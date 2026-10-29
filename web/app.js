@@ -90,6 +90,8 @@ const ACTIONS = {
     renameExercise: function (a, b) { renameExercise(+a, +b); },
     deleteExercise: function (a, b) { deleteExercise(+a, +b); },
     deleteExerciseGo: function () { deleteExerciseGo(); },
+    deleteSet: function (a, b, c) { deleteSet(+a, +b, +c); },
+    deleteSetGo: function () { deleteSetGo(); },
     modalBackdrop: function () { closeModal(); }
 };
 
@@ -547,7 +549,11 @@ function workoutCard(w, showActions) {
             '</div>';
         e.sets.forEach((s, si) => {
             h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
-                '<span>' + esc(entryLine(s)) + '</span></div>';
+                '<span class="rectext">' + esc(entryLine(s)) + '</span>' +
+                '<span class="recic">' +
+                '<button class="barebtn" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Изменить">' + ico('pencil') + '</button>' +
+                '<button class="barebtn trash-bare" data-act="deleteSet" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Удалить запись">' + ico('trash') + '</button>' +
+                '</span></div>';
         });
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
             h += '<div class="restline"> упражнение активно — время идёт</div>';
@@ -1198,6 +1204,27 @@ async function deleteExerciseGo() {
         if (!inDetail) await save();
     }
     __delEx = null;
+    closeModal();
+    render();
+}
+let __delSet = null;
+function deleteSet(wid, exIdx, setIdx) {
+    const w = findW(wid);
+    if (!w || !w.exercises[exIdx] || !w.exercises[exIdx].sets[setIdx]) return;
+    __delSet = { wid, exIdx, setIdx };
+    confirmModal('Удалить запись «' + entryLine(w.exercises[exIdx].sets[setIdx]) + '»?', 'deleteSetGo', null);
+}
+async function deleteSetGo() {
+    const inDetail = tab === 'history' && viewWid;
+    if (!inDetail) await reloadSilently();
+    const w2 = findW(__delSet.wid);
+    const e2 = w2 ? w2.exercises[__delSet.exIdx] : null;
+    if (e2 && e2.sets[__delSet.setIdx]) {
+        e2.sets.splice(__delSet.setIdx, 1);
+        if (!e2.sets.length) w2.exercises.splice(w2.exercises.indexOf(e2), 1);
+        if (!inDetail) await save();
+    }
+    __delSet = null;
     closeModal();
     render();
 }
