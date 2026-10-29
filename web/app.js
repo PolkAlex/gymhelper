@@ -166,7 +166,7 @@ function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function pad2(n) { return String(n).padStart(2, '0'); }
-const DOW = ['ПН', 'ВТ', 'СР', 'ЧТ', 'ПТ', 'СБ', 'ВС'];
+const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 function fmtW(w) {
     if (w == null || isNaN(w)) return '0';
     return Number.isInteger(+w) ? String(+w) : String(w);
@@ -714,8 +714,8 @@ function previewCard(w) {
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard" data-act="openHistory" data-a="' + w.id + '">';
     h += '<div class="pc-main">';
-    h += '<div class="pc-date">' + dateStr + '</div>';
-    h += '<div><span class="pc-pill">' + (w.finished ? (dp ? dp.i + ' ' + dp.n : '') : '⚡ идёт') + '</span></div>';
+    h += '<div class="pc-date">' + (dp ? '<span class="pc-dp">' + dp.i + '</span> ' : '') + dateStr + '</div>';
+    if (!w.finished) h += '<div><span class="pc-pill">⚡ идёт</span></div>';
     if (!show.length) h += '<div class="pc-ex">Нет записей</div>';
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';
     h += '</div>';

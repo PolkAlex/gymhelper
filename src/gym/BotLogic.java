@@ -19,7 +19,7 @@ public final class BotLogic {
     private static final DateTimeFormatter DF = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     private static final DateTimeFormatter DDM = DateTimeFormatter.ofPattern("dd-MM");
     private static final DateTimeFormatter HF = DateTimeFormatter.ofPattern("HH:mm");
-    private static final String[] DOW = {"ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"};
+    private static final String[] DOW = {"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"};
     private static final Pattern LINE_PATTERN = Pattern.compile("^(.*?)\\s*(\\d{1,2})\\s+по\\s+(.+)$");
     private static final Pattern NUM_PATTERN = Pattern.compile("\\d+(?:[.,]\\d+)?");
     private static final Pattern WEIGHT_PATTERN = Pattern.compile("^[0-9.,\\-\\s]+$");
