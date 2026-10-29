@@ -551,8 +551,8 @@ function workoutCard(w, showActions) {
             h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
                 '<span class="rectext">' + esc(entryLine(s)) + '</span>' +
                 '<span class="recic">' +
-                '<button class="barebtn" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Изменить">' + ico('pencil') + '</button>' +
-                '<button class="barebtn trash-bare" data-act="deleteSet" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Удалить запись">' + ico('trash') + '</button>' +
+                '<span class="recbtn" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Изменить">✏️</span>' +
+                '<span class="recbtn" data-act="deleteSet" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Удалить запись">🗑️</span>' +
                 '</span></div>';
         });
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
