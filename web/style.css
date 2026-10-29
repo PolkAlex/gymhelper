@@ -513,6 +513,22 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 /* ============ icon buttons ============ */
 .wchead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .wctitles { flex: 1; min-width: 0; }
+.wctitles .t1 { font-size: 17px; line-height: 1.3; overflow-wrap: break-word; word-break: break-word; }
+.dp-inline { font-size: 14px; }
+.wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
+.barebtn {
+    background: none;
+    border: none;
+    padding: 7px;
+    cursor: pointer;
+    display: inline-flex;
+    color: var(--muted);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.barebtn svg { width: 18px; height: 18px; }
+.trash-bare { color: var(--danger); }
+.trash-bare svg { width: 19px; height: 19px; }
 .iconbtn {
     background: var(--entry);
     border: none;
@@ -532,7 +548,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 .iconrow { gap: 12px; }
 .iconrow.wideic { gap: 10px; }
 .iconrow.wideic .iconbtn { flex: 1 1 0; padding: 13px 8px; }
-.iconrow.wideic .iconbtn.del { flex: 1.3 1 0; }
+.iconrow.wideic .iconbtn.del { flex: 1.3 1 0; background: none; }
+.iconrow.wideic .iconbtn.del svg { width: 23px; height: 23px; }
 .iconrow.wideic .iconbtn svg { width: 20px; height: 20px; }
 .pencil-inline {
     display: inline-flex;

@@ -144,7 +144,7 @@ document.addEventListener('touchend', function (ev) {
         const lastD = window.__lastDispatch || 0;
         setTimeout(function () {
             if (Date.now() - seen < 450) return;
-            if (Date.now() - lastD < 450) return;
+            if (Date.now() - lastD < 600) return;
             try {
                 if (t.hasAttribute('data-fav')) toggleFav(t.getAttribute('data-fav'));
                 else dispatchFromEl(t, null);
@@ -378,10 +378,14 @@ function calcWorkoutKcal(p, w) {
     return { total, lines };
 }
 
-let __saving = false;
-async function save() {
-    if (__saving) return 'busy';
-    __saving = true;
+let __saveChain = Promise.resolve();
+function save() {
+    const run = __saveChain.then(function () { return doSave(); });
+    __saveChain = run.catch(function () { });
+    return run;
+}
+async function doSave() {
+    __saveBusy = true;
     try {
         const r = await fetch('/api/save', {
             method: 'POST',
@@ -396,11 +400,13 @@ async function save() {
         console.error('save failed', e);
         return 'err';
     } finally {
-        __saving = false;
+        __saveBusy = false;
     }
 }
-async function reloadSilently() {
-    if (__saving) return;
+let __saveBusy = false;
+async function reloadSilently(force) {
+    if (!force && __saveBusy) return;
+    if (!force && tab === 'history' && viewWid) return;
     try {
         const r = await fetch('/api/init', {
             method: 'POST',
@@ -505,10 +511,14 @@ function workoutCard(w, showActions) {
     showActions = showActions !== false;
     const lines = titleLines(w);
     let h = '<div class="card" id="w' + w.id + '">';
-    h += '<div class="wchead"><div class="wctitles"><p class="t1">' + esc(lines[0]) +
-        '<span class="pencil-inline" data-act="titleModal" data-a="' + w.id + '">' + ico('pencil') + '</span></p>';
+    const dpw = dayPart(w);
+    h += '<div class="wchead"><div class="wctitles"><p class="t1">' +
+        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p>';
     for (let i = 1; i < lines.length; i++) h += '<div class="tn">' + esc(lines[i]) + '</div>';
-    h += '</div><button class="iconbtn del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ico('trash') + '</button></div>';
+    h += '</div><div class="wcicons">' +
+        '<button class="barebtn pencil-bare" data-act="titleModal" data-a="' + w.id + '" title="Название">' + ico('pencil') + '</button>' +
+        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ico('trash') + '</button>' +
+        '</div></div>';
     h += '<p class="meta">' + esc(timeLine(w)) + '</p>';
     if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
     if (G.profile && G.profile.weight > 0) {
@@ -678,10 +688,11 @@ function isWarmupName(name) {
     const c = findCatalog(name);
     return c ? c.t.includes('warmup') : /^разминка/i.test(name);
 }
+const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 function previewCard(w) {
     const d = parseDateISO(w.date);
     const dateStr = d ? pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) : (w.date || '—');
-    const dow = d ? DOW[(d.getDay() + 6) % 7] : '';
+    const rightTop = d ? d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' · ' + DOW[(d.getDay() + 6) % 7] : '';
     const dp = dayPart(w);
     const exs = (w.exercises || []).filter(e => e.sets.length && !isWarmupName(e.name));
     const show = exs.slice(0, 3);
@@ -697,7 +708,7 @@ function previewCard(w) {
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';
     h += '</div>';
     h += '<div class="pc-side">';
-    h += '<div class="pc-dow">' + dow + '</div>';
+    h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-right">';
     if (mins != null) h += '<span>⏱ ' + durationText(mins) + '</span>';
     if (res && res.total > 0) h += '<span>🔥 ' + res.total + ' ккал</span>';
@@ -1294,7 +1305,7 @@ function timeModal(wid) {
         if (el) el.addEventListener('input', function () { maskTime(this); });
     });
 }
-async function saveWorkout(id) {
+async function saveWorkout() {
     dbgMsg('сохраняю...');
     const r = await save();
     if (r !== 'ok') {
@@ -1388,6 +1399,7 @@ async function init() {
             }
         }
     }
+    let failMsg = '';
     try {
         const r = await fetch('/api/init', {
             method: 'POST',
@@ -1395,17 +1407,23 @@ async function init() {
         });
         let j = {};
         try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (!j.ok) throw new Error('HTTP ' + r.status);
-        G = j.data;
-        if (!G.workouts) G.workouts = [];
-        if (G.nextId < 1) G.nextId = 1;
-        if (G.profile) profileSex = G.profile.sex;
-        render();
+        if (j.ok) {
+            G = j.data;
+            if (!G.workouts) G.workouts = [];
+            if (G.nextId < 1) G.nextId = 1;
+            if (G.profile) profileSex = G.profile.sex;
+            render();
+        } else {
+            failMsg = 'HTTP ' + r.status;
+        }
     } catch (e) {
+        failMsg = (e && e.message) ? e.message : 'ошибка сети';
+    }
+    if (failMsg) {
         const info = 'tg: ' + (tg ? 'да' : 'нет')
             + ' · initData: ' + (INIT ? INIT.length + ' симв.' : 'пусто')
             + ' · платформа: ' + (tg && tg.platform ? tg.platform : '?')
-            + ' · ' + (e && e.message ? e.message : 'ошибка сети');
+            + ' · ' + failMsg;
         document.getElementById('app').innerHTML =
             '<p class="empty">Не удалось авторизоваться 😕<br>' + esc(info) +
             '<br><br>Открой приложение через меню бота (кнопка ☰ → «🏋️ Дневник»).</p>';
