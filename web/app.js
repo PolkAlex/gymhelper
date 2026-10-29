@@ -543,10 +543,14 @@ function workoutCard(w, showActions) {
         }
         h += '<div class="expill"><div class="exhead">' + (c ? ico(c.i) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
-            (timeNote ? '<span class="extime">' + esc(timeNote) + '</span>' : '') +
-            '<button class="barebtn pencil-bare" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Переименовать">' + ico('pencil') + '</button>' +
-            '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ico('trash') + '</button>' +
-            '</div>';
+            '<span class="recic">' +
+            '<span class="recbtn" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Переименовать">✏️</span>' +
+            '<span class="recbtn" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">🗑️</span>' +
+            '</span></div>';
+        if (timeNote) {
+            h += '<div class="exsub">⏱ ' + durationText(st.mins) +
+                (st.restSec != null ? ' · ~' + st.restSec + ' с' : '') + '</div>';
+        }
         e.sets.forEach((s, si) => {
             h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
                 '<span class="rectext">' + esc(entryLine(s)) + '</span>' +
