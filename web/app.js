@@ -87,6 +87,9 @@ const ACTIONS = {
     setSex: function (a) { profileSex = a; render(); },
     saveProfile: function () { saveProfile(); },
     closeModal: function () { closeModal(); },
+    renameExercise: function (a, b) { renameExercise(+a, +b); },
+    deleteExercise: function (a, b) { deleteExercise(+a, +b); },
+    deleteExerciseGo: function () { deleteExerciseGo(); },
     modalBackdrop: function () { closeModal(); }
 };
 
@@ -502,9 +505,9 @@ function diffTxt(delta, unit) {
 /* ---------- render: workout card ---------- */
 function iconRowHtml(w) {
     return '<div class="btnrow iconrow wideic">' +
-        '<button class="iconbtn del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ico('trash') + '</button>' +
-        '<button class="iconbtn" data-act="nutrModal" data-a="' + w.id + '" title="Питание">' + ico('cup') + '</button>' +
-        '<button class="iconbtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ico('timer') + '</button>' +
+        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ico('trash') + '</button>' +
+        '<button class="barebtn" data-act="nutrModal" data-a="' + w.id + '" title="Питание">' + ico('cup') + '</button>' +
+        '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ico('timer') + '</button>' +
         '</div>';
 }
 function workoutCard(w, showActions) {
@@ -536,12 +539,15 @@ function workoutCard(w, showActions) {
         if (st) {
             timeNote = '⏱ ' + durationText(st.mins) + (st.restSec != null ? ' · отдых ~' + st.restSec + ' сек' : '');
         }
-        h += '<div class="exgrp"><div class="exhead">' + (c ? ico(c.i) : ico('custom')) +
+        h += '<div class="expill"><div class="exhead">' + (c ? ico(c.i) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
-            (timeNote ? '<span class="extime">' + esc(timeNote) + '</span>' : '') + '</div>';
+            (timeNote ? '<span class="extime">' + esc(timeNote) + '</span>' : '') +
+            '<button class="barebtn pencil-bare" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Переименовать">' + ico('pencil') + '</button>' +
+            '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ico('trash') + '</button>' +
+            '</div>';
         e.sets.forEach((s, si) => {
             h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
-                '<span>' + esc(entryLine(s)) + '</span><span class="pen">✏️</span></div>';
+                '<span>' + esc(entryLine(s)) + '</span></div>';
         });
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
             h += '<div class="restline"> упражнение активно — время идёт</div>';
@@ -1170,10 +1176,36 @@ async function deleteEntry() {
     closeModal();
     render();
 }
+let __delEx = null;
+function renameExercise(wid, exIdx) {
+    const w = findW(wid);
+    if (!w || !w.exercises[exIdx]) return;
+    modalCtx = { wid, exIdx, setIdx: -1, name: w.exercises[exIdx].name };
+    renameModal();
+}
+function deleteExercise(wid, exIdx) {
+    const w = findW(wid);
+    if (!w || !w.exercises[exIdx]) return;
+    __delEx = { wid, exIdx };
+    confirmModal('Удалить упражнение «' + w.exercises[exIdx].name + '» со всеми записями?', 'deleteExerciseGo', null);
+}
+async function deleteExerciseGo() {
+    const inDetail = tab === 'history' && viewWid;
+    if (!inDetail) await reloadSilently();
+    const w2 = findW(__delEx.wid);
+    if (w2 && w2.exercises[__delEx.exIdx]) {
+        w2.exercises.splice(__delEx.exIdx, 1);
+        if (!inDetail) await save();
+    }
+    __delEx = null;
+    closeModal();
+    render();
+}
 function renameModal() {
     if (!modalCtx) return;
     const w = findW(modalCtx.wid);
-    const e = w.exercises[modalCtx.exIdx];
+    const e = w ? w.exercises[modalCtx.exIdx] : null;
+    if (!e) return;
     let h = '<p class="mtitle">Переименовать упражнение</p>' +
         '<label>Название (до 60 символов)</label><input id="mName" type="text" value="' + esc(e.name) + '">' +
         '<div class="btnrow"><button class="btn wide" data-act="doRename">💾 Сохранить</button>' +

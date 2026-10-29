@@ -18,12 +18,13 @@ if (!actBlock) {
     const used = new Set();
     for (const m of app.matchAll(/data-act="([a-zA-Z]+)"/g)) used.add(m[1]);
     for (const m of app.matchAll(/data-b="([a-zA-Z]+)"/g)) used.add(m[1]);
+    for (const m of app.matchAll(/confirmModal\([^,]+,\s*'([a-zA-Z]+)'/g)) used.add(m[1]);
     for (const u of used) {
         if (!keys.has(u)) fails.push('data-act/data-b без обработчика в ACTIONS: ' + u);
     }
     for (const k of keys) {
         if (k === 'modalBackdrop') continue;
-        if (!app.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"')) {
+        if (!app.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"') && !app.includes("'" + k + "'")) {
             fails.push('обработчик ACTIONS никогда не используется: ' + k);
         }
     }

@@ -134,11 +134,24 @@ body {
 .toprow { margin: 0 0 12px; }
 .btnrow { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; margin-bottom: 2px; }
 
-.exgrp { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
-.exgrp:first-of-type { border-top: none; padding-top: 0; }
-.exhead { display: flex; align-items: center; gap: 10px; }
+.expill {
+    background: var(--entry);
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-top: 12px;
+}
+.expill:first-of-type { margin-top: 0; }
+.exhead { display: flex; align-items: center; gap: 8px; }
 .exname { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; }
 .extime { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.expill .entry {
+    background: transparent;
+    margin-top: 2px;
+    padding: 6px 2px;
+    border-radius: 8px;
+    font-size: 14px;
+}
+.expill .entry:active { background: var(--card2); }
 .formerr { color: var(--danger); font-size: 13px; margin-top: 10px; min-height: 16px; }
 
 .entry {
@@ -546,11 +559,10 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 .iconbtn.del { color: var(--danger); padding: 11px; }
 .iconbtn.del svg { width: 21px; height: 21px; }
 .iconrow { gap: 12px; }
-.iconrow.wideic { gap: 10px; }
-.iconrow.wideic .iconbtn { flex: 1 1 0; padding: 13px 8px; }
-.iconrow.wideic .iconbtn.del { flex: 1.3 1 0; background: none; }
-.iconrow.wideic .iconbtn.del svg { width: 23px; height: 23px; }
-.iconrow.wideic .iconbtn svg { width: 20px; height: 20px; }
+.iconrow.wideic { gap: 6px; }
+.iconrow.wideic .barebtn { flex: 1 1 0; padding: 12px 8px; justify-content: center; }
+.iconrow.wideic .barebtn.trash-bare { flex: 1.3 1 0; }
+.iconrow.wideic .barebtn svg { width: 21px; height: 21px; }
 .pencil-inline {
     display: inline-flex;
     vertical-align: middle;
