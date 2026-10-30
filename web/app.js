@@ -29,7 +29,8 @@ const THEMES = [
     { id: 'ice', name: 'Голубой лёд', dots: ['#eef3f7', '#fbfdff', '#7397b5'] },
     { id: 'graphite', name: 'Графит', dots: ['#1c1d1f', '#26272a', '#8d9db6'] },
     { id: 'coffee', name: 'Кофе с молоком', dots: ['#efe7dc', '#faf5ee', '#b08b68'] },
-    { id: 'midnight', name: 'Полночь', dots: ['#171c26', '#1f2532', '#7d95c9'] }
+    { id: 'midnight', name: 'Полночь', dots: ['#171c26', '#1f2532', '#7d95c9'] },
+    { id: 'stockline', name: 'Stockline', dots: ['#16181d', '#1e2228', '#3ddc97'] }
 ];
 function applyTheme(id) {
     document.documentElement.setAttribute('data-theme', id);
@@ -45,7 +46,8 @@ function loadTheme() {
 /* ---------- actions ---------- */
 const ACTIONS = {
     switchTab: function (a) {
-        if (tab === 'history' && viewWid && isDirty()) { pendingTab = a; exitConfirmModal(); return; }
+        if (tab === 'history' && viewWid && isDirty()) { pendingTab = a; railOpen = false; exitConfirmModal(); return; }
+        railOpen = false;
         tab = a; viewWid = 0; render();
     },
     openHistory: function (a) { viewWid = +a; tab = 'history'; render(); },
@@ -92,7 +94,8 @@ const ACTIONS = {
     deleteExerciseGo: function () { deleteExerciseGo(); },
     deleteSet: function (a, b, c) { deleteSet(+a, +b, +c); },
     deleteSetGo: function () { deleteSetGo(); },
-    modalBackdrop: function () { closeModal(); }
+    modalBackdrop: function () { closeModal(); },
+    toggleRail: function () { railOpen = !railOpen; render(); }
 };
 
 function dbgMsg(t) {
@@ -585,26 +588,16 @@ function workoutCard(w, showActions) {
     return h;
 }
 
-let navMin = false;
-let __lastY = 0;
-window.addEventListener('scroll', function () {
-    const y = window.scrollY || window.pageYOffset;
-    if (y > __lastY + 10 && y > 70) navMin = true;
-    else if (y < __lastY - 10 || y < 70) navMin = false;
-    __lastY = y;
-    const nav = document.querySelector('.nav');
-    if (nav) nav.classList.toggle('min', navMin);
-}, { passive: true });
-
 function render() {
     const app = document.getElementById('app');
-    let h = topbarHtml();
+    let h = railHtml();
+    if (railOpen) h += '<div class="rail-backdrop" data-act="toggleRail"></div>';
+    h += topbarHtml();
     if (tab === 'workout') h += renderWorkoutTab();
     if (tab === 'history') h += renderHistoryTab();
     if (tab === 'tech') h += renderTechTab();
     if (tab === 'stats') h += renderStatsTab();
     if (tab === 'profile') h += renderProfileTab();
-    h += navHtml();
     if (tab === 'history' && viewWid && findW(viewWid)) {
         h += '<div class="backbar"><div class="ab-row">' +
             '<button class="btn prime" data-act="saveWorkout" data-a="' + viewWid + '">💾 Сохранить</button>' +
@@ -623,22 +616,33 @@ function render() {
     }
     dbgMsg('rev ' + (G ? G.rev : '-'));
 }
-function topbarHtml() {
-    const names = { workout: 'Тренировка', history: 'История', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
-    return '<div class="topbar"><span class="tb-title">GymHelper · ' + names[tab] + '</span>' +
-        '<button class="tb-user" data-act="switchTab" data-a="profile" title="Настройки">' + ico('user') + '</button></div>';
-}
-function navHtml() {
+function railHtml() {
     const items = [
         ['workout', 'dumbbell', 'Тренировка'],
         ['history', 'timer', 'История'],
         ['tech', 'pilates', 'Техника'],
         ['stats', 'chart', 'Статистика']
     ];
-    return '<div class="nav' + (navMin ? ' min' : '') + '">' + items.map(it =>
-        '<button class="' + (tab === it[0] ? 'on' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
-        '<span class="nwrap"><span class="nico">' + (ICONS[it[1]] || '') + '</span></span>' +
-        '<span class="nlabel">' + it[2] + '</span></button>').join('') + '</div>';
+    let h = '<div class="rail' + (railOpen ? ' open' : '') + '">';
+    h += '<button class="rail-user" data-act="toggleRail" title="Меню"><span class="nico">' + ico('user') + '</span><span class="rlabel">GymHelper</span></button>';
+    h += '<div class="rail-sep"></div><div class="rail-items">';
+    for (const it of items) {
+        h += '<button class="rail-item' + (tab === it[0] ? ' on' : '') + '" data-act="switchTab" data-a="' + it[0] + '" title="' + it[2] + '">' +
+            '<span class="nico">' + ico(it[1]) + '</span><span class="rlabel">' + it[2] + '</span></button>';
+    }
+    h += '</div><div class="rail-sep"></div>';
+    h += '<button class="rail-item' + (tab === 'profile' ? ' on' : '') + '" data-act="switchTab" data-a="profile" title="Настройки">' +
+        '<span class="nico">' + ico('user') + '</span><span class="rlabel">Настройки</span></button>';
+    h += '</div>';
+    return h;
+}
+function topbarHtml() {
+    const names = { workout: 'Тренировка', history: 'История', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
+    return '<div class="topbar"><span class="tb-title">GymHelper · ' + names[tab] + '</span></div>';
+}
+function topbarHtml() {
+    const names = { workout: 'Тренировка', history: 'История', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
+    return '<div class="topbar"><span class="tb-title">GymHelper · ' + names[tab] + '</span></div>';
 }
 function backBarHtml(action, label) {
     return '<div class="backbar"><button class="btn sec wide" data-act="' + action + '">' + label + '</button></div>';
