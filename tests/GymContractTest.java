@@ -45,6 +45,12 @@ public class GymContractTest {
         check(out.contains("\"started\":\"2026-10-29T18:30:00\""), "toJson пишет started");
         check(out.contains("\"st\":\"2026-10-29T18:31:00\""), "toJson пишет st");
 
+        String delJson = "{\"nextId\":24,\"rev\":6,\"del\":[22],\"workouts\":[]}";
+        GymData dd = GymData.fromJson((Map<String, Object>) Json.parse(delJson));
+        check(dd.deletedIds.size() == 1 && dd.deletedIds.get(0) == 22L, "del читается");
+        String delOut = Json.write(dd.toJson());
+        check(delOut.contains("\"del\":[22]"), "toJson пишет del");
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }

@@ -956,6 +956,8 @@ function finishWorkout(id) {
     save().then(render);
 }
 function deleteWorkout(id) {
+    if (!G.del) G.del = [];
+    G.del.push(id);
     G.workouts = G.workouts.filter(w => w.id !== id);
     if (viewWid === id) viewWid = 0;
     save().then(render);

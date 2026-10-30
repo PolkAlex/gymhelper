@@ -143,6 +143,13 @@ public final class WebServer {
             }
             if (!replaced) current.workouts.add(iw);
         }
+        for (Long id : data.deletedIds) {
+            if (!current.deletedIds.contains(id)) current.deletedIds.add(id);
+        }
+        for (Long id : current.deletedIds) {
+            current.workouts.removeIf(w -> w.id == id);
+        }
+        while (current.deletedIds.size() > 100) current.deletedIds.remove(0);
         if (data.profile != null) current.profile = data.profile;
         data = current;
         data.nextId = Math.max(current.nextId, data.nextId);

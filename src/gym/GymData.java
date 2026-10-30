@@ -10,6 +10,7 @@ public final class GymData {
     public long rev;
     public ProfileData profile;
     public final List<Workout> workouts = new ArrayList<>();
+    public final List<Long> deletedIds = new ArrayList<>();
 
     public Workout active() {
         for (Workout w : workouts) {
@@ -40,6 +41,10 @@ public final class GymData {
             p.weight = Json.dbl(pm.get("weight"));
             d.profile = p;
         }
+        List<Object> delList = Json.list(m.get("del"));
+        if (delList != null) {
+            for (Object o : delList) d.deletedIds.add(Json.lng(o));
+        }
         for (Object o : Json.list(m.get("workouts"))) {
             Map<String, Object> w = Json.map(o);
             Workout workout = new Workout();
@@ -53,8 +58,8 @@ public final class GymData {
             for (Object eo : Json.list(w.get("exercises"))) {
                 Map<String, Object> e = Json.map(eo);
                 ExerciseEntry entry = new ExerciseEntry(Json.str(e, "name"));
-                entry.startedAt = Json.str(e, "st");
-                entry.endedAt = Json.str(e, "en");
+                entry.startedAt = firstStr(e, "st", "startedAt");
+                entry.endedAt = firstStr(e, "en", "endedAt");
                 for (Object so : Json.list(e.get("sets"))) {
                     entry.sets.add(setFromJson(Json.map(so)));
                 }
@@ -101,6 +106,11 @@ public final class GymData {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("nextId", nextId);
         m.put("rev", rev);
+        if (!deletedIds.isEmpty()) {
+            List<Object> del = new ArrayList<>();
+            for (Long id : deletedIds) del.add(id);
+            m.put("del", del);
+        }
         if (profile != null) {
             Map<String, Object> pm = new LinkedHashMap<>();
             pm.put("sex", profile.sex);
