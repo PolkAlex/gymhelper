@@ -470,9 +470,9 @@ function render() {
 }
 function navHtml() {
     const items = [
-        ['workout', 'dumbbell', 'Тренировка'],
-        ['history', 'timer', 'История'],
         ['coach', 'user', 'Тренер'],
+        ['history', 'timer', 'История'],
+        ['workout', 'dumbbell', 'Тренировка'],
         ['tech', 'pilates', 'Техника'],
         ['stats', 'chart', 'Статистика']
     ];
