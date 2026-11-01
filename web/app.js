@@ -368,7 +368,6 @@ function loadTheme() {
 /* ============ ACTIONS ============ */
 const ACTIONS = {
     switchTab: function (a) {
-        if (tab === 'history' && viewWid && isDirty()) { pendingTab = a; exitDirtyModal(); return; }
         tab = a; viewWid = 0; render();
     },
     openHistory: function (a) {
@@ -379,7 +378,6 @@ const ACTIONS = {
     },
     openEntryModal: function (a, b, c) { openEntryModal(+a, +b, +c); },
     closeHistory: function () {
-        if (isDirty()) { exitDirtyModal(); return; }
         editSnap = null;
         viewWid = 0;
         render();
@@ -605,9 +603,7 @@ function closeHistory() {
     viewWid = 0;
     render();
 }
-function isDirty() {
-    return editSnap !== null && JSON.stringify(G) !== editSnap;
-}
+function isDirty() { return false; }
 function exitDirtyModal() {
     const h = '<p class="mtitle">Есть несохранённые изменения</p>' +
         '<div class="btnrow"><button class="btn prime wide" data-act="saveAndExit">💾 Сохранить и выйти</button>' +
@@ -1176,7 +1172,6 @@ function kpDel() {
 }
 async function saveEntry() {
     if (!modalCtx) return;
-    const inDetail = tab === 'history' && viewWid;
     const wid = modalCtx.wid, setIdx = modalCtx.setIdx, name = modalCtx.name;
     let weight = String(document.getElementById('mWeight').value).trim().replace(/[.,;]+$/, '');
     if (weight.toLowerCase().endsWith('кг')) weight = weight.slice(0, -2).trim();
@@ -1189,7 +1184,7 @@ async function saveEntry() {
     }
     if (!(sets >= 1 && sets <= 30)) { alert('Подходы: число от 1 до 30'); return; }
     if (!reps || reps.length > 15) { alert('Повторения: например 12, 8-10 или макс'); return; }
-    if (!inDetail) await reloadSilently();
+    await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name) : null;
     if (!e) { closeModal(); render(); return; }
@@ -1199,21 +1194,20 @@ async function saveEntry() {
         const old = e.sets[setIdx];
         e.sets[setIdx] = { w: weight, s: sets, r: reps, t: old ? (old.t || nowLocalISO()) : nowLocalISO() };
     }
-    if (!inDetail) await save();
+    await save();
     closeModal();
     render();
 }
 async function deleteEntry() {
     if (!modalCtx) return;
-    const inDetail = tab === 'history' && viewWid;
     const wid = modalCtx.wid, setIdx = modalCtx.setIdx, name = modalCtx.name;
-    if (!inDetail) await reloadSilently();
+    await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name) : null;
     if (!e) { closeModal(); render(); return; }
     if (setIdx < e.sets.length) e.sets.splice(setIdx, 1);
     if (!e.sets.length) w.exercises.splice(w.exercises.indexOf(e), 1);
-    if (!inDetail) await save();
+    await save();
     closeModal();
     render();
 }
@@ -1235,11 +1229,10 @@ function renameModalHtml(w) {
 }
 async function doRename() {
     if (!modalCtx) return;
-    const inDetail = tab === 'history' && viewWid;
     const wid = modalCtx.wid, name2 = modalCtx.name;
     const name = String(document.getElementById('mName').value).trim();
     if (!name || name.length > 60) { alert('Название от 1 до 60 символов'); return; }
-    if (!inDetail) await reloadSilently();
+    await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name2) : null;
     if (!e) { closeModal(); render(); return; }
@@ -1250,7 +1243,7 @@ async function doRename() {
     } else {
         e.name = name;
     }
-    if (!inDetail) await save();
+    await save();
     closeModal();
     render();
 }
@@ -1261,12 +1254,11 @@ function deleteExercise(wid, exIdx) {
     confirmModal('Удалить упражнение «' + w.exercises[exIdx].name + '» со всеми записями?', 'deleteExerciseGo', null);
 }
 async function deleteExerciseGo() {
-    const inDetail = tab === 'history' && viewWid;
-    if (!inDetail) await reloadSilently();
+    await reloadSilently();
     const w = findW(__delExerciseCtx.wid);
     if (w && w.exercises[__delExerciseCtx.exIdx]) {
         w.exercises.splice(__delExerciseCtx.exIdx, 1);
-        if (!inDetail) await save();
+        await save();
     }
     __delExerciseCtx = null;
     closeModal();
@@ -1281,14 +1273,13 @@ function deleteSet(wid, exIdx, setIdx) {
     confirmModal('Удалить запись «' + entryLine(w.exercises[exIdx].sets[setIdx]) + '»?', 'deleteSetGo', null);
 }
 async function deleteSetGo() {
-    const inDetail = tab === 'history' && viewWid;
-    if (!inDetail) await reloadSilently();
+    await reloadSilently();
     const w = findW(__delSetCtx.wid);
     const e = w ? w.exercises[__delSetCtx.exIdx] : null;
     if (e && __delSetCtx.setIdx < e.sets.length) {
         e.sets.splice(__delSetCtx.setIdx, 1);
         if (!e.sets.length) w.exercises.splice(w.exercises.indexOf(e), 1);
-        if (!inDetail) await save();
+        await save();
     }
     __delSetCtx = null;
     closeModal();
@@ -1418,15 +1409,14 @@ async function saveTime(wid) {
     const startVal = sdt + 'T' + stm + ':00';
     if (endVal && new Date(endVal) < new Date(startVal)) { err('Окончание не может быть раньше начала'); return; }
     err('');
-    const inDetail = tab === 'history' && viewWid;
-    if (!inDetail) await reloadSilently();
+    await reloadSilently();
     const w2 = findW(wid);
     if (!w2) { err('Тренировка не найдена'); return; }
     w2.started = startVal;
     w2.date = sdt;
     if (endVal) w2.ended = endVal;
     if (!w2.finished) w2.ended = '';
-    if (!inDetail) await save();
+    await save();
     closeModal();
     render();
 }
