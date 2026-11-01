@@ -1,0 +1,6 @@
+    return '<div class="nav">' + items.map(function (it) {
+        const c = it[3] === true;
+        return '<button class="' + (tab === it[0] ? 'on ' : '') + (c ? 'navc' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
+            '<span class="nwrap' + (c ? ' ncc' : '') + '"><span class="nico">' + (ICONS[it[1]] || '') + '</span></span>' +
+            '<span class="nlabel">' + it[2] + '</span></button>';
+    }).join('') + '<div class="nav-notch"></div></div>';

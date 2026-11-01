@@ -1,0 +1,7 @@
+    const items = [
+        ['workout', 'dumbbell', 'Тренировка', true],
+        ['history', 'timer', 'История'],
+        ['coach', 'user', 'Тренер'],
+        ['tech', 'pilates', 'Техника'],
+        ['stats', 'chart', 'Статистика']
+    ];

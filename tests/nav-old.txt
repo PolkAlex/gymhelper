@@ -1,0 +1,4 @@
+    return '<div class="nav' + (navMin ? ' min' : '') + '">' + items.map(it =>
+        '<button class="' + (tab === it[0] ? 'on' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
+        '<span class="nwrap"><span class="nico">' + (ICONS[it[1]] || '') + '</span></span>' +
+        '<span class="nlabel">' + it[2] + '</span></button>').join('') + '</div>';
