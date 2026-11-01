@@ -29,7 +29,8 @@ const THEMES = [
     { id: 'ice', name: 'Голубой лёд', dots: ['#eef3f7', '#fbfdff', '#7397b5'] },
     { id: 'graphite', name: 'Графит', dots: ['#1c1d1f', '#26272a', '#8d9db6'] },
     { id: 'coffee', name: 'Кофе с молоком', dots: ['#efe7dc', '#faf5ee', '#b08b68'] },
-    { id: 'midnight', name: 'Полночь', dots: ['#171c26', '#1f2532', '#7d95c9'] }
+    { id: 'midnight', name: 'Полночь', dots: ['#171c26', '#1f2532', '#7d95c9'] },
+    { id: 'stockline', name: 'Stockline', dots: ['#16181d', '#1e2228', '#3ddc97'] }
 ];
 function applyTheme(id) {
     document.documentElement.setAttribute('data-theme', id);
@@ -45,7 +46,8 @@ function loadTheme() {
 /* ---------- actions ---------- */
 const ACTIONS = {
     switchTab: function (a) {
-        if (tab === 'history' && viewWid && isDirty()) { pendingTab = a; exitConfirmModal(); return; }
+        if (tab === 'history' && viewWid && isDirty()) { pendingTab = a; railOpen = false; exitConfirmModal(); return; }
+        railOpen = false;
         tab = a; viewWid = 0; render();
     },
     openHistory: function (a) { viewWid = +a; tab = 'history'; render(); },
@@ -92,7 +94,10 @@ const ACTIONS = {
     deleteExerciseGo: function () { deleteExerciseGo(); },
     deleteSet: function (a, b, c) { deleteSet(+a, +b, +c); },
     deleteSetGo: function () { deleteSetGo(); },
-    modalBackdrop: function () { closeModal(); }
+    kpIns: function (a) { kpIns(a); },
+    kpDel: function () { kpDel(); },
+    modalBackdrop: function () { closeModal(); },
+    toggleRail: function () { railOpen = !railOpen; render(); }
 };
 
 function dbgMsg(t) {
@@ -100,8 +105,11 @@ function dbgMsg(t) {
     if (d) d.textContent = t;
 }
 function dispatchFromEl(el, ev) {
+    if (Date.now() - (el.__gymFired || 0) < 400) return;
+    el.__gymFired = Date.now();
+    const fav = el.getAttribute('data-fav');
+    if (fav) { toggleFav(fav); return; }
     const act = el.getAttribute('data-act');
-    window.__lastDispatch = Date.now();
     if (act === 'modalBackdrop') {
         if (!ev || ev.target === el) closeModal();
         return;
@@ -112,50 +120,12 @@ function dispatchFromEl(el, ev) {
     }
 }
 window.addEventListener('click', function (ev) {
-    try {
-        window.__clickSeen = Date.now();
-        const favEl = ev.target && ev.target.closest ? ev.target.closest('[data-fav]') : null;
-        if (favEl) { toggleFav(favEl.getAttribute('data-fav')); return; }
-        const el = ev.target && ev.target.closest ? ev.target.closest('[data-act]') : null;
-        if (!el) return;
-        dispatchFromEl(el, ev);
-    } catch (e) {
-        console.error('action error', e);
-        dbgMsg('ОШИБКА: ' + (e && e.message || e));
-    }
+    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
+    if (el) dispatchFromEl(el, ev);
 }, true);
-let __touch = null;
-document.addEventListener('touchstart', function (ev) {
-    if (ev.touches.length > 1) { __touch = null; return; }
-    const t = ev.touches[0];
-    __touch = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false };
-}, { passive: true, capture: true });
-document.addEventListener('touchmove', function (ev) {
-    if (!__touch) return;
-    const t = ev.touches && ev.touches[0];
-    if (!t) return;
-    const dx = t.clientX - __touch.x, dy = t.clientY - __touch.y;
-    if (dx * dx + dy * dy > 144) __touch.moved = true;
-}, { passive: true, capture: true });
 document.addEventListener('touchend', function (ev) {
-    try {
-        const st = __touch;
-        __touch = null;
-        const t = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
-        if (!t || t.getAttribute('data-act') === 'modalBackdrop') return;
-        if (!st || st.moved) return;
-        if (Date.now() - st.time > 600) return;
-        const seen = window.__clickSeen || 0;
-        const lastD = window.__lastDispatch || 0;
-        setTimeout(function () {
-            if (Date.now() - seen < 450) return;
-            if (Date.now() - lastD < 600) return;
-            try {
-                if (t.hasAttribute('data-fav')) toggleFav(t.getAttribute('data-fav'));
-                else dispatchFromEl(t, null);
-            } catch (e) { /* noop */ }
-        }, 350);
-    } catch (e) { /* noop */ }
+    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
+    if (el) dispatchFromEl(el, null);
 }, true);
 window.addEventListener('error', function (ev) {
     dbgMsg('ОШИБКА JS: ' + (ev && ev.message || '?') + ' @' + (ev && ev.lineno || '?'));
@@ -501,7 +471,25 @@ function progressHtml(w) {
 }
 function diffTxt(delta, unit) {
     if (!delta) return '';
-    return ' (' + (delta > 0 ? '+' : '') + delta + unit + ')';
+    const up = delta > 0;
+    return ' <span class="dl ' + (up ? 'dl-up' : 'dl-down') + '">' + (up ? '▲ +' : '▼ −') + Math.abs(delta) + unit + '</span>';
+}
+function sparkSvg(vals) {
+    if (!vals || vals.length < 2) return '';
+    const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    const rng = max - min || 1;
+    const pts = vals.map((v, i) =>
+        Math.round((i / (vals.length - 1)) * 60 + 2) + ',' + Math.round(20 - ((v - min) / rng) * 16));
+    const up = vals[vals.length - 1] >= vals[0];
+    return '<svg class="spark" viewBox="0 0 64 24"><polyline class="' + (up ? 'spark-up' : 'spark-down') + '" points="' + pts.join(' ') + '"/></svg>';
+}
+function maxWeightSeries(name) {
+    const out = [];
+    for (const w of G.workouts) {
+        const e = findEx(w, name);
+        if (e && e.sets.length) out.push(maxWeightOf(e));
+    }
+    return out;
 }
 
 /* ---------- render: workout card ---------- */
@@ -598,7 +586,9 @@ window.addEventListener('scroll', function () {
 
 function render() {
     const app = document.getElementById('app');
-    let h = topbarHtml();
+    let h = railHtml();
+    if (railOpen) h += '<div class="rail-backdrop" data-act="toggleRail"></div>';
+    h += topbarHtml();
     if (tab === 'workout') h += renderWorkoutTab();
     if (tab === 'history') h += renderHistoryTab();
     if (tab === 'tech') h += renderTechTab();
@@ -622,6 +612,27 @@ function render() {
         if (q) q.addEventListener('input', function () { TECH.q = this.value; const list = document.getElementById('techList'); if (list) list.innerHTML = techListHtml(); });
     }
     dbgMsg('rev ' + (G ? G.rev : '-'));
+}
+let railOpen = false;
+function railHtml() {
+    const items = [
+        ['workout', 'dumbbell', 'Тренировка'],
+        ['history', 'timer', 'История'],
+        ['tech', 'pilates', 'Техника'],
+        ['stats', 'chart', 'Статистика']
+    ];
+    let h = '<div class="rail' + (railOpen ? ' open' : '') + '">';
+    h += '<button class="rail-user" data-act="toggleRail" title="Меню"><span class="nico">' + ico('user') + '</span><span class="rlabel">GymHelper</span></button>';
+    h += '<div class="rail-sep"></div><div class="rail-items">';
+    for (const it of items) {
+        h += '<button class="rail-item' + (tab === it[0] ? ' on' : '') + '" data-act="switchTab" data-a="' + it[0] + '" title="' + it[2] + '">' +
+            '<span class="nico">' + ico(it[1]) + '</span><span class="rlabel">' + it[2] + '</span></button>';
+    }
+    h += '</div><div class="rail-sep"></div>';
+    h += '<button class="rail-item' + (tab === 'profile' ? ' on' : '') + '" data-act="switchTab" data-a="profile" title="Настройки">' +
+        '<span class="nico">' + ico('user') + '</span><span class="rlabel">Настройки</span></button>';
+    h += '</div>';
+    return h;
 }
 function topbarHtml() {
     const names = { workout: 'Тренировка', history: 'История', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
@@ -684,10 +695,22 @@ function heroHtml(fin) {
     const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
     const month = todayISO().slice(0, 7);
     const mCount = fin.filter(w => (w.date || '').startsWith(month)).length;
+    const now = new Date();
+    const wFrom = new Date(now); wFrom.setDate(now.getDate() - 6);
+    const pFrom = new Date(now); pFrom.setDate(now.getDate() - 13);
+    const pTo = new Date(now); pTo.setDate(now.getDate() - 7);
+    const inW = w => { const dd = parseDateISO(w.date); return dd && dd >= wFrom && dd <= now; };
+    const inP = w => { const dd = parseDateISO(w.date); return dd && dd >= pFrom && dd < wFrom; };
+    const thisWeek = fin.filter(inW).length;
+    const prevWeek = fin.filter(inP).length;
+    let badge = '';
+    if (prevWeek > 0) badge = '<span class="badge-up">' + (thisWeek >= prevWeek ? '▲ +' : '▼ ') + Math.abs(thisWeek - prevWeek) + ' к прошлой неделе</span>';
+    else if (thisWeek > 0) badge = '<span class="badge-up">▲ +' + thisWeek + ' за неделю</span>';
     return '<div class="card hero">' +
         '<div class="hero-date">' + days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + '</div>' +
-        '<p class="t1" style="font-size:21px;margin-top:4px">Готов к тренировке?</p>' +
-        '<p class="muted">Всего тренировок: ' + fin.length + ' · в этом месяце: ' + mCount + '</p>' +
+        '<div class="hero-big">' + fin.length + '</div>' +
+        '<div class="hero-sub">тренировок всего · ' + mCount + ' в этом месяце</div>' +
+        (badge ? '<div style="margin-top:6px">' + badge + '</div>' : '') +
         '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
 }
 function innerCardLink(w) {
@@ -876,7 +899,16 @@ function renderStatsTab() {
         '<p class="meta">В этом месяце: ' + monthCount + '</p>';
     if (totalMin > 0) h += '<p class="meta">Общее время: ' + durationText(totalMin) + '</p>';
     h += '<p class="meta">Подходов всего: ' + totalSets + '</p></div>';
-    h += '<div class="card"><p class="t1">🏆 Упражнения</p>';
+    h += '<div class="card"><p class="t1">📈 Тренды</p>';
+    const trendNames = names.slice(0, 5);
+    for (const name of trendNames) {
+        const series = maxWeightSeries(name);
+        h += '<div class="trendline">' + sparkSvg(series) +
+            '<span style="flex:1;min-width:0"><b>' + esc(name) + '</b><br><span class="tn">' +
+            fmtW(series[series.length - 1] || 0) + ' кг — последний результат</span></span></div>';
+    }
+    if (!trendNames.length) h += '<p class="muted">Нет данных</p>';
+    h += '</div><div class="card"><p class="t1">🏆 Упражнения</p>';
     for (const name of names.slice(0, 15)) {
         const s = byEx[name];
         h += '<div class="statline"><b>' + esc(name) + '</b> (' + s.sessions + ' раз.)</div>' +
@@ -1119,7 +1151,13 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     let h = '<p class="mtitle">' + (isNew ? 'Новая запись' : 'Изменить запись') + '</p>' +
         '<p class="muted">' + esc(e.name) + '</p>' +
         '<label>Вес, кг (можно «50, 80» или «100-260», пусто — без веса)</label>' +
-        '<input id="mWeight" type="text" value="' + esc(s.w) + '">';
+        '<input id="mWeight" type="text" value="' + esc(s.w) + '">' +
+        '<div class="keypad">' +
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '-'].map(function (k) {
+            return '<button class="kp" data-act="kpIns" data-a="' + k + '">' + (k === '-' ? '–' : k) + '</button>';
+        }).join('') +
+        '<button class="kp kp-del" data-act="kpDel">⌫</button>' +
+        '</div>';
     if (isNew && SUG_W.length) {
         h += '<div class="chips">';
         SUG_W.forEach((v, i) => { h += '<button class="chip" data-act="chipW" data-a="' + i + '">' + esc(v) + 'кг</button>'; });
@@ -1144,6 +1182,15 @@ function chipW(i) {
 }
 function chipR(i) {
     document.getElementById('mReps').value = SUG_R[i];
+}
+function kpIns(ch) {
+    const inp = document.getElementById('mWeight');
+    if (!inp) return;
+    inp.value = (inp.value || '') + ch;
+}
+function kpDel() {
+    const inp = document.getElementById('mWeight');
+    if (inp && inp.value.length) inp.value = inp.value.slice(0, -1);
 }
 async function saveEntry() {
     if (!modalCtx) return;
