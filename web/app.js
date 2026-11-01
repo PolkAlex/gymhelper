@@ -11,12 +11,17 @@ let SUG_W = [];
 let SUG_R = [];
 let CUR = null;
 let PICKER = null;
-let TECH = { section: 'all', cat: null, q: '', open: null };
+let TECH = { section: 'all', cat: null, open: null };
 let profileSex = 'м';
 let editSnap = null;
 let pendingTab = null;
+let __delExerciseCtx = null;
+let __delSetCtx = null;
+let railOpen = false;
 
-/* ---------- themes ---------- */
+const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+
 const THEMES = [
     { id: 'sage', name: 'Шалфей', dots: ['#f6f3ec', '#fdfbf6', '#87a592'] },
     { id: 'forest', name: 'Тёмный лес', dots: ['#20211c', '#2a2b24', '#87a592'] },
@@ -32,109 +37,12 @@ const THEMES = [
     { id: 'midnight', name: 'Полночь', dots: ['#171c26', '#1f2532', '#7d95c9'] },
     { id: 'stockline', name: 'Stockline', dots: ['#16181d', '#1e2228', '#3ddc97'] }
 ];
-function applyTheme(id) {
-    document.documentElement.setAttribute('data-theme', id);
-    try { localStorage.setItem('gymTheme', id); } catch (e) { /* noop */ }
-    if (tg && tg.setHeaderColor) { try { tg.setHeaderColor('secondary_bg_color'); } catch (e2) { /* noop */ } }
-}
-function loadTheme() {
-    let id = 'sage';
-    try { id = localStorage.getItem('gymTheme') || 'sage'; } catch (e) { /* noop */ }
-    applyTheme(id);
-}
 
-/* ---------- actions ---------- */
-const ACTIONS = {
-    switchTab: function (a) {
-        if (tab === 'history' && viewWid && isDirty()) { pendingTab = a; exitConfirmModal(); return; }
-        tab = a; viewWid = 0; render();
-    },
-    openHistory: function (a) { viewWid = +a; tab = 'history'; render(); },
-    closeHistory: function () { closeHistory(); },
-    saveAndExit: function () { saveAndExit(); },
-    discardExit: function () { discardEdits(); },
-    startWorkout: function () { startWorkout(); },
-    openEntryModal: function (a, b, c) { openEntryModal(+a, +b, +c); },
-    finishWorkout: function (a) { finishWorkout(+a); },
-    deleteWorkout: function (a) { deleteWorkout(+a); },
-    openPicker: function (a) { openPicker(+a); },
-    pickerSection: function (a) { if (PICKER) { PICKER.section = a; PICKER.cat = null; renderPickerModal(); } },
-    pickerCat: function (a) { if (PICKER) { PICKER.cat = PICKER.cat === a ? null : a; renderPickerModal(); } },
-    pickCatEx: function (a) { pickCatEx(a); },
-    customExerciseModal: function () { customExerciseModal(); },
-    createCustom: function () { createCustom(); },
-    openTech: function (a) { TECH.open = a; render(); },
-    techBack: function () { TECH.open = null; render(); },
-    techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
-    techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
-    chipW: function (a) { chipW(+a); },
-    chipR: function (a) { chipR(+a); },
-    saveEntry: function () { saveEntry(); },
-    deleteEntry: function () { deleteEntry(); },
-    renameModal: function () { renameModal(); },
-    doRename: function () { doRename(); },
-    nutrModal: function (a) { nutrModal(+a); },
-    saveNutr: function (a) { saveNutr(+a); },
-    clearNutr: function (a) { clearNutr(+a); },
-    titleModal: function (a) { titleModal(+a); },
-    saveTitle: function (a) { saveTitle(+a); },
-    autoTitle: function (a) { autoTitle(+a); },
-    timeModal: function (a) { timeModal(+a); },
-    saveTime: function (a) { saveTime(+a); },
-    confirmModal: function (a, b, c) { confirmModal(a, b, +c); },
-    confirmYes: function () { confirmYes(); },
-    saveWorkout: function (a) { saveWorkout(+a); },
-    setTheme: function (a) { applyTheme(a); render(); },
-    setSex: function (a) { profileSex = a; render(); },
-    saveProfile: function () { saveProfile(); },
-    closeModal: function () { closeModal(); },
-    renameExercise: function (a, b) { renameExercise(+a, +b); },
-    deleteExercise: function (a, b) { deleteExercise(+a, +b); },
-    deleteExerciseGo: function () { deleteExerciseGo(); },
-    deleteSet: function (a, b, c) { deleteSet(+a, +b, +c); },
-    deleteSetGo: function () { deleteSetGo(); },
-    kpIns: function (a) { kpIns(a); },
-    kpDel: function () { kpDel(); },
-    modalBackdrop: function () { closeModal(); },
-};
-
-function dbgMsg(t) {
-    const d = document.getElementById('dbg');
-    if (d) d.textContent = t;
-}
-function dispatchFromEl(el, ev) {
-    if (Date.now() - (el.__gymFired || 0) < 400) return;
-    el.__gymFired = Date.now();
-    const fav = el.getAttribute('data-fav');
-    if (fav) { toggleFav(fav); return; }
-    const act = el.getAttribute('data-act');
-    if (act === 'modalBackdrop') {
-        if (!ev || ev.target === el) closeModal();
-        return;
-    }
-    const fn = ACTIONS[act];
-    if (typeof fn === 'function') {
-        fn(el.getAttribute('data-a'), el.getAttribute('data-b'), el.getAttribute('data-c'));
-    }
-}
-window.addEventListener('click', function (ev) {
-    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
-    if (el) dispatchFromEl(el, ev);
-}, true);
-document.addEventListener('touchend', function (ev) {
-    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
-    if (el) dispatchFromEl(el, null);
-}, true);
-window.addEventListener('error', function (ev) {
-    dbgMsg('ОШИБКА JS: ' + (ev && ev.message || '?') + ' @' + (ev && ev.lineno || '?'));
-});
-
-/* ---------- utils ---------- */
+/* ============ утилиты ============ */
 function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function pad2(n) { return String(n).padStart(2, '0'); }
-const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 function fmtW(w) {
     if (w == null || isNaN(w)) return '0';
     return Number.isInteger(+w) ? String(+w) : String(w);
@@ -156,7 +64,7 @@ function parseDateISO(s) {
 function firstLine(w) {
     const d = parseDateISO(w.date);
     if (!d) return w.date || 'Тренировка';
-    return pad2(d.getDate()) + '-' + pad2(d.getMonth() + 1) + ' ' + DOW[(d.getDay() + 6) % 7];
+    return pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) + ', ' + DOW[(d.getDay() + 6) % 7];
 }
 function titleLines(w) {
     if (w.title && w.title.trim()) return w.title.split('\n').map(s => s.trim()).filter(Boolean);
@@ -208,7 +116,7 @@ function durationMin(w) {
 }
 function durationText(mins) {
     const h = Math.floor(mins / 60), m = mins % 60;
-    return h > 0 ? h + 'ч ' + m + 'м' : m + 'м';
+    return h > 0 ? h + ' ч ' + m + ' м' : m + ' м';
 }
 function bmr(p) {
     const base = 10 * p.weight + 6.25 * p.height - 5 * p.age;
@@ -276,8 +184,19 @@ function entryLine(s) {
 function isCustomEx(name) {
     return !findCatalog(name);
 }
+function dayPart(w) {
+    if (!w.started) return null;
+    const hh = +String(w.started).slice(11, 13);
+    if (hh < 12) return { n: 'утро', i: '🌅' };
+    if (hh < 18) return { n: 'день', i: '☀️' };
+    return { n: 'вечер', i: '🌙' };
+}
+function isWarmupName(name) {
+    const c = findCatalog(name);
+    return c ? c.t.includes('warmup') : /^разминка/i.test(name);
+}
 
-/* ---------- timing ---------- */
+/* ============ тайминг и калории ============ */
 function closeCurrentExercise() {
     if (!CUR) return;
     const w = findW(CUR.wid);
@@ -317,8 +236,6 @@ function exStats(e) {
     }
     return { mins, restSec };
 }
-
-/* ---------- calories ---------- */
 function calcWorkoutKcal(p, w) {
     if (!p || !(p.weight > 0)) return null;
     const exs = (w.exercises || []).filter(e => e.sets.length);
@@ -351,7 +268,9 @@ function calcWorkoutKcal(p, w) {
     return { total, lines };
 }
 
+/* ============ сохранение (очередь) ============ */
 let __saveChain = Promise.resolve();
+let __saveBusy = false;
 function save() {
     const run = __saveChain.then(function () { return doSave(); });
     __saveChain = run.catch(function () { });
@@ -376,7 +295,6 @@ async function doSave() {
         __saveBusy = false;
     }
 }
-let __saveBusy = false;
 async function reloadSilently(force) {
     if (!force && __saveBusy) return;
     if (!force && tab === 'history' && viewWid) return;
@@ -389,6 +307,7 @@ async function reloadSilently(force) {
         if (j.ok && j.data) {
             G = j.data;
             if (!G.workouts) G.workouts = [];
+            if (!G.del) G.del = [];
             if (G.nextId < 1) G.nextId = 1;
             if (G.profile) profileSex = G.profile.sex;
             render();
@@ -396,195 +315,136 @@ async function reloadSilently(force) {
     } catch (e) { /* noop */ }
 }
 document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) reloadSilently();
+    if (!document.hidden && !(tab === 'history' && viewWid)) reloadSilently();
 });
-window.addEventListener('focus', function () { reloadSilently(); });
+window.addEventListener('focus', function () {
+    if (!(tab === 'history' && viewWid)) reloadSilently();
+});
 
-function timeLine(w) {
-    if (!w.started) return '⏱ время не зафиксировано';
-    const start = w.started.slice(11, 16);
-    const mins = durationMin(w);
-    const dur = mins != null ? ' · ' + durationText(mins) : '';
-    if (w.finished && w.ended) return '⏱ ' + start + '–' + w.ended.slice(11, 16) + dur;
-    return '⏱ начало ' + start + dur;
+/* ============ доставка действий ============ */
+function dispatchFromEl(el, ev) {
+    if (Date.now() - (el.__gymFired || 0) < 400) return;
+    el.__gymFired = Date.now();
+    const fav = el.getAttribute('data-fav');
+    if (fav) { toggleFav(fav); return; }
+    const act = el.getAttribute('data-act');
+    if (act === 'modalBackdrop') {
+        if (!ev || ev.target === el) closeModal();
+        return;
+    }
+    const fn = ACTIONS[act];
+    if (typeof fn === 'function') {
+        fn(el.getAttribute('data-a'), el.getAttribute('data-b'), el.getAttribute('data-c'));
+    }
 }
-
-function kcalBreakdown(w) {
-    const res = calcWorkoutKcal(G.profile, w);
-    const mins = durationMin(w);
-    if (mins == null) return '<p class="muted">Время начала не зафиксировано — нажми «⏱ Время».</p>';
-    let h = '⏱ Длительность: ' + durationText(mins);
-    h += '\n🏋️ Объём: ≈' + fmtW(Math.round(workoutVolume(w))) + ' кг';
-    if (!G.profile || !(G.profile.weight > 0)) {
-        h += '\n\n⚠️ Задай вес в профиле — он нужен для расчёта.';
-        return '<div class="hl">' + esc(h) + '</div>';
-    }
-    h += '\nВес: ' + fmtW(G.profile.weight) + ' кг · формула: MET × 3.5 × вес ÷ 200 × мин\n';
-    for (const l of res.lines) {
-        h += '\n• ' + esc(l.name) + ' — ' + (l.m != null ? l.m + ' мин, ' : '') + 'MET ' + l.met + (l.kcal != null ? ' ≈ ' + l.kcal + ' ккал' : '');
-    }
-    h += '\n\n🔥 Итого: ≈' + res.total + ' ккал';
-    return '<div class="hl">' + esc(h) + '</div>';
-}
-
-function progressHtml(w) {
-    const prev = prevOf(w);
-    if (!prev) return '<p class="muted">Это первая тренировка — сравнивать не с чем.</p>';
-    let h = '<p class="muted">Сравнение с ' + esc(firstLine(prev)) + '</p>';
-    const d1 = durationMin(w), d0 = durationMin(prev);
-    if (d1 != null && d0 != null) {
-        h += '<div class="statline">⏱ ' + durationText(d0) + ' → ' + durationText(d1) + diffTxt(d1 - d0, ' мин') + '</div>';
-    }
-    const p = G.profile;
-    if (p && p.weight > 0) {
-        const k1 = calcWorkoutKcal(p, w), k0 = calcWorkoutKcal(p, prev);
-        if (k0 && k1) {
-            h += '<div class="statline">🔥 ' + k0.total + ' → ' + k1.total + ' ккал' + diffTxt(k1.total - k0.total, '') + '</div>';
-        }
-    }
-    h += '<div class="statline"><b>Упражнения</b></div>';
-    let any = false;
-    for (const e of (w.exercises || [])) {
-        if (!e.sets.length) continue;
-        const pe = findEx(prev, e.name);
-        if (!pe || !pe.sets.length) {
-            h += '<div class="statline">• ' + esc(e.name) + ': новое упражнение</div>';
-            any = true;
-            continue;
-        }
-        const cur = maxWeightOf(e), pw = maxWeightOf(pe);
-        const cs = setsCount(e), ps = setsCount(pe);
-        let line = '• ' + esc(e.name) + ': ';
-        if (pw > 0 || cur > 0) {
-            line += fmtW(pw) + ' → ' + fmtW(cur) + 'кг' + diffTxt(Math.round(cur - pw), 'кг');
-        } else {
-            line += 'без веса';
-        }
-        if (ps !== cs) line += ', подходов ' + ps + ' → ' + cs;
-        h += '<div class="statline">' + line + '</div>';
-        any = true;
-    }
-    if (!any) h += '<p class="muted">Нет записей.</p>';
-    return h;
-}
-function diffTxt(delta, unit) {
-    if (!delta) return '';
-    const up = delta > 0;
-    return ' <span class="dl ' + (up ? 'dl-up' : 'dl-down') + '">' + (up ? '▲ +' : '▼ −') + Math.abs(delta) + unit + '</span>';
-}
-function sparkSvg(vals) {
-    if (!vals || vals.length < 2) return '';
-    const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
-    const rng = max - min || 1;
-    const pts = vals.map((v, i) =>
-        Math.round((i / (vals.length - 1)) * 60 + 2) + ',' + Math.round(20 - ((v - min) / rng) * 16));
-    const up = vals[vals.length - 1] >= vals[0];
-    return '<svg class="spark" viewBox="0 0 64 24"><polyline class="' + (up ? 'spark-up' : 'spark-down') + '" points="' + pts.join(' ') + '"/></svg>';
-}
-function maxWeightSeries(name) {
-    const out = [];
-    for (const w of G.workouts) {
-        const e = findEx(w, name);
-        if (e && e.sets.length) out.push(maxWeightOf(e));
-    }
-    return out;
+window.addEventListener('click', function (ev) {
+    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
+    if (el) dispatchFromEl(el, ev);
+}, true);
+document.addEventListener('touchend', function (ev) {
+    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
+    if (el) dispatchFromEl(el, null);
+}, true);
+window.addEventListener('error', function (ev) {
+    dbgMsg('ОШИБКА JS: ' + (ev && ev.message || '?') + ' @' + (ev && ev.lineno || '?'));
+});
+function dbgMsg(t) {
+    const d = document.getElementById('dbg');
+    if (d) d.textContent = t;
 }
 
-/* ---------- render: workout card ---------- */
-function iconRowHtml(w) {
-    return '<div class="btnrow iconrow wideic">' +
-        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ico('trash') + '</button>' +
-        '<button class="barebtn" data-act="nutrModal" data-a="' + w.id + '" title="Питание">' + ico('cup') + '</button>' +
-        '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ico('timer') + '</button>' +
-        '</div>';
+/* ============ темы ============ */
+function applyTheme(id) {
+    document.documentElement.setAttribute('data-theme', id);
+    try { localStorage.setItem('gymTheme', id); } catch (e) { /* noop */ }
+    if (tg && tg.setHeaderColor) { try { tg.setHeaderColor('secondary_bg_color'); } catch (e2) { /* noop */ } }
 }
-function workoutCard(w, showActions) {
-    showActions = showActions !== false;
-    const lines = titleLines(w);
-    let h = '<div class="card" id="w' + w.id + '">';
-    const dpw = dayPart(w);
-    h += '<div class="wchead"><div class="wctitles"><p class="t1">' +
-        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p>';
-    for (let i = 1; i < lines.length; i++) h += '<div class="tn">' + esc(lines[i]) + '</div>';
-    h += '</div><div class="wcicons">' +
-        '<button class="barebtn pencil-bare" data-act="titleModal" data-a="' + w.id + '" title="Название">' + ico('pencil') + '</button>' +
-        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ico('trash') + '</button>' +
-        '</div></div>';
-    h += '<p class="meta">' + esc(timeLine(w)) + '</p>';
-    if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
-    if (G.profile && G.profile.weight > 0) {
-        const res = calcWorkoutKcal(G.profile, w);
-        if (res && res.total > 0) h += '<p class="kcalline">🔥 ≈' + res.total + ' ккал</p>';
-    }
-    const exs = w.exercises || [];
-    if (!exs.length) {
-        h += '<p class="muted" style="margin-top:8px">Пока нет упражнений.</p>';
-    }
-    exs.forEach((e, ei) => {
-        const c = findCatalog(e.name);
-        const st = exStats(e);
-        let timeNote = '';
-        if (st) {
-            timeNote = '⏱ ' + durationText(st.mins) + (st.restSec != null ? ' · отдых ~' + st.restSec + ' сек' : '');
-        }
-        h += '<div class="expill"><div class="exhead">' + (c ? ico(c.i) : ico('custom')) +
-            '<span class="exname">' + esc(e.name) + '</span>' +
-            '<span class="recic">' +
-            '<span class="recbtn" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Переименовать">✏️</span>' +
-            '<span class="recbtn" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">🗑️</span>' +
-            '</span></div>';
-        if (timeNote) {
-            h += '<div class="exsub">⏱ ' + durationText(st.mins) +
-                (st.restSec != null ? ' · ~' + st.restSec + ' с' : '') + '</div>';
-        }
-        e.sets.forEach((s, si) => {
-            h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
-                '<span class="rectext">' + esc(entryLine(s)) + '</span>' +
-                '<span class="recic">' +
-                '<span class="recbtn" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Изменить">✏️</span>' +
-                '<span class="recbtn" data-act="deleteSet" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Удалить запись">🗑️</span>' +
-                '</span></div>';
-        });
-        if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
-            h += '<div class="restline"> упражнение активно — время идёт</div>';
-        }
-        h += '<div class="btnrow"><button class="btn sec" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1">➕ Запись</button></div>';
-        h += '</div>';
-    });
-    if (G.profile && G.profile.weight > 0 && exs.length) {
-        h += '<details><summary>🔥 Ккал по упражнениям</summary>' + kcalBreakdown(w) + '</details>';
-    }
-    h += '<details><summary>📈 Прогресс</summary>' + progressHtml(w) + '</details>';
-    if (showActions) h += '<div class="btnrow">';
-    if (showActions && !w.finished) {
-        h += '<button class="btn prime" data-act="openPicker" data-a="' + w.id + '">➕ Упражнение</button>';
-        h += '<button class="btn" data-act="finishWorkout" data-a="' + w.id + '">✅ Завершить</button>';
-        h += '</div>';
-        h += iconRowHtml(w);
-    }
-    if (showActions && w.finished) {
-        h += '</div>';
-        h += iconRowHtml(w);
-    }
-    if (showActions) h += '</div>';
-    h += '</div>';
-    return h;
+function loadTheme() {
+    let id = 'sage';
+    try { id = localStorage.getItem('gymTheme') || 'sage'; } catch (e) { /* noop */ }
+    applyTheme(id);
 }
 
-let navMin = false;
-let __lastY = 0;
-window.addEventListener('scroll', function () {
-    const y = window.scrollY || window.pageYOffset;
-    if (y > __lastY + 10 && y > 70) navMin = true;
-    else if (y < __lastY - 10 || y < 70) navMin = false;
-    __lastY = y;
-    const nav = document.querySelector('.nav');
-    if (nav) nav.classList.toggle('min', navMin);
-}, { passive: true });
+/* ============ ACTIONS ============ */
+const ACTIONS = {
+    switchTab: function (a) {
+        if (tab === 'history' && viewWid && isDirty()) { pendingTab = a; exitDirtyModal(); return; }
+        tab = a; viewWid = 0; render();
+    },
+    openHistory: function (a) {
+        editSnap = JSON.stringify(G);
+        viewWid = +a;
+        tab = 'history';
+        render();
+    },
+    openEntryModal: function (a, b, c) { openEntryModal(+a, +b, +c); },
+    closeHistory: function () {
+        if (isDirty()) { exitDirtyModal(); return; }
+        editSnap = null;
+        viewWid = 0;
+        render();
+    },
+    saveAndExit: async function () {
+        closeModal();
+        await save();
+        editSnap = null;
+        viewWid = 0;
+        render();
+    },
+    discardExit: async function () {
+        closeModal();
+        await reloadSilently(true);
+        editSnap = null;
+        viewWid = 0;
+        render();
+    },
+    saveWorkout: async function () { await saveWorkout(); },
+    startWorkout: function () { startWorkout(); },
+    finishWorkout: function (a) { finishWorkout(+a); },
+    deleteWorkout: function (a) { deleteWorkout(+a); },
+    openPicker: function (a) { openPicker(+a); },
+    pickerSection: function (a) { if (PICKER) { PICKER.section = a; PICKER.cat = null; renderPickerModal(); } },
+    pickerCat: function (a) { if (PICKER) { PICKER.cat = PICKER.cat === a ? null : a; renderPickerList(); } },
+    pickCatEx: function (a) { pickCatEx(a); },
+    customExerciseModal: function () { customExerciseModal(); },
+    createCustom: function () { createCustom(); },
+    openTech: function (a) { TECH.open = a; render(); },
+    techBack: function () { TECH.open = null; render(); },
+    techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
+    techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
+    chipW: function (a) { chipW(+a); },
+    chipR: function (a) { chipR(+a); },
+    kpIns: function (a) { kpIns(a); },
+    kpDel: function () { kpDel(); },
+    saveEntry: async function () { await saveEntry(); },
+    deleteEntry: async function () { await deleteEntry(); },
+    renameExercise: function (a, b) { renameExercise(+a, +b); },
+    doRename: async function () { await doRename(); },
+    deleteExercise: function (a, b) { deleteExercise(+a, +b); },
+    deleteExerciseGo: function () { deleteExerciseGo(); },
+    deleteSet: function (a, b, c) { deleteSet(+a, +b, +c); },
+    deleteSetGo: function () { deleteSetGo(); },
+    nutrModal: function (a) { nutrModal(+a); },
+    saveNutr: function (a) { saveNutr(+a); },
+    clearNutr: function (a) { clearNutr(+a); },
+    titleModal: function (a) { titleModal(+a); },
+    saveTitle: function (a) { saveTitle(+a); },
+    autoTitle: function (a) { autoTitle(+a); },
+    timeModal: function (a) { timeModal(+a); },
+    saveTime: function (a) { saveTime(+a); },
+    confirmModal: function (a, b, c) { confirmModal(a, b, +c); },
+    confirmYes: function () { confirmYes(); },
+    setTheme: function (a) { applyTheme(a); render(); },
+    setSex: function (a) { profileSex = a; render(); },
+    saveProfile: function () { saveProfile(); },
+    closeModal: function () { closeModal(); },
+    modalBackdrop: function () { closeModal(); }
+};
 
+/* ============ каркас ============ */
 function render() {
     const app = document.getElementById('app');
-    h += topbarHtml();
+    let h = topbarHtml();
     if (tab === 'workout') h += renderWorkoutTab();
     if (tab === 'history') h += renderHistoryTab();
     if (tab === 'tech') h += renderTechTab();
@@ -594,7 +454,7 @@ function render() {
     h += navHtml();
     if (tab === 'history' && viewWid && findW(viewWid)) {
         h += '<div class="backbar"><div class="ab-row">' +
-            '<button class="btn prime" data-act="saveWorkout" data-a="' + viewWid + '">💾 Сохранить</button>' +
+            '<button class="btn prime" data-act="saveWorkout">💾 Сохранить</button>' +
             '<button class="btn sec" data-act="closeHistory">🚪 Выйти</button>' +
             '</div></div>';
         h += '<div style="height:70px"></div>';
@@ -610,21 +470,11 @@ function render() {
     }
     dbgMsg('rev ' + (G ? G.rev : '-'));
 }
-
-function topbarHtml() {
-    const names = { workout: 'Тренировка', history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
-    return '<div class="topbar"><span class="tb-title">GymHelper · ' + names[tab] + '</span></div>';
-}
-function renderCoachTab() {
-    return '<div class="card hero"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
-        '<p class="muted">Раздел в разработке: здесь появятся персональные программы тренировок, разборы техники и советы по питанию.</p>' +
-        '<p class="meta">Следи за обновлениями 💪</p></div>';
-}
 function navHtml() {
     const items = [
-        ['workout', 'dumbbell', 'Тренировка', true],
         ['history', 'timer', 'История'],
         ['coach', 'user', 'Тренер'],
+        ['workout', 'dumbbell', 'Тренировка', true],
         ['tech', 'pilates', 'Техника'],
         ['stats', 'chart', 'Статистика']
     ];
@@ -633,24 +483,15 @@ function navHtml() {
         return '<button class="' + (tab === it[0] ? 'on ' : '') + (c ? 'navc' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
             '<span class="nwrap' + (c ? ' ncc' : '') + '"><span class="nico">' + (ICONS[it[1]] || '') + '</span></span>' +
             '<span class="nlabel">' + it[2] + '</span></button>';
-    }).join('') + '<div class="nav-notch"></div></div>';}
-function backBarHtml(action, label) {
-    return '<div class="backbar"><button class="btn sec wide" data-act="' + action + '">' + label + '</button></div>';
+    }).join('') + '</div>';
 }
-function workoutActionBarHtml(w) {
-    return '<div class="actionbar">' +
-        '<div class="ab-row">' +
-        '<button class="btn prime ab-big" data-act="openPicker" data-a="' + w.id + '">➕ Упражнение</button>' +
-        '<button class="btn prime ab-big" data-act="finishWorkout" data-a="' + w.id + '">✅ Завершить</button>' +
-        '<button class="btn danger ab-big ab-x" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">✕</button>' +
-        '</div>' +
-        '<div class="ab-row ab-small">' +
-        '<button class="btn sec" data-act="nutrModal" data-a="' + w.id + '">🥤 Питание</button>' +
-        '<button class="btn sec" data-act="timeModal" data-a="' + w.id + '">⏱ Время</button>' +
-        '<button class="btn sec" data-act="titleModal" data-a="' + w.id + '">🏷 Название</button>' +
-        '</div></div>';
+function topbarHtml() {
+    const names = { workout: 'Тренировка', history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
+    return '<div class="topbar"><span class="tb-title">GymHelper · ' + names[tab] + '</span>' +
+        '<button class="tb-user" data-act="switchTab" data-a="profile" title="Настройки">' + ico('user') + '</button></div>';
 }
 
+/* ---------- вкладка тренировки ---------- */
 function renderWorkoutTab() {
     const fin = G.workouts.filter(w => w.finished);
     const unfin = G.workouts.filter(w => !w.finished).slice().reverse();
@@ -687,7 +528,7 @@ function heroHtml(fin) {
     const thisWeek = fin.filter(inW).length;
     const prevWeek = fin.filter(inP).length;
     let badge = '';
-    if (prevWeek > 0) badge = '<span class="badge-up">' + (thisWeek >= prevWeek ? '▲ +' : '▼ ') + Math.abs(thisWeek - prevWeek) + ' к прошлой неделе</span>';
+    if (prevWeek > 0) badge = '<span class="badge-up">' + (thisWeek >= prevWeek ? '▲ +' : '▼ −') + Math.abs(thisWeek - prevWeek) + ' к прошлой неделе</span>';
     else if (thisWeek > 0) badge = '<span class="badge-up">▲ +' + thisWeek + ' за неделю</span>';
     return '<div class="card hero">' +
         '<div class="hero-date">' + days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + '</div>' +
@@ -696,21 +537,6 @@ function heroHtml(fin) {
         (badge ? '<div style="margin-top:6px">' + badge + '</div>' : '') +
         '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
 }
-function innerCardLink(w) {
-    return previewCard(w);
-}
-function dayPart(w) {
-    if (!w.started) return null;
-    const h = +String(w.started).slice(11, 13);
-    if (h < 12) return { n: 'утро', i: '🌅' };
-    if (h < 18) return { n: 'день', i: '☀️' };
-    return { n: 'вечер', i: '🌙' };
-}
-function isWarmupName(name) {
-    const c = findCatalog(name);
-    return c ? c.t.includes('warmup') : /^разминка/i.test(name);
-}
-const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 function previewCard(w) {
     const d = parseDateISO(w.date);
     const dateStr = d ? pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) : (w.date || '—');
@@ -724,21 +550,33 @@ function previewCard(w) {
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard" data-act="openHistory" data-a="' + w.id + '">';
     h += '<div class="pc-main">';
-    h += '<div class="pc-date">' + (dp ? '<span class="pc-dp">' + dp.i + '</span> ' : '') + dateStr + '</div>';
-    if (!w.finished) h += '<div><span class="pc-pill">⚡ идёт</span></div>';
+    h += '<div class="pc-daterow"><span class="pc-date">' + dateStr + '</span>' +
+        (w.finished
+            ? (dp ? '<span class="pc-pill">' + dp.i + ' ' + dp.n + '</span>' : '')
+            : '<span class="pc-pill">⚡ идёт</span>') + '</div>';
     if (!show.length) h += '<div class="pc-ex">Нет записей</div>';
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';
     h += '</div>';
-    h += '<div class="pc-side">';
-    h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-right">';
     if (mins != null) h += '<span>⏱ ' + durationText(mins) + '</span>';
     if (res && res.total > 0) h += '<span>🔥 ' + res.total + ' ккал</span>';
     h += '<span>🏋 ' + sets + ' подх.</span>';
-    h += '</div></div></div>';
+    h += '</div></div>';
     return h;
 }
+function dayPart(w) {
+    if (!w.started) return null;
+    const hh = +String(w.started).slice(11, 13);
+    if (hh < 12) return { n: 'утро', i: '🌅' };
+    if (hh < 18) return { n: 'день', i: '☀️' };
+    return { n: 'вечер', i: '🌙' };
+}
+function isWarmupName(name) {
+    const c = findCatalog(name);
+    return c ? c.t.includes('warmup') : /^разминка/i.test(name);
+}
 
+/* ---------- история и карточка ---------- */
 function renderHistoryTab() {
     if (viewWid) {
         const w = findW(viewWid);
@@ -761,16 +599,16 @@ function openHistory(id) {
     tab = 'history';
     render();
 }
-function isDirty() {
-    return editSnap !== null && JSON.stringify(G) !== editSnap;
-}
 function closeHistory() {
-    if (isDirty()) { exitConfirmModal(); return; }
+    if (isDirty()) { exitDirtyModal(); return; }
     editSnap = null;
     viewWid = 0;
     render();
 }
-function exitConfirmModal() {
+function isDirty() {
+    return editSnap !== null && JSON.stringify(G) !== editSnap;
+}
+function exitDirtyModal() {
     const h = '<p class="mtitle">Есть несохранённые изменения</p>' +
         '<div class="btnrow"><button class="btn prime wide" data-act="saveAndExit">💾 Сохранить и выйти</button>' +
         '<button class="btn sec wide" data-act="discardExit">🚪 Выйти без сохранения</button>' +
@@ -779,26 +617,181 @@ function exitConfirmModal() {
 }
 async function saveAndExit() {
     closeModal();
-    const r = await save();
-    if (r !== 'ok') {
-        alert('Не удалось сохранить. Проверь интернет и попробуй ещё раз.');
-        return;
-    }
+    await save();
     editSnap = null;
     viewWid = 0;
-    if (pendingTab) { tab = pendingTab; pendingTab = null; }
     render();
 }
-async function discardEdits() {
+async function discardExit() {
     closeModal();
     await reloadSilently(true);
     editSnap = null;
     viewWid = 0;
-    if (pendingTab) { tab = pendingTab; pendingTab = null; }
     render();
 }
 
-/* ---------- tech tab ---------- */
+/* ---------- карточка тренировки ---------- */
+function workoutCard(w, showActions) {
+    showActions = showActions !== false;
+    const lines = titleLines(w);
+    let h = '<div class="card" id="w' + w.id + '">';
+    const dpw = dayPart(w);
+    h += '<div class="wchead"><div class="wctitles"><p class="t1">' +
+        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p>';
+    for (let i = 1; i < lines.length; i++) h += '<div class="tn">' + esc(lines[i]) + '</div>';
+    h += '</div><div class="wcicons">' +
+        '<button class="barebtn pencil-bare" data-act="titleModal" data-a="' + w.id + '" title="Название">' + ICONS.pencil + '</button>' +
+        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
+        '</div></div>';
+    h += '<p class="meta">' + esc(timeLine(w)) + '</p>';
+    if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
+    if (G.profile && G.profile.weight > 0) {
+        const res = calcWorkoutKcal(G.profile, w);
+        if (res && res.total > 0) h += '<p class="kcalline">🔥 ≈' + res.total + ' ккал</p>';
+    }
+    const exs = w.exercises || [];
+    if (!exs.length) {
+        h += '<p class="muted" style="margin-top:8px">Пока нет упражнений.</p>';
+    }
+    exs.forEach((e, ei) => {
+        const c = findCatalog(e.name);
+        const st = exStats(e);
+        let timeNote = '';
+        if (st) {
+            timeNote = '⏱ ' + durationText(st.mins) + (st.restSec != null ? ' · отдых ~' + st.restSec + ' сек' : '');
+        }
+        h += '<div class="expill"><div class="exhead">' + (c ? ico(c.i) : ico('custom')) +
+            '<span class="exname">' + esc(e.name) + '</span>' +
+            (timeNote ? '<span class="extime">' + esc(timeNote) + '</span>' : '') +
+            '<button class="barebtn pencil-bare" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Переименовать">' + ICONS.pencil + '</button>' +
+            '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
+            '</div>';
+        e.sets.forEach((s, si) => {
+            h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
+                '<span class="rectext">' + esc(entryLine(s)) + '</span>' +
+                '<span class="recic">' +
+                '<span class="recbtn" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Изменить">✏️</span>' +
+                '<span class="recbtn" data-act="deleteSet" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Удалить запись">🗑️</span>' +
+                '</span></div>';
+        });
+        if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
+            h += '<div class="restline"> упражнение активно — время идёт</div>';
+        }
+        h += '<div class="btnrow"><button class="btn sec" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1">➕ Запись</button></div>';
+        h += '</div>';
+    });
+    if (G.profile && G.profile.weight > 0 && exs.length) {
+        h += '<details><summary>🔥 Ккал по упражнениям</summary>' + kcalBreakdown(w) + '</details>';
+    }
+    h += '<details><summary>📈 Прогресс</summary>' + progressHtml(w) + '</details>';
+    if (showActions) h += '<div class="btnrow">';
+    if (showActions && !w.finished) {
+        h += '<button class="btn prime" data-act="openPicker" data-a="' + w.id + '">➕ Упражнение</button>';
+        h += '<button class="btn prime" data-act="finishWorkout" data-a="' + w.id + '">✅ Завершить</button>';
+        h += '<button class="btn danger" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">✕ Отменить</button>';
+        h += '</div>';
+        h += '<div class="btnrow iconrow wideic">' +
+            '<button class="barebtn" data-act="nutrModal" data-a="' + w.id + '" title="Питание">' + ICONS.cup + '</button>' +
+            '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
+            '</div>';
+    }
+    if (showActions && w.finished) {
+        h += '<button class="btn danger wide" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">🗑 Удалить тренировку</button>';
+    }
+    if (showActions) h += '</div>';
+    h += '</div>';
+    return h;
+}
+function timeLine(w) {
+    if (!w.started) return '⏱ время не зафиксировано';
+    const start = w.started.slice(11, 16);
+    const mins = durationMin(w);
+    const dur = mins != null ? ' · ' + durationText(mins) : '';
+    if (w.finished && w.ended) return '⏱ ' + start + '–' + w.ended.slice(11, 16) + dur;
+    return '⏱ начало ' + start + dur;
+}
+function kcalBreakdown(w) {
+    const mins = durationMin(w);
+    if (mins == null) return '<p class="muted">Время начала не зафиксировано — нажми «⏱ Время».</p>';
+    const vol = workoutVolume(w);
+    let h = '⏱ Длительность: ' + durationText(mins);
+    h += '\n🏋️ Объём: ≈' + fmtW(Math.round(workoutVolume(w))) + ' кг';
+    if (!G.profile || !(G.profile.weight > 0)) {
+        h += '\n\n⚠️ Задай вес в профиле — он нужен для расчёта.';
+        return '<div class="hl">' + esc(h) + '</div>';
+    }
+    h += '\nВес: ' + fmtW(G.profile.weight) + ' кг · формула: MET × 3.5 × вес ÷ 200 × мин\n';
+    const res = calcWorkoutKcal(G.profile, w);
+    for (const l of res.lines) {
+        h += '\n• ' + esc(l.name) + ' — ' + (l.m != null ? l.m + ' мин, ' : '') + 'MET ' + l.met + (l.kcal != null ? ' ≈ ' + l.kcal + ' ккал' : '');
+    }
+    h += '\n\n🔥 Итого: ≈' + res.total + ' ккал';
+    return '<div class="hl">' + esc(h) + '</div>';
+}
+function progressHtml(w) {
+    const prev = prevOf(w);
+    if (!prev) return '<p class="muted">Это первая тренировка — сравнивать не с чем.</p>';
+    let h = '<p class="muted">Сравнение с ' + esc(firstLine(prev)) + '</p>';
+    const d1 = durationMin(w), d0 = durationMin(prev);
+    if (d1 != null && d0 != null) {
+        h += '<div class="statline">⏱ ' + durationText(d0) + ' → ' + durationText(d1) + diffTxt(d1 - d0, ' мин') + '</div>';
+    }
+    const p = G.profile;
+    if (p && p.weight > 0) {
+        const k1 = calcWorkoutKcal(p, w), k0 = calcWorkoutKcal(p, prev);
+        if (k0 && k1) {
+            h += '<div class="statline">🔥 ' + k0.total + ' → ' + k1.total + ' ккал' + diffTxt(k1.total - k0.total, '') + '</div>';
+        }
+    }
+    h += '<div class="statline"><b>Упражнения</b></div>';
+    let any = false;
+    for (const e of (w.exercises || [])) {
+        if (!e.sets.length) continue;
+        const pe = findEx(prev, e.name);
+        if (!pe || !pe.sets.length) {
+            h += '<div class="statline">• ' + esc(e.name) + ': новое упражнение</div>';
+            any = true;
+            continue;
+        }
+        const cur = maxWeightOf(e), pw = maxWeightOf(pe);
+        const cs = setsCount(e), ps = setsCount(pe);
+        let line = '• ' + esc(e.name) + ': ';
+        if (pw > 0 || cur > 0) {
+            line += fmtW(pw) + ' → ' + fmtW(cur) + ' кг' + diffTxt(Math.round(cur - pw), ' кг');
+        } else {
+            line += 'без веса';
+        }
+        if (ps !== cs) line += ', подходов ' + ps + ' → ' + cs;
+        h += '<div class="statline">' + line + '</div>';
+        any = true;
+    }
+    if (!any) h += '<p class="muted">Нет записей.</p>';
+    return h;
+}
+function diffTxt(delta, unit) {
+    if (!delta) return '';
+    const up = delta > 0;
+    return ' <span class="dl ' + (up ? 'dl-up' : 'dl-down') + '">' + (up ? '▲ +' : '▼ −') + Math.abs(delta) + unit + '</span>';
+}
+function sparkSvg(vals) {
+    if (!vals || vals.length < 2) return '';
+    const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    const rng = max - min || 1;
+    const pts = vals.map((v, i) =>
+        Math.round((i / (vals.length - 1)) * 60 + 2) + ',' + Math.round(20 - ((v - min) / rng) * 16));
+    const up = vals[vals.length - 1] >= vals[0];
+    return '<svg class="spark" viewBox="0 0 64 24"><polyline class="' + (up ? 'spark-up' : 'spark-down') + '" points="' + pts.join(' ') + '"/></svg>';
+}
+function maxWeightSeries(name) {
+    const out = [];
+    for (const w of G.workouts) {
+        const e = findEx(w, name);
+        if (e && e.sets.length) out.push(maxWeightOf(e));
+    }
+    return out;
+}
+
+/* ---------- техника ---------- */
 function techFiltered() {
     let list = CATALOG.slice();
     if (TECH.cat) list = list.filter(c => c.t.includes(TECH.cat));
@@ -852,7 +845,7 @@ function renderTechTab() {
     return h;
 }
 
-/* ---------- stats ---------- */
+/* ---------- статистика ---------- */
 function renderStatsTab() {
     const fin = G.workouts.filter(w => w.finished);
     if (!fin.length) return '<p class="empty">Нет данных. Заверши первую тренировку! 💪</p>';
@@ -902,7 +895,14 @@ function renderStatsTab() {
     return h;
 }
 
-/* ---------- profile ---------- */
+/* ---------- тренер ---------- */
+function renderCoachTab() {
+    return '<div class="card hero"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
+        '<p class="muted">Раздел в разработке: здесь появятся персональные программы тренировок, разборы техники и советы по питанию.</p>' +
+        '<p class="meta">Следи за обновлениями 💪</p></div>';
+}
+
+/* ---------- профиль ---------- */
 function renderProfileTab() {
     if (!profileSex && G.profile) profileSex = G.profile.sex;
     const p = G.profile || { sex: profileSex, age: '', height: '', weight: '' };
@@ -948,7 +948,7 @@ function saveProfile() {
     save().then(render);
 }
 
-/* ---------- workout actions ---------- */
+/* ---------- действия тренировки ---------- */
 function startWorkout() {
     const active = activeW();
     if (active) { openPicker(active.id); return; }
@@ -978,7 +978,11 @@ function deleteWorkout(id) {
     save().then(render);
 }
 
-/* ---------- exercise picker ---------- */
+/* ---------- пикер ---------- */
+function openPicker(wid) {
+    PICKER = { wid, section: 'fav', cat: null, q: '' };
+    renderPickerModal();
+}
 function favsList() {
     try { return JSON.parse(localStorage.getItem('gymFavs') || '[]'); } catch (e) { return []; }
 }
@@ -988,7 +992,6 @@ function toggleFav(n) {
     if (f.includes(n)) f = f.filter(x => x !== n); else f.push(n);
     try { localStorage.setItem('gymFavs', JSON.stringify(f)); } catch (e) { /* noop */ }
     renderPickerList();
-    if (tab === 'workout') render();
 }
 function mostUsed(n) {
     const cnt = {};
@@ -999,10 +1002,6 @@ function mostUsed(n) {
     }
     return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, n);
 }
-function openPicker(wid) {
-    PICKER = { wid, section: 'fav', cat: null, q: '' };
-    renderPickerModal();
-}
 function ownCustomNames() {
     const set = new Set();
     for (const w of G.workouts) {
@@ -1011,9 +1010,6 @@ function ownCustomNames() {
         }
     }
     return Array.from(set);
-}
-function starHtml(name) {
-    return '<span class="star' + (isFav(name) ? ' fav' : '') + '" data-fav="' + esc(name) + '">' + (isFav(name) ? '★' : '☆') + '</span>';
 }
 function exCard(c) {
     return '<div class="excard" data-act="pickCatEx" data-a="' + esc(c.n) + '">' + ico(c.i) +
@@ -1025,6 +1021,9 @@ function exCardByName(name) {
     const tags = c ? c.t.slice(0, 3).map(t => '#' + t).join(' ') : '#своё';
     return '<div class="excard" data-act="pickCatEx" data-a="' + esc(name) + '">' + (c ? ico(c.i) : ico('custom')) +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(name) + '</div><div class="extags">' + tags + '</div></span>' + starHtml(name) + '</div>';
+}
+function starHtml(name) {
+    return '<span class="star' + (isFav(name) ? ' fav' : '') + '" data-fav="' + esc(name) + '">' + (isFav(name) ? '★' : '☆') + '</span>';
 }
 function renderPickerList() {
     const box = document.getElementById('pickerList');
@@ -1099,6 +1098,7 @@ function storage_after_pick(w, e) {
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
 }
 function customExerciseModal() {
+    const w = findW(PICKER.wid);
     const h = '<p class="mtitle">✍️ Своё упражнение</p>' +
         '<label>Название (до 60 символов)</label><input id="mCustomName" type="text" maxlength="60">' +
         '<div class="btnrow"><button class="btn wide" data-act="createCustom">➕ Добавить</button>' +
@@ -1106,6 +1106,7 @@ function customExerciseModal() {
     openModal(h);
     const inp = document.getElementById('mCustomName');
     if (inp) inp.focus();
+    void w;
 }
 function createCustom() {
     const w = findW(PICKER.wid);
@@ -1120,7 +1121,7 @@ function createCustom() {
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
 }
 
-/* ---------- entry modal ---------- */
+/* ---------- окно записи ---------- */
 function openEntryModal(wid, exIdx, setIdx) {
     const w = findW(wid);
     if (!w || !w.exercises[exIdx]) return;
@@ -1143,7 +1144,7 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '</div>';
     if (isNew && SUG_W.length) {
         h += '<div class="chips">';
-        SUG_W.forEach((v, i) => { h += '<button class="chip" data-act="chipW" data-a="' + i + '">' + esc(v) + 'кг</button>'; });
+        SUG_W.forEach((v, i) => { h += '<button class="chip" data-act="chipW" data-a="' + i + '">' + esc(v) + ' кг</button>'; });
         h += '<button class="chip" data-act="chipW" data-a="-1">🚫 Без веса</button></div>';
     }
     h += '<label>Подходы</label><input id="mSets" type="number" inputmode="numeric" value="' + (+s.s || 1) + '">' +
@@ -1156,8 +1157,7 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     }
     h += '<div class="btnrow"><button class="btn wide" data-act="saveEntry">' + (isNew ? '➕ Добавить' : '💾 Сохранить') + '</button>';
     if (!isNew) h += '<button class="btn danger wide" data-act="deleteEntry">🗑 Удалить запись</button>';
-    h += '<button class="btn sec wide" data-act="closeModal">Закрыть</button></div>' +
-        '<div class="btnrow"><button class="btn sec wide" data-act="renameModal">🏷 Переименовать упражнение</button></div>';
+    h += '<button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
     openModal(h);
 }
 function chipW(i) {
@@ -1168,8 +1168,7 @@ function chipR(i) {
 }
 function kpIns(ch) {
     const inp = document.getElementById('mWeight');
-    if (!inp) return;
-    inp.value = (inp.value || '') + ch;
+    if (inp) inp.value = (inp.value || '') + ch;
 }
 function kpDel() {
     const inp = document.getElementById('mWeight');
@@ -1218,58 +1217,17 @@ async function deleteEntry() {
     closeModal();
     render();
 }
-let __delEx = null;
+
+/* ---------- переименование/удаление упражнения ---------- */
 function renameExercise(wid, exIdx) {
     const w = findW(wid);
     if (!w || !w.exercises[exIdx]) return;
     modalCtx = { wid, exIdx, setIdx: -1, name: w.exercises[exIdx].name };
-    renameModal();
+    renameModalHtml(w);
 }
-function deleteExercise(wid, exIdx) {
-    const w = findW(wid);
-    if (!w || !w.exercises[exIdx]) return;
-    __delEx = { wid, exIdx };
-    confirmModal('Удалить упражнение «' + w.exercises[exIdx].name + '» со всеми записями?', 'deleteExerciseGo', null);
-}
-async function deleteExerciseGo() {
-    const inDetail = tab === 'history' && viewWid;
-    if (!inDetail) await reloadSilently();
-    const w2 = findW(__delEx.wid);
-    if (w2 && w2.exercises[__delEx.exIdx]) {
-        w2.exercises.splice(__delEx.exIdx, 1);
-        if (!inDetail) await save();
-    }
-    __delEx = null;
-    closeModal();
-    render();
-}
-let __delSet = null;
-function deleteSet(wid, exIdx, setIdx) {
-    const w = findW(wid);
-    if (!w || !w.exercises[exIdx] || !w.exercises[exIdx].sets[setIdx]) return;
-    __delSet = { wid, exIdx, setIdx };
-    confirmModal('Удалить запись «' + entryLine(w.exercises[exIdx].sets[setIdx]) + '»?', 'deleteSetGo', null);
-}
-async function deleteSetGo() {
-    const inDetail = tab === 'history' && viewWid;
-    if (!inDetail) await reloadSilently();
-    const w2 = findW(__delSet.wid);
-    const e2 = w2 ? w2.exercises[__delSet.exIdx] : null;
-    if (e2 && e2.sets[__delSet.setIdx]) {
-        e2.sets.splice(__delSet.setIdx, 1);
-        if (!e2.sets.length) w2.exercises.splice(w2.exercises.indexOf(e2), 1);
-        if (!inDetail) await save();
-    }
-    __delSet = null;
-    closeModal();
-    render();
-}
-function renameModal() {
-    if (!modalCtx) return;
-    const w = findW(modalCtx.wid);
-    const e = w ? w.exercises[modalCtx.exIdx] : null;
-    if (!e) return;
-    let h = '<p class="mtitle">Переименовать упражнение</p>' +
+function renameModalHtml(w) {
+    const e = w.exercises[modalCtx.exIdx];
+    const h = '<p class="mtitle">Переименовать упражнение</p>' +
         '<label>Название (до 60 символов)</label><input id="mName" type="text" value="' + esc(e.name) + '">' +
         '<div class="btnrow"><button class="btn wide" data-act="doRename">💾 Сохранить</button>' +
         '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>';
@@ -1277,10 +1235,10 @@ function renameModal() {
 }
 async function doRename() {
     if (!modalCtx) return;
+    const inDetail = tab === 'history' && viewWid;
     const wid = modalCtx.wid, name2 = modalCtx.name;
     const name = String(document.getElementById('mName').value).trim();
     if (!name || name.length > 60) { alert('Название от 1 до 60 символов'); return; }
-    const inDetail = tab === 'history' && viewWid;
     if (!inDetail) await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name2) : null;
@@ -1296,11 +1254,51 @@ async function doRename() {
     closeModal();
     render();
 }
+function deleteExercise(wid, exIdx) {
+    const w = findW(wid);
+    if (!w || !w.exercises[exIdx]) return;
+    __delExerciseCtx = { wid, exIdx };
+    confirmModal('Удалить упражнение «' + w.exercises[exIdx].name + '» со всеми записями?', 'deleteExerciseGo', null);
+}
+async function deleteExerciseGo() {
+    const inDetail = tab === 'history' && viewWid;
+    if (!inDetail) await reloadSilently();
+    const w = findW(__delExerciseCtx.wid);
+    if (w && w.exercises[__delExerciseCtx.exIdx]) {
+        w.exercises.splice(__delExerciseCtx.exIdx, 1);
+        if (!inDetail) await save();
+    }
+    __delExerciseCtx = null;
+    closeModal();
+    render();
+}
 
-/* ---------- nutrition / title / time ---------- */
+/* ---------- удаление записи ---------- */
+function deleteSet(wid, exIdx, setIdx) {
+    const w = findW(wid);
+    if (!w || !w.exercises[exIdx] || !w.exercises[exIdx].sets[setIdx]) return;
+    __delSetCtx = { wid, exIdx, setIdx };
+    confirmModal('Удалить запись «' + entryLine(w.exercises[exIdx].sets[setIdx]) + '»?', 'deleteSetGo', null);
+}
+async function deleteSetGo() {
+    const inDetail = tab === 'history' && viewWid;
+    if (!inDetail) await reloadSilently();
+    const w = findW(__delSetCtx.wid);
+    const e = w ? w.exercises[__delSetCtx.exIdx] : null;
+    if (e && __delSetCtx.setIdx < e.sets.length) {
+        e.sets.splice(__delSetCtx.setIdx, 1);
+        if (!e.sets.length) w.exercises.splice(w.exercises.indexOf(e), 1);
+        if (!inDetail) await save();
+    }
+    __delSetCtx = null;
+    closeModal();
+    render();
+}
+
+/* ---------- питание / название / время ---------- */
 function nutrModal(wid) {
     const w = findW(wid);
-    let h = '<p class="mtitle">🥤 Питание во время тренировки</p>' +
+    const h = '<p class="mtitle">🥤 Питание во время тренировки</p>' +
         '<label>Что пил и что ел</label>' +
         '<textarea id="mNutr" maxlength="500">' + esc(w.nutrition || '') + '</textarea>' +
         '<div class="btnrow"><button class="btn wide" data-act="saveNutr" data-a="' + wid + '">💾 Сохранить</button>' +
@@ -1312,17 +1310,17 @@ function saveNutr(wid) {
     const v = String(document.getElementById('mNutr').value).trim();
     if (v.length > 500) { alert('До 500 символов'); return; }
     w.nutrition = v || null;
-    closeModal(); render();
+    save().then(() => { closeModal(); render(); });
 }
 function clearNutr(wid) {
     const w = findW(wid);
     w.nutrition = null;
-    closeModal(); render();
+    save().then(() => { closeModal(); render(); });
 }
 function titleModal(wid) {
     const w = findW(wid);
     const cur = w.title && w.title.trim() ? w.title : '';
-    let h = '<p class="mtitle">🏷 Название тренировки</p>' +
+    const h = '<p class="mtitle">🏷 Название тренировки</p>' +
         '<p class="muted">Сейчас: ' + esc(titleLines(w).join(' / ')) + '</p>' +
         '<label>Своё название (первая строка — жирная, «авто» — вернуться к автоматическому)</label>' +
         '<textarea id="mTitle" maxlength="200">' + esc(cur) + '</textarea>' +
@@ -1336,12 +1334,36 @@ function saveTitle(wid) {
     if (v.length > 200) { alert('До 200 символов'); return; }
     if (v.toLowerCase() === 'авто') v = '';
     w.title = v || null;
-    closeModal(); render();
+    save().then(() => { closeModal(); render(); });
 }
 function autoTitle(wid) {
     const w = findW(wid);
     w.title = null;
-    closeModal(); render();
+    save().then(() => { closeModal(); render(); });
+}
+function timeModal(wid) {
+    const w = findW(wid);
+    const sd = isoToDateInput(w.started || w.date);
+    const st = w.started ? w.started.slice(11, 16) : '';
+    const ed = isoToDateInput(w.ended);
+    const et = w.ended ? w.ended.slice(11, 16) : '';
+    const h = '<p class="mtitle">⏱ Даты и время тренировки</p>' +
+        '<label>Начало — дата (ДД.ММ.ГГГГ)</label><input id="mStartDate" type="text" inputmode="numeric" placeholder="29.10.2026" value="' + esc(sd) + '">' +
+        '<label>Начало — время (ЧЧ:ММ)</label><input id="mStartTime" type="text" inputmode="numeric" placeholder="18:30" value="' + esc(st) + '">' +
+        '<label>Окончание — дата</label><input id="mEndDate" type="text" inputmode="numeric" placeholder="29.10.2026" value="' + esc(ed) + '">' +
+        '<label>Окончание — время</label><input id="mEndTime" type="text" inputmode="numeric" placeholder="20:05" value="' + esc(et) + '">' +
+        '<p class="muted">У активной тренировки окончание можно оставить пустым.</p>' +
+        '<div id="mTimeErr" class="formerr"></div>' +
+        '<div class="btnrow"><button class="btn wide" data-act="saveTime" data-a="' + wid + '">💾 Сохранить</button></div>';
+    openModal(h);
+    ['mStartDate', 'mEndDate'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', function () { maskDate(this); });
+    });
+    ['mStartTime', 'mEndTime'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', function () { maskTime(this); });
+    });
 }
 function parseDateInput(s) {
     s = String(s || '').trim();
@@ -1376,46 +1398,11 @@ function maskTime(el) {
     const v = el.value.replace(/\D/g, '').slice(0, 4);
     el.value = v.length >= 3 ? v.slice(0, 2) + ':' + v.slice(2) : v;
 }
-function timeModal(wid) {
-    const w = findW(wid);
-    const sd = isoToDateInput(w.started || w.date);
-    const st = w.started ? w.started.slice(11, 16) : '';
-    const ed = isoToDateInput(w.ended);
-    const et = w.ended ? w.ended.slice(11, 16) : '';
-    let h = '<p class="mtitle">⏱ Даты и время тренировки</p>' +
-        '<label>Начало — дата</label><input id="mStartDate" type="text" inputmode="numeric" placeholder="29.10.2026" value="' + esc(sd) + '">' +
-        '<label>Начало — время</label><input id="mStartTime" type="text" inputmode="numeric" placeholder="18:30" value="' + esc(st) + '">' +
-        '<label>Окончание — дата</label><input id="mEndDate" type="text" inputmode="numeric" placeholder="29.10.2026" value="' + esc(ed) + '">' +
-        '<label>Окончание — время</label><input id="mEndTime" type="text" inputmode="numeric" placeholder="20:05" value="' + esc(et) + '">' +
-        '<p class="muted">У активной тренировки окончание можно оставить пустым.</p>' +
-        '<div id="mTimeErr" class="formerr"></div>' +
-        '<div class="btnrow"><button class="btn wide" data-act="saveTime" data-a="' + wid + '">💾 Сохранить</button></div>';
-    openModal(h);
-    ['mStartDate', 'mEndDate'].forEach(function (id) {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('input', function () { maskDate(this); });
-    });
-    ['mStartTime', 'mEndTime'].forEach(function (id) {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('input', function () { maskTime(this); });
-    });
-}
-async function saveWorkout() {
-    dbgMsg('сохраняю...');
-    const r = await save();
-    if (r !== 'ok') {
-        alert('Не удалось сохранить. Проверь интернет и попробуй ещё раз.');
-        return;
-    }
-    await reloadSilently(true);
-    editSnap = null;
-    viewWid = 0;
-    tab = 'history';
-    render();
-}
 async function saveTime(wid) {
     const errEl = document.getElementById('mTimeErr');
     const err = function (msg) { if (errEl) errEl.textContent = msg; };
+    const w = findW(wid);
+    if (!w) return;
     const sdt = parseDateInput(document.getElementById('mStartDate').value);
     const stm = parseTimeInput(document.getElementById('mStartTime').value);
     if (!sdt || !stm) { err('Проверь дату и время начала (например 29.10.2026 и 18:30)'); return; }
@@ -1443,6 +1430,8 @@ async function saveTime(wid) {
     closeModal();
     render();
 }
+
+/* ---------- подтверждения и модалки ---------- */
 function confirmModal(text, fn, id) {
     PENDING = { fn, id };
     const h = '<p class="mtitle">' + esc(text) + '</p>' +
@@ -1505,6 +1494,7 @@ async function init() {
         if (j.ok) {
             G = j.data;
             if (!G.workouts) G.workouts = [];
+            if (!G.del) G.del = [];
             if (G.nextId < 1) G.nextId = 1;
             if (G.profile) profileSex = G.profile.sex;
             render();
@@ -1525,3 +1515,11 @@ async function init() {
     }
 }
 init();
+
+/* ============ тестовый крюк (используется tests/render-smoke.js) ============ */
+if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
+    globalThis.__gymExpose({
+        render: function (t) { if (t) { tab = t; } render(); },
+        setTab: function (t) { tab = t; }
+    });
+}

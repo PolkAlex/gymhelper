@@ -14,7 +14,7 @@ if (!actBlock) {
     fails.push('Блок ACTIONS не найден');
 } else {
     const keys = new Set();
-    for (const m of actBlock[1].matchAll(/([a-zA-Z]+):\s*function/g)) keys.add(m[1]);
+    for (const m of actBlock[1].matchAll(/([a-zA-Z]+):\s*(?:async\s+)?function/g)) keys.add(m[1]);
     const used = new Set();
     for (const m of app.matchAll(/data-act="([a-zA-Z]+)"/g)) used.add(m[1]);
     for (const m of app.matchAll(/data-b="([a-zA-Z]+)"/g)) used.add(m[1]);
