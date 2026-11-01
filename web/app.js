@@ -470,16 +470,15 @@ function render() {
 }
 function navHtml() {
     const items = [
+        ['workout', 'dumbbell', 'Тренировка'],
         ['history', 'timer', 'История'],
         ['coach', 'user', 'Тренер'],
-        ['workout', 'dumbbell', 'Тренировка', true],
         ['tech', 'pilates', 'Техника'],
         ['stats', 'chart', 'Статистика']
     ];
     return '<div class="nav">' + items.map(function (it) {
-        const c = it[3] === true;
-        return '<button class="' + (tab === it[0] ? 'on ' : '') + (c ? 'navc' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
-            '<span class="nwrap' + (c ? ' ncc' : '') + '"><span class="nico">' + (ICONS[it[1]] || '') + '</span></span>' +
+        return '<button class="' + (tab === it[0] ? 'on' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
+            '<span class="nwrap"><span class="nico">' + (ICONS[it[1]] || '') + '</span></span>' +
             '<span class="nlabel">' + it[2] + '</span></button>';
     }).join('') + '</div>';
 }
@@ -517,22 +516,10 @@ function heroHtml(fin) {
     const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
     const month = todayISO().slice(0, 7);
     const mCount = fin.filter(w => (w.date || '').startsWith(month)).length;
-    const now = new Date();
-    const wFrom = new Date(now); wFrom.setDate(now.getDate() - 6);
-    const pFrom = new Date(now); pFrom.setDate(now.getDate() - 13);
-    const pTo = new Date(now); pTo.setDate(now.getDate() - 7);
-    const inW = w => { const dd = parseDateISO(w.date); return dd && dd >= wFrom && dd <= now; };
-    const inP = w => { const dd = parseDateISO(w.date); return dd && dd >= pFrom && dd < wFrom; };
-    const thisWeek = fin.filter(inW).length;
-    const prevWeek = fin.filter(inP).length;
-    let badge = '';
-    if (prevWeek > 0) badge = '<span class="badge-up">' + (thisWeek >= prevWeek ? '▲ +' : '▼ −') + Math.abs(thisWeek - prevWeek) + ' к прошлой неделе</span>';
-    else if (thisWeek > 0) badge = '<span class="badge-up">▲ +' + thisWeek + ' за неделю</span>';
     return '<div class="card hero">' +
         '<div class="hero-date">' + days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + '</div>' +
-        '<div class="hero-big">' + fin.length + '</div>' +
-        '<div class="hero-sub">тренировок всего · ' + mCount + ' в этом месяце</div>' +
-        (badge ? '<div style="margin-top:6px">' + badge + '</div>' : '') +
+        '<p class="t1" style="font-size:21px;margin-top:4px">Готов к тренировке?</p>' +
+        '<p class="muted">Всего тренировок: ' + fin.length + ' · в этом месяце: ' + mCount + '</p>' +
         '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
 }
 function previewCard(w) {
