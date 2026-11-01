@@ -393,7 +393,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 }
 .pcard:active { background: var(--card2); }
 .pc-main { flex: 1; min-width: 0; min-height: 104px; }
-.pc-date { font-size: 19px; font-weight: 800; letter-spacing: .5px; }
+.pc-side { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
+.pc-dow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); }
 .pc-dp { font-size: 14px; }
 .pc-pill {
     display: inline-flex;
@@ -705,11 +706,7 @@ body { padding: 12px 12px 32px 66px; }
     font-size: 12px; font-weight: 600;
 }
 
-/* ============ sparklines & deltas ============ */
-.spark { width: 64px; height: 24px; flex: none; }
-.spark-up, .spark-down { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.spark-up { stroke: var(--accent-deep); }
-.spark-down { stroke: var(--danger); }
+/* ============ deltas ============ */
 .dl { font-weight: 600; white-space: nowrap; }
 .dl-up { color: var(--accent-deep); }
 .dl-down { color: var(--danger); }

@@ -542,23 +542,14 @@ function previewCard(w) {
     if (!show.length) h += '<div class="pc-ex">Нет записей</div>';
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';
     h += '</div>';
+    h += '<div class="pc-side">';
+    h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-right">';
     if (mins != null) h += '<span>⏱ ' + durationText(mins) + '</span>';
     if (res && res.total > 0) h += '<span>🔥 ' + res.total + ' ккал</span>';
     h += '<span>🏋 ' + sets + ' подх.</span>';
-    h += '</div></div>';
+    h += '</div></div></div>';
     return h;
-}
-function dayPart(w) {
-    if (!w.started) return null;
-    const hh = +String(w.started).slice(11, 13);
-    if (hh < 12) return { n: 'утро', i: '🌅' };
-    if (hh < 18) return { n: 'день', i: '☀️' };
-    return { n: 'вечер', i: '🌙' };
-}
-function isWarmupName(name) {
-    const c = findCatalog(name);
-    return c ? c.t.includes('warmup') : /^разминка/i.test(name);
 }
 
 /* ---------- история и карточка ---------- */
@@ -696,7 +687,6 @@ function timeLine(w) {
 function kcalBreakdown(w) {
     const mins = durationMin(w);
     if (mins == null) return '<p class="muted">Время начала не зафиксировано — нажми «⏱ Время».</p>';
-    const vol = workoutVolume(w);
     let h = '⏱ Длительность: ' + durationText(mins);
     h += '\n🏋️ Объём: ≈' + fmtW(Math.round(workoutVolume(w))) + ' кг';
     if (!G.profile || !(G.profile.weight > 0)) {
@@ -755,15 +745,6 @@ function diffTxt(delta, unit) {
     if (!delta) return '';
     const up = delta > 0;
     return ' <span class="dl ' + (up ? 'dl-up' : 'dl-down') + '">' + (up ? '▲ +' : '▼ −') + Math.abs(delta) + unit + '</span>';
-}
-function sparkSvg(vals) {
-    if (!vals || vals.length < 2) return '';
-    const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
-    const rng = max - min || 1;
-    const pts = vals.map((v, i) =>
-        Math.round((i / (vals.length - 1)) * 60 + 2) + ',' + Math.round(20 - ((v - min) / rng) * 16));
-    const up = vals[vals.length - 1] >= vals[0];
-    return '<svg class="spark" viewBox="0 0 64 24"><polyline class="' + (up ? 'spark-up' : 'spark-down') + '" points="' + pts.join(' ') + '"/></svg>';
 }
 function maxWeightSeries(name) {
     const out = [];
@@ -862,8 +843,7 @@ function renderStatsTab() {
     const trendNames = names.slice(0, 5);
     for (const name of trendNames) {
         const series = maxWeightSeries(name);
-        h += '<div class="trendline">' + sparkSvg(series) +
-            '<span style="flex:1;min-width:0"><b>' + esc(name) + '</b><br><span class="tn">' +
+        h += '<div class="trendline"><span style="flex:1;min-width:0"><b>' + esc(name) + '</b><br><span class="tn">' +
             fmtW(series[series.length - 1] || 0) + ' кг — последний результат</span></span></div>';
     }
     if (!trendNames.length) h += '<p class="muted">Нет данных</p>';
