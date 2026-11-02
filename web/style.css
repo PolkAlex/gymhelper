@@ -437,14 +437,19 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 /* ============ top bar ============ */
 .topbar {
     position: sticky;
-    top: 0;
+    top: 6px;
     z-index: 30;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: var(--bg);
-    padding: 10px 2px 10px;
-    max-width: 560px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    padding: 10px 12px;
+    box-sizing: border-box;
+    max-width: 536px;
+    margin: 4px auto 10px;
 }
 .tb-title { font-weight: 700; font-size: 17px; letter-spacing: .2px; }
 .tb-user {
@@ -767,14 +772,17 @@ html.has-bg body::before {
 }
 html.has-bg body::after {
     content: ''; position: fixed; inset: 0; z-index: -1;
-    background: var(--bg); opacity: .74;
+    background: var(--bg); opacity: .58;
 }
-html.has-bg .card, html.has-bg .nav, html.has-bg .modal-box,
-html.has-bg .backbar, html.has-bg .topbar {
-    background-color: color-mix(in srgb, var(--card) 88%, transparent);
+html.has-bg .card, html.has-bg .nav, html.has-bg .topbar,
+html.has-bg .backbar {
+    background-color: color-mix(in srgb, var(--card) 74%, transparent);
+}
+html.has-bg .modal-box {
+    background-color: color-mix(in srgb, var(--card) 92%, transparent);
 }
 html.has-bg .expill, html.has-bg .entry, html.has-bg .excard {
-    background-color: color-mix(in srgb, var(--entry, var(--card)) 88%, transparent);
+    background-color: color-mix(in srgb, var(--entry, var(--card)) 80%, transparent);
 }
 
 /* ============ Stockline theme ============ */
