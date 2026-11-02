@@ -390,13 +390,48 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.nav.min')).toHaveCount(0, { timeout: 5000 });
     });
 
-    test('выбранная тема сохраняется после перезагрузки', async ({ page }) => {
+    test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.topbar .tb-user').click();
         await page.locator('.themecard', { hasText: 'Stockline' }).click();
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'stockline', { timeout: 5000 });
         await page.reload();
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'stockline', { timeout: 5000 });
+    });
+
+    test('id удалённой тренировки не переиспользуется (tombstone-защита от коллизий)', async ({ page, request }) => {
+        /* сервер: тренировка id 5 жива, id 3 удалена, nextId=6 (клиент мог прислать устаревший) */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 5, del: [3],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 5, date: '2026-10-29', started: '2026-10-29T09:30:00', ended: '2026-10-29T10:30:00',
+                finished: true, title: '', nutrition: '',
+                exercises: [{ name: EX, st: '2026-10-29T09:31:00', en: '2026-10-29T10:00:00',
+                    sets: [{ w: '100', s: 3, r: '8-10', t: '2026-10-29T09:32:00' }] }] }]
+        } } });
+        await openApp(page);
+        await startWorkoutUi(page);
+        const st = await request.get('/api/state');
+        const state = await st.json().catch(function () { return null; });
+        if (!state || !Array.isArray(state.workouts)) throw new Error('нет состояния заглушки');
+        if (state.workouts.some(function (w) { return w.id === 3; })) throw new Error('tombstone id 3 воскрес!');
+        const fresh = state.workouts.find(function (w) { return !w.finished; });
+        if (!fresh) throw new Error('новая тренировка не создана');
+        if (fresh.id !== 6) throw new Error('новая тренировка получила id ' + fresh.id + ', ожидался 6');
+    });
+
+    test('повторный «Начать тренировку» не создаёт дубликат', async ({ page, request }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await page.locator('[data-act="startWorkout"]').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        await page.locator('.modal.open [data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        const st = await request.get('/api/state');
+        const state = await st.json().catch(function () { return null; });
+        if (!state || !Array.isArray(state.workouts)) throw new Error('нет состояния заглушки');
+        const unfin = state.workouts.filter(function (w) { return !w.finished; });
+        if (unfin.length !== 1) throw new Error('незавершённых тренировок: ' + unfin.length + ', ожидалась 1');
     });
 });
 

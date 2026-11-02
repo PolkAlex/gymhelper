@@ -331,6 +331,7 @@ async function reloadSilently(force) {
             if (!G.del) G.del = [];
             /* nextId не откатывается ниже локально известного — защита от id-коллизий */
             if (G.nextId < localNextId) G.nextId = localNextId;
+            for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
             for (const d of (G.del || [])) if (d >= G.nextId) G.nextId = d + 1;
             if (G.nextId < 1) G.nextId = 1;
             if (G.profile) profileSex = G.profile.sex;
@@ -1625,6 +1626,8 @@ async function init() {
             if (G.nextId < 1) G.nextId = 1;
             /* id из tombstone-списка нельзя выдавать заново — иначе новая тренировка мгновенно «удалится» */
             for (const d of G.del) if (d >= G.nextId) G.nextId = d + 1;
+            /* и не должен совпадать с живыми тренировками сервера */
+            for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
             if (G.profile) profileSex = G.profile.sex;
             render();
         } else {

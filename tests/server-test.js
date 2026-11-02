@@ -35,6 +35,10 @@ http.createServer(function (req, res) {
         sendJson(res, 200, { ok: true });
         return;
     }
+    if (req.method === 'GET' && url === '/api/state') {
+        sendJson(res, 200, store);
+        return;
+    }
     if (req.method === 'POST' && url === '/api/init') {
         sendJson(res, 200, { ok: true, userId: 1, rev: store.rev, data: store });
         return;

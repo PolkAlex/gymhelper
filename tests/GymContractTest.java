@@ -1,6 +1,7 @@
 import gym.ExerciseEntry;
 import gym.GymData;
 import gym.Json;
+import gym.Storage;
 import gym.Workout;
 
 import java.util.Map;
@@ -59,6 +60,29 @@ public class GymContractTest {
         check(GymData.incomingNextId(empty) == 7, "incomingNextId без тренировок = nextId");
         GymData gap = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":5,\"workouts\":[{\"id\":2,\"date\":\"2026-10-01\",\"exercises\":[]},{\"id\":9,\"date\":\"2026-10-02\",\"exercises\":[]}]}"));
         check(GymData.incomingNextId(gap) == 10, "incomingNextId: max(id)+1 = 10");
+
+        /* Storage: перед каждой перезаписью создаётся бэкап, хранятся последние 20, чужие не смешиваются */
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymstore");
+            Storage st = new Storage(tmp);
+            GymData seed = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":2,\"workouts\":[{\"id\":1,\"date\":\"2026-10-01\",\"finished\":true,\"exercises\":[]}]}"));
+            st.save(777, seed);
+            check(java.nio.file.Files.exists(tmp.resolve("chat_777.json")), "storage: основной файл создан");
+            for (int i = 0; i < Storage.BACKUPS_TO_KEEP + 3; i++) {
+                GymData v = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":2,\"rev\":" + (i + 1) + ",\"workouts\":[{\"id\":1,\"date\":\"2026-10-01\",\"finished\":true,\"exercises\":[]}]}"));
+                Thread.sleep(3);
+                st.save(777, v);
+            }
+            Storage st2 = new Storage(tmp);
+            check(st2.backups(777).size() == Storage.BACKUPS_TO_KEEP, "storage: ротация держит " + Storage.BACKUPS_TO_KEEP + " бэкапов, а не " + st2.backups(777).size());
+            check(st2.backups(888).isEmpty(), "storage: бэкапы разных пользователей не смешиваются");
+            GymData restored = st2.load(777);
+            check(restored.findById(1) != null && restored.rev == Storage.BACKUPS_TO_KEEP + 3, "storage: основной файл читается после ротации");
+            GymData fromBackup = GymData.fromJson(Json.map(Json.parse(java.nio.file.Files.readString(st2.backups(777).get(0)))));
+            check(fromBackup.findById(1) != null, "storage: свежий бэкап валиден и содержит тренировку");
+        } catch (Exception storageErr) {
+            throw new AssertionError("CONTRACT FAIL: storage " + storageErr);
+        }
 
         System.out.println("CONTRACT OK");
         System.exit(0);
