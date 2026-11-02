@@ -51,6 +51,15 @@ public class GymContractTest {
         String delOut = Json.write(dd.toJson());
         check(delOut.contains("\"del\":[22]"), "toJson пишет del");
 
+        /* nextId обязан расти от id тренировок: клиент с устаревшим nextId не создаёт коллизий */
+        String staleJson = "{\"nextId\":22,\"workouts\":[{\"id\":22,\"date\":\"2026-11-02\",\"started\":\"2026-11-02T21:30:58\",\"finished\":false,\"exercises\":[]}]}";
+        GymData stale = GymData.fromJson((Map<String, Object>) Json.parse(staleJson));
+        check(GymData.incomingNextId(stale) == 23, "incomingNextId: max(nextId, max(id)+1) = 23");
+        GymData empty = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":7,\"workouts\":[]}"));
+        check(GymData.incomingNextId(empty) == 7, "incomingNextId без тренировок = nextId");
+        GymData gap = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":5,\"workouts\":[{\"id\":2,\"date\":\"2026-10-01\",\"exercises\":[]},{\"id\":9,\"date\":\"2026-10-02\",\"exercises\":[]}]}"));
+        check(GymData.incomingNextId(gap) == 10, "incomingNextId: max(id)+1 = 10");
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }

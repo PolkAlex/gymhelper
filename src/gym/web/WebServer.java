@@ -124,7 +124,9 @@ public final class WebServer {
         GymData current = storage.load(userId);
         GymData data = GymData.fromJson(dataJson);
         if (data.nextId < 1) data.nextId = 1;
+        long incomingNextId = data.nextId;
         for (Workout iw : data.workouts) {
+            if (iw.id >= incomingNextId) incomingNextId = iw.id + 1;
             System.out.println("[save-data] id " + iw.id + " date " + iw.date + " started " + iw.startedAt + " ended " + iw.endedAt + " finished " + iw.finished + " sets " + iw.exercises.size());
         }
         for (Workout iw : data.workouts) {
@@ -152,10 +154,11 @@ public final class WebServer {
         while (current.deletedIds.size() > 100) current.deletedIds.remove(0);
         if (data.profile != null) current.profile = data.profile;
         data = current;
-        data.nextId = Math.max(current.nextId, data.nextId);
+        /* nextId монотонно растёт: max(серверный, клиентский, max(id)+1) — иначе коллизии id затирают данные */
+        data.nextId = Math.max(current.nextId, incomingNextId);
         data.rev = current.rev + 1;
         storage.save(userId, data);
-        System.out.println("[save] user " + userId + " rev " + data.rev + " workouts " + data.workouts.size());
+        System.out.println("[save] user " + userId + " rev " + data.rev + " workouts " + data.workouts.size() + " nextId " + data.nextId);
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("rev", data.rev);

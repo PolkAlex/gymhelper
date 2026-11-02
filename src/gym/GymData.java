@@ -26,6 +26,15 @@ public final class GymData {
         return null;
     }
 
+    /* следующий свободный id по входящим данным: max(nextId, max(id)+1) — защита от id-коллизий */
+    public static long incomingNextId(GymData d) {
+        long n = d.nextId;
+        for (Workout w : d.workouts) {
+            if (w.id >= n) n = w.id + 1;
+        }
+        return n;
+    }
+
     public static GymData fromJson(Map<String, Object> m) {
         GymData d = new GymData();
         d.nextId = Json.lng(m.get("nextId"));
