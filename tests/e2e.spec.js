@@ -189,7 +189,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('#mStartTime').fill('0930');
         await page.locator('[data-act="saveTime"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.wcrange', { hasText: '09:30' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wcpill', { hasText: '09:30' })).toBeVisible({ timeout: 5000 });
     });
 
     test('время окончания вводят руками: сохраняется и переживает завершение', async ({ page }) => {
@@ -207,7 +207,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="saveTime"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="finishWorkout"]').click();
-        await expect(page.locator('.wcrange', { hasText: '10:00–11:30' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wcpill', { hasText: '10:00–11:30' })).toBeVisible({ timeout: 5000 });
     });
 
     test('своё упражнение сохраняется в базе', async ({ page }) => {
@@ -241,7 +241,70 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.wcicons [data-act="titleModal"]').click();
         await page.locator('#mTitle').fill('Спина и грудь');
         await page.locator('[data-act="saveTitle"]').click();
-        await expect(page.locator('.t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wctitles .t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
+    });
+
+    test('шапка карточки: выравнивание и пилюля времени', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        const pill = page.locator('.wcpill');
+        await expect(pill).toBeVisible({ timeout: 5000 });
+        await expect(pill).toContainText(':', { timeout: 5000 });
+        const tt = await page.locator('.wctitles').boundingBox();
+        const wr = await page.locator('.wcright').boundingBox();
+        if (!tt || !wr) throw new Error('шапка карточки не найдена');
+        const d = Math.abs((tt.y + tt.height / 2) - (wr.y + wr.height / 2));
+        if (d > 10) throw new Error('заголовок и правая колонка не по центру: ' + d.toFixed(1) + 'px');
+    });
+
+    test('запись не теряется, если сохранение на сервер не ушло', async ({ page }) => {
+        let failSave = true;
+        await page.route('**/api/save', function (route) {
+            if (failSave) route.abort();
+            else route.fallback();
+        });
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('100');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('8-10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
+
+        failSave = false;
+        await page.locator('[data-act="saveWorkout"]').click();
+        await expect(page.locator('.toast.show')).toBeVisible({ timeout: 5000 });
+        await page.reload();
+        await expect(page.locator('#app .hero')).toBeVisible({ timeout: 10000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('превью-карточки: иконка без текста, дата без дня недели, жирное название', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('100');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('8-10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await page.locator('.wcicons [data-act="titleModal"]').click();
+        await page.locator('#mTitle').fill('Вечерняя программа');
+        await page.locator('[data-act="saveTitle"]').click();
+        await expect(page.locator('.wctitles .t1', { hasText: 'Вечерняя программа' })).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="finishWorkout"]').click();
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pc-title', { hasText: 'Вечерняя программа' })).toBeVisible({ timeout: 5000 });
+        const pillTxt = (await page.locator('.pc-pill').first().textContent()) || '';
+        if (/утро|день|вечер/.test(pillTxt)) throw new Error('в пилюле день-части остался текст: ' + pillTxt);
+        const dowTxt = (await page.locator('.pc-dow').first().textContent()) || '';
+        if (dowTxt.includes('·')) throw new Error('в правом углу остался день недели: ' + dowTxt);
+        if (!/^\d{1,2}\s[а-яё]+$/i.test(dowTxt.trim())) throw new Error('формат даты в правом углу: ' + dowTxt);
     });
 
     test('любимые пустые -> пустой список; фильтр Все -> весь каталог', async ({ page }) => {
@@ -328,5 +391,29 @@ test.describe('мобильный (тач-экран)', function () {
         await page.keyboard.type('жим', { delay: 120 });
         await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('#pickerList .excard', { hasText: 'Подтягивания' })).toHaveCount(0);
+    });
+
+    test('полный флоу с тача: старт, вес с цифровой панели, запись сохраняется', async ({ page }) => {
+        await openApp(page);
+        await touchTap(page, page.locator('[data-act="startWorkout"]'));
+        const modal = page.locator('.modal.open');
+        await modal.waitFor({ state: 'visible', timeout: 5000 });
+        await touchTap(page, modal.locator('.excard', { hasText: EX }).first());
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        for (const d of ['1', '0', '0']) {
+            await touchTap(page, modal.locator('.kp', { hasText: d }).first());
+        }
+        await touchTap(page, modal.locator('#mSets'));
+        await page.keyboard.type('3');
+        await touchTap(page, modal.locator('#mReps'));
+        await page.keyboard.type('8-10');
+        await touchTap(page, modal.locator('[data-act="saveEntry"]'));
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
+        await page.reload();
+        await expect(page.locator('#app .hero')).toBeVisible({ timeout: 10000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
     });
 });

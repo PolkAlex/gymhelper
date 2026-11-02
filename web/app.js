@@ -317,7 +317,12 @@ async function reloadSilently(force) {
         });
         const j = await r.json();
         if (j.ok && j.data) {
+            /* не теряем локальные тренировки, которых сервер ещё не видел (сбой сохранения) */
+            const serverIds = new Set((j.data.workouts || []).map(w => w.id));
+            const serverDel = new Set(j.data.del || []);
+            const localOnly = G ? G.workouts.filter(w => !serverIds.has(w.id) && !serverDel.has(w.id)) : [];
             G = j.data;
+            for (const w of localOnly) G.workouts.push(w);
             if (!G.workouts) G.workouts = [];
             if (!G.del) G.del = [];
             if (G.nextId < 1) G.nextId = 1;
@@ -335,7 +340,9 @@ window.addEventListener('focus', function () {
 
 /* ============ доставка действий ============ */
 function dispatchFromEl(el, ev) {
-    if (Date.now() - (el.__gymFired || 0) < 400) return;
+    const act0 = el.getAttribute('data-act');
+    /* цифровая панель: без дедупа — быстрые повторные тапы по одной цифре легальны */
+    if (act0 !== 'kpIns' && act0 !== 'kpDel' && Date.now() - (el.__gymFired || 0) < 400) return;
     el.__gymFired = Date.now();
     const fav = el.getAttribute('data-fav');
     if (fav) { toggleFav(fav); return; }
@@ -578,11 +585,12 @@ function heroHtml(fin) {
 }
 function previewCard(w) {
     const d = parseDateISO(w.date);
-    const dateStr = d ? pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) : (w.date || '—');
-    const rightTop = d ? d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] + ' · ' + DOW[(d.getDay() + 6) % 7] : '';
+    const dateStr = d ? pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) : (w.date || '-');
+    const rightTop = d ? d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] : '';
     const dp = dayPart(w);
     const exs = (w.exercises || []).filter(e => e.sets.length && !isWarmupName(e.name));
-    const show = exs.slice(0, 3);
+    const hasTitle = w.title && w.title.trim();
+    const show = exs.slice(0, hasTitle ? 2 : 3);
     const sets = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
     const mins = durationMin(w);
     const p = G.profile;
@@ -591,9 +599,10 @@ function previewCard(w) {
     h += '<div class="pc-main">';
     h += '<div class="pc-daterow"><span class="pc-date">' + dateStr + '</span>' +
         (w.finished
-            ? (dp ? '<span class="pc-pill">' + dp.i + ' ' + dp.n + '</span>' : '')
-            : '<span class="pc-pill">⚡ идёт</span>') + '</div>';
-    if (!show.length) h += '<div class="pc-ex">Нет записей</div>';
+            ? (dp ? '<span class="pc-pill">' + dp.i + '</span>' : '')
+            : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
+    if (hasTitle) h += '<div class="pc-title">' + esc(String(w.title).split('\n')[0].trim()) + '</div>';
+    if (!show.length) h += '<div class="pc-ex">Без упражнений</div>';
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';
     h += '</div>';
     h += '<div class="pc-side">';
@@ -676,12 +685,13 @@ function workoutCard(w, showActions) {
         const sT = String(w.started).slice(11, 16);
         const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
         const mins = durationMin(w);
-        h += '<div class="wcrange">' + range + '</div>' +
-            '<div class="wcdur">' + (mins != null ? durationText(mins) : '—') + '</div>';
-    }
-    if (G.profile && G.profile.weight > 0) {
-        const res = calcWorkoutKcal(G.profile, w);
-        if (res && res.total > 0) h += '<div class="wckcal">🔥 ' + res.total + ' ккал</div>';
+        let pill = '<span class="wp-r">' + range + '</span>';
+        if (mins != null) pill += '<span class="wp-d">' + durationText(mins) + '</span>';
+        if (G.profile && G.profile.weight > 0) {
+            const res = calcWorkoutKcal(G.profile, w);
+            if (res && res.total > 0) pill += '<span class="wp-k">🔥 ' + res.total + ' ккал</span>';
+        }
+        h += '<div class="wcpill">' + pill + '</div>';
     }
     h += '</div></div>';
     if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
@@ -977,7 +987,11 @@ function startWorkout() {
     const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '', exercises: [] };
     if (G.nextId < 1) G.nextId = 1;
     G.workouts.push(w);
-    save().then(() => { render(); openPicker(w.id); });
+    save().then(function (r) {
+        if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
+        render();
+        openPicker(w.id);
+    });
 }
 function finishWorkout(id) {
     const w = findW(id);
@@ -1211,6 +1225,11 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     if (!isNew) h += '<button class="btn danger wide" data-act="deleteEntry">🗑 Удалить запись</button>';
     h += '<button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
     openModal(h);
+    /* при фокусе поле выделяется целиком — ввод с клавиатуры заменяет значение, а не дописывает */
+    ['mWeight', 'mSets', 'mReps'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('focus', function () { try { el.select(); } catch (err) { /* noop */ } });
+    });
 }
 function chipW(i) {
     document.getElementById('mWeight').value = i < 0 ? '' : SUG_W[i];
@@ -1243,7 +1262,12 @@ async function saveEntry() {
     await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name) : null;
-    if (!e) { closeModal(); render(); return; }
+    if (!e) {
+        toast('Упражнение не найдено — запись не сохранена', true);
+        closeModal();
+        render();
+        return;
+    }
     if (setIdx < 0) {
         e.sets.push({ w: weight, s: sets, r: reps, t: nowLocalISO() });
     } else {
@@ -1292,7 +1316,12 @@ async function doRename() {
     await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name2) : null;
-    if (!e) { closeModal(); render(); return; }
+    if (!e) {
+        toast('Упражнение не найдено — переименование не сохранено', true);
+        closeModal();
+        render();
+        return;
+    }
     const other = w.exercises.find(x => x !== e && x.name.toLowerCase() === name.toLowerCase());
     if (other) {
         other.sets.push(...e.sets);
