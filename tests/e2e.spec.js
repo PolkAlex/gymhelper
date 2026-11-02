@@ -180,31 +180,68 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.themecard.on')).toHaveCount(1);
     });
 
-    test('питание и название тренировки', async ({ page }) => {
-        await openApp(page);
-        await startWorkoutUi(page);
-        await openActiveDetail(page);
-        await page.locator('.iconrow [data-act="nutrModal"]').click();
-        await page.locator('#mNutr').fill('Вода, BCAA');
-        await page.locator('[data-act="saveNutr"]').click();
-        await expect(page.locator('.meta', { hasText: '🥤 Вода, BCAA' })).toBeVisible({ timeout: 5000 });
-
-        await page.locator('.wcicons [data-act="titleModal"]').click();
-        await page.locator('#mTitle').fill('Спина и грудь');
-        await page.locator('[data-act="saveTitle"]').click();
-        await expect(page.locator('.t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
-    });
-
     test('время и дата тренировки: маски ввода', async ({ page }) => {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
-        await page.locator('.iconrow [data-act="timeModal"]').click();
+        await page.locator('.wcicons [data-act="timeModal"]').click();
         await page.locator('#mStartDate').fill('29.10.2026');
         await page.locator('#mStartTime').fill('0930');
         await page.locator('[data-act="saveTime"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await expect(page.locator('.meta', { hasText: '09:30' })).toBeVisible({ timeout: 5000 });
+    });
+
+    test('время окончания вводят руками: сохраняется и переживает завершение', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('50');
+        await page.locator('#mSets').fill('1');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await page.locator('.wcicons [data-act="timeModal"]').click();
+        await page.locator('#mStartTime').fill('1000');
+        await page.locator('#mEndTime').fill('1130');
+        await page.locator('[data-act="saveTime"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="finishWorkout"]').click();
+        await expect(page.locator('.meta', { hasText: '10:00–11:30' })).toBeVisible({ timeout: 5000 });
+    });
+
+    test('своё упражнение сохраняется в базе', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Тяга гантели в планке');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('20');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Тяга гантели в планке' })).toBeVisible({ timeout: 5000 });
+
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Тяга гантели в планке' })).toBeVisible({ timeout: 5000 });
+    });
+
+    test('название тренировки', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('.wcicons [data-act="titleModal"]').click();
+        await page.locator('#mTitle').fill('Спина и грудь');
+        await page.locator('[data-act="saveTitle"]').click();
+        await expect(page.locator('.t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
     });
 
     test('любимые пустые -> пустой список; фильтр Все -> весь каталог', async ({ page }) => {

@@ -717,11 +717,65 @@ body { padding: 12px 12px 32px 66px; }
 /* ============ nav: иконки в цвет текста + сворачивание при скролле ============ */
 .nav { transition: padding .18s ease; }
 .nav .nico, .nav .nico svg { color: inherit; }
+.nav .nico svg { color: inherit; stroke: currentColor; }
+.nav button.on .nico, .nav button.on .nico svg { color: var(--text); }
 .nav .nlabel { transition: opacity .15s ease; }
 .nav.min { padding: 6px; }
 .nav.min .nlabel { display: none; }
 .nav.min .nwrap { height: 34px; }
 .nav.min .nico svg { width: 22px; height: 22px; }
+
+/* ============ плавные анимации ============ */
+@keyframes mslide { from { transform: translateY(28px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.modal.open .modal-box { animation: mslide .3s cubic-bezier(.2,.8,.25,1); }
+.card, .btn, .chip, .excard, .themecard, .nav button, .barebtn {
+    transition: background .22s ease, border-color .22s ease, color .22s ease,
+        box-shadow .22s ease, transform .12s ease, opacity .22s ease;
+}
+.btn:active { transform: scale(.97); }
+.chip:active, .excard:active, .themecard:active { transform: scale(.98); }
+.expill, .entry { transition: background .22s ease, border-color .22s ease; }
+
+/* ============ карточка: время упражнения мельче ============ */
+.exhead .exname { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extime { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+
+/* ============ кнопки Отмена/Завершить в один ряд ============ */
+.split2 { display: flex; gap: 8px; margin-top: 8px; }
+.split2 .btn { flex: 1 1 0; min-width: 0; margin: 0; }
+
+/* ============ тосты «Сохранено» / ошибки ============ */
+.toast {
+    position: fixed; left: 50%; bottom: 108px; z-index: 90;
+    transform: translate(-50%, 14px);
+    max-width: 88vw; box-sizing: border-box;
+    background: var(--card2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 10px 18px; font-size: 14px; font-weight: 600;
+    box-shadow: 0 8px 28px rgba(0,0,0,.25);
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s ease, transform .22s ease;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast.err { background: var(--danger); color: #fff; border-color: transparent; }
+
+/* ============ фон-картинка ============ */
+html.has-bg body::before {
+    content: ''; position: fixed; inset: 0; z-index: -2;
+    background-image: var(--bg-img, none);
+    background-size: cover; background-position: center;
+}
+html.has-bg body::after {
+    content: ''; position: fixed; inset: 0; z-index: -1;
+    background: var(--bg); opacity: .74;
+}
+html.has-bg .card, html.has-bg .nav, html.has-bg .modal-box,
+html.has-bg .backbar, html.has-bg .topbar {
+    background-color: color-mix(in srgb, var(--card) 88%, transparent);
+}
+html.has-bg .expill, html.has-bg .entry, html.has-bg .excard {
+    background-color: color-mix(in srgb, var(--entry, var(--card)) 88%, transparent);
+}
 
 /* ============ Stockline theme ============ */
 [data-theme="stockline"] {

@@ -287,9 +287,11 @@ async function doSave() {
         try { j = await r.json(); } catch (e2) { /* noop */ }
         if (j.ok && typeof j.rev === 'number') { G.rev = j.rev; return 'ok'; }
         console.error('save failed', r.status);
+        toast('Ошибка сохранения: сервер ответил ' + r.status, true);
         return 'err';
     } catch (e) {
         console.error('save failed', e);
+        toast('Ошибка сохранения: нет связи с сервером', true);
         return 'err';
     } finally {
         __saveBusy = false;
@@ -373,6 +375,15 @@ function dbgMsg(t) {
     const d = document.getElementById('dbg');
     if (d) d.textContent = t;
 }
+let __toastTimer = null;
+function toast(msg, isErr) {
+    const t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.className = 'toast show' + (isErr ? ' err' : '');
+    if (__toastTimer) clearTimeout(__toastTimer);
+    __toastTimer = setTimeout(function () { t.className = 'toast'; }, 2200);
+}
 
 /* ============ темы ============ */
 function applyTheme(id) {
@@ -417,7 +428,11 @@ const ACTIONS = {
         viewWid = 0;
         render();
     },
-    saveWorkout: async function () { await saveWorkout(); },
+    saveWorkout: async function () {
+        const r = await save();
+        if (r === 'ok') toast('✓ Сохранено');
+        render();
+    },
     startWorkout: function () { startWorkout(); },
     finishWorkout: function (a) { finishWorkout(+a); },
     deleteWorkout: function (a) { deleteWorkout(+a); },
@@ -457,7 +472,13 @@ const ACTIONS = {
     setSex: function (a) { profileSex = a; render(); },
     saveProfile: function () { saveProfile(); },
     closeModal: function () { closeModal(); },
-    modalBackdrop: function () { closeModal(); }
+    modalBackdrop: function () { closeModal(); },
+    pickBg: function () { const el = document.getElementById('bgFile'); if (el) el.click(); },
+    clearBg: function () {
+        try { localStorage.removeItem('gymBg'); } catch (e) { /* noop */ }
+        document.documentElement.classList.remove('has-bg');
+        toast('Фон убран');
+    }
 };
 
 /* ============ каркас ============ */
@@ -638,6 +659,7 @@ function workoutCard(w, showActions) {
     for (let i = 1; i < lines.length; i++) h += '<div class="tn">' + esc(lines[i]) + '</div>';
     h += '</div><div class="wcicons">' +
         '<button class="barebtn pencil-bare" data-act="titleModal" data-a="' + w.id + '" title="Название">' + ICONS.pencil + '</button>' +
+        '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
         '</div></div>';
     h += '<p class="meta">' + esc(timeLine(w)) + '</p>';
@@ -683,13 +705,10 @@ function workoutCard(w, showActions) {
     h += '<details><summary>📈 Прогресс</summary>' + progressHtml(w) + '</details>';
     if (showActions) h += '<div class="btnrow">';
     if (showActions && !w.finished) {
-        h += '<button class="btn prime" data-act="openPicker" data-a="' + w.id + '">➕ Упражнение</button>';
-        h += '<button class="btn prime" data-act="finishWorkout" data-a="' + w.id + '">✅ Завершить</button>';
-        h += '<button class="btn danger" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">✕ Отменить</button>';
-        h += '</div>';
-        h += '<div class="btnrow iconrow wideic">' +
-            '<button class="barebtn" data-act="nutrModal" data-a="' + w.id + '" title="Питание">' + ICONS.cup + '</button>' +
-            '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
+        h += '<button class="btn prime wide" data-act="openPicker" data-a="' + w.id + '">➕ Упражнение</button>';
+        h += '<div class="split2">' +
+            '<button class="btn danger" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">✕ Отменить</button>' +
+            '<button class="btn prime" data-act="finishWorkout" data-a="' + w.id + '">✅ Завершить</button>' +
             '</div>';
     }
     if (showActions && w.finished) {
@@ -919,6 +938,12 @@ function renderProfileTab() {
             '<span style="font-size:13px">' + t.name + '</span></div>';
     }
     h += '</div></div>';
+    h += '<div class="card"><p class="t1">🖼 Фон приложения</p>' +
+        '<p class="meta">Картинка хранится только на этом устройстве</p>' +
+        '<div class="split2">' +
+        '<button class="btn sec" data-act="pickBg">📷 Выбрать из галереи</button>' +
+        '<button class="btn sec" data-act="clearBg">Убрать фон</button>' +
+        '</div></div>';
     return h;
 }
 function saveProfile() {
@@ -931,7 +956,7 @@ function saveProfile() {
         return;
     }
     G.profile = { sex, age, height, weight };
-    save().then(render);
+    save().then(function (r) { if (r === 'ok') toast('✓ Профиль сохранён'); render(); });
 }
 
 /* ---------- действия тренировки ---------- */
@@ -953,8 +978,8 @@ function finishWorkout(id) {
     w.exercises = (w.exercises || []).filter(e => e.sets.length);
     if (!w.exercises.length) { alert('Сначала добавь хотя бы одно упражнение 💪'); return; }
     w.finished = true;
-    w.ended = nowLocalISO();
-    save().then(render);
+    if (!w.ended) w.ended = nowLocalISO();
+    save().then(function (r) { if (r === 'ok') toast('✅ Тренировка завершена'); render(); });
 }
 function deleteWorkout(id) {
     if (!G.del) G.del = [];
@@ -989,13 +1014,22 @@ function mostUsed(n) {
     return Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, n);
 }
 function ownCustomNames() {
-    const set = new Set();
+    const set = new Set(customBase());
     for (const w of G.workouts) {
         for (const e of (w.exercises || [])) {
             if (isCustomEx(e.name)) set.add(e.name);
         }
     }
     return Array.from(set);
+}
+function customBase() {
+    try { return JSON.parse(localStorage.getItem('gymCustomEx') || '[]'); } catch (e) { return []; }
+}
+function addCustomBase(n) {
+    const a = customBase();
+    if (a.includes(n)) return;
+    a.push(n);
+    try { localStorage.setItem('gymCustomEx', JSON.stringify(a)); } catch (e) { /* noop */ }
 }
 function exCard(c) {
     return '<div class="excard" data-act="pickCatEx" data-a="' + esc(c.n) + '">' + ico(c.i) +
@@ -1060,10 +1094,15 @@ function renderPickerList() {
         let list = CATALOG.slice();
         if (PICKER.cat) list = list.filter(c => c.t.includes(PICKER.cat));
         if (q) list = list.filter(c => c.n.toLowerCase().includes(q));
+        let customs = [];
+        if (!PICKER.cat && PICKER.section !== 'coll') {
+            customs = customBase().filter(n => !q || n.toLowerCase().includes(q));
+        }
         h += '<div class="exgrid">';
         for (const c of list) h += exCard(c);
+        for (const n of customs) h += exCardByName(n);
         h += '</div>';
-        if (!list.length) h += '<p class="empty">Ничего не найдено</p>';
+        if (!list.length && !customs.length) h += '<p class="empty">Ничего не найдено</p>';
     }
     box.innerHTML = h;
 }
@@ -1113,6 +1152,7 @@ function createCustom() {
     const w = findW(PICKER.wid);
     const name = String((document.getElementById('mCustomName') || {}).value || '').trim();
     if (!name || name.length > 60) { alert('Название от 1 до 60 символов'); return; }
+    addCustomBase(name);
     closeCurrentExercise();
     const e = startExercise(w, name);
     save();
@@ -1200,6 +1240,7 @@ async function saveEntry() {
         e.sets[setIdx] = { w: weight, s: sets, r: reps, t: old ? (old.t || nowLocalISO()) : nowLocalISO() };
     }
     await save();
+    if (modalCtx) toast('✓ Сохранено');
     closeModal();
     render();
 }
@@ -1306,7 +1347,7 @@ function saveNutr(wid) {
     const v = String(document.getElementById('mNutr').value).trim();
     if (v.length > 500) { alert('До 500 символов'); return; }
     w.nutrition = v || null;
-    save().then(() => { closeModal(); render(); });
+    save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); closeModal(); render(); });
 }
 function clearNutr(wid) {
     const w = findW(wid);
@@ -1318,10 +1359,9 @@ function titleModal(wid) {
     const cur = w.title && w.title.trim() ? w.title : '';
     const h = '<p class="mtitle">🏷 Название тренировки</p>' +
         '<p class="muted">Сейчас: ' + esc(titleLines(w).join(' / ')) + '</p>' +
-        '<label>Своё название (первая строка — жирная, «авто» — вернуться к автоматическому)</label>' +
-        '<textarea id="mTitle" maxlength="200">' + esc(cur) + '</textarea>' +
-        '<div class="btnrow"><button class="btn wide" data-act="saveTitle" data-a="' + wid + '">💾 Сохранить</button>' +
-        '<button class="btn sec wide" data-act="autoTitle" data-a="' + wid + '">↺ Авто</button></div>';
+        '<label>Напиши своё название тренировки</label>' +
+        '<textarea id="mTitle" maxlength="200" placeholder="Например: Спина и грудь"></textarea>' +
+        '<div class="btnrow"><button class="btn wide" data-act="saveTitle" data-a="' + wid + '">💾 Сохранить</button></div>';
     openModal(h);
 }
 function saveTitle(wid) {
@@ -1330,7 +1370,7 @@ function saveTitle(wid) {
     if (v.length > 200) { alert('До 200 символов'); return; }
     if (v.toLowerCase() === 'авто') v = '';
     w.title = v || null;
-    save().then(() => { closeModal(); render(); });
+    save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); closeModal(); render(); });
 }
 function autoTitle(wid) {
     const w = findW(wid);
@@ -1406,9 +1446,9 @@ async function saveTime(wid) {
     const rawEt = String(document.getElementById('mEndTime').value).trim();
     let endVal = null;
     if (rawEd || rawEt) {
-        const edt = parseDateInput(rawEd);
+        const edt = parseDateInput(rawEd) || sdt;
         const etm = parseTimeInput(rawEt);
-        if (!edt || !etm) { err('Проверь дату и время окончания (или очисти оба поля)'); return; }
+        if (!etm) { err('Проверь время окончания (например 20:05) или очисти оба поля'); return; }
         endVal = edt + 'T' + etm + ':00';
     }
     const startVal = sdt + 'T' + stm + ':00';
@@ -1420,8 +1460,9 @@ async function saveTime(wid) {
     w2.started = startVal;
     w2.date = sdt;
     if (endVal) w2.ended = endVal;
-    if (!w2.finished) w2.ended = '';
+    else if (!w2.finished) w2.ended = '';
     await save();
+    if (!errEl || !errEl.textContent) toast('✓ Сохранено');
     closeModal();
     render();
 }
@@ -1454,9 +1495,51 @@ function closeModal() {
     modalCtx = null;
 }
 
+function applyBg(data) {
+    document.documentElement.classList.add('has-bg');
+    document.body.style.setProperty('--bg-img', 'url("' + data + '")');
+}
+function loadBg() {
+    let bg = null;
+    try { bg = localStorage.getItem('gymBg'); } catch (e) { /* noop */ }
+    if (bg) applyBg(bg);
+}
+function initBgPicker() {
+    const bf = document.getElementById('bgFile');
+    if (!bf || bf.__gymBound) return;
+    bf.__gymBound = true;
+    bf.addEventListener('change', function () {
+        const f = this.files && this.files[0];
+        if (!f) return;
+        const fr = new FileReader();
+        fr.onload = function () {
+            const img = new Image();
+            img.onload = function () {
+                const max = 1280;
+                const k = Math.min(1, max / Math.max(img.width, img.height));
+                const cv = document.createElement('canvas');
+                cv.width = Math.max(1, Math.round(img.width * k));
+                cv.height = Math.max(1, Math.round(img.height * k));
+                try { cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height); } catch (e1) { toast('Не удалось обработать картинку', true); return; }
+                let data;
+                try { data = cv.toDataURL('image/jpeg', 0.82); } catch (e2) { toast('Не удалось обработать картинку', true); return; }
+                try { localStorage.setItem('gymBg', data); } catch (e3) { toast('Картинка слишком большая, выбери другую', true); return; }
+                applyBg(data);
+                toast('✓ Фон установлен');
+            };
+            img.onerror = function () { toast('Не удалось открыть картинку', true); };
+            img.src = fr.result;
+        };
+        fr.readAsDataURL(f);
+        this.value = '';
+    });
+}
+
 /* ---------- init ---------- */
 async function init() {
     loadTheme();
+    loadBg();
+    initBgPicker();
     if (tg) {
         try { tg.ready(); tg.expand(); } catch (e) { /* noop */ }
         INIT = tg.initData || '';
