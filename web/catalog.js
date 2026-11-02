@@ -46,7 +46,10 @@ const ICONS = {
     cup: _s('<path d="M6 4h10v6a5 5 0 01-10 0V4z"/><path d="M16 5h2a2.5 2.5 0 010 5h-2"/><path d="M4 20h14"/>'),
     chart: _s('<path d="M4 20v-9M10 20V5M16 20v-6M21 20H3"/>'),
     user: _s('<circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.5 3.8-5 7-5s5.8 1.5 7 5"/>'),
-    timer: _s('<circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M9.5 3h5"/>')
+    timer: _s('<circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M9.5 3h5"/>'),
+    check: _s('<path d="M20 6L9 17l-5-5"/>'),
+    cross: _s('<path d="M18 6L6 18M6 6l12 12"/>'),
+    plus: _s('<path d="M12 5v14M5 12h14"/>')
 };
 function ico(key, cls) {
     return '<span class="ico' + (cls ? ' ' + cls : '') + '">' + (ICONS[key] || ICONS.custom) + '</span>';
