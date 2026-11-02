@@ -358,11 +358,13 @@ document.addEventListener('touchmove', function (ev) {
 document.addEventListener('touchend', function (ev) {
     const info = __tap;
     __tap = null;
-    const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
+    const t = ev.target;
+    if (t && t.closest && t.closest('input,textarea')) return; /* поля ввода: не мешаем фокусу и каретке */
+    const el = t && t.closest ? t.closest('[data-fav],[data-act]') : null;
     if (!el) return;
     if (!info || info.moved || Date.now() - info.time > 500) return; /* это был скролл, не тап */
     if (ev.cancelable) ev.preventDefault();
-    dispatchFromEl(el, null);
+    dispatchFromEl(el, ev);
 }, false);
 window.addEventListener('error', function (ev) {
     dbgMsg('ОШИБКА JS: ' + (ev && ev.message || '?') + ' @' + (ev && ev.lineno || '?'));
@@ -420,8 +422,8 @@ const ACTIONS = {
     finishWorkout: function (a) { finishWorkout(+a); },
     deleteWorkout: function (a) { deleteWorkout(+a); },
     openPicker: function (a) { openPicker(+a); },
-    pickerSection: function (a) { if (PICKER) { PICKER.section = a; PICKER.cat = null; renderPickerModal(); } },
-    pickerCat: function (a) { if (PICKER) { PICKER.cat = PICKER.cat === a ? null : a; renderPickerList(); } },
+    pickerSection: function (a) { if (PICKER) { PICKER.section = a; PICKER.cat = null; renderPickerChips(); renderPickerList(); } },
+    pickerCat: function (a) { if (PICKER) { PICKER.cat = PICKER.cat === a ? null : a; renderPickerChips(); renderPickerList(); } },
     pickCatEx: function (a) { pickCatEx(a); },
     customExerciseModal: function () { customExerciseModal(); },
     createCustom: function () { createCustom(); },
@@ -481,6 +483,8 @@ function render() {
         h += '<div style="height:70px"></div>';
     }
     app.innerHTML = h;
+    const nv = document.querySelector('.nav');
+    if (nv && (window.scrollY || 0) > 60) nv.classList.add('min');
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
         if (q) q.addEventListener('input', function () { TECH.q = this.value; const list = document.getElementById('techList'); if (list) list.innerHTML = techListHtml(); });
@@ -962,7 +966,7 @@ function deleteWorkout(id) {
 
 /* ---------- пикер ---------- */
 function openPicker(wid) {
-    PICKER = { wid, section: 'fav', cat: null, q: '' };
+    PICKER = { wid, section: 'all', cat: null, q: '' };
     renderPickerModal();
 }
 function favsList() {
@@ -1007,6 +1011,29 @@ function exCardByName(name) {
 function starHtml(name) {
     return '<span class="star' + (isFav(name) ? ' fav' : '') + '" data-fav="' + esc(name) + '">' + (isFav(name) ? '★' : '☆') + '</span>';
 }
+function pickerChipsHtml() {
+    let h = '';
+    for (const s of CAT_SECTIONS) {
+        h += '<button class="chip' + (PICKER.section === s.id ? ' on' : '') + '" data-act="pickerSection" data-a="' + s.id + '">' + s.n + '</button>';
+    }
+    return h;
+}
+function pickerCatsHtml() {
+    let h = '';
+    for (const c of (CATS[PICKER.section] || [])) {
+        h += '<button class="chip' + (PICKER.cat === c.id ? ' on' : '') + '" data-act="pickerCat" data-a="' + c.id + '">' + ico(c.icon) + ' ' + c.n + '</button>';
+    }
+    return h;
+}
+function renderPickerChips() {
+    const sec = document.getElementById('pickerSections');
+    if (sec) sec.innerHTML = pickerChipsHtml();
+    const catsBox = document.getElementById('pickerCats');
+    if (!catsBox) return;
+    const showCats = PICKER.section !== 'fav' && PICKER.section !== 'all';
+    catsBox.style.display = showCats ? '' : 'none';
+    if (showCats) catsBox.innerHTML = pickerCatsHtml();
+}
 function renderPickerList() {
     const box = document.getElementById('pickerList');
     if (!box) return;
@@ -1019,15 +1046,12 @@ function renderPickerList() {
         if (favs.length) {
             list = CATALOG.filter(c => favs.includes(c.n));
             h += '<div class="muted" style="margin:6px 0">★ Избранные</div>';
+            h += '<div class="exgrid">';
+            for (const c of list) h += exCard(c);
+            h += '</div>';
         } else {
-            h += '<div class="muted" style="margin:6px 0">★ Избранных пока нет — отмечай ☆ на карточках. Пока показываю весь каталог.</div>';
-            list = CATALOG.slice();
+            h += '<p class="empty">★ Избранных пока нет — отмечай ☆ на карточках упражнений</p>';
         }
-        if (q) list = list.filter(c => c.n.toLowerCase().includes(q.toLowerCase()));
-        h += '<div class="exgrid">';
-        for (const c of list) h += exCard(c);
-        h += '</div>';
-        if (!list.length) h += '<p class="empty">Ничего не найдено</p>';
     } else if (PICKER.section === 'coll' && PICKER.cat === 'own') {
         const own = ownCustomNames().filter(n => !q || n.toLowerCase().includes(q));
         for (const n of own) h += exCardByName(n);
@@ -1045,19 +1069,10 @@ function renderPickerList() {
 }
 function renderPickerModal() {
     let h = '<p class="mtitle">➕ Добавить упражнение</p>';
-    h += '<div class="searchbox"><input id="pickerQ" type="text" placeholder="Поиск..." value="' + esc(PICKER.q) + '"></div>';
-    h += '<div class="secrow">';
-    for (const s of CAT_SECTIONS) {
-        h += '<button class="chip' + (PICKER.section === s.id ? ' on' : '') + '" data-act="pickerSection" data-a="' + s.id + '">' + s.n + '</button>';
-    }
-    h += '</div>';
-    if (PICKER.section !== 'fav') {
-        h += '<div class="secrow">';
-        for (const c of (CATS[PICKER.section] || [])) {
-            h += '<button class="chip' + (PICKER.cat === c.id ? ' on' : '') + '" data-act="pickerCat" data-a="' + c.id + '">' + ico(c.icon) + ' ' + c.n + '</button>';
-        }
-        h += '</div>';
-    }
+    h += '<div class="searchbox"><input id="pickerQ" type="text" placeholder="Поиск..." autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(PICKER.q) + '"></div>';
+    const showCats = PICKER.section !== 'fav' && PICKER.section !== 'all';
+    h += '<div class="secrow" id="pickerSections">' + pickerChipsHtml() + '</div>';
+    h += '<div class="secrow" id="pickerCats"' + (showCats ? '' : ' style="display:none"') + '>' + (showCats ? pickerCatsHtml() : '') + '</div>';
     h += '<div class="excard" data-act="customExerciseModal" style="margin:6px 0">' + ico('custom') +
         '<span><div class="exn">✍️ Своё упражнение</div><div class="extags">добавь то, чего нет в каталоге</div></span></div>';
     h += '<div id="pickerList"></div>';
@@ -1426,9 +1441,11 @@ function confirmYes() {
 }
 function openModal(html) {
     const m = document.getElementById('modal');
-    document.getElementById('modalBox').innerHTML = html;
+    const mb = document.getElementById('modalBox');
+    mb.innerHTML = html;
     m.classList.remove('hidden');
     m.classList.add('open');
+    mb.scrollTop = 0;
 }
 function closeModal() {
     const m = document.getElementById('modal');
@@ -1494,6 +1511,10 @@ async function init() {
             '<br><br>Открой приложение через меню бота (кнопка ☰ → «🏋️ Дневник»).</p>';
     }
 }
+window.addEventListener('scroll', function () {
+    const nv = document.querySelector('.nav');
+    if (nv) nv.classList.toggle('min', (window.scrollY || 0) > 60);
+}, { passive: true });
 init();
 
 /* ============ тестовый крюк (используется tests/render-smoke.js) ============ */

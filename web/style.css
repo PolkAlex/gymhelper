@@ -714,17 +714,14 @@ body { padding: 12px 12px 32px 66px; }
 .trendline b { font-size: 14px; }
 .pc-dp { font-size: 14px; }
 
-/* ============ weight keypad ============ */
-.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
-.kp {
-    border: none; background: var(--card2); color: var(--text);
-    border-radius: 12px; padding: 11px 0;
-    font-size: 17px; font-weight: 600; cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-}
-.kp:active { background: var(--border); }
-.kp-del { background: var(--sec); color: var(--sec-text); font-size: 14px; }
+/* ============ nav: иконки в цвет текста + сворачивание при скролле ============ */
+.nav { transition: padding .18s ease; }
+.nav .nico, .nav .nico svg { color: inherit; }
+.nav .nlabel { transition: opacity .15s ease; }
+.nav.min { padding: 6px; }
+.nav.min .nlabel { display: none; }
+.nav.min .nwrap { height: 34px; }
+.nav.min .nico svg { width: 22px; height: 22px; }
 
 /* ============ Stockline theme ============ */
 [data-theme="stockline"] {

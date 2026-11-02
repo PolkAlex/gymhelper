@@ -194,4 +194,102 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="saveTitle"]').click();
         await expect(page.locator('.t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
     });
+
+    test('время и дата тренировки: маски ввода', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('.iconrow [data-act="timeModal"]').click();
+        await page.locator('#mStartDate').fill('29.10.2026');
+        await page.locator('#mStartTime').fill('0930');
+        await page.locator('[data-act="saveTime"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.meta', { hasText: '09:30' })).toBeVisible({ timeout: 5000 });
+    });
+
+    test('любимые пустые -> пустой список; фильтр Все -> весь каталог', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
+        await expect(page.locator('#pickerList')).toContainText('Избранных пока нет', { timeout: 5000 });
+        await expect(page.locator('#pickerList .excard')).toHaveCount(0);
+
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        const total = await page.locator('#pickerList .excard').count();
+        if (total < 60) throw new Error('в каталоге должно быть 75 упражнений, найдено: ' + total);
+    });
+
+    test('выбор группы мышц подсвечивает чип и фильтрует список', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Мышцы' }).click();
+        const back = page.locator('.modal.open .secrow .chip', { hasText: 'Спина' });
+        await back.click();
+        await expect(back).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('#pickerList .excard', { hasText: 'Подтягивания' }).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('звезда добавляет в любимые', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        const card = page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first();
+        await card.locator('.star').click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).locator('.star')).toHaveClass(/fav/, { timeout: 5000 });
+
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
+        await expect(page.locator('#pickerList .excard')).toHaveCount(1);
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' })).toBeVisible();
+    });
+
+    test('навигация сворачивается при скролле и разворачивается наверху', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(function () { document.body.style.minHeight = '2200px'; });
+        await page.evaluate(function () { window.scrollTo(0, 500); });
+        await expect(page.locator('.nav.min')).toHaveCount(1, { timeout: 5000 });
+        await page.evaluate(function () { window.scrollTo(0, 0); });
+        await expect(page.locator('.nav.min')).toHaveCount(0, { timeout: 5000 });
+    });
+
+    test('выбранная тема сохраняется после перезагрузки', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.topbar .tb-user').click();
+        await page.locator('.themecard', { hasText: 'Stockline' }).click();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'stockline', { timeout: 5000 });
+        await page.reload();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'stockline', { timeout: 5000 });
+    });
+});
+
+/* ===== мобильная эмуляция: тач + настоящая клавиатура (Android/iOS) ===== */
+test.describe('мобильный (тач-экран)', function () {
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+    async function touchTap(page, loc) {
+        const b = await loc.boundingBox();
+        await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+    }
+
+    test('поиск: тап в поле не закрывает модалку, фокус есть, ввод фильтрует', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await touchTap(page, page.locator('[data-act="openPicker"]'));
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+
+        const q = page.locator('#pickerQ');
+        await touchTap(page, q);
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        const focused = await q.evaluate(function (el) { return el === document.activeElement; });
+        if (!focused) throw new Error('тап не поставил фокус в поле поиска');
+
+        await page.keyboard.type('жим', { delay: 120 });
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#pickerList .excard', { hasText: 'Подтягивания' })).toHaveCount(0);
+    });
 });

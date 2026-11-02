@@ -55,6 +55,7 @@ function ico(key, cls) {
 /* ---------- categories ---------- */
 const CAT_SECTIONS = [
     { id: 'fav', n: '★ Любимые' },
+    { id: 'all', n: 'Все' },
     { id: 'muscle', n: 'Мышцы' },
     { id: 'type', n: 'Вид' },
     { id: 'block', n: 'Блок' },
