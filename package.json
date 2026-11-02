@@ -1,0 +1,12 @@
+{
+  "name": "gymhelper",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "server:test": "node tests/server-test.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1"
+  }
+}

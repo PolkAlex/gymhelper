@@ -341,10 +341,29 @@ window.addEventListener('click', function (ev) {
     const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
     if (el) dispatchFromEl(el, ev);
 }, true);
+
+/* тап vs скролл: действие только для чистого тапа (без движения, короче 500 мс) */
+let __tap = null;
+document.addEventListener('touchstart', function (ev) {
+    if (ev.touches.length > 1) { __tap = null; return; }
+    const t = ev.touches[0];
+    __tap = { x: t.clientX, y: t.clientY, time: Date.now(), moved: false };
+}, { passive: true });
+document.addEventListener('touchmove', function (ev) {
+    if (!__tap) return;
+    const t = ev.touches && ev.touches[0];
+    if (!t) return;
+    if (Math.abs(t.clientX - __tap.x) > 15 || Math.abs(t.clientY - __tap.y) > 15) __tap.moved = true;
+}, { passive: true });
 document.addEventListener('touchend', function (ev) {
+    const info = __tap;
+    __tap = null;
     const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
-    if (el) dispatchFromEl(el, null);
-}, true);
+    if (!el) return;
+    if (!info || info.moved || Date.now() - info.time > 500) return; /* это был скролл, не тап */
+    if (ev.cancelable) ev.preventDefault();
+    dispatchFromEl(el, null);
+}, false);
 window.addEventListener('error', function (ev) {
     dbgMsg('ОШИБКА JS: ' + (ev && ev.message || '?') + ' @' + (ev && ev.lineno || '?'));
 });
@@ -991,20 +1010,24 @@ function starHtml(name) {
 function renderPickerList() {
     const box = document.getElementById('pickerList');
     if (!box) return;
+    console.log('[picker] section=' + PICKER.section + ' cat=' + PICKER.cat + ' q=' + (PICKER.q || ''));
     const q = (PICKER.q || '').toLowerCase();
     let h = '';
     if (PICKER.section === 'fav') {
         const favs = favsList().filter(n => !q || n.toLowerCase().includes(q));
+        let list;
         if (favs.length) {
-            for (const n of favs) h += exCardByName(n);
+            list = CATALOG.filter(c => favs.includes(c.n));
+            h += '<div class="muted" style="margin:6px 0">★ Избранные</div>';
         } else {
-            h += '<p class="muted" style="margin:6px 0">Нажми ☆ на карточке упражнения — оно появится здесь.</p>';
-            const top = mostUsed(6).filter(n => !q || n.toLowerCase().includes(q));
-            if (top.length) {
-                h += '<div class="muted" style="margin:12px 0 6px">Часто используемые</div>';
-                for (const n of top) h += exCardByName(n);
-            }
+            h += '<div class="muted" style="margin:6px 0">★ Избранных пока нет — отмечай ☆ на карточках. Пока показываю весь каталог.</div>';
+            list = CATALOG.slice();
         }
+        if (q) list = list.filter(c => c.n.toLowerCase().includes(q.toLowerCase()));
+        h += '<div class="exgrid">';
+        for (const c of list) h += exCard(c);
+        h += '</div>';
+        if (!list.length) h += '<p class="empty">Ничего не найдено</p>';
     } else if (PICKER.section === 'coll' && PICKER.cat === 'own') {
         const own = ownCustomNames().filter(n => !q || n.toLowerCase().includes(q));
         for (const n of own) h += exCardByName(n);
