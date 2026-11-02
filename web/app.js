@@ -321,10 +321,17 @@ async function reloadSilently(force) {
             const serverIds = new Set((j.data.workouts || []).map(w => w.id));
             const serverDel = new Set(j.data.del || []);
             const localOnly = G ? G.workouts.filter(w => !serverIds.has(w.id) && !serverDel.has(w.id)) : [];
+            const localNextId = G ? G.nextId : 0;
             G = j.data;
-            for (const w of localOnly) G.workouts.push(w);
+            for (const w of localOnly) {
+                G.workouts.push(w);
+                if (w.id >= G.nextId) G.nextId = w.id + 1;
+            }
             if (!G.workouts) G.workouts = [];
             if (!G.del) G.del = [];
+            /* nextId не откатывается ниже локально известного — защита от id-коллизий */
+            if (G.nextId < localNextId) G.nextId = localNextId;
+            for (const d of (G.del || [])) if (d >= G.nextId) G.nextId = d + 1;
             if (G.nextId < 1) G.nextId = 1;
             if (G.profile) profileSex = G.profile.sex;
             render();
@@ -685,11 +692,11 @@ function workoutCard(w, showActions) {
         const sT = String(w.started).slice(11, 16);
         const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
         const mins = durationMin(w);
-        let pill = '<span class="wp-r">' + range + '</span>';
-        if (mins != null) pill += '<span class="wp-d">' + durationText(mins) + '</span>';
+        let pill = '<span class="wpill wp-r">🕐 ' + range + '</span>';
+        if (mins != null) pill += '<span class="wpill wp-d">⏱ ' + durationText(mins) + '</span>';
         if (G.profile && G.profile.weight > 0) {
             const res = calcWorkoutKcal(G.profile, w);
-            if (res && res.total > 0) pill += '<span class="wp-k">🔥 ' + res.total + ' ккал</span>';
+            if (res && res.total > 0) pill += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
         }
         h += '<div class="wcpill">' + pill + '</div>';
     }
@@ -973,7 +980,7 @@ function saveProfile() {
     const height = parseInt(document.getElementById('pfHeight').value, 10);
     const weight = parseFloat(String(document.getElementById('pfWeight').value).replace(',', '.'));
     if (!(age >= 10 && age <= 100) || !(height >= 100 && height <= 250) || !(weight >= 30 && weight <= 300)) {
-        alert('Проверь значения: возраст 10–100, рост 100–250, вес 30–300');
+        toast('Проверь значения: возраст 10–100, рост 100–250, вес 30–300', true);
         return;
     }
     G.profile = { sex, age, height, weight };
@@ -1001,7 +1008,7 @@ function finishWorkout(id) {
         if (e.st && !e.en) e.en = nowLocalISO();
     }
     w.exercises = (w.exercises || []).filter(e => e.sets.length);
-    if (!w.exercises.length) { alert('Сначала добавь хотя бы одно упражнение 💪'); return; }
+    if (!w.exercises.length) { toast('Сначала добавь хотя бы одно упражнение 💪', true); return; }
     w.finished = true;
     if (!w.ended) w.ended = nowLocalISO();
     save().then(function (r) { if (r === 'ok') toast('✅ Тренировка завершена'); render(); });
@@ -1176,7 +1183,7 @@ function customExerciseModal() {
 function createCustom() {
     const w = findW(PICKER.wid);
     const name = String((document.getElementById('mCustomName') || {}).value || '').trim();
-    if (!name || name.length > 60) { alert('Название от 1 до 60 символов'); return; }
+    if (!name || name.length > 60) { toast('Название от 1 до 60 символов', true); return; }
     addCustomBase(name);
     closeCurrentExercise();
     const e = startExercise(w, name);
@@ -1254,11 +1261,11 @@ async function saveEntry() {
     const sets = parseInt(document.getElementById('mSets').value, 10);
     const reps = String(document.getElementById('mReps').value).trim();
     if (weight.length > 25 || !/^[\d.,\-\s]*$/.test(weight) || (weight && !/\d/.test(weight))) {
-        alert('Некорректный вес. Например: 45 или 50, 80');
+        toast('Некорректный вес. Например: 45 или 50, 80', true);
         return;
     }
-    if (!(sets >= 1 && sets <= 30)) { alert('Подходы: число от 1 до 30'); return; }
-    if (!reps || reps.length > 15) { alert('Повторения: например 12, 8-10 или макс'); return; }
+    if (!(sets >= 1 && sets <= 30)) { toast('Подходы: число от 1 до 30', true); return; }
+    if (!reps || reps.length > 15) { toast('Повторения: например 12, 8-10 или макс', true); return; }
     await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name) : null;
@@ -1312,7 +1319,7 @@ async function doRename() {
     if (!modalCtx) return;
     const wid = modalCtx.wid, name2 = modalCtx.name;
     const name = String(document.getElementById('mName').value).trim();
-    if (!name || name.length > 60) { alert('Название от 1 до 60 символов'); return; }
+    if (!name || name.length > 60) { toast('Название от 1 до 60 символов', true); return; }
     await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name2) : null;
@@ -1385,7 +1392,7 @@ function nutrModal(wid) {
 function saveNutr(wid) {
     const w = findW(wid);
     const v = String(document.getElementById('mNutr').value).trim();
-    if (v.length > 500) { alert('До 500 символов'); return; }
+    if (v.length > 500) { toast('До 500 символов', true); return; }
     w.nutrition = v || null;
     save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); closeModal(); render(); });
 }
@@ -1407,7 +1414,7 @@ function titleModal(wid) {
 function saveTitle(wid) {
     const w = findW(wid);
     let v = String(document.getElementById('mTitle').value).trim();
-    if (v.length > 200) { alert('До 200 символов'); return; }
+    if (v.length > 200) { toast('До 200 символов', true); return; }
     if (v.toLowerCase() === 'авто') v = '';
     w.title = v || null;
     save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); closeModal(); render(); });
@@ -1616,6 +1623,8 @@ async function init() {
             if (!G.workouts) G.workouts = [];
             if (!G.del) G.del = [];
             if (G.nextId < 1) G.nextId = 1;
+            /* id из tombstone-списка нельзя выдавать заново — иначе новая тренировка мгновенно «удалится» */
+            for (const d of G.del) if (d >= G.nextId) G.nextId = d + 1;
             if (G.profile) profileSex = G.profile.sex;
             render();
         } else {
