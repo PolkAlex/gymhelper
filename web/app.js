@@ -116,7 +116,16 @@ function durationMin(w) {
 }
 function durationText(mins) {
     const h = Math.floor(mins / 60), m = mins % 60;
-    return h > 0 ? h + ' ч ' + m + ' м' : m + ' м';
+    if (h > 0 && m > 0) return h + ' ч ' + m + ' м';
+    if (h > 0) return h + ' ч';
+    return m + ' м';
+}
+function setsWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'подход';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'подхода';
+    return 'подходов';
 }
 function bmr(p) {
     const base = 10 * p.weight + 6.25 * p.height - 5 * p.age;
@@ -179,7 +188,8 @@ function popularWeight(name) {
     return best;
 }
 function entryLine(s) {
-    return (s.w ? s.w + ' кг, ' : '') + s.s + ' по ' + s.r;
+    const repsPart = /\d/.test(String(s.r)) ? ' по ' + s.r + ' повторений' : ' по ' + s.r;
+    return (s.w ? s.w + ' кг, ' : '') + s.s + ' ' + setsWord(s.s) + repsPart;
 }
 function isCustomEx(name) {
     return !findCatalog(name);
@@ -657,31 +667,32 @@ function workoutCard(w, showActions) {
     h += '<div class="wchead"><div class="wctitles"><p class="t1">' +
         (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p>';
     for (let i = 1; i < lines.length; i++) h += '<div class="tn">' + esc(lines[i]) + '</div>';
-    h += '</div><div class="wcicons">' +
+    h += '</div><div class="wcright"><div class="wcicons">' +
         '<button class="barebtn pencil-bare" data-act="titleModal" data-a="' + w.id + '" title="Название">' + ICONS.pencil + '</button>' +
-        '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
-        '</div></div>';
-    h += '<p class="meta">' + esc(timeLine(w)) + '</p>';
-    if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
+        '</div>';
+    if (w.started) {
+        const sT = String(w.started).slice(11, 16);
+        const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : sT;
+        const mins = durationMin(w);
+        h += '<div class="wcrange">' + range + '</div>' +
+            '<button class="wcbtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
+            '<div class="wcdur">' + (mins != null ? durationText(mins) : '—') + '</div>';
+    }
     if (G.profile && G.profile.weight > 0) {
         const res = calcWorkoutKcal(G.profile, w);
-        if (res && res.total > 0) h += '<p class="kcalline">🔥 ≈' + res.total + ' ккал</p>';
+        if (res && res.total > 0) h += '<div class="wckcal">🔥 ' + res.total + ' ккал</div>';
     }
+    h += '</div></div>';
+    if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
     const exs = w.exercises || [];
     if (!exs.length) {
         h += '<p class="muted" style="margin-top:8px">Пока нет упражнений.</p>';
     }
     exs.forEach((e, ei) => {
         const c = findCatalog(e.name);
-        const st = exStats(e);
-        let timeNote = '';
-        if (st) {
-            timeNote = '⏱ ' + durationText(st.mins) + (st.restSec != null ? ' · отдых ~' + st.restSec + ' сек' : '');
-        }
         h += '<div class="expill"><div class="exhead">' + (c ? ico(c.i) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
-            (timeNote ? '<span class="extime">' + esc(timeNote) + '</span>' : '') +
             '<button class="barebtn pencil-bare" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Переименовать">' + ICONS.pencil + '</button>' +
             '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
             '</div>';

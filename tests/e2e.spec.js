@@ -42,7 +42,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
 
         await openActiveDetail(page);
-        await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 по 8-10', { timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
     });
 
     test('записи переживают перезагрузку страницы', async ({ page }) => {
@@ -56,7 +56,7 @@ test.describe('GymHelper e2e', function () {
 
         await page.reload();
         await openActiveDetail(page);
-        await expect(page.locator('.expill .entry').first()).toContainText('80 кг, 4 по 10', { timeout: 10000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('80 кг, 4 подхода по 10 повторений', { timeout: 10000 });
     });
 
     test('редактирование записи', async ({ page }) => {
@@ -77,7 +77,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
 
         await openActiveDetail(page);
-        await expect(page.locator('.expill .entry').first()).toContainText('110 кг, 5 по 8-10', { timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('110 кг, 5 подходов по 8-10 повторений', { timeout: 5000 });
     });
 
     test('удаление записи', async ({ page }) => {
@@ -184,12 +184,12 @@ test.describe('GymHelper e2e', function () {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
-        await page.locator('.wcicons [data-act="timeModal"]').click();
+        await page.locator('.wcright [data-act="timeModal"]').click();
         await page.locator('#mStartDate').fill('29.10.2026');
         await page.locator('#mStartTime').fill('0930');
         await page.locator('[data-act="saveTime"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.meta', { hasText: '09:30' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wcrange', { hasText: '09:30' })).toBeVisible({ timeout: 5000 });
     });
 
     test('время окончания вводят руками: сохраняется и переживает завершение', async ({ page }) => {
@@ -201,13 +201,14 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
-        await page.locator('.wcicons [data-act="timeModal"]').click();
+        await page.locator('.wcright [data-act="timeModal"]').click();
         await page.locator('#mStartTime').fill('1000');
         await page.locator('#mEndTime').fill('1130');
         await page.locator('[data-act="saveTime"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="finishWorkout"]').click();
-        await expect(page.locator('.meta', { hasText: '10:00–11:30' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wcrange', { hasText: '10:00–11:30' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.entry', { hasText: '50 кг, 1 подход по 10 повторений' })).toBeVisible({ timeout: 5000 });
     });
 
     test('своё упражнение сохраняется в базе', async ({ page }) => {
@@ -241,7 +242,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.wcicons [data-act="titleModal"]').click();
         await page.locator('#mTitle').fill('Спина и грудь');
         await page.locator('[data-act="saveTitle"]').click();
-        await expect(page.locator('.t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wctitles .t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
     });
 
     test('любимые пустые -> пустой список; фильтр Все -> весь каталог', async ({ page }) => {
