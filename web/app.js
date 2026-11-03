@@ -624,7 +624,7 @@ function previewCard(w) {
         (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
     h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-main">';
-    if (hasTitle) h += '<div class="pc-title">' + esc(String(w.title).split('\n')[0].trim()) + '</div>';
+    if (hasTitle) h += '<div class="pc-title">' + ICONS.tag + ' «' + esc(String(w.title).split('\n')[0].trim()) + '»</div>';
     if (!show.length) h += '<div class="pc-ex">Без упражнений</div>';
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';
     h += '</div>';
@@ -698,8 +698,11 @@ function workoutCard(w, showActions) {
     const lines = titleLines(w);
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
+    const isCustomTitle = w.title && w.title.trim();
     h += '<div class="wchead"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
-        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p></div>' +
+        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') +
+        (isCustomTitle ? '<span class="dp-inline">' + ICONS.tag + '</span> ' : '') +
+        esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +

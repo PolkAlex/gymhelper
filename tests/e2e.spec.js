@@ -592,6 +592,36 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toContainText('50 кг, 3 подхода по 10 повторений', { timeout: 5000 });
     });
 
+    test('переименование тренировки не трогает упражнения', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('100');
+        await page.locator('[data-act="setsSet"][data-a="3"]').click();
+        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+
+        /* тап по названию тренировки -> окно названия тренировки -> сохраняем «Спина» */
+        await page.locator('.wctitles').click();
+        await expect(page.locator('#mTitle')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mTitle').fill('Спина');
+        await page.locator('[data-act="saveTitle"]').click();
+        await expect(page.locator('.wctitles .t1', { hasText: 'Спина' })).toBeVisible({ timeout: 5000 });
+
+        /* название тренировки НЕ попало в упражнения */
+        await expect(page.locator('.expill .exname', { hasText: 'Спина' })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.expill .exname', { hasText: EX })).toBeVisible({ timeout: 5000 });
+
+        /* и после перезагрузки: title = Спина, упражнения на месте */
+        await page.reload();
+        await openActiveDetail(page);
+        await expect(page.locator('.wctitles .t1', { hasText: 'Спина' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .exname', { hasText: 'Спина' })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.expill .exname', { hasText: EX })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('100 кг', { timeout: 5000 });
+    });
+
     test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.topbar .tb-user').click();
