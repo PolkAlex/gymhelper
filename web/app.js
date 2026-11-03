@@ -566,11 +566,10 @@ function renderWorkoutTab() {
     if (unfin.length) {
         h += '<div class="card" style="padding:10px"><p class="t1" style="font-size:15px">⚡ Незавершённые тренировки</p>';
         for (const w of unfin) {
-            const d = parseDateISO(w.date);
-            const ds = d ? pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) : (w.date || '—');
+            const dpw = dayPart(w);
             h += '<div class="wrow" data-act="openHistory" data-a="' + w.id + '">' +
                 '<span class="ico">' + ICONS.timer + '</span>' +
-                '<span class="wt"><div class="exn">' + ds + '</div></span>' +
+                '<span class="wt"><div class="exn">' + (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(firstLine(w)) + '</div></span>' +
                 '<span class="badge">открыть</span></div>';
         }
         h += '</div>';
@@ -593,7 +592,7 @@ function heroHtml(fin) {
 }
 function previewCard(w) {
     const d = parseDateISO(w.date);
-    const dateStr = d ? pad2(d.getDate()) + '.' + pad2(d.getMonth() + 1) : (w.date || '-');
+    const dateStr = firstLine(w);
     const rightTop = d ? d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] : '';
     const dp = dayPart(w);
     const exs = (w.exercises || []).filter(e => e.sets.length && !isWarmupName(e.name));
@@ -605,10 +604,9 @@ function previewCard(w) {
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard" data-act="openHistory" data-a="' + w.id + '">';
     h += '<div class="pc-main">';
-    h += '<div class="pc-daterow"><span class="pc-date">' + dateStr + '</span>' +
-        (w.finished
-            ? (dp ? '<span class="pc-pill">' + dp.i + '</span>' : '')
-            : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
+    h += '<div class="pc-daterow">' +
+        '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + dp.i + '</span> ' : '') + esc(dateStr) + '</span>' +
+        (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
     if (hasTitle) h += '<div class="pc-title">' + esc(String(w.title).split('\n')[0].trim()) + '</div>';
     if (!show.length) h += '<div class="pc-ex">Без упражнений</div>';
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';

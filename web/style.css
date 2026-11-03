@@ -394,6 +394,7 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 .pcard:active { background: var(--card2); }
 .pc-main { flex: 1; min-width: 0; min-height: 104px; }
 .pc-daterow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pc-date { font-size: 15px; font-weight: 700; color: var(--text); }
 .pc-side { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
 .pc-dow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); }
 .pc-dp { font-size: 14px; }
@@ -620,7 +621,7 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 }
 .wrow:active { background: var(--card2); }
 .wrow .wt { flex: 1; min-width: 0; }
-.wrow .exn { font-size: 14px; font-weight: 600; }
+.wrow .exn { font-size: 14px; font-weight: 700; }
 .wrow .badge {
     background: var(--card2);
     color: var(--muted);

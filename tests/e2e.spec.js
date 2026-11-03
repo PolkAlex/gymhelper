@@ -317,7 +317,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
     });
 
-    test('превью-карточки: иконка без текста, дата без дня недели, жирное название', async ({ page }) => {
+    test('превью-карточки: дата как в шапке (эмодзи + дд.мм, дн), жирное название, правый угол без дня недели', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
@@ -334,8 +334,14 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.nav button', { hasText: 'История' }).click();
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.pc-title', { hasText: 'Вечерняя программа' })).toBeVisible({ timeout: 5000 });
-        const pillTxt = (await page.locator('.pc-pill').first().textContent()) || '';
-        if (/утро|день|вечер/.test(pillTxt)) throw new Error('в пилюле день-части остался текст: ' + pillTxt);
+        /* дата в превью: эмодзи дня + дд.мм, дн — единый формат названия */
+        const dateTxt = ((await page.locator('.pc-date').first().textContent()) || '').trim();
+        if (!/^(🌅|☀️|🌙)\s\d{2}\.\d{2},\s[а-я]{1,2}$/iu.test(dateTxt)) throw new Error('формат даты превью: ' + JSON.stringify(dateTxt));
+        const pill = page.locator('.pc-pill');
+        if (await pill.count()) {
+            const pillTxt = (await pill.first().textContent()) || '';
+            if (/утро|день|вечер/.test(pillTxt)) throw new Error('в пилюле день-части остался текст: ' + pillTxt);
+        }
         const dowTxt = (await page.locator('.pc-dow').first().textContent()) || '';
         if (dowTxt.includes('·')) throw new Error('в правом углу остался день недели: ' + dowTxt);
         if (!/^\d{1,2}\s[а-яё]+$/i.test(dowTxt.trim())) throw new Error('формат даты в правом углу: ' + dowTxt);
