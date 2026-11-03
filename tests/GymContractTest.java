@@ -1,6 +1,8 @@
+import gym.BotLogic;
 import gym.ExerciseEntry;
 import gym.GymData;
 import gym.Json;
+import gym.SetEntry;
 import gym.Storage;
 import gym.Workout;
 
@@ -83,6 +85,14 @@ public class GymContractTest {
         } catch (Exception storageErr) {
             throw new AssertionError("CONTRACT FAIL: storage " + storageErr);
         }
+
+        /* склонения в формулировках записей (веб + бот) */
+        check(BotLogic.renderLine("Жим", new SetEntry("25", 2, "4")).equals("Жим 25 кг, 2 подхода по 4 повторения"), "renderLine: 2 подхода по 4 повторения");
+        check(BotLogic.renderLine("Жим", new SetEntry("", 5, "12")).equals("Жим, 5 подходов по 12 повторений"), "renderLine: 5 подходов по 12 повторений");
+        check(BotLogic.renderLine("Тяга", new SetEntry("", 1, "1")).equals("Тяга, 1 подход по 1 повторению"), "renderLine: 1 подход по 1 повторению");
+        check(BotLogic.renderLine("Становая", new SetEntry("", 21, "макс")).equals("Становая, 21 подход по макс"), "renderLine: 21 подход по макс");
+        check(BotLogic.renderLine("Жим", new SetEntry("100", 3, "8-10")).equals("Жим 100 кг, 3 подхода по 8-10 повторений"), "renderLine: 3 подхода по 8-10 повторений");
+        check(BotLogic.renderLine("Жим", new SetEntry("", 11, "2-4")).equals("Жим, 11 подходов по 2-4 повторения"), "renderLine: 11 подходов по 2-4 повторения (диапазон по последнему числу)");
 
         System.out.println("CONTRACT OK");
         System.exit(0);

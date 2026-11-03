@@ -1420,9 +1420,31 @@ public final class BotLogic {
         return " (" + (delta > 0 ? "+" : "") + delta + unit + ")";
     }
 
-    static String renderLine(String name, SetEntry s) {
-        if (s.weight.isEmpty()) return name + ", " + s.sets + " по " + s.reps;
-        return name + " " + s.weight + " кг, " + s.sets + " по " + s.reps;
+    public static String renderLine(String name, SetEntry s) {
+        if (s.weight.isEmpty()) return name + ", " + s.sets + " " + setsWord(s.sets) + repsPhrase(s.reps);
+        return name + " " + s.weight + " кг, " + s.sets + " " + setsWord(s.sets) + repsPhrase(s.reps);
+    }
+
+    /* «2 подхода», «5 подходов» — склонение числа подходов */
+    static String setsWord(int n) {
+        n = Math.abs(n);
+        int m10 = n % 10, m100 = n % 100;
+        if (m10 == 1 && m100 != 11) return "подход";
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "подхода";
+        return "подходов";
+    }
+
+    /* «по 4 повторения», «по 12 повторений», «по макс» — склонение по последнему числу в строке */
+    static String repsPhrase(String reps) {
+        String str = reps == null ? "" : reps.trim();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\d+").matcher(str);
+        int last = -1;
+        while (m.find()) last = Integer.parseInt(m.group());
+        if (last < 0) return " по " + str;
+        if (last == 1) return " по " + str + " повторению";
+        int m10 = last % 10, m100 = last % 100;
+        String word = (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) ? "повторения" : "повторений";
+        return " по " + str + " " + word;
     }
 
     private static Workout resolveWorkout(GymData data, UserState st) {

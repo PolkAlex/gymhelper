@@ -188,8 +188,20 @@ function popularWeight(name) {
     return best;
 }
 function entryLine(s) {
-    const repsPart = /\d/.test(String(s.r)) ? ' по ' + s.r + ' повторений' : ' по ' + s.r;
-    return (s.w ? s.w + ' кг, ' : '') + s.s + ' ' + setsWord(s.s) + repsPart;
+    return (s.w ? s.w + ' кг, ' : '') + s.s + ' ' + setsWord(s.s) + repsPhrase(s.r);
+}
+function repsPhrase(r) {
+    const str = String(r || '').trim();
+    if (!/\d/.test(str)) return ' по ' + str;
+    const nums = str.match(/\d+/g) || [];
+    const last = nums.length ? Math.abs(+nums[nums.length - 1]) : 0;
+    let word;
+    if (last === 1) word = 'повторению';
+    else {
+        const m10 = last % 10, m100 = last % 100;
+        word = (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) ? 'повторения' : 'повторений';
+    }
+    return ' по ' + str + ' ' + word;
 }
 function isCustomEx(name) {
     return !findCatalog(name);
