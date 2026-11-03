@@ -49,13 +49,7 @@ const ICONS = {
     timer: _s('<circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M9.5 3h5"/>'),
     check: _s('<path d="M20 6L9 17l-5-5"/>'),
     cross: _s('<path d="M18 6L6 18M6 6l12 12"/>'),
-    plus: _s('<path d="M12 5v14M5 12h14"/>'),
-    flame: _s('<path d="M12 3c2 2.5 5 5.5 5 9a5 5 0 01-10 0c0-1.8.8-3.5 2-5 .3 1 .8 1.8 1.6 2.3C10.9 7.6 11.5 5.2 12 3z"/>'),
-    save: _s('<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3"/><path d="M8 21v-7h8v7"/>'),
-    exit: _s('<path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'),
-    sunrise: _s('<path d="M4 18h16"/><path d="M6 15a6 6 0 0112 0"/><path d="M12 3v4"/><path d="M5 11l2 2M19 11l-2-2"/>'),
-    sun: _s('<circle cx="12" cy="14" r="4"/><path d="M12 5v2M5.6 9.6l1.4 1.4M18.4 9.6L17 11M3 14h2M19 14h2"/>'),
-    moon: _s('<path d="M20 13.5A8 8 0 1110.5 4 6.5 6.5 0 0020 13.5z"/>')
+    plus: _s('<path d="M12 5v14M5 12h14"/>')
 };
 function ico(key, cls) {
     return '<span class="ico' + (cls ? ' ' + cls : '') + '">' + (ICONS[key] || ICONS.custom) + '</span>';
