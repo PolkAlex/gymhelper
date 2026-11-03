@@ -427,12 +427,10 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
     gap: 3px;
     align-items: center;
     text-align: center;
-    font-size: 10.5px;
-    color: var(--sec-text);
     white-space: nowrap;
     background: var(--card2);
     border-radius: 12px;
-    padding: 6px 9px;
+    padding: 6px 10px;
     align-self: center;
 }
 

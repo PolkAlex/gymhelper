@@ -599,7 +599,6 @@ function previewCard(w) {
     const hasTitle = w.title && w.title.trim();
     const show = exs.slice(0, hasTitle ? 2 : 3);
     const sets = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
-    const mins = durationMin(w);
     const p = G.profile;
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard" data-act="openHistory" data-a="' + w.id + '">';
@@ -614,9 +613,13 @@ function previewCard(w) {
     h += '<div class="pc-side">';
     h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-right">';
-    if (mins != null) h += '<span>⏱ ' + durationText(mins) + '</span>';
-    if (res && res.total > 0) h += '<span>🔥 ' + res.total + ' ккал</span>';
-    h += '<span>🏋 ' + sets + ' подх.</span>';
+    if (w.started) {
+        const sT = String(w.started).slice(11, 16);
+        const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
+        h += '<span class="wpill wp-r">🕐 ' + range + '</span>';
+    }
+    if (res && res.total > 0) h += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
+    h += '<span class="wpill wp-s">🏋 ' + sets + ' подх.</span>';
     h += '</div></div></div>';
     return h;
 }
