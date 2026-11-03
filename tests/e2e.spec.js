@@ -357,11 +357,40 @@ test.describe('GymHelper e2e', function () {
         const dowTxt = (await page.locator('.pc-dow').first().textContent()) || '';
         if (dowTxt.includes('·')) throw new Error('в правом углу остался день недели: ' + dowTxt);
         if (!/^\d{1,2}\s[а-яё]+$/i.test(dowTxt.trim())) throw new Error('формат даты в правом углу: ' + dowTxt);
-        /* дата и правый угол на одном уровне */
-        const dateBox = await page.locator('.pc-date').first().boundingBox();
-        const dowBox = await page.locator('.pc-dow').first().boundingBox();
-        const dOff = Math.abs((dateBox.y + dateBox.height / 2) - (dowBox.y + dowBox.height / 2));
-        if (dOff > 3) throw new Error('«2 ноя» не на уровне названия: ' + dOff.toFixed(1) + 'px');
+        /* дата и правый угол на одном уровне; пилюля по центру блока упражнений (один кадр, без скролла) */
+        const m = await page.evaluate(function () {
+            function cy(el) {
+                const r = el.getBoundingClientRect();
+                return r.y + r.height / 2;
+            }
+            const card = document.querySelector('.pcard');
+            if (!card) return { err: 'нет превью-карточки' };
+            const dateEl = card.querySelector('.pc-date');
+            const dowEl = card.querySelector('.pc-dow');
+            const pillEl = card.querySelector('.pc-right');
+            const exEls = card.querySelectorAll('.pc-ex');
+            if (!dateEl || !dowEl || !pillEl || !exEls.length) return { err: 'нет элементов шапки' };
+            const dOff = Math.abs(cy(dateEl) - cy(dowEl));
+            const dowTxt = (dowEl.textContent || '').trim();
+            /* центр левой колонки = объединение названия (если есть) и строк упражнений */
+            const parts = [];
+            const titleEl = card.querySelector('.pc-title');
+            if (titleEl) parts.push(titleEl);
+            Array.prototype.forEach.call(exEls, function (el) { parts.push(el); });
+            let top = null, bottom = null;
+            parts.forEach(function (el) {
+                const r = el.getBoundingClientRect();
+                if (top === null || r.y < top) top = r.y;
+                if (bottom === null || r.y + r.height > bottom) bottom = r.y + r.height;
+            });
+            const pr = pillEl.getBoundingClientRect();
+            const contentCenter = (top + bottom) / 2;
+            const pOff = Math.abs(pr.y + pr.height / 2 - contentCenter);
+            return { dOff: dOff, pOff: pOff, dowTxt: dowTxt };
+        });
+        if (m.err) throw new Error(m.err);
+        if (m.dOff > 3) throw new Error('«2 ноя» не на уровне названия: ' + m.dOff.toFixed(1) + 'px');
+        if (m.pOff > 3) throw new Error('пилюля не по центру контента карточки: ' + m.pOff.toFixed(1) + 'px');
     });
 
     test('любимые пустые -> пустой список; фильтр Все -> весь каталог', async ({ page }) => {

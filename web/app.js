@@ -602,16 +602,15 @@ function previewCard(w) {
     const p = G.profile;
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard" data-act="openHistory" data-a="' + w.id + '">';
-    h += '<div class="pc-main">';
     h += '<div class="pc-daterow">' +
         '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + dp.i + '</span> ' : '') + esc(dateStr) + '</span>' +
         (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
+    h += '<div class="pc-dow">' + rightTop + '</div>';
+    h += '<div class="pc-main">';
     if (hasTitle) h += '<div class="pc-title">' + esc(String(w.title).split('\n')[0].trim()) + '</div>';
     if (!show.length) h += '<div class="pc-ex">Без упражнений</div>';
     for (const e of show) h += '<div class="pc-ex">' + esc(e.name) + '</div>';
     h += '</div>';
-    h += '<div class="pc-side">';
-    h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-right">';
     if (w.started) {
         const sT = String(w.started).slice(11, 16);
@@ -620,7 +619,7 @@ function previewCard(w) {
     }
     if (res && res.total > 0) h += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
     h += '<span class="wpill wp-s">🏋 ' + sets + ' подх.</span>';
-    h += '</div></div></div>';
+    h += '</div></div>';
     return h;
 }
 
