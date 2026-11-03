@@ -362,10 +362,15 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="finishWorkout"]').click();
         await page.locator('.nav button', { hasText: 'История' }).click();
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.pc-title', { hasText: 'Вечерняя программа' })).toBeVisible({ timeout: 5000 });
-        /* дата в превью: эмодзи дня + дд.мм, дн — единый формат названия */
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        /* своё название тренировки показывается В СТРОКЕ ДАТЫ, а не отдельной строкой среди упражнений */
+        await expect(page.locator('.pc-date', { hasText: 'Вечерняя программа' }).first()).toBeVisible({ timeout: 5000 });
         const dateTxt = ((await page.locator('.pc-date').first().textContent()) || '').trim();
-        if (!/^(🌅|☀️|🌙)\s\d{2}\.\d{2},\s[а-я]{1,2}$/iu.test(dateTxt)) throw new Error('формат даты превью: ' + JSON.stringify(dateTxt));
+        if (!dateTxt.includes('Вечерняя программа')) throw new Error('название тренировки не в строке даты: ' + JSON.stringify(dateTxt));
+        const exTexts = await page.locator('.pc-ex').allTextContents();
+        for (const t of exTexts) {
+            if (t.includes('Вечерняя программа')) throw new Error('название тренировки попало в список упражнений: ' + t);
+        }
         const pill = page.locator('.pc-pill');
         if (await pill.count()) {
             const pillTxt = (await pill.first().textContent()) || '';

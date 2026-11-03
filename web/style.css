@@ -426,8 +426,6 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
     white-space: nowrap;
 }
 .pc-dow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); margin-top: 3.5px; grid-column: 2; grid-row: 1; justify-self: center; }
-.pc-title { font-weight: 700; font-size: 17px; line-height: 1.3; color: var(--text); }
-.pc-title svg { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
 .pc-ex {
     font-size: 12.5px;
     color: var(--muted);
@@ -573,7 +571,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 .wchead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .wctitles { flex: 1; min-width: 0; cursor: pointer; }
 .wctitles .t1 { font-size: 17px; line-height: 1.3; overflow-wrap: break-word; word-break: break-word; }
-.dp-inline { font-size: 14px; }
+.dp-inline { display: inline-flex; align-items: center; font-size: 14px; }
+.dp-inline svg { width: 16px; height: 16px; }
 .wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
 .barebtn {
     background: none;
