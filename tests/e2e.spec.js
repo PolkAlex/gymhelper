@@ -6,6 +6,14 @@ test.beforeEach(async function ({ request }) {
     await request.post('/api/reset');
 });
 
+/* захват тестового крюка приложения до загрузки app.js */
+test.beforeEach(async function ({ context }) {
+    await context.addInitScript(function () {
+        window.__gymExpose = function (api) { window.__gym = api; };
+    });
+});
+
+
 async function openApp(page) {
     await page.goto('/');
     await expect(page.locator('#app .hero')).toBeVisible({ timeout: 10000 });
@@ -647,6 +655,74 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pc-ex', { hasText: 'Подтягивания' }).first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.pc-ex', { hasText: 'Жим ногами' }).first()).toBeVisible({ timeout: 5000 });
     });
+
+    test('математика объёма: среднее по диапазону, макс, ккал от объёма', async ({ page }) => {
+        await openApp(page);
+        const r = await page.evaluate(function () {
+            const g = window.__gym;
+            const p = { sex: 'м', age: 30, height: 180, weight: 90 };
+            const w60 = { started: '2026-10-29T09:30:00', ended: '2026-10-29T10:30:00', finished: true,
+                exercises: [{ name: 'Жим штанги лёжа', sets: [{ w: '75-175', s: 3, r: '8-10' }] }] };
+            return {
+                avgWeight: g.avgNum('75-175'),
+                repsRange: g.repsAvg('8-10'),
+                repsMax: g.repsAvg('макс'),
+                repsPlus: g.repsAvg('5+1'),
+                volume: g.workoutVolume(w60),
+                calc: g.calcWorkoutKcal(p, w60)
+            };
+        });
+        if (r.avgWeight !== 125) throw new Error('среднее 75-175: ' + r.avgWeight);
+        if (r.repsRange !== 9) throw new Error('среднее 8-10: ' + r.repsRange);
+        if (r.repsMax !== 10) throw new Error('макс = 10: ' + r.repsMax);
+        if (r.repsPlus !== 6) throw new Error('5+1 = 6: ' + r.repsPlus);
+        /* объём: 125 × 3 подхода × 9 повторений = 3375 */
+        if (r.volume !== 3375) throw new Error('объём: ' + r.volume);
+        if (!r.calc || !r.calc.total) throw new Error('ккал не посчитались');
+        /* 3375 кг / 60 мин = 56 кг/мин < 120 → MET 3.5 → 3.5×3.5×90÷200×60 ≈ 331 */
+        if (r.calc.total < 300 || r.calc.total > 360) throw new Error('ккал вне диапазона: ' + r.calc.total);
+    });
+
+    test('вес с буквами отклоняется', async ({ page }) => {
+        page.on('console', function (msg) { if (msg.text().indexOf('[SE]') === 0) console.log('SE:', msg.text()); });
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('50 кг');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.toast.err')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('abc');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        /* теперь корректный ввод сохраняется */
+        await page.locator('#mWeight').fill('75-175');
+        await page.locator('[data-act="setsSet"][data-a="1"]').click();
+        await page.locator('[data-act="repsSet"][data-a="8"]').click();
+        const dbg = await page.evaluate(function () {
+            return {
+                w: document.getElementById('mWeight').value,
+                s: document.getElementById('mSets').value,
+                r: document.getElementById('mReps').value,
+                ctx: window.__gym.modalCtx(),
+                toast: (document.getElementById('toast') || { textContent: '' }).textContent
+            };
+        });
+        console.log('DBG STATE:', JSON.stringify(dbg));
+        await page.locator('[data-act="saveEntry"]').click();
+        await page.waitForTimeout(2000);
+        const dbg2 = await page.evaluate(function () {
+            return {
+                modal: document.getElementById('modal').className,
+                ctx: window.__gym.modalCtx(),
+                toast: (document.getElementById('toast') || { textContent: '' }).textContent
+            };
+        });
+        console.log('DBG AFTER:', JSON.stringify(dbg2));
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('75-175 кг, 1 подход по 8 повторений', { timeout: 5000 });
+    });
+
 
     test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
         await openApp(page);

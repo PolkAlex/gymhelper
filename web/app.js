@@ -87,6 +87,38 @@ function maxNum(t) {
     }
     return max;
 }
+/* среднее по числам строки: «75-175» → 125, «50, 80» → 65, «100» → 100 */
+function avgNum(t) {
+    const nums = [];
+    const re = /(\d+(?:[.,]\d+)?)/g;
+    let m;
+    while ((m = re.exec(t || '')) !== null) nums.push(parseFloat(m[1].replace(',', '.')));
+    if (!nums.length) return 0;
+    if (nums.length >= 2 && /-/.test(String(t))) {
+        const mn = Math.min.apply(null, nums), mx = Math.max.apply(null, nums);
+        return (mn + mx) / 2;
+    }
+    let sum = 0;
+    for (const v of nums) sum += v;
+    return sum / nums.length;
+}
+/* среднее число повторений: «8-10» → 9, «5+1» → 6, «макс» → 10, «12» → 12 */
+function repsAvg(r) {
+    const str = String(r || '');
+    const nums = [];
+    const re = /(\d+(?:[.,]\d+)?)/g;
+    let m;
+    while ((m = re.exec(str)) !== null) nums.push(Math.round(parseFloat(m[1].replace(',', '.'))));
+    if (!nums.length) return 10;
+    let sum = 0;
+    for (const v of nums) sum += v;
+    if (str.indexOf('+') >= 0) return sum; /* «5+1» = дроп-сет: суммарно 6 */
+    if (nums.length >= 2 && str.indexOf('-') >= 0) {
+        const mn = Math.min.apply(null, nums), mx = Math.max.apply(null, nums);
+        return Math.round((mn + mx) / 2);
+    }
+    return nums.length > 1 ? sum / nums.length : nums[0];
+}
 function repsNum(r) {
     const m = /(\d+(?:[.,]\d+)?)/.exec(r || '');
     return m ? Math.round(parseFloat(m[1].replace(',', '.'))) : 10;
@@ -104,7 +136,7 @@ function setsCount(e) {
 function workoutVolume(w) {
     let v = 0;
     for (const e of (w.exercises || [])) {
-        for (const s of e.sets) v += maxNum(s.w) * (+s.s || 0) * repsNum(s.r);
+        for (const s of e.sets) v += avgNum(s.w) * (+s.s || 0) * repsAvg(s.r);
     }
     return v;
 }
@@ -262,26 +294,32 @@ function exStats(e) {
 function calcWorkoutKcal(p, w) {
     if (!p || !(p.weight > 0)) return null;
     const exs = (w.exercises || []).filter(e => e.sets.length);
-    if (!exs.length) return { total: 0, lines: [] };
+    if (!exs.length) return { total: 0, lines: [], met: 0, perMin: 0 };
+    const wminRaw = durationMin(w);
+    const wmin = wminRaw != null ? Math.min(wminRaw, 240) : null;
     const totalSets = exs.reduce((a, e) => a + e.sets.length, 0) || 1;
-    const wmin = durationMin(w); /* длительность всей тренировки, а не упражнений */
+    /* объём нагрузки: средний вес подхода × подходы × средние повторения */
+    let vol = 0;
+    const vols = [];
+    for (const e of exs) {
+        let v = 0;
+        for (const s of e.sets) v += avgNum(s.w) * (+s.s || 0) * repsAvg(s.r);
+        vols.push(v);
+        vol += v;
+    }
+    const perMin = vol / Math.max(wmin != null ? wmin : 1, 1);
+    const met = perMin < 120 ? 3.5 : (perMin <= 300 ? 5.0 : 6.0);
+    const kcalTotal = (wmin != null && wmin > 0) ? Math.round(met * 3.5 * p.weight / 200 * wmin) : 0;
     let total = 0;
     const lines = [];
-    for (const e of exs) {
-        const met = exMet(e.name);
-        /* время тренировки делится между упражнениями пропорционально подходам:
-           занёс записи за минуту после часовой тренировки — ккал всё равно за час */
-        let m = (wmin != null)
-            ? Math.min(wmin * e.sets.length / totalSets, 120)
-            : (e.st ? Math.min(exMinutes(e), 120) : null);
-        let kcal = null;
-        if (m != null && m > 0) {
-            kcal = Math.round(met * 3.5 * p.weight / 200 * m);
-            total += kcal;
-        }
+    exs.forEach((e, i) => {
+        const share = vol > 0 ? vols[i] / vol : 1 / exs.length;
+        const m = wmin != null ? Math.round(wmin * (e.sets.length / totalSets)) : null;
+        const kcal = kcalTotal > 0 ? Math.round(kcalTotal * share) : null;
+        if (kcal != null) total += kcal;
         lines.push({ name: e.name, m, met, kcal });
-    }
-    return { total, lines };
+    });
+    return { total, lines, met, perMin: Math.round(perMin) };
 }
 
 /* ============ сохранение (очередь) ============ */
@@ -353,10 +391,15 @@ window.addEventListener('focus', function () {
 });
 
 /* ============ доставка действий ============ */
+/* кнопки без дедупа: быстрый повторный тап легален (ввод значений, ретрай после ошибки) */
+const NO_DEDUP = {
+    wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1
+};
 function dispatchFromEl(el, ev) {
     const act0 = el.getAttribute('data-act');
-    /* аддитивные кнопки (+1/+2/+5…): без дедупа — быстрые повторные тапы легальны */
-    if (act0 !== 'wAdd' && act0 !== 'repsAdd' && Date.now() - (el.__gymFired || 0) < 400) return;
+    /* кнопки ввода и сохранения: без дедупа — быстрый повторный тап после ошибки валидации легален
+       (двойной вызов предотвращается на уровне touchend preventDefault) */
+    if (!(act0 && NO_DEDUP[act0]) && Date.now() - (el.__gymFired || 0) < 400) return;
     el.__gymFired = Date.now();
     const fav = el.getAttribute('data-fav');
     if (fav) { toggleFav(fav); return; }
@@ -772,16 +815,16 @@ function timeLine(w) {
 function kcalBreakdown(w) {
     const mins = durationMin(w);
     if (mins == null) return '<p class="muted">Время начала не зафиксировано — нажми «⏱ Время».</p>';
+    const res = calcWorkoutKcal(G.profile, w);
     let h = '⏱ Длительность: ' + durationText(mins);
     h += '\n🏋️ Объём: ≈' + fmtW(Math.round(workoutVolume(w))) + ' кг';
     if (!G.profile || !(G.profile.weight > 0)) {
         h += '\n\n⚠️ Задай вес в профиле — он нужен для расчёта.';
         return '<div class="hl">' + esc(h) + '</div>';
     }
-    h += '\nВес: ' + fmtW(G.profile.weight) + ' кг · формула: MET × 3.5 × вес ÷ 200 × мин\n';
-    const res = calcWorkoutKcal(G.profile, w);
+    h += '\nВес: ' + fmtW(G.profile.weight) + ' кг · ' + res.perMin + ' кг/мин → ' + res.met + ' MET\n';
     for (const l of res.lines) {
-        h += '\n• ' + esc(l.name) + ' — ' + (l.m != null ? l.m + ' мин, ' : '') + 'MET ' + l.met + (l.kcal != null ? ' ≈ ' + l.kcal + ' ккал' : '');
+        h += '\n• ' + esc(l.name) + ' — ' + (l.m != null ? l.m + ' мин, ' : '') + (l.kcal != null ? '≈ ' + l.kcal + ' ккал' : '');
     }
     h += '\n\n🔥 Итого: ≈' + res.total + ' ккал';
     return '<div class="hl">' + esc(h) + '</div>';
@@ -1331,16 +1374,14 @@ async function saveEntry() {
     if (!modalCtx) return;
     const wid = modalCtx.wid, setIdx = modalCtx.setIdx, name = modalCtx.name;
     let weight = String(document.getElementById('mWeight').value).trim().replace(/[.,;]+$/, '');
-    if (weight.toLowerCase().endsWith('кг')) weight = weight.slice(0, -2).trim();
-    weight = weight.replace(/[.,;]+$/, '').trim();
-    /* 0 = пусто, без веса: в записи не пишем */
-    if (weight === '' || +weight === 0) weight = '';
     const sets = parseInt(document.getElementById('mSets').value, 10);
     const reps = String(document.getElementById('mReps').value).trim();
-    if (weight.length > 25 || !/^[\d.,\-\s]*$/.test(weight) || (weight && !/\d/.test(weight))) {
-        toast('Некорректный вес. Например: 45 или 50, 80', true);
+    /* буквы запрещены: только число или диапазон (75-175); пусто или 0 = без веса */
+    if (weight !== '' && (weight.length > 25 || !/^[\d.,\-\s]+$/.test(weight) || !/\d/.test(weight))) {
+        toast('Вес: число или диапазон, например 100 или 75-175', true);
         return;
     }
+    if (weight === '' || +weight === 0) weight = '';
     if (!(sets >= 1 && sets <= 30)) { toast('Подходы: число от 1 до 30', true); return; }
     if (!reps || reps.length > 15) { toast('Повторения: например 12, 8-10 или макс', true); return; }
     await reloadSilently();
@@ -1732,6 +1773,13 @@ init();
 if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
     globalThis.__gymExpose({
         render: function (t) { if (t) { tab = t; } render(); },
-        setTab: function (t) { tab = t; }
+        setTab: function (t) { tab = t; },
+        avgNum: avgNum,
+        repsAvg: repsAvg,
+        setsWord: setsWord,
+        repsPhrase: repsPhrase,
+        calcWorkoutKcal: calcWorkoutKcal,
+        workoutVolume: workoutVolume,
+        modalCtx: function () { return modalCtx; }
     });
 }
