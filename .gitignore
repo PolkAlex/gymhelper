@@ -40,3 +40,4 @@ bin/
 .DS_Store
 ### Playwright ###
 test-results/
+tests/debug-75.spec.js
