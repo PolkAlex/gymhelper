@@ -354,8 +354,8 @@ window.addEventListener('focus', function () {
 /* ============ доставка действий ============ */
 function dispatchFromEl(el, ev) {
     const act0 = el.getAttribute('data-act');
-    /* цифровая панель: без дедупа — быстрые повторные тапы по одной цифре легальны */
-    if (act0 !== 'kpIns' && act0 !== 'kpDel' && Date.now() - (el.__gymFired || 0) < 400) return;
+    /* аддитивные кнопки (+1/+2/+5…): без дедупа — быстрые повторные тапы легальны */
+    if (act0 !== 'wAdd' && act0 !== 'repsAdd' && Date.now() - (el.__gymFired || 0) < 400) return;
     el.__gymFired = Date.now();
     const fav = el.getAttribute('data-fav');
     if (fav) { toggleFav(fav); return; }
@@ -478,8 +478,10 @@ const ACTIONS = {
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
     chipW: function (a) { chipW(+a); },
     chipR: function (a) { chipR(+a); },
-    kpIns: function (a) { kpIns(a); },
-    kpDel: function () { kpDel(); },
+    wAdd: function (a) { wAdd(+a); },
+    setsSet: function (a) { setsSet(+a); },
+    repsSet: function (a) { repsSet(a); },
+    repsAdd: function (a) { repsAdd(+a); },
     saveEntry: async function () { await saveEntry(); },
     deleteEntry: async function () { await deleteEntry(); },
     renameExercise: function (a, b) { renameExercise(+a, +b); },
@@ -1212,13 +1214,12 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     modalCtx = { wid: w.id, exIdx, setIdx, name: e.name };
     let h = '<p class="mtitle">' + (isNew ? 'Новая запись' : 'Изменить запись') + '</p>' +
         '<p class="muted">' + esc(e.name) + '</p>' +
-        '<label>Вес, кг (можно «50, 80» или «100-260», пусто — без веса)</label>' +
-        '<input id="mWeight" type="text" value="' + esc(s.w) + '">' +
-        '<div class="keypad">' +
-        ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '.', '-'].map(function (k) {
-            return '<button class="kp" data-act="kpIns" data-a="' + k + '">' + (k === '-' ? '–' : k) + '</button>';
+        '<label>Вес, кг (0 — без веса)</label>' +
+        '<input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
+        '<div class="mini-row">' +
+        ['1', '2', '5', '10', '15', '20'].map(function (n) {
+            return '<button class="mbtn" data-act="wAdd" data-a="' + n + '">+' + n + '</button>';
         }).join('') +
-        '<button class="kp kp-del" data-act="kpDel">⌫</button>' +
         '</div>';
     if (isNew && SUG_W.length) {
         h += '<div class="chips">';
@@ -1226,8 +1227,26 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         h += '<button class="chip" data-act="chipW" data-a="-1">🚫 Без веса</button></div>';
     }
     h += '<label>Подходы</label><input id="mSets" type="number" inputmode="numeric" value="' + (+s.s || 1) + '">' +
+        '<div class="mini-row">' +
+        ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
+            return '<button class="mbtn" data-act="setsSet" data-a="' + n + '">' + n + '</button>';
+        }).join('') +
+        '</div>' +
         '<label>Повторения (12, 8-10, макс, 5+1)</label>' +
-        '<input id="mReps" type="text" value="' + esc(s.r) + '">';
+        '<input id="mReps" type="text" value="' + esc(s.r) + '">' +
+        '<div class="mini-row">' +
+        ['1', '2', '3', '8'].map(function (n) {
+            return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
+        }).join('') +
+        '</div>' +
+        '<div class="mini-row">' +
+        ['10', '12'].map(function (n) {
+            return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
+        }).join('') +
+        ['2', '5'].map(function (n) {
+            return '<button class="mbtn" data-act="repsAdd" data-a="' + n + '">+' + n + '</button>';
+        }).join('') +
+        '</div>';
     if (isNew && SUG_R.length) {
         h += '<div class="chips">';
         SUG_R.forEach((v, i) => { h += '<button class="chip" data-act="chipR" data-a="' + i + '">' + esc(v) + '</button>'; });
@@ -1244,18 +1263,34 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     });
 }
 function chipW(i) {
-    document.getElementById('mWeight').value = i < 0 ? '' : SUG_W[i];
+    document.getElementById('mWeight').value = i < 0 ? '0' : SUG_W[i];
 }
 function chipR(i) {
     document.getElementById('mReps').value = SUG_R[i];
 }
-function kpIns(ch) {
-    const inp = document.getElementById('mWeight');
-    if (inp) inp.value = (inp.value || '') + ch;
+function fmtNum2(v) {
+    return String(Math.round(v * 100) / 100);
 }
-function kpDel() {
+function wAdd(n) {
     const inp = document.getElementById('mWeight');
-    if (inp && inp.value.length) inp.value = inp.value.slice(0, -1);
+    if (!inp) return;
+    const cur = parseFloat(String(inp.value).replace(',', '.')) || 0;
+    inp.value = fmtNum2(cur + (+n || 0));
+}
+function setsSet(n) {
+    const inp = document.getElementById('mSets');
+    if (inp) inp.value = +n || 1;
+}
+function repsSet(v) {
+    const inp = document.getElementById('mReps');
+    if (inp) inp.value = v;
+}
+function repsAdd(n) {
+    const inp = document.getElementById('mReps');
+    if (!inp) return;
+    const nums = String(inp.value).match(/\d+/g);
+    const cur = nums.length ? +nums[nums.length - 1] : 0;
+    inp.value = (cur + (+n || 0)) + '';
 }
 async function saveEntry() {
     if (!modalCtx) return;
@@ -1263,6 +1298,8 @@ async function saveEntry() {
     let weight = String(document.getElementById('mWeight').value).trim().replace(/[.,;]+$/, '');
     if (weight.toLowerCase().endsWith('кг')) weight = weight.slice(0, -2).trim();
     weight = weight.replace(/[.,;]+$/, '').trim();
+    /* 0 = пусто, без веса: в записи не пишем */
+    if (weight === '' || +weight === 0) weight = '';
     const sets = parseInt(document.getElementById('mSets').value, 10);
     const reps = String(document.getElementById('mReps').value).trim();
     if (weight.length > 25 || !/^[\d.,\-\s]*$/.test(weight) || (weight && !/\d/.test(weight))) {

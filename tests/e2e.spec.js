@@ -464,6 +464,70 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.nav.min')).toHaveCount(0, { timeout: 5000 });
     });
 
+    test('вес: кнопки +N прибавляют к значению, дефолт 0', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await expect(page.locator('#mWeight')).toHaveValue('0');
+        await page.locator('[data-act="wAdd"][data-a="20"]').click();
+        await page.locator('[data-act="wAdd"][data-a="15"]').click();
+        await expect(page.locator('#mWeight')).toHaveValue('35');
+        await page.locator('[data-act="setsSet"][data-a="2"]').click();
+        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('35 кг, 2 подхода по 12 повторений', { timeout: 5000 });
+    });
+
+    test('вес 0 — в записи без веса (не пишем «0 кг»)', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await expect(page.locator('#mWeight')).toHaveValue('0');
+        await page.locator('[data-act="setsSet"][data-a="1"]').click();
+        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        const entry = page.locator('.expill .entry').first();
+        await expect(entry).toContainText('1 подход по 12 повторений', { timeout: 5000 });
+        const entryTxt = await entry.textContent();
+        if (entryTxt.includes('кг') || entryTxt.includes('0')) throw new Error('нулевая масса попала в запись: ' + entryTxt);
+    });
+
+    test('подходы и повторения кнопками: 8 + 2 = 10', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('[data-act="setsSet"][data-a="5"]').click();
+        await expect(page.locator('#mSets')).toHaveValue('5');
+        await page.locator('[data-act="repsSet"][data-a="8"]').click();
+        await expect(page.locator('#mReps')).toHaveValue('8');
+        await page.locator('[data-act="repsAdd"][data-a="2"]').click();
+        await expect(page.locator('#mReps')).toHaveValue('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('5 подходов по 10 повторений', { timeout: 5000 });
+    });
+
+    test('редактирование записи: +10 к существующим 100 = 110', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('100');
+        await page.locator('[data-act="setsSet"][data-a="1"]').click();
+        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await page.locator('.expill .entry').first().click();
+        await expect(page.locator('#mWeight')).toHaveValue('100', { timeout: 5000 });
+        await page.locator('[data-act="wAdd"][data-a="10"]').click();
+        await expect(page.locator('#mWeight')).toHaveValue('110');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('110 кг', { timeout: 5000 });
+    });
+
     test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.topbar .tb-user').click();
@@ -538,16 +602,15 @@ test.describe('мобильный (тач-экран)', function () {
         await expect(page.locator('#pickerList .excard', { hasText: 'Подтягивания' })).toHaveCount(0);
     });
 
-    test('полный флоу с тача: старт, вес с цифровой панели, запись сохраняется', async ({ page }) => {
+    test('полный флоу с тача: старт, вес с клавиатуры, запись сохраняется', async ({ page }) => {
         await openApp(page);
         await touchTap(page, page.locator('[data-act="startWorkout"]'));
         const modal = page.locator('.modal.open');
         await modal.waitFor({ state: 'visible', timeout: 5000 });
         await touchTap(page, modal.locator('.excard', { hasText: EX }).first());
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
-        for (const d of ['1', '0', '0']) {
-            await touchTap(page, modal.locator('.kp', { hasText: d }).first());
-        }
+        await touchTap(page, modal.locator('#mWeight'));
+        await page.keyboard.type('100');
         await touchTap(page, modal.locator('#mSets'));
         await page.keyboard.type('3');
         await touchTap(page, modal.locator('#mReps'));
