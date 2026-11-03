@@ -188,7 +188,8 @@ function popularWeight(name) {
     return best;
 }
 function entryLine(s) {
-    return (s.w ? s.w + ' кг, ' : '') + s.s + ' ' + setsWord(s.s) + repsPhrase(s.r);
+    const w = s.w ? String(s.w).replace('.', ',') : '';
+    return (w ? w + ' кг, ' : '') + s.s + ' ' + setsWord(s.s) + repsPhrase(s.r);
 }
 function repsPhrase(r) {
     const str = String(r || '').trim();
@@ -479,6 +480,7 @@ const ACTIONS = {
     chipW: function (a) { chipW(+a); },
     chipR: function (a) { chipR(+a); },
     wAdd: function (a) { wAdd(+a); },
+    wSet: function (a) { wSet(a); },
     setsSet: function (a) { setsSet(+a); },
     repsSet: function (a) { repsSet(a); },
     repsAdd: function (a) { repsAdd(+a); },
@@ -1217,8 +1219,14 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '<label>Вес, кг (0 — без веса)</label>' +
         '<input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
         '<div class="mini-row">' +
-        ['1', '2', '5', '10', '15', '20'].map(function (n) {
-            return '<button class="mbtn" data-act="wAdd" data-a="' + n + '">+' + n + '</button>';
+        ['0.5', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {
+            const label = n === '0.5' ? '+0,5' : '+' + n;
+            return '<button class="mbtn" data-act="wAdd" data-a="' + n + '">' + label + '</button>';
+        }).join('') +
+        '</div>' +
+        '<div class="mini-row">' +
+        ['10', '20', '30', '50', '60', '80', '100', '200'].map(function (n) {
+            return '<button class="mbtn" data-act="wSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
         '</div>';
     if (isNew && SUG_W.length) {
@@ -1235,15 +1243,15 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '<label>Повторения (12, 8-10, макс, 5+1)</label>' +
         '<input id="mReps" type="text" value="' + esc(s.r) + '">' +
         '<div class="mini-row">' +
-        ['1', '2', '3', '8'].map(function (n) {
+        ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
             return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
         '</div>' +
         '<div class="mini-row">' +
-        ['10', '12'].map(function (n) {
+        ['9', '10', '11', '12'].map(function (n) {
             return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
-        ['2', '5'].map(function (n) {
+        ['1', '2', '5', '10'].map(function (n) {
             return '<button class="mbtn" data-act="repsAdd" data-a="' + n + '">+' + n + '</button>';
         }).join('') +
         '</div>';
@@ -1270,6 +1278,10 @@ function chipR(i) {
 }
 function fmtNum2(v) {
     return String(Math.round(v * 100) / 100);
+}
+function wSet(v) {
+    const inp = document.getElementById('mWeight');
+    if (inp) inp.value = v;
 }
 function wAdd(n) {
     const inp = document.getElementById('mWeight');

@@ -528,6 +528,48 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toContainText('110 кг', { timeout: 5000 });
     });
 
+    test('вес: +0,5 и +50, запятая в записи', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('[data-act="wAdd"][data-a="0.5"]').click();
+        await page.locator('[data-act="wAdd"][data-a="50"]').click();
+        await expect(page.locator('#mWeight')).toHaveValue('50.5');
+        await page.locator('[data-act="setsSet"][data-a="1"]').click();
+        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('50,5 кг, 1 подход по 12 повторений', { timeout: 5000 });
+    });
+
+    test('вес: быстрые значения 10-200', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('[data-act="wSet"][data-a="100"]').click();
+        await expect(page.locator('#mWeight')).toHaveValue('100');
+        await page.locator('[data-act="wSet"][data-a="60"]').click();
+        await expect(page.locator('#mWeight')).toHaveValue('60');
+        await page.locator('[data-act="setsSet"][data-a="3"]').click();
+        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('60 кг, 3 подхода по 10 повторений', { timeout: 5000 });
+    });
+
+    test('повторения: ряд 1-8 и нижний 9-12/+N', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('[data-act="repsSet"][data-a="7"]').click();
+        await page.locator('[data-act="repsAdd"][data-a="10"]').click();
+        await expect(page.locator('#mReps')).toHaveValue('17');
+        await page.locator('[data-act="setsSet"][data-a="7"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('7 подходов по 17 повторений', { timeout: 5000 });
+    });
+
     test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.topbar .tb-user').click();
