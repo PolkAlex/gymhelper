@@ -467,6 +467,9 @@ const ACTIONS = {
     saveWorkout: async function () {
         const r = await save();
         if (r === 'ok') toast('✓ Сохранено');
+        /* сохраняем и выходим из карточки на предыдущий экран */
+        editSnap = null;
+        viewWid = 0;
         render();
     },
     startWorkout: function () { startWorkout(); },
