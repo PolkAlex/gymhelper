@@ -262,30 +262,23 @@ function calcWorkoutKcal(p, w) {
     if (!p || !(p.weight > 0)) return null;
     const exs = (w.exercises || []).filter(e => e.sets.length);
     if (!exs.length) return { total: 0, lines: [] };
-    const anyTiming = exs.some(e => e.st);
     const totalSets = exs.reduce((a, e) => a + e.sets.length, 0) || 1;
-    const wmin = durationMin(w);
+    const wmin = durationMin(w); /* длительность всей тренировки, а не упражнений */
     let total = 0;
     const lines = [];
     for (const e of exs) {
         const met = exMet(e.name);
-        let m = anyTiming ? exMinutes(e) : (wmin != null ? wmin * e.sets.length / totalSets : null);
+        /* время тренировки делится между упражнениями пропорционально подходам:
+           занёс записи за минуту после часовой тренировки — ккал всё равно за час */
+        let m = (wmin != null)
+            ? Math.min(wmin * e.sets.length / totalSets, 120)
+            : (e.st ? Math.min(exMinutes(e), 120) : null);
         let kcal = null;
         if (m != null && m > 0) {
-            const cm = Math.min(m, 120);
-            kcal = Math.round(met * 3.5 * p.weight / 200 * cm);
+            kcal = Math.round(met * 3.5 * p.weight / 200 * m);
             total += kcal;
         }
         lines.push({ name: e.name, m, met, kcal });
-    }
-    const sum = lines.reduce((a, l) => a + (l.m || 0), 0);
-    if (wmin != null && sum > wmin && sum > 0) {
-        const k = wmin / sum;
-        total = 0;
-        for (const l of lines) {
-            if (l.kcal != null) { l.kcal = Math.round(l.kcal * k); total += l.kcal; }
-            if (l.m != null) l.m = Math.round(l.m * k);
-        }
     }
     return { total, lines };
 }

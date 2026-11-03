@@ -281,6 +281,9 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.wpill.wp-r')).toContainText('09:30–10:30', { timeout: 5000 });
         await expect(page.locator('.wpill.wp-k')).toContainText('ккал', { timeout: 5000 });
         await expect(page.locator('.wpill.wp-s')).toContainText('подх.', { timeout: 5000 });
+        /* часовая тренировка с записями, занесёнными за минуту: ккал считаем по длительности ТРЕНИРОВКИ */
+        const kcalDigits = ((await page.locator('.wpill.wp-k').textContent()).match(/\d+/) || ['0'])[0];
+        if (+kcalDigits < 100) throw new Error('ккал подозрительно мало для часовой тренировки: ' + kcalDigits);
         const wpillCount = await page.locator('.wpill').count();
         if (wpillCount !== 3) throw new Error('строк в пилюле: ' + wpillCount + ', ожидалось 3');
         if (await page.locator('.wpill.wp-d').count()) throw new Error('длительность осталась в пилюле');
