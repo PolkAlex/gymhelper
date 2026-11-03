@@ -386,11 +386,16 @@ test.describe('GymHelper e2e', function () {
             const pr = pillEl.getBoundingClientRect();
             const contentCenter = (top + bottom) / 2;
             const pOff = Math.abs(pr.y + pr.height / 2 - contentCenter);
-            return { dOff: dOff, pOff: pOff, dowTxt: dowTxt };
+            /* «2 ноя» по центру оси пилюли */
+            const dowCx = dowEl.getBoundingClientRect().x + dowEl.getBoundingClientRect().width / 2;
+            const pillCx = pr.x + pr.width / 2;
+            const dCxOff = Math.abs(dowCx - pillCx);
+            return { dOff: dOff, pOff: pOff, dowTxt: dowTxt, dCxOff: dCxOff };
         });
         if (m.err) throw new Error(m.err);
         if (m.dOff > 3) throw new Error('«2 ноя» не на уровне названия: ' + m.dOff.toFixed(1) + 'px');
         if (m.pOff > 3) throw new Error('пилюля не по центру контента карточки: ' + m.pOff.toFixed(1) + 'px');
+        if (m.dCxOff > 2) throw new Error('«2 ноя» не по центру оси пилюли: ' + m.dCxOff.toFixed(1) + 'px');
     });
 
     test('любимые пустые -> пустой список; фильтр Все -> весь каталог', async ({ page }) => {
