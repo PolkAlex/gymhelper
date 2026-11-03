@@ -989,13 +989,14 @@ function saveProfile() {
 /* ---------- действия тренировки ---------- */
 function startWorkout() {
     const active = activeW();
-    if (active) { openPicker(active.id); return; }
+    if (active) { openHistory(active.id); openPicker(active.id); return; }
     const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '', exercises: [] };
     if (G.nextId < 1) G.nextId = 1;
     G.workouts.push(w);
     save().then(function (r) {
         if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
-        render();
+        /* сразу экран редактирования тренировки (карточка + пикер), а не главный экран */
+        openHistory(w.id);
         openPicker(w.id);
     });
 }

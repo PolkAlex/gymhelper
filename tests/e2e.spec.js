@@ -26,6 +26,8 @@ async function startWorkoutUi(page) {
 }
 async function openActiveDetail(page) {
     if (await page.locator('.expill').first().isVisible().catch(function () { return false; })) return;
+    /* уже внутри карточки (после старта попадаем сразу сюда) */
+    if (await page.locator('.backbar').isVisible().catch(function () { return false; })) return;
     await page.locator('.wrow').first().click();
     await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
 }
@@ -34,7 +36,18 @@ test.describe('GymHelper e2e', function () {
 
     test('старт: пикер открывается сразу после начала тренировки', async ({ page }) => {
         await openApp(page);
-        await startAndPick(page, EX);
+        await page.locator('[data-act="startWorkout"]').click();
+        /* после старта — сразу экран редактирования (карточка тренировки), а не Главный */
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        await page.locator('.modal.open [data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wcpill')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.backbar', { hasText: 'Сохранить' })).toBeVisible({ timeout: 5000 });
+
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('#pickerList .excard', { hasText: EX }).first().click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await page.locator('#mWeight').fill('100');
         await page.locator('#mSets').fill('3');
         await page.locator('#mReps').fill('8-10');
@@ -481,6 +494,8 @@ test.describe('GymHelper e2e', function () {
     test('повторный «Начать тренировку» не создаёт дубликат', async ({ page, request }) => {
         await openApp(page);
         await startWorkoutUi(page);
+        /* после старта мы на экране редактирования — возвращаемся на Главный и жмём «Начать» ещё раз */
+        await page.locator('.nav button', { hasText: 'Тренировка' }).click();
         await page.locator('[data-act="startWorkout"]').click();
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
         await page.locator('.modal.open [data-act="closeModal"]').click();
