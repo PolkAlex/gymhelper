@@ -392,6 +392,11 @@ document.addEventListener('touchend', function (ev) {
     const info = __tap;
     __tap = null;
     const t = ev.target;
+    /* андроид-баг: поле остаётся «в фокусе» после закрытия клавиатуры — тап вне поля снимает фокус */
+    const ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && !(t && t.closest && t.closest('input,textarea'))) {
+        try { ae.blur(); } catch (e0) { /* noop */ }
+    }
     if (t && t.closest && t.closest('input,textarea')) return; /* поля ввода: не мешаем фокусу и каретке */
     const el = t && t.closest ? t.closest('[data-fav],[data-act]') : null;
     if (!el) return;
@@ -1247,8 +1252,9 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         }).join('') +
         '</div>' +
         '<label>Повторения (12, 8-10, макс, 5+1)</label>' +
-        '<div class="inwrap"><input id="mReps" type="text" value=' + esc(s.r) + '>' +
+        '<div class="inwrap"><input id="mReps" type="text" value="' + esc(s.r) + '">' +
         '<button class="clr" data-act="rClr">Очистить</button></div>' +
+        '<div class="mini-row">' +
         ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
             return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
