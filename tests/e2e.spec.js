@@ -82,7 +82,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible();
 
         await openActiveDetail(page);
-        await page.locator('.expill .entry .recbtn').first().click();
+        await page.locator('.expill .entry').first().click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await page.locator('#mWeight').fill('110');
         await page.locator('#mSets').fill('5');
@@ -103,8 +103,8 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible();
 
         await openActiveDetail(page);
-        await page.locator('.expill .entry .recbtn').nth(1).click();
-        await page.locator('.modal.open [data-act="confirmYes"]').click();
+        await page.locator('.expill .entry').click();
+        await page.locator('.modal.open [data-act="deleteEntry"]').click();
         await expect(page.locator('.expill .entry')).toHaveCount(0, { timeout: 5000 });
     });
 
@@ -133,7 +133,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible();
 
         await openActiveDetail(page);
-        await page.locator('.expill .exhead [data-act="renameExercise"]').click();
+        await page.locator('.expill .exhead .exname').click();
         await page.locator('#mName').fill('Жим стоя');
         await page.locator('[data-act="doRename"]').click();
 
@@ -251,7 +251,7 @@ test.describe('GymHelper e2e', function () {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
-        await page.locator('.wcicons [data-act="titleModal"]').click();
+        await page.locator('.wctitles').click();
         await page.locator('#mTitle').fill('Спина и грудь');
         await page.locator('[data-act="saveTitle"]').click();
         await expect(page.locator('.wctitles .t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
@@ -355,7 +355,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
-        await page.locator('.wcicons [data-act="titleModal"]').click();
+        await page.locator('.wctitles').click();
         await page.locator('#mTitle').fill('Вечерняя программа');
         await page.locator('[data-act="saveTitle"]').click();
         await expect(page.locator('.wctitles .t1', { hasText: 'Вечерняя программа' })).toBeVisible({ timeout: 5000 });

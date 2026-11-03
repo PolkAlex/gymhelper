@@ -698,10 +698,9 @@ function workoutCard(w, showActions) {
     const lines = titleLines(w);
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
-    h += '<div class="wchead"><div class="wctitles"><p class="t1">' +
+    h += '<div class="wchead"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
         (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' +
-        '<button class="barebtn pencil-bare" data-act="titleModal" data-a="' + w.id + '" title="Название">' + ICONS.pencil + '</button>' +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
         '</div></div>';
@@ -724,18 +723,15 @@ function workoutCard(w, showActions) {
     }
     exs.forEach((e, ei) => {
         const c = findCatalog(e.name);
-        h += '<div class="expill"><div class="exhead">' + (c ? ico(c.i) : ico('custom')) +
+        /* тап по названию упражнения — переименование; корзина — удаление упражнения;
+           тап по записи — редактирование (удаление — из окна редактирования) */
+        h += '<div class="expill"><div class="exhead" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '">' + (c ? ico(c.i) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
-            '<button class="barebtn pencil-bare" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Переименовать">' + ICONS.pencil + '</button>' +
             '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
             '</div>';
         e.sets.forEach((s, si) => {
             h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
-                '<span class="rectext">' + esc(entryLine(s)) + '</span>' +
-                '<span class="recic">' +
-                '<span class="recbtn" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Изменить">✏️</span>' +
-                '<span class="recbtn" data-act="deleteSet" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '" title="Удалить запись">🗑️</span>' +
-                '</span></div>';
+                '<span class="rectext">' + esc(entryLine(s)) + '</span></div>';
         });
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
             h += '<div class="restline"> упражнение активно — время идёт</div>';

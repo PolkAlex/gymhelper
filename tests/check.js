@@ -24,8 +24,8 @@ if (!actBlock) {
     }
     for (const k of keys) {
         if (k === 'modalBackdrop') continue;
-        /* nutrModal/autoTitle: кнопки временно скрыты из UI, код оставлен — вернём позже */
-        if (k === 'nutrModal' || k === 'autoTitle') continue;
+        /* nutrModal/autoTitle/deleteSet: кнопки временно скрыты из UI, код оставлен — вернём позже */
+        if (k === 'nutrModal' || k === 'autoTitle' || k === 'deleteSet') continue;
         if (!app.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"') && !app.includes("'" + k + "'")) {
             fails.push('обработчик ACTIONS никогда не используется: ' + k);
         }
