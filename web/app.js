@@ -614,7 +614,7 @@ function previewCard(w) {
     const dp = dayPart(w);
     const exs = (w.exercises || []).filter(e => e.sets.length && !isWarmupName(e.name));
     const hasTitle = w.title && w.title.trim();
-    const show = exs.slice(0, hasTitle ? 2 : 3);
+    const show = exs.slice(0, 3); /* название живёт в строке даты — упражнения всегда три */
     const sets = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
     const p = G.profile;
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;

@@ -607,6 +607,19 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
 
+        /* второе и третье упражнения — чтобы в превью было ровно 3 строки упражнений */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .excard', { hasText: 'Подтягивания' }).first().click();
+        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .excard', { hasText: 'Жим ногами' }).first().click();
+        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+
         /* тап по названию тренировки -> окно названия тренировки -> сохраняем «Спина» */
         await page.locator('.wctitles').click();
         await expect(page.locator('#mTitle')).toBeVisible({ timeout: 5000 });
@@ -625,6 +638,14 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .exname', { hasText: 'Спина' })).toHaveCount(0, { timeout: 5000 });
         await expect(page.locator('.expill .exname', { hasText: EX })).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.expill .entry').first()).toContainText('100 кг', { timeout: 5000 });
+
+        /* все 3 упражнения видны в превью несмотря на своё название */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pc-date', { hasText: 'Спина' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pc-ex', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pc-ex', { hasText: 'Подтягивания' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pc-ex', { hasText: 'Жим ногами' }).first()).toBeVisible({ timeout: 5000 });
     });
 
     test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
