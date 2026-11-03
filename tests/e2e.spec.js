@@ -264,10 +264,13 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.pcard').first().click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
 
-        /* время, длительность и ккал — каждая в своей пилюле, как на превью-карточках */
+        /* ровно три значения: время, ккал, подходы. Длительности внутри быть не должно */
         await expect(page.locator('.wpill.wp-r')).toContainText('09:30–10:30', { timeout: 5000 });
-        await expect(page.locator('.wpill.wp-d')).toContainText('1 ч');
-        await expect(page.locator('.wpill.wp-k')).toContainText('ккал');
+        await expect(page.locator('.wpill.wp-k')).toContainText('ккал', { timeout: 5000 });
+        await expect(page.locator('.wpill.wp-s')).toContainText('подх.', { timeout: 5000 });
+        const wpillCount = await page.locator('.wpill').count();
+        if (wpillCount !== 3) throw new Error('строк в пилюле: ' + wpillCount + ', ожидалось 3');
+        if (await page.locator('.wpill.wp-d').count()) throw new Error('длительность осталась в пилюле');
 
         /* название тренировки и иконки карандаша/часов/корзины — на одном уровне */
         const t1 = await page.locator('.wchead .t1').boundingBox();
@@ -276,25 +279,24 @@ test.describe('GymHelper e2e', function () {
         const d = Math.abs((t1.y + t1.height / 2) - (icons.y + icons.height / 2));
         if (d > 8) throw new Error('название и иконки не на одном уровне: ' + d.toFixed(1) + 'px');
 
-        /* коробка-пилюля и иконки выровнены по правому краю; строки внутри коробки выровнены и одной высоты */
+        /* поля пилюли выровнены по ЦЕНТРУ; коробка — по правому краю с иконками */
         const pillBox = await page.locator('.wcpill').boundingBox();
         const icBox = await page.locator('.wcicons').boundingBox();
         if (!pillBox || !icBox) throw new Error('шапка карточки не найдена');
         const edge = Math.abs((pillBox.x + pillBox.width) - (icBox.x + icBox.width));
         if (edge > 2) throw new Error('коробка-пилюля не на правом краю с иконками: ' + edge.toFixed(1) + 'px');
         const rows = await page.locator('.wpill').all();
-        const rights = [];
+        const centers = [];
         const hs = [];
+        const pillCenter = pillBox.x + pillBox.width / 2;
         for (const p of rows) {
             const bb = await p.boundingBox();
-            rights.push(bb.x + bb.width);
+            centers.push(bb.x + bb.width / 2);
             hs.push(bb.height);
         }
-        const rowSpread = Math.max.apply(null, rights) - Math.min.apply(null, rights);
-        if (rowSpread > 1) throw new Error('строки в пилюле не выровнены по правому краю: ' + rowSpread.toFixed(1) + 'px');
+        const centerSpread = Math.max.apply(null, centers.map(function (c) { return Math.abs(c - pillCenter); }));
+        if (centerSpread > 2) throw new Error('строки пилюли не по центру: ' + centerSpread.toFixed(1) + 'px');
         if (Math.max.apply(null, hs) - Math.min.apply(null, hs) > 2) throw new Error('строки пилюли разной высоты');
-        /* подходы присутствуют в пилюле */
-        await expect(page.locator('.wpill.wp-s')).toContainText('подх.', { timeout: 5000 });
 
         /* ккал не «выпадает» из шапки: пилюля выше карточек упражнений */
         const kcal = await page.locator('.wpill.wp-k').boundingBox();

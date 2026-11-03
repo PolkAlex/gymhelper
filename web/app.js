@@ -690,10 +690,8 @@ function workoutCard(w, showActions) {
     if (w.started) {
         const sT = String(w.started).slice(11, 16);
         const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
-        const mins = durationMin(w);
         const setsTotal = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
         let pill = '<span class="wpill wp-r">🕐 ' + range + '</span>';
-        if (mins != null) pill += '<span class="wpill wp-d">⏱ ' + durationText(mins) + '</span>';
         if (G.profile && G.profile.weight > 0) {
             const res = calcWorkoutKcal(G.profile, w);
             if (res && res.total > 0) pill += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
