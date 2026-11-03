@@ -276,17 +276,27 @@ test.describe('GymHelper e2e', function () {
         const d = Math.abs((t1.y + t1.height / 2) - (icons.y + icons.height / 2));
         if (d > 8) throw new Error('название и иконки не на одном уровне: ' + d.toFixed(1) + 'px');
 
-        /* пилюли и иконки выровнены по правому краю, пилюли симметричны (одной высоты) */
-        const boxes = [];
-        for (const p of await page.locator('.wpill').all()) boxes.push(await p.boundingBox());
-        boxes.push(await page.locator('.wcicons').boundingBox());
-        const rights = boxes.map(function (b) { return b.x + b.width; });
-        const spread = Math.max.apply(null, rights) - Math.min.apply(null, rights);
-        if (spread > 2) throw new Error('пилюли не выровнены по правому краю: ' + spread.toFixed(1) + 'px');
-        const hs = boxes.slice(0, -1).map(function (b) { return b.height; });
-        if (Math.max.apply(null, hs) - Math.min.apply(null, hs) > 2) throw new Error('пилюли разной высоты');
+        /* коробка-пилюля и иконки выровнены по правому краю; строки внутри коробки выровнены и одной высоты */
+        const pillBox = await page.locator('.wcpill').boundingBox();
+        const icBox = await page.locator('.wcicons').boundingBox();
+        if (!pillBox || !icBox) throw new Error('шапка карточки не найдена');
+        const edge = Math.abs((pillBox.x + pillBox.width) - (icBox.x + icBox.width));
+        if (edge > 2) throw new Error('коробка-пилюля не на правом краю с иконками: ' + edge.toFixed(1) + 'px');
+        const rows = await page.locator('.wpill').all();
+        const rights = [];
+        const hs = [];
+        for (const p of rows) {
+            const bb = await p.boundingBox();
+            rights.push(bb.x + bb.width);
+            hs.push(bb.height);
+        }
+        const rowSpread = Math.max.apply(null, rights) - Math.min.apply(null, rights);
+        if (rowSpread > 1) throw new Error('строки в пилюле не выровнены по правому краю: ' + rowSpread.toFixed(1) + 'px');
+        if (Math.max.apply(null, hs) - Math.min.apply(null, hs) > 2) throw new Error('строки пилюли разной высоты');
+        /* подходы присутствуют в пилюле */
+        await expect(page.locator('.wpill.wp-s')).toContainText('подх.', { timeout: 5000 });
 
-        /* ккал не «выпадает» из шапки: пилюли выше карточек упражнений */
+        /* ккал не «выпадает» из шапки: пилюля выше карточек упражнений */
         const kcal = await page.locator('.wpill.wp-k').boundingBox();
         const firstEx = await page.locator('.expill').first().boundingBox();
         if (kcal.y + kcal.height > firstEx.y) throw new Error('пилюля ккал провалилась ниже карточки упражнения');

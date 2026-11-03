@@ -770,15 +770,15 @@ body { padding: 12px 12px 32px 66px; }
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 4px;
+    gap: 3px;
+    background: var(--card2);
+    border-radius: 12px;
+    padding: 6px 10px;
 }
 .wpill {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    padding: 3px 12px;
-    border-radius: 12px;
-    background: var(--card2);
     color: var(--sec-text);
     font-size: 11.5px;
     white-space: nowrap;
