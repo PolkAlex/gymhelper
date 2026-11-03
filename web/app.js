@@ -481,6 +481,9 @@ const ACTIONS = {
     chipR: function (a) { chipR(+a); },
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
+    wClr: function () { wClr(); },
+    sClr: function () { sClr(); },
+    rClr: function () { rClr(); },
     setsSet: function (a) { setsSet(+a); },
     repsSet: function (a) { repsSet(a); },
     repsAdd: function (a) { repsAdd(+a); },
@@ -1217,7 +1220,8 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     let h = '<p class="mtitle">' + (isNew ? 'Новая запись' : 'Изменить запись') + '</p>' +
         '<p class="muted">' + esc(e.name) + '</p>' +
         '<label>Вес, кг (0 — без веса)</label>' +
-        '<input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
+        '<div class="inwrap"><input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
+        '<button class="clr" data-act="wClr">Очистить</button></div>' +
         '<div class="mini-row">' +
         ['0.5', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {
             const label = n === '0.5' ? '+0,5' : '+' + n;
@@ -1234,15 +1238,17 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         SUG_W.forEach((v, i) => { h += '<button class="chip" data-act="chipW" data-a="' + i + '">' + esc(v) + ' кг</button>'; });
         h += '<button class="chip" data-act="chipW" data-a="-1">🚫 Без веса</button></div>';
     }
-    h += '<label>Подходы</label><input id="mSets" type="number" inputmode="numeric" value="' + (+s.s || 1) + '">' +
+    h += '<label>Подходы</label>' +
+        '<div class="inwrap"><input id="mSets" type="number" inputmode="numeric" value="' + (+s.s || 1) + '">' +
+        '<button class="clr" data-act="sClr">Очистить</button></div>' +
         '<div class="mini-row">' +
         ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
             return '<button class="mbtn" data-act="setsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
         '</div>' +
         '<label>Повторения (12, 8-10, макс, 5+1)</label>' +
-        '<input id="mReps" type="text" value="' + esc(s.r) + '">' +
-        '<div class="mini-row">' +
+        '<div class="inwrap"><input id="mReps" type="text" value=' + esc(s.r) + '>' +
+        '<button class="clr" data-act="rClr">Очистить</button></div>' +
         ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
             return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
@@ -1282,6 +1288,18 @@ function fmtNum2(v) {
 function wSet(v) {
     const inp = document.getElementById('mWeight');
     if (inp) inp.value = v;
+}
+function wClr() {
+    const inp = document.getElementById('mWeight');
+    if (inp) inp.value = '0';
+}
+function sClr() {
+    const inp = document.getElementById('mSets');
+    if (inp) inp.value = '1';
+}
+function rClr() {
+    const inp = document.getElementById('mReps');
+    if (inp) inp.value = '';
 }
 function wAdd(n) {
     const inp = document.getElementById('mWeight');

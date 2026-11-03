@@ -242,6 +242,23 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 textarea { min-height: 70px; resize: vertical; font-family: inherit; }
 
+/* строка ввода с кнопкой «Очистить» справа (прозрачная, только текст) */
+.inwrap { position: relative; display: flex; align-items: center; }
+.inwrap input { padding-right: 84px; }
+.inwrap .clr {
+    position: absolute;
+    right: 10px;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 8px 2px;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.inwrap .clr:active { color: var(--text); }
+
 .modal {
     position: fixed;
     inset: 0;
@@ -900,16 +917,16 @@ body { padding: 12px 12px 96px; }
 .pc-dp { font-size: 14px; }
 
 /* ============ мини-кнопки ввода (вес/подходы/повторения) ============ */
-.mini-row { display: flex; gap: 4px; margin-top: 5px; flex-wrap: nowrap; }
+.mini-row { display: flex; gap: 5px; margin-top: 6px; flex-wrap: nowrap; }
 .mini-row .mbtn {
     flex: 1 1 0;
     min-width: 0;
     border: none;
     background: var(--card2);
     color: var(--text);
-    border-radius: 8px;
-    padding: 4px 0;
-    font-size: 12px;
+    border-radius: 9px;
+    padding: 7px 0;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     touch-action: manipulation;

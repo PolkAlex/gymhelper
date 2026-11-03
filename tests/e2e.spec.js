@@ -570,6 +570,28 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toContainText('7 подходов по 17 повторений', { timeout: 5000 });
     });
 
+    test('кнопки «Очистить» сбрасывают значения к дефолтам', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('100');
+        await page.locator('#mSets').fill('6');
+        await page.locator('#mReps').fill('8-10');
+        await page.locator('[data-act="wClr"]').click();
+        await expect(page.locator('#mWeight')).toHaveValue('0');
+        await page.locator('[data-act="sClr"]').click();
+        await expect(page.locator('#mSets')).toHaveValue('1');
+        await page.locator('[data-act="rClr"]').click();
+        await expect(page.locator('#mReps')).toHaveValue('');
+        /* после очистки значение вводится заново и сохраняется */
+        await page.locator('[data-act="wAdd"][data-a="50"]').click();
+        await page.locator('[data-act="setsSet"][data-a="3"]').click();
+        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('50 кг, 3 подхода по 10 повторений', { timeout: 5000 });
+    });
+
     test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.topbar .tb-user').click();
