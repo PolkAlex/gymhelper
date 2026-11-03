@@ -210,9 +210,9 @@ function isCustomEx(name) {
 function dayPart(w) {
     if (!w.started) return null;
     const hh = +String(w.started).slice(11, 13);
-    if (hh < 12) return { n: 'утро', i: '🌅' };
-    if (hh < 18) return { n: 'день', i: '☀️' };
-    return { n: 'вечер', i: '🌙' };
+    if (hh < 12) return { n: 'утро', i: 'sunrise' };
+    if (hh < 18) return { n: 'день', i: 'sun' };
+    return { n: 'вечер', i: 'moon' };
 }
 function isWarmupName(name) {
     const c = findCatalog(name);
@@ -536,8 +536,8 @@ function render() {
     h += navHtml();
     if (tab === 'history' && viewWid && findW(viewWid)) {
         h += '<div class="backbar"><div class="ab-row">' +
-            '<button class="btn prime" data-act="saveWorkout">💾 Сохранить</button>' +
-            '<button class="btn sec" data-act="closeHistory">🚪 Выйти</button>' +
+            '<button class="btn prime icbtn" data-act="saveWorkout">' + ICONS.save + '<span>Сохранить</span></button>' +
+            '<button class="btn sec icbtn" data-act="closeHistory">' + ICONS.exit + '<span>Выйти</span></button>' +
             '</div></div>';
         h += '<div style="height:70px"></div>';
     }
@@ -581,18 +581,18 @@ function renderWorkoutTab() {
     const last = fin.length ? fin[fin.length - 1] : null;
     let h = heroHtml(fin);
     if (unfin.length) {
-        h += '<div class="card" style="padding:10px"><p class="t1" style="font-size:15px">⚡ Незавершённые тренировки</p>';
+        h += '<div class="card" style="padding:10px"><p class="t1" style="font-size:15px">Незавершённые тренировки</p>';
         for (const w of unfin) {
             const dpw = dayPart(w);
             h += '<div class="wrow" data-act="openHistory" data-a="' + w.id + '">' +
                 '<span class="ico">' + ICONS.timer + '</span>' +
-                '<span class="wt"><div class="exn">' + (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(firstLine(w)) + '</div></span>' +
+                '<span class="wt"><div class="exn">' + (dpw ? '<span class="dp-inline">' + ICONS[dpw.i] + '</span> ' : '') + esc(firstLine(w)) + '</div></span>' +
                 '<span class="badge">открыть</span></div>';
         }
         h += '</div>';
     }
-    if (last) h += '<div class="card"><p class="t1">👀 Последняя тренировка</p>' + previewCard(last) + '</div>';
-    if (!G.workouts.length) h += '<p class="empty">Пока пусто. Начни первую тренировку! 💪</p>';
+    if (last) h += '<div class="card"><p class="t1">Последняя тренировка</p>' + previewCard(last) + '</div>';
+    if (!G.workouts.length) h += '<p class="empty">Пока пусто. Начни первую тренировку!</p>';
     return h;
 }
 function heroHtml(fin) {
@@ -605,7 +605,7 @@ function heroHtml(fin) {
         '<div class="hero-date">' + days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + '</div>' +
         '<p class="t1" style="font-size:21px;margin-top:4px">Готов к тренировке?</p>' +
         '<p class="muted">Всего тренировок: ' + fin.length + ' · в этом месяце: ' + mCount + '</p>' +
-        '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
+        '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout" class="icbtn">' + ICONS.dumbbell + '<span>Начать тренировку</span></button></div></div>';
 }
 function previewCard(w) {
     const d = parseDateISO(w.date);
@@ -620,8 +620,8 @@ function previewCard(w) {
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard" data-act="openHistory" data-a="' + w.id + '">';
     h += '<div class="pc-daterow">' +
-        '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + dp.i + '</span> ' : '') + esc(dateStr) + '</span>' +
-        (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
+        '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + ICONS[dp.i] + '</span> ' : '') + esc(dateStr) + '</span>' +
+        (w.finished ? '' : '<span class="pc-pill"><i class="livedot"></i>идёт</span>') + '</div>';
     h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-main">';
     if (hasTitle) h += '<div class="pc-title">' + esc(String(w.title).split('\n')[0].trim()) + '</div>';
@@ -632,10 +632,10 @@ function previewCard(w) {
     if (w.started) {
         const sT = String(w.started).slice(11, 16);
         const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
-        h += '<span class="wpill wp-r">🕐 ' + range + '</span>';
+        h += '<span class="wpill wp-r">' + ICONS.timer + ' ' + range + '</span>';
     }
-    if (res && res.total > 0) h += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
-    h += '<span class="wpill wp-s">🏋 ' + sets + ' подх.</span>';
+    if (res && res.total > 0) h += '<span class="wpill wp-k">' + ICONS.flame + ' ' + res.total + ' ккал</span>';
+    h += '<span class="wpill wp-s">' + ICONS.dumbbell + ' ' + sets + ' подх.</span>';
     h += '</div></div>';
     return h;
 }
@@ -672,8 +672,8 @@ function closeHistory() {
 function isDirty() { return false; }
 function exitDirtyModal() {
     const h = '<p class="mtitle">Есть несохранённые изменения</p>' +
-        '<div class="btnrow"><button class="btn prime wide" data-act="saveAndExit">💾 Сохранить и выйти</button>' +
-        '<button class="btn sec wide" data-act="discardExit">🚪 Выйти без сохранения</button>' +
+        '<div class="btnrow"><button class="btn prime wide icbtn" data-act="saveAndExit">' + ICONS.save + '<span>Сохранить и выйти</span></button>' +
+        '<button class="btn sec wide icbtn" data-act="discardExit">' + ICONS.exit + '<span>Выйти без сохранения</span></button>' +
         '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>';
     openModal(h);
 }
@@ -699,7 +699,7 @@ function workoutCard(w, showActions) {
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
     h += '<div class="wchead"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
-        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p></div>' +
+        (dpw ? '<span class="dp-inline">' + ICONS[dpw.i] + '</span> ' : '') + esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
@@ -708,15 +708,15 @@ function workoutCard(w, showActions) {
         const sT = String(w.started).slice(11, 16);
         const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
         const setsTotal = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
-        let pill = '<span class="wpill wp-r">🕐 ' + range + '</span>';
+        let pill = '<span class="wpill wp-r">' + ICONS.timer + ' ' + range + '</span>';
         if (G.profile && G.profile.weight > 0) {
             const res = calcWorkoutKcal(G.profile, w);
-            if (res && res.total > 0) pill += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
+            if (res && res.total > 0) pill += '<span class="wpill wp-k">' + ICONS.flame + ' ' + res.total + ' ккал</span>';
         }
-        if (setsTotal > 0) pill += '<span class="wpill wp-s">🏋 ' + setsTotal + ' подх.</span>';
+        if (setsTotal > 0) pill += '<span class="wpill wp-s">' + ICONS.dumbbell + ' ' + setsTotal + ' подх.</span>';
         h += '<div class="wcpill">' + pill + '</div>';
     }
-    if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
+    if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">Питание: ' + esc(w.nutrition) + '</p>';
     const exs = w.exercises || [];
     if (!exs.length) {
         h += '<p class="muted" style="margin-top:8px">Пока нет упражнений.</p>';
@@ -736,13 +736,13 @@ function workoutCard(w, showActions) {
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
             h += '<div class="restline"> упражнение активно — время идёт</div>';
         }
-        h += '<div class="btnrow"><button class="btn sec" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1">➕ Запись</button></div>';
+        h += '<div class="btnrow"><button class="btn sec icbtn" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1">' + ICONS.plus + '<span>Запись</span></button></div>';
         h += '</div>';
     });
     if (G.profile && G.profile.weight > 0 && exs.length) {
-        h += '<details><summary>🔥 Ккал по упражнениям</summary>' + kcalBreakdown(w) + '</details>';
+        h += '<details><summary>Ккал по упражнениям</summary>' + kcalBreakdown(w) + '</details>';
     }
-    h += '<details><summary>📈 Прогресс</summary>' + progressHtml(w) + '</details>';
+    h += '<details><summary>Прогресс</summary>' + progressHtml(w) + '</details>';
     if (showActions) h += '<div class="btnrow">';
     if (showActions && !w.finished) {
         h += '<button class="btn prime wide icbtn" data-act="openPicker" data-a="' + w.id + '">' + ICONS.plus + '<span>Упражнение</span></button>';
@@ -769,10 +769,10 @@ function timeLine(w) {
 function kcalBreakdown(w) {
     const mins = durationMin(w);
     if (mins == null) return '<p class="muted">Время начала не зафиксировано — нажми «⏱ Время».</p>';
-    let h = '⏱ Длительность: ' + durationText(mins);
-    h += '\n🏋️ Объём: ≈' + fmtW(Math.round(workoutVolume(w))) + ' кг';
+    let h = 'Длительность: ' + durationText(mins);
+    h += '\nОбъём: ≈' + fmtW(Math.round(workoutVolume(w))) + ' кг';
     if (!G.profile || !(G.profile.weight > 0)) {
-        h += '\n\n⚠️ Задай вес в профиле — он нужен для расчёта.';
+        h += '\n\nЗадай вес в профиле — он нужен для расчёта.';
         return '<div class="hl">' + esc(h) + '</div>';
     }
     h += '\nВес: ' + fmtW(G.profile.weight) + ' кг · формула: MET × 3.5 × вес ÷ 200 × мин\n';
@@ -780,7 +780,7 @@ function kcalBreakdown(w) {
     for (const l of res.lines) {
         h += '\n• ' + esc(l.name) + ' — ' + (l.m != null ? l.m + ' мин, ' : '') + 'MET ' + l.met + (l.kcal != null ? ' ≈ ' + l.kcal + ' ккал' : '');
     }
-    h += '\n\n🔥 Итого: ≈' + res.total + ' ккал';
+    h += '\n\nИтого: ≈' + res.total + ' ккал';
     return '<div class="hl">' + esc(h) + '</div>';
 }
 function progressHtml(w) {
@@ -795,7 +795,7 @@ function progressHtml(w) {
     if (p && p.weight > 0) {
         const k1 = calcWorkoutKcal(p, w), k0 = calcWorkoutKcal(p, prev);
         if (k0 && k1) {
-            h += '<div class="statline">🔥 ' + k0.total + ' → ' + k1.total + ' ккал' + diffTxt(k1.total - k0.total, '') + '</div>';
+            h += '<div class="statline">' + k0.total + ' → ' + k1.total + ' ккал' + diffTxt(k1.total - k0.total, '') + '</div>';
         }
     }
     h += '<div class="statline"><b>Упражнения</b></div>';
@@ -951,13 +951,13 @@ function renderCoachTab() {
 function renderProfileTab() {
     if (!profileSex && G.profile) profileSex = G.profile.sex;
     const p = G.profile || { sex: profileSex, age: '', height: '', weight: '' };
-    let h = '<div class="card"><p class="t1">⚙️ Профиль</p>';
+    let h = '<div class="card"><p class="t1">Профиль</p>';
     if (G.profile) {
         h += '<p class="meta">' + esc(G.profile.sex.toUpperCase()) + ' · ' + G.profile.age + ' лет · ' +
             G.profile.height + ' см · ' + fmtW(G.profile.weight) + ' кг</p>' +
             '<p class="meta">BMR ≈ ' + Math.round(bmr(G.profile)) + ' ккал/сут (Mifflin-St Jeor)</p>';
     } else {
-        h += '<p class="meta">Нужен для расчёта калорий 🔥</p>';
+        h += '<p class="meta">Нужен для расчёта калорий </p>';
     }
     h += '</div>';
     h += '<div class="card"><p class="t1">Пол</p>' +
@@ -969,8 +969,8 @@ function renderProfileTab() {
         '<label>Возраст</label><input id="pfAge" type="number" inputmode="numeric" value="' + p.age + '">' +
         '<label>Рост (см)</label><input id="pfHeight" type="number" inputmode="numeric" value="' + p.height + '">' +
         '<label>Вес (кг)</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '">' +
-        '<div class="btnrow"><button class="btn wide" data-act="saveProfile">💾 Сохранить профиль</button></div></div>';
-    h += '<div class="card"><p class="t1">🎨 Тема оформления</p><div class="themegrid">';
+        '<div class="btnrow"><button class="btn wide" data-act="saveProfile" class="icbtn">' + ICONS.save + '<span>Сохранить профиль</span></button></div></div>';
+    h += '<div class="card"><p class="t1">Тема оформления</p><div class="themegrid">';
     const cur = document.documentElement.getAttribute('data-theme') || 'sage';
     for (const t of THEMES) {
         h += '<div class="themecard' + (cur === t.id ? ' on' : '') + '" data-act="setTheme" data-a="' + t.id + '">' +
@@ -978,10 +978,10 @@ function renderProfileTab() {
             '<span style="font-size:13px">' + t.name + '</span></div>';
     }
     h += '</div></div>';
-    h += '<div class="card"><p class="t1">🖼 Фон приложения</p>' +
+    h += '<div class="card"><p class="t1">Фон приложения</p>' +
         '<p class="meta">Картинка хранится только на этом устройстве</p>' +
         '<div class="split2">' +
-        '<button class="btn sec" data-act="pickBg">📷 Выбрать из галереи</button>' +
+        '<button class="btn sec" data-act="pickBg">Выбрать из галереи</button>' +
         '<button class="btn sec" data-act="clearBg">Убрать фон</button>' +
         '</div></div>';
     return h;
@@ -1152,13 +1152,13 @@ function renderPickerList() {
     box.innerHTML = h;
 }
 function renderPickerModal() {
-    let h = '<p class="mtitle">➕ Добавить упражнение</p>';
+    let h = '<p class="mtitle">Добавить упражнение</p>';
     h += '<div class="searchbox"><input id="pickerQ" type="text" placeholder="Поиск..." autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(PICKER.q) + '"></div>';
     const showCats = PICKER.section !== 'fav' && PICKER.section !== 'all';
     h += '<div class="secrow" id="pickerSections">' + pickerChipsHtml() + '</div>';
     h += '<div class="secrow" id="pickerCats"' + (showCats ? '' : ' style="display:none"') + '>' + (showCats ? pickerCatsHtml() : '') + '</div>';
     h += '<div class="excard" data-act="customExerciseModal" style="margin:6px 0">' + ico('custom') +
-        '<span><div class="exn">✍️ Своё упражнение</div><div class="extags">добавь то, чего нет в каталоге</div></span></div>';
+        '<span><div class="exn">Своё упражнение</div><div class="extags">добавь то, чего нет в каталоге</div></span></div>';
     h += '<div id="pickerList"></div>';
     h += '<div class="btnrow"><button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
     openModal(h);
@@ -1184,9 +1184,9 @@ function storage_after_pick(w, e) {
 }
 function customExerciseModal() {
     const w = findW(PICKER.wid);
-    const h = '<p class="mtitle">✍️ Своё упражнение</p>' +
+    const h = '<p class="mtitle">Своё упражнение</p>' +
         '<label>Название (до 60 символов)</label><input id="mCustomName" type="text" maxlength="60">' +
-        '<div class="btnrow"><button class="btn wide" data-act="createCustom">➕ Добавить</button>' +
+        '<div class="btnrow"><button class="btn wide" data-act="createCustom">' + ICONS.plus + '<span>Добавить</span></button>' +
         '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>';
     openModal(h);
     const inp = document.getElementById('mCustomName');
@@ -1268,8 +1268,8 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         SUG_R.forEach((v, i) => { h += '<button class="chip" data-act="chipR" data-a="' + i + '">' + esc(v) + '</button>'; });
         h += '</div>';
     }
-    h += '<div class="btnrow"><button class="btn wide" data-act="saveEntry">' + (isNew ? '➕ Добавить' : '💾 Сохранить') + '</button>';
-    if (!isNew) h += '<button class="btn danger wide" data-act="deleteEntry">🗑 Удалить запись</button>';
+    h += '<div class="btnrow"><button class="btn wide" data-act="saveEntry" class="icbtn">' + (isNew ? ICONS.plus + '<span>Добавить</span>' : ICONS.save + '<span>Сохранить</span>') + '</button>';
+    if (!isNew) h += '<button class="btn danger wide" data-act="deleteEntry" class="icbtn">ICONS.trash<span>Удалить запись</span></button>';
     h += '<button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
     openModal(h);
     /* при фокусе поле выделяется целиком — ввод с клавиатуры заменяет значение, а не дописывает */
@@ -1385,7 +1385,7 @@ function renameModalHtml(w) {
     const e = w.exercises[modalCtx.exIdx];
     const h = '<p class="mtitle">Переименовать упражнение</p>' +
         '<label>Название (до 60 символов)</label><input id="mName" type="text" value="' + esc(e.name) + '">' +
-        '<div class="btnrow"><button class="btn wide" data-act="doRename">💾 Сохранить</button>' +
+        '<div class="btnrow"><button class="btn wide icbtn" data-act="doRename">' + ICONS.save + '<span>Сохранить</span></button>' +
         '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>';
     openModal(h);
 }
@@ -1459,7 +1459,7 @@ function nutrModal(wid) {
     const h = '<p class="mtitle">🥤 Питание во время тренировки</p>' +
         '<label>Что пил и что ел</label>' +
         '<textarea id="mNutr" maxlength="500">' + esc(w.nutrition || '') + '</textarea>' +
-        '<div class="btnrow"><button class="btn wide" data-act="saveNutr" data-a="' + wid + '">💾 Сохранить</button>' +
+        '<div class="btnrow"><button class="btn wide" data-act="saveNutr" data-a="' + wid + '" class="icbtn">' + ICONS.save + '<span>Сохранить</span></button>' +
         '<button class="btn sec wide" data-act="clearNutr" data-a="' + wid + '">🚫 Очистить</button></div>';
     openModal(h);
 }
@@ -1478,11 +1478,11 @@ function clearNutr(wid) {
 function titleModal(wid) {
     const w = findW(wid);
     const cur = w.title && w.title.trim() ? w.title : '';
-    const h = '<p class="mtitle">🏷 Название тренировки</p>' +
+    const h = '<p class="mtitle">Название тренировки</p>' +
         '<p class="muted">Сейчас: ' + esc(titleLines(w).join(' / ')) + '</p>' +
         '<label>Напиши своё название тренировки</label>' +
         '<textarea id="mTitle" maxlength="200" placeholder="Например: Спина и грудь"></textarea>' +
-        '<div class="btnrow"><button class="btn wide" data-act="saveTitle" data-a="' + wid + '">💾 Сохранить</button></div>';
+        '<div class="btnrow"><button class="btn wide icbtn" data-act="saveTitle" data-a="' + wid + '">' + ICONS.save + '<span>Сохранить</span></button></div>';
     openModal(h);
 }
 function saveTitle(wid) {
@@ -1504,14 +1504,14 @@ function timeModal(wid) {
     const st = w.started ? w.started.slice(11, 16) : '';
     const ed = isoToDateInput(w.ended);
     const et = w.ended ? w.ended.slice(11, 16) : '';
-    const h = '<p class="mtitle">⏱ Даты и время тренировки</p>' +
+    const h = '<p class="mtitle">Даты и время тренировки</p>' +
         '<label>Начало — дата (ДД.ММ.ГГГГ)</label><input id="mStartDate" type="text" inputmode="numeric" placeholder="29.10.2026" value="' + esc(sd) + '">' +
         '<label>Начало — время (ЧЧ:ММ)</label><input id="mStartTime" type="text" inputmode="numeric" placeholder="18:30" value="' + esc(st) + '">' +
         '<label>Окончание — дата</label><input id="mEndDate" type="text" inputmode="numeric" placeholder="29.10.2026" value="' + esc(ed) + '">' +
         '<label>Окончание — время</label><input id="mEndTime" type="text" inputmode="numeric" placeholder="20:05" value="' + esc(et) + '">' +
         '<p class="muted">У активной тренировки окончание можно оставить пустым.</p>' +
         '<div id="mTimeErr" class="formerr"></div>' +
-        '<div class="btnrow"><button class="btn wide" data-act="saveTime" data-a="' + wid + '">💾 Сохранить</button></div>';
+        '<div class="btnrow"><button class="btn wide icbtn" data-act="saveTime" data-a="' + wid + '">' + ICONS.save + '<span>Сохранить</span></button></div>';
     openModal(h);
     ['mStartDate', 'mEndDate'].forEach(function (id) {
         const el = document.getElementById(id);
@@ -1716,7 +1716,7 @@ async function init() {
             + ' · ' + failMsg;
         document.getElementById('app').innerHTML =
             '<p class="empty">Не удалось авторизоваться 😕<br>' + esc(info) +
-            '<br><br>Открой приложение через меню бота (кнопка ☰ → «🏋️ Дневник»).</p>';
+            '<br><br>Открой приложение через меню бота (кнопка  → « Дневник»).</p>';
     }
 }
 window.addEventListener('scroll', function () {
