@@ -357,6 +357,11 @@ test.describe('GymHelper e2e', function () {
         const dowTxt = (await page.locator('.pc-dow').first().textContent()) || '';
         if (dowTxt.includes('·')) throw new Error('в правом углу остался день недели: ' + dowTxt);
         if (!/^\d{1,2}\s[а-яё]+$/i.test(dowTxt.trim())) throw new Error('формат даты в правом углу: ' + dowTxt);
+        /* дата и правый угол на одном уровне */
+        const dateBox = await page.locator('.pc-date').first().boundingBox();
+        const dowBox = await page.locator('.pc-dow').first().boundingBox();
+        const dOff = Math.abs((dateBox.y + dateBox.height / 2) - (dowBox.y + dowBox.height / 2));
+        if (dOff > 3) throw new Error('«2 ноя» не на уровне названия: ' + dOff.toFixed(1) + 'px');
     });
 
     test('любимые пустые -> пустой список; фильтр Все -> весь каталог', async ({ page }) => {

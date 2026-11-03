@@ -395,8 +395,6 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
 .pc-main { flex: 1; min-width: 0; min-height: 104px; }
 .pc-daterow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .pc-date { font-size: 15px; font-weight: 700; color: var(--text); }
-.pc-side { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
-.pc-dow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); }
 .pc-dp { font-size: 14px; }
 .pc-pill {
     display: inline-flex;
@@ -409,8 +407,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--sec-t
     font-size: 11.5px;
     white-space: nowrap;
 }
-.pc-side { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
-.pc-dow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); }
+.pc-side { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 7px; }
+.pc-dow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); margin-top: 3.5px; }
 .pc-title { font-weight: 700; font-size: 17px; line-height: 1.3; }
 .pc-ex {
     font-size: 12.5px;
@@ -763,7 +761,7 @@ body { padding: 12px 12px 32px 66px; }
 .wcright { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; flex: none; }
 /* центры строки названия и ряда иконок совпадают */
 .wcright .wcicons { margin: 0; }
-.wctitles { padding-top: 4px; }
+.wctitles { padding-top: 5.4px; }
 .wcpill {
     display: flex;
     flex-direction: column;
