@@ -682,13 +682,12 @@ function workoutCard(w, showActions) {
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
     h += '<div class="wchead"><div class="wctitles"><p class="t1">' +
-        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p>';
-    for (let i = 1; i < lines.length; i++) h += '<div class="tn">' + esc(lines[i]) + '</div>';
-    h += '</div><div class="wcright"><div class="wcicons">' +
+        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(lines[0]) + '</p></div>' +
+        '<div class="wcicons">' +
         '<button class="barebtn pencil-bare" data-act="titleModal" data-a="' + w.id + '" title="Название">' + ICONS.pencil + '</button>' +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
-        '</div>';
+        '</div></div>';
     if (w.started) {
         const sT = String(w.started).slice(11, 16);
         const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
@@ -701,7 +700,6 @@ function workoutCard(w, showActions) {
         if (setsTotal > 0) pill += '<span class="wpill wp-s">🏋 ' + setsTotal + ' подх.</span>';
         h += '<div class="wcpill">' + pill + '</div>';
     }
-    h += '</div></div>';
     if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
     const exs = w.exercises || [];
     if (!exs.length) {

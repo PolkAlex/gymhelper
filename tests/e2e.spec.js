@@ -279,24 +279,25 @@ test.describe('GymHelper e2e', function () {
         const d = Math.abs((t1.y + t1.height / 2) - (icons.y + icons.height / 2));
         if (d > 8) throw new Error('название и иконки не на одном уровне: ' + d.toFixed(1) + 'px');
 
-        /* поля пилюли выровнены по ЦЕНТРУ; коробка — по правому краю с иконками */
+        /* инфо-лента: одна строка на всю ширину ниже названия, три значения на одном уровне */
         const pillBox = await page.locator('.wcpill').boundingBox();
         const icBox = await page.locator('.wcicons').boundingBox();
-        if (!pillBox || !icBox) throw new Error('шапка карточки не найдена');
+        const t1Box = await page.locator('.wctitles .t1').boundingBox();
+        if (!pillBox || !icBox || !t1Box) throw new Error('шапка карточки не найдена');
         const edge = Math.abs((pillBox.x + pillBox.width) - (icBox.x + icBox.width));
-        if (edge > 2) throw new Error('коробка-пилюля не на правом краю с иконками: ' + edge.toFixed(1) + 'px');
+        if (edge > 2) throw new Error('пилюля не растянута до правого края: ' + edge.toFixed(1) + 'px');
+        if (pillBox.y < t1Box.y) throw new Error('пилюля выше названия');
         const rows = await page.locator('.wpill').all();
         const centers = [];
         const hs = [];
-        const pillCenter = pillBox.x + pillBox.width / 2;
         for (const p of rows) {
             const bb = await p.boundingBox();
-            centers.push(bb.x + bb.width / 2);
+            centers.push(bb.y + bb.height / 2);
             hs.push(bb.height);
         }
-        const centerSpread = Math.max.apply(null, centers.map(function (c) { return Math.abs(c - pillCenter); }));
-        if (centerSpread > 2) throw new Error('строки пилюли не по центру: ' + centerSpread.toFixed(1) + 'px');
-        if (Math.max.apply(null, hs) - Math.min.apply(null, hs) > 2) throw new Error('строки пилюли разной высоты');
+        const centerSpread = Math.max.apply(null, centers) - Math.min.apply(null, centers);
+        if (centerSpread > 2) throw new Error('значения пилюли не в одной строке: ' + centerSpread.toFixed(1) + 'px');
+        if (Math.max.apply(null, hs) - Math.min.apply(null, hs) > 2) throw new Error('значения пилюли разной высоты');
 
         /* ккал не «выпадает» из шапки: пилюля выше карточек упражнений */
         const kcal = await page.locator('.wpill.wp-k').boundingBox();
