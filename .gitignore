@@ -7,12 +7,15 @@ out/
 ### Gym bot ###
 token.txt
 webapp.txt
+.env
 data/
 out/
 testout/
 sources.txt
 deploy_key*
 node_modules/
+.gradle/
+build/
 
 ### Eclipse ###
 .apt_generated

@@ -1,0 +1,57 @@
+/*
+ * Сборка GymHelper: чистая Java без внешних зависимостей (только JDK).
+ * Gradle здесь — инструмент сборки/упаковки, в рантайм ничего не добавляет.
+ */
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'gym'
+version = '1.0.0'
+
+// нестандартная структура проекта: пакет gym лежит прямо в src/ (src/gym/*.java)
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+        }
+    }
+    // контрактный тест формата данных (tests/GymContractTest.java, default package)
+    contractTest {
+        java {
+            srcDirs = ['tests']
+        }
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17 // байткод Java 17, собирается любым JDK >= 17
+}
+
+application {
+    mainClass = 'gym.Main'
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'gym.Main'
+    }
+    archiveBaseName = 'gymhelper'
+}
+
+// запуск: gradlew contractTest
+tasks.register('contractTest', JavaExec) {
+    group = 'verification'
+    description = 'Контрактный тест формата данных (app <-> сервер).'
+    classpath = sourceSets.contractTest.runtimeClasspath
+    mainClass = 'GymContractTest'
+}
+
+// проверка: gradlew check -> build + контрактный тест
+tasks.named('check') {
+    dependsOn 'contractTest'
+}
