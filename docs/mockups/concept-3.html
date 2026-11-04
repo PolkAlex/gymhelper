@@ -1,0 +1,435 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Концепт 3 · Deep Forest Glass — глубокий зелёный glassmorphism</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c4cec8;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #e4f2e8; }
+.caption span { color: #7fe0a0; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #75857c; line-height: 1.5; }
+
+/* ============ телефон ============ */
+.phone {
+    position: relative; width: 100%; max-width: 430px; margin: 0 auto;
+    height: 780px; border-radius: 36px; border: 1px solid #1e2c24;
+    overflow: hidden; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+
+/* ============ тема Deep Forest Glass ============ */
+.p {
+    --text: #e4f2e8; --muted: #9dbbac;
+    --accent: #b8e6c4; --on-accent: #12281c;
+    --num: #7fe0a0;
+    --glass: rgba(255,255,255,.06); --glassbrd: rgba(255,255,255,.10);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden;
+    background: #0c1f16;
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(63,116,88,.55), transparent 70%),
+        radial-gradient(380px 320px at -60px 34%, rgba(38,92,64,.5), transparent 70%),
+        radial-gradient(460px 360px at 110% 78%, rgba(24,74,50,.55), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+/* ---- хедер Telegram (UX-I2) ---- */
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(12,31,22,.9) 55%, rgba(12,31,22,.55));
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 20px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apphead .tbtn {
+    width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--glassbrd); flex: none;
+    background: var(--glass); color: var(--muted); font-size: 13px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.fhrow .tbtn {
+    width: 30px; height: 30px; border-radius: 50%; border: none; flex: none;
+    background: none; color: var(--muted); font-size: 16px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.content { padding: 4px 14px 130px; }
+
+/* ---- стеклянные карточки ---- */
+.glass {
+    background: var(--glass);
+    border: 1px solid var(--glassbrd);
+    border-radius: 22px;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 16px; margin-top: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06);
+}
+.gh { font-family: Georgia, serif; font-size: 19px; font-weight: 600; color: var(--text); }
+.gsub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.exrow { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.exleaf {
+    width: 40px; height: 40px; border-radius: 14px; flex: none;
+    background: rgba(127,224,160,.12); border: 1px solid rgba(127,224,160,.2);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.exrow .en { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--text); }
+.exrow .ev { font-size: 13px; font-weight: 700; color: var(--num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.setline {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(0,0,0,.16); border-radius: 14px;
+    padding: 10px 12px; margin-top: 8px; font-size: 13px; color: var(--text);
+}
+.setline b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.pillbtn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: none; cursor: pointer;
+    background: var(--accent); color: var(--on-accent);
+    border-radius: 999px; padding: 12px 22px;
+    font-size: 14px; font-weight: 700; font-family: inherit;
+}
+.pillbtn.ghost {
+    background: rgba(127,224,160,.1); color: var(--num);
+    border: 1px solid rgba(127,224,160,.25);
+}
+.btnrow2 { display: flex; gap: 8px; margin-top: 14px; }
+.btnrow2 .pillbtn { flex: 1; padding: 12px 8px; }
+
+/* ---- нижний стеклянный dock ---- */
+.dockwrap { position: sticky; bottom: 0; z-index: 20; margin: 0 -14px; padding: 10px 14px calc(14px + env(safe-area-inset-bottom)); }
+.dock {
+    display: flex; align-items: center; gap: 4px;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 999px;
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    padding: 6px 8px;
+    box-shadow: 0 10px 34px rgba(0,0,0,.35);
+}
+.dock .dbtn {
+    flex: 1; min-width: 0; border: none; background: none; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    color: #7f9a8c; font-size: 10px; font-weight: 600; padding: 6px 0; border-radius: 999px;
+}
+.dock .dbtn .di { font-size: 18px; line-height: 1; }
+.dock .dbtn.on { background: var(--accent); color: var(--on-accent); }
+
+/* ============ форма «Новая запись» ============ */
+.fhrow { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.fhrow .ft { flex: 1; min-width: 0; font-family: Georgia, serif; font-size: 19px; font-weight: 600; color: var(--text); }
+.fhrow .ft small { display: block; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: 11.5px; color: var(--num); font-weight: 600; margin-top: 2px; }
+.flabel { font-size: 12.5px; color: var(--muted); margin: 18px 0 6px; font-weight: 600; }
+.inp {
+    width: 100%; border: 1px solid rgba(255,255,255,.14); border-radius: 18px;
+    background: rgba(0,0,0,.22); color: var(--text);
+    font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+    padding: 13px 16px; outline: none; font-family: inherit;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.inp:focus { border-color: rgba(127,224,160,.6); }
+.prevpill {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    margin-top: 8px; border: 1px solid rgba(127,224,160,.3);
+    background: rgba(127,224,160,.1); color: var(--num);
+    border-radius: 999px; padding: 8px 14px; font-size: 12.5px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.keyrow { display: flex; gap: 5px; margin-top: 8px; }
+.keyrow .k {
+    flex: 1 1 0; min-width: 0; border: none; cursor: pointer;
+    background: rgba(255,255,255,.07); color: var(--text);
+    border-radius: 12px; padding: 11px 0; font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums; font-family: inherit; transition: transform .12s ease;
+}
+.keyrow .k:active { transform: scale(.95); background: rgba(255,255,255,.12); }
+.keyrow .k.plus { color: var(--num); background: rgba(127,224,160,.12); }
+.bigadd {
+    margin-top: 22px; width: 100%; border: none; cursor: pointer;
+    background: var(--accent); color: var(--on-accent);
+    border-radius: 999px; padding: 16px;
+    font-size: 16px; font-weight: 700; font-family: inherit;
+    box-shadow: 0 12px 34px rgba(184,230,196,.18);
+}
+.bigadd:active { transform: scale(.98); }
+
+/* ============ отличительный компонент: кольцо недели ============ */
+.ringwrap { display: flex; align-items: center; gap: 18px; }
+.ring { flex: none; }
+.ringwrap .rw { flex: 1; min-width: 0; }
+.ringwrap .rw .big { font-size: 30px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.ringwrap .rw .lbl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.weekdots { display: flex; justify-content: space-between; margin-top: 16px; }
+.wd { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted); font-weight: 600; }
+.wd i { width: 30px; height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); }
+.wd.on i { background: var(--num); }
+.wd.today { color: var(--text); }
+
+@media (max-width: 379px) {
+    .keyrow { gap: 4px; }
+    .keyrow .k { font-size: 12px; border-radius: 10px; }
+    .ringwrap .rw .big { font-size: 25px; }
+}
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">Концепт 3 · Deep Forest Glass <span>глубокий зелёный · glassmorphism</span></div>
+    <div class="note">Референс: Leafora. Преемник текущей forest-темы: слои радиальных градиентов вместо теней,
+    стеклянные карточки с blur, serif-заголовки Georgia, кнопки-пилюли. Самый атмосферный концепт.</div>
+
+    <!-- ================= ЭКРАН 1: ИСТОРИЯ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">Дневник тренировок</div>
+                    <button class="tbtn">⋯</button><button class="tbtn">×</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass">
+                    <div class="gh">Вторник, 3 ноября</div>
+                    <div class="gsub">жим лёжа · присед · 18:20–19:05</div>
+                    <div class="exrow">
+                        <div class="exleaf">🏋</div>
+                        <div class="en">Жим лёжа</div>
+                        <div class="ev">195 кг</div>
+                    </div>
+                    <div class="setline"><span><b>65 кг,</b> 3 подхода по 10 повторений</span></div>
+                    <div class="setline"><span><b>70 кг,</b> 3 подхода по 8 повторений</span></div>
+                    <div class="exrow">
+                        <div class="exleaf">🦵</div>
+                        <div class="en">Приседания</div>
+                        <div class="ev">360 кг</div>
+                    </div>
+                    <div class="setline"><span><b>90 кг,</b> 4 подхода по 8 повторений</span></div>
+                    <div class="btnrow2">
+                        <button class="pillbtn ghost">Упражнение</button>
+                        <button class="pillbtn">Завершить</button>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="gh">Воскресенье, 1 ноября</div>
+                    <div class="gsub">спина · тяга · 17:40–18:25</div>
+                    <div class="exrow">
+                        <div class="exleaf">💪</div>
+                        <div class="en">Подтягивания</div>
+                        <div class="ev">—</div>
+                    </div>
+                    <div class="setline"><span>3 подхода по 8 повторений</span></div>
+                    <div class="exrow">
+                        <div class="exleaf">🏋</div>
+                        <div class="en">Тяга штанги</div>
+                        <div class="ev">180 кг</div>
+                    </div>
+                    <div class="setline"><span><b>60 кг,</b> 3 подхода по 10 повторений</span></div>
+                </div>
+
+                <div class="glass">
+                    <div class="gh">Четверг, 29 октября</div>
+                    <div class="gsub">плечи · руки · 19:00–19:35</div>
+                    <div class="exrow">
+                        <div class="exleaf">⚙</div>
+                        <div class="en">Жим стоя</div>
+                        <div class="ev">120 кг</div>
+                    </div>
+                </div>
+
+                <div class="dockwrap">
+                    <div class="dock">
+                        <button class="dbtn on"><span class="di">⌂</span>История</button>
+                        <button class="dbtn"><span class="di">📈</span>Статистика</button>
+                        <button class="dbtn"><span class="di">📖</span>Каталог</button>
+                        <button class="dbtn"><span class="di">✍</span>Запись</button>
+                        <button class="dbtn"><span class="di">👤</span>Профиль</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="caption">Экран 2 · Новая запись <span>полноэкранная форма · UX-I2</span></div>
+    <div class="note">Форма без чипсов; стеклянные поля и зелёные пилюли. Бейдж UX-I1 рабочий.</div>
+
+    <!-- ================= ЭКРАН 2: НОВАЯ ЗАПИСЬ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="fhrow">
+                    <button class="tbtn" style="background:none">×</button>
+                    <div class="ft">Новая запись <small>Жим лёжа</small></div>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass" style="margin-top:8px">
+                    <div class="flabel" style="margin-top:0">Вес, кг</div>
+                    <input class="inp" id="inpWeight" type="text" inputmode="decimal" value="70">
+                    <button class="prevpill" data-prev="65">↺ Предыдущий подход: 65 кг — подставить</button>
+                    <div class="keyrow">
+                        <button class="k plus" data-wadd="0.5">+0,5</button>
+                        <button class="k plus" data-wadd="1">+1</button>
+                        <button class="k plus" data-wadd="2">+2</button>
+                        <button class="k plus" data-wadd="5">+5</button>
+                        <button class="k plus" data-wadd="10">+10</button>
+                        <button class="k plus" data-wadd="15">+15</button>
+                        <button class="k plus" data-wadd="20">+20</button>
+                        <button class="k plus" data-wadd="50">+50</button>
+                    </div>
+                    <div class="keyrow">
+                        <button class="k" data-wset="10">10</button>
+                        <button class="k" data-wset="20">20</button>
+                        <button class="k" data-wset="30">30</button>
+                        <button class="k" data-wset="50">50</button>
+                        <button class="k" data-wset="60">60</button>
+                        <button class="k" data-wset="80">80</button>
+                        <button class="k" data-wset="100">100</button>
+                        <button class="k" data-wset="200">200</button>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="flabel" style="margin-top:0">Подходы</div>
+                    <input class="inp" id="inpSets" type="text" inputmode="numeric" value="3">
+                    <div class="keyrow">
+                        <button class="k" data-sset="1">1</button>
+                        <button class="k" data-sset="2">2</button>
+                        <button class="k" data-sset="3">3</button>
+                        <button class="k" data-sset="4">4</button>
+                        <button class="k" data-sset="5">5</button>
+                        <button class="k" data-sset="6">6</button>
+                        <button class="k" data-sset="7">7</button>
+                        <button class="k" data-sset="8">8</button>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="flabel" style="margin-top:0">Повторения (например 12, 8-10)</div>
+                    <input class="inp" id="inpReps" type="text" value="10">
+                    <div class="keyrow">
+                        <button class="k" data-rset="1">1</button>
+                        <button class="k" data-rset="2">2</button>
+                        <button class="k" data-rset="3">3</button>
+                        <button class="k" data-rset="4">4</button>
+                        <button class="k" data-rset="5">5</button>
+                        <button class="k" data-rset="6">6</button>
+                        <button class="k" data-rset="7">7</button>
+                        <button class="k" data-rset="8">8</button>
+                    </div>
+                    <div class="keyrow">
+                        <button class="k plus" data-radd="1">+1</button>
+                        <button class="k plus" data-radd="2">+2</button>
+                        <button class="k plus" data-radd="5">+5</button>
+                        <button class="k plus" data-radd="10">+10</button>
+                    </div>
+                </div>
+
+                <button class="bigadd">Добавить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="caption">Экран 3 · Отличительный компонент <span>стеклянное кольцо недели</span></div>
+    <div class="note">Прогресс недели: тренировки / подходы / тоннаж в одном кольце + лента дней.</div>
+
+    <!-- ================= ЭКРАН 3: КОМПОНЕНТ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">Неделя 2–8 ноября</div>
+                    <button class="tbtn">⋯</button><button class="tbtn">×</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass">
+                    <div class="ringwrap">
+                        <svg class="ring" width="130" height="130" viewBox="0 0 130 130">
+                            <circle cx="65" cy="65" r="54" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="11"/>
+                            <circle cx="65" cy="65" r="54" fill="none" stroke="#7fe0a0" stroke-width="11"
+                                stroke-linecap="round" stroke-dasharray="339.3" stroke-dashoffset="113"
+                                transform="rotate(-90 65 65)"/>
+                            <text x="65" y="61" text-anchor="middle" fill="#e4f2e8" font-size="26" font-weight="700" font-family="inherit">2/3</text>
+                            <text x="65" y="82" text-anchor="middle" fill="#9dbbac" font-size="11">тренировки</text>
+                        </svg>
+                        <div class="rw">
+                            <div class="big">4 260 кг</div>
+                            <div class="lbl">тоннаж за неделю · 72% до цели</div>
+                            <div class="big" style="font-size:20px; margin-top:10px">36</div>
+                            <div class="lbl">подходов · цель 50</div>
+                        </div>
+                    </div>
+                    <div class="weekdots">
+                        <div class="wd on">Пн<i></i></div>
+                        <div class="wd on today">Вт<i></i></div>
+                        <div class="wd">Ср<i></i></div>
+                        <div class="wd">Чт<i></i></div>
+                        <div class="wd">Пт<i></i></div>
+                        <div class="wd">Сб<i></i></div>
+                        <div class="wd">Вс<i></i></div>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="gh">Ближайшая цель</div>
+                    <div class="gsub">3 тренировки до воскресенья — осталось 1</div>
+                    <div class="btnrow2">
+                        <button class="pillbtn ghost">План недели</button>
+                        <button class="pillbtn">Начать</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<script>
+(function(){
+    function num(v){ return parseFloat(String(v).replace(',', '.')) || 0; }
+    function fmt(v){ return String(Math.round(v*100)/100).replace('.', ','); }
+    document.addEventListener('click', function(ev){
+        var t = ev.target.closest('[data-wadd],[data-wset],[data-sset],[data-rset],[data-radd],[data-prev]');
+        if(!t) return;
+        var w = document.getElementById('inpWeight');
+        if(w){
+            if(t.hasAttribute('data-wadd')) w.value = fmt(num(w.value) + parseFloat(t.dataset.wadd));
+            if(t.hasAttribute('data-wset')) w.value = t.dataset.wset;
+            if(t.hasAttribute('data-prev')) w.value = t.dataset.prev;
+        }
+        var s = document.getElementById('inpSets');
+        if(s && t.hasAttribute('data-sset')) s.value = t.dataset.sset;
+        var r = document.getElementById('inpReps');
+        if(r){
+            if(t.hasAttribute('data-rset')) r.value = t.dataset.rset;
+            if(t.hasAttribute('data-radd')){
+                var m = String(r.value).match(/\d+/g);
+                var cur = m ? +m[m.length-1] : 0;
+                r.value = (cur + parseInt(t.dataset.radd,10));
+            }
+        }
+    });
+})();
+</script>
+</body>
+</html>

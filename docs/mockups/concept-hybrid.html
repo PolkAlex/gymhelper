@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Гибрид · Amber Glass — Amber Drive + стекло + типографика Mint Ledger</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+
+/* ============ телефон ============ */
+.phone {
+    position: relative; width: 100%; max-width: 430px; margin: 0 auto;
+    height: 780px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+
+/* ============ тема Amber Glass ============
+   база: концепт 2 (Amber Drive) · стекло: концепт 3 (тёплый блур)
+   типографика и нижнее меню: концепт 1 (Mint Ledger) */
+.p {
+    --bg: #101114; --card2: #24272d;
+    --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    /* стекло (тёплое, не зелёное) */
+    --glass: rgba(255,255,255,.055);
+    --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    /* круги мышечных групп (из Amber Drive) */
+    --c-bench: rgba(255,194,32,.15);
+    --c-legs: rgba(90,176,255,.15);
+    --c-back: rgba(255,138,92,.15);
+    --c-abs: rgba(126,224,129,.15);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+/* ---- стеклянные карточки ---- */
+.glass {
+    background: var(--glass);
+    border: 1px solid var(--glassbrd);
+    border-radius: 20px;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 16px; margin-top: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+.glass.glow { border-color: var(--glowbrd); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28), 0 0 26px rgba(255,194,32,.08); }
+
+/* ---- хедер Telegram (UX-I2: контент под шапкой) ---- */
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apphead .tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: rgba(255,255,255,.07); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.fhrow .tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: none; color: var(--muted); font-size: 16px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.content { padding: 4px 14px 120px; }
+
+/* ---- круги мышечных групп (временно из Amber Drive, см. [UX-I3] #25) ---- */
+.bigcircle {
+    width: 56px; height: 56px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center; font-size: 23px;
+    border: 1px solid rgba(255,255,255,.10);
+}
+.bigcircle.small { width: 42px; height: 42px; font-size: 18px; border-radius: 14px; }
+
+/* ---- строка тренировки ---- */
+.dhead { display: flex; align-items: center; gap: 12px; }
+.dhead .dn { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; color: var(--text); }
+.dhead .dd { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 400; }
+.dc-stats { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.dchip {
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 999px; padding: 4px 10px;
+    font-size: 11.5px; font-weight: 600; color: var(--text); white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.dchip.k { color: var(--accent); }
+
+/* записи тренировки */
+.setline {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 14px; padding: 10px 12px; margin-top: 8px;
+    font-size: 13px; color: var(--text);
+}
+.setline b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.wtag {
+    margin-left: auto; background: rgba(255,194,32,.12);
+    border: 1px solid rgba(255,194,32,.2);
+    color: var(--accent); border-radius: 9px; padding: 3px 9px;
+    font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.exhead { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.exhead:first-of-type { margin-top: 2px; }
+.exhead .en { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--text); }
+.exhead .ev { font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* янтарная CTA (залитая, тёмный текст — из Amber Drive) */
+.cta {
+    display: block; width: 100%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 16px; padding: 15px;
+    font-size: 15px; font-weight: 700; font-family: inherit; margin-top: 14px;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.cta:active { transform: scale(.98); }
+
+/* ---- нижнее меню из Mint Ledger: 4 таба + центральная FAB ---- */
+.nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -14px; padding: 8px 18px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { font-size: 19px; line-height: 1; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+.nav .nfab:active { transform: translateY(-12px) scale(.96); }
+
+/* ============ форма «Новая запись» (полноэкранная, UX-I2) ============ */
+.formhead {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 60%, rgba(16,17,20,.78));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.fhrow { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.fhrow .ft { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); }
+.fhrow .ft small { display: block; font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 2px; }
+.flabel { font-size: 12.5px; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+.inp {
+    width: 100%; border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+    background: rgba(0,0,0,.22); color: var(--text);
+    font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+    padding: 12px 14px; outline: none; font-family: inherit;
+}
+.inp:focus { border-color: var(--accent); }
+.prevpill {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    margin-top: 8px; border: 1px solid rgba(255,194,32,.25);
+    background: rgba(255,194,32,.1); color: var(--accent);
+    border-radius: 999px; padding: 7px 12px; font-size: 12.5px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.keyrow { display: flex; gap: 5px; margin-top: 8px; }
+.keyrow .k {
+    flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,.08); cursor: pointer;
+    background: rgba(255,255,255,.07); color: var(--text);
+    border-radius: 10px; padding: 10px 0; font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums; font-family: inherit;
+    transition: transform .12s ease;
+}
+.keyrow .k:active { transform: scale(.95); background: rgba(255,255,255,.12); }
+.keyrow .k.plus {
+    border-color: transparent;
+    background: var(--accent); color: var(--on-accent);
+}
+.keyrow .k.plus:active { background: var(--accent-deep); }
+.bigadd {
+    margin-top: 20px; width: 100%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 16px; padding: 15px;
+    font-size: 16px; font-weight: 700; font-family: inherit;
+    box-shadow: 0 10px 30px rgba(255,194,32,.25);
+}
+.bigadd:active { transform: scale(.98); }
+
+/* ============ отличительные компоненты Amber Drive на стекле ============ */
+.reccard {
+    border-radius: 20px; padding: 18px; margin-top: 12px; position: relative; overflow: hidden;
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+.reccard::before {
+    content: ''; position: absolute; right: -40px; bottom: -40px;
+    width: 170px; height: 170px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,194,32,.16), transparent 70%);
+}
+.rec-l { font-size: 12px; font-weight: 600; letter-spacing: .4px; color: var(--muted); }
+.rec-ex { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.rec-ex .en { font-size: 14.5px; font-weight: 700; color: var(--text); }
+.rec-num { font-size: 44px; font-weight: 800; color: var(--accent); line-height: 1.1; margin-top: 8px; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+.rec-num small { font-size: 18px; font-weight: 700; color: var(--muted); }
+.rec-bar { height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); margin-top: 14px; overflow: hidden; }
+.rec-bar i { display: block; height: 100%; width: 83%; border-radius: 999px; background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+.rec-sub { display: flex; justify-content: space-between; margin-top: 8px; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+
+/* легенда мышечных групп (круги) */
+.mgroups { display: flex; justify-content: space-between; gap: 6px; margin-top: 12px; }
+.mg { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted); font-weight: 600; min-width: 0; }
+.mg .bigcircle { width: 44px; height: 44px; font-size: 19px; }
+.mg b { color: var(--text); font-weight: 700; }
+
+@media (max-width: 379px) {
+    .keyrow { gap: 4px; }
+    .keyrow .k { font-size: 12px; padding: 10px 0; border-radius: 9px; }
+    .rec-num { font-size: 38px; }
+    .bigcircle { width: 48px; height: 48px; font-size: 20px; }
+    .mg .bigcircle { width: 40px; height: 40px; font-size: 17px; }
+}
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">Гибрид · Amber Glass <span>Amber Drive + стекло + типографика Mint Ledger</span></div>
+    <div class="note">Выбор владельца: база — концепт 2 (янтарь на почти чёрном, цветные круги мышц, залитые CTA,
+    карточка рекорда); стекло — концепт 3, но с тёплым блуром (янтарно-медовые градиенты вместо зелёных);
+    типографика и нижнее меню с FAB — концепт 1. Иконки временно из концепта 2, переделка — тикет [UX-I3] #25.</div>
+
+    <!-- ================= ЭКРАН 1: ИСТОРИЯ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">Дневник тренировок</div>
+                    <button class="tbtn">⋯</button><button class="tbtn">×</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass glow">
+                    <div class="dhead">
+                        <div class="bigcircle" style="background:var(--c-bench)">🏋</div>
+                        <div style="flex:1;min-width:0">
+                            <div class="dn">Жим лёжа · присед</div>
+                            <span class="dd">3 ноября, вторник · 18:20–19:05 · 470 ккал</span>
+                        </div>
+                    </div>
+                    <div class="exhead">
+                        <span class="en">Жим лёжа</span><span class="ev">195 кг</span>
+                    </div>
+                    <div class="setline"><span><b>65 кг,</b> 3 подхода по 10 повторений</span></div>
+                    <div class="setline"><span><b>70 кг,</b> 3 подхода по 8 повторений</span><span class="wtag">210 кг</span></div>
+                    <div class="exhead">
+                        <span class="en">Приседания</span><span class="ev">360 кг</span>
+                    </div>
+                    <div class="setline"><span><b>90 кг,</b> 4 подхода по 8 повторений</span></div>
+                    <button class="cta">+ Новая запись</button>
+                </div>
+
+                <div class="glass">
+                    <div class="dhead">
+                        <div class="bigcircle" style="background:var(--c-back)">💪</div>
+                        <div style="flex:1;min-width:0">
+                            <div class="dn">Спина · тяга</div>
+                            <span class="dd">1 ноября, воскресенье · 17:40–18:25</span>
+                        </div>
+                    </div>
+                    <div class="dc-stats">
+                        <span class="dchip">🏋 6 подх.</span>
+                        <span class="dchip">🕐 45 мин</span>
+                        <span class="dchip k">🔥 410 ккал</span>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="dhead">
+                        <div class="bigcircle" style="background:var(--c-legs)">⚙</div>
+                        <div style="flex:1;min-width:0">
+                            <div class="dn">Плечи · руки</div>
+                            <span class="dd">29 октября, четверг · 19:00–19:35</span>
+                        </div>
+                    </div>
+                    <div class="dc-stats">
+                        <span class="dchip">🏋 5 подх.</span>
+                        <span class="dchip">🕐 35 мин</span>
+                        <span class="dchip k">🔥 320 ккал</span>
+                    </div>
+                </div>
+
+                <div class="nav">
+                    <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                    <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                    <button class="nfab">+</button>
+                    <button class="nbtn"><span class="nic">📖</span>Каталог</button>
+                    <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="caption">Экран 2 · Новая запись <span>полноэкранная форма · UX-I2</span></div>
+    <div class="note">Подпись веса согласована: «Вес, кг (0 — без веса)». Повторения: кнопки 1–8 + инкременты +1/+2/+5/+10
+    (без ряда 9–12 — решение владельца). Чипсов-подсказок нет, слова «макс» нет. Бейдж UX-I1 рабочий: тап подставляет вес.</div>
+
+    <!-- ================= ЭКРАН 2: НОВАЯ ЗАПИСЬ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="formhead">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="fhrow">
+                    <button class="tbtn" style="background:none">×</button>
+                    <div class="ft">Новая запись <small>Жим лёжа · вторая тренировка недели</small></div>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass" style="margin-top:8px">
+                    <div class="flabel" style="margin-top:0">Вес, кг (0 — без веса)</div>
+                    <input class="inp" id="inpWeight" type="text" inputmode="decimal" value="70">
+                    <button class="prevpill" data-prev="65">↺ Предыдущий подход: 65 кг — подставить</button>
+                    <div class="keyrow">
+                        <button class="k plus" data-wadd="0.5">+0,5</button>
+                        <button class="k plus" data-wadd="1">+1</button>
+                        <button class="k plus" data-wadd="2">+2</button>
+                        <button class="k plus" data-wadd="5">+5</button>
+                        <button class="k plus" data-wadd="10">+10</button>
+                        <button class="k plus" data-wadd="15">+15</button>
+                        <button class="k plus" data-wadd="20">+20</button>
+                        <button class="k plus" data-wadd="50">+50</button>
+                    </div>
+                    <div class="keyrow">
+                        <button class="k" data-wset="10">10</button>
+                        <button class="k" data-wset="20">20</button>
+                        <button class="k" data-wset="30">30</button>
+                        <button class="k" data-wset="50">50</button>
+                        <button class="k" data-wset="60">60</button>
+                        <button class="k" data-wset="80">80</button>
+                        <button class="k" data-wset="100">100</button>
+                        <button class="k" data-wset="200">200</button>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="flabel" style="margin-top:0">Подходы</div>
+                    <input class="inp" id="inpSets" type="text" inputmode="numeric" value="3">
+                    <div class="keyrow">
+                        <button class="k" data-sset="1">1</button>
+                        <button class="k" data-sset="2">2</button>
+                        <button class="k" data-sset="3">3</button>
+                        <button class="k" data-sset="4">4</button>
+                        <button class="k" data-sset="5">5</button>
+                        <button class="k" data-sset="6">6</button>
+                        <button class="k" data-sset="7">7</button>
+                        <button class="k" data-sset="8">8</button>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="flabel" style="margin-top:0">Повторения (например 12, 8-10)</div>
+                    <input class="inp" id="inpReps" type="text" value="10">
+                    <div class="keyrow">
+                        <button class="k" data-rset="1">1</button>
+                        <button class="k" data-rset="2">2</button>
+                        <button class="k" data-rset="3">3</button>
+                        <button class="k" data-rset="4">4</button>
+                        <button class="k" data-rset="5">5</button>
+                        <button class="k" data-rset="6">6</button>
+                        <button class="k" data-rset="7">7</button>
+                        <button class="k" data-rset="8">8</button>
+                    </div>
+                    <div class="keyrow">
+                        <button class="k plus" data-radd="1">+1</button>
+                        <button class="k plus" data-radd="2">+2</button>
+                        <button class="k plus" data-radd="5">+5</button>
+                        <button class="k plus" data-radd="10">+10</button>
+                    </div>
+                </div>
+
+                <button class="bigadd">Добавить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="caption">Экран 3 · Отличительные компоненты <span>карточка рекорда + круги мышечных групп</span></div>
+    <div class="note">Компоненты Amber Drive, переложенные на стекло: рекорд с гигантской янтарной цифрой и шкалой
+    «до личного рекорда», легенда мышечных групп (цвета сохранены за группами). Иконки-эмодзи — временные,
+    переделка по [UX-I3] #25.</div>
+
+    <!-- ================= ЭКРАН 3: КОМПОНЕНТЫ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">Рекорды</div>
+                    <button class="tbtn">⋯</button><button class="tbtn">×</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="reccard glow">
+                    <div class="rec-l">Рекорд недели · жим лёжа</div>
+                    <div class="rec-ex">
+                        <div class="bigcircle small" style="background:var(--c-bench)">🏋</div>
+                        <div class="en">Одним подходом</div>
+                    </div>
+                    <div class="rec-num">100 <small>кг</small></div>
+                    <div class="rec-bar"><i></i></div>
+                    <div class="rec-sub"><span>личный рекорд: 120 кг</span><span>83%</span></div>
+                </div>
+
+                <div class="reccard">
+                    <div class="rec-l">Рекорд недели · приседания</div>
+                    <div class="rec-ex">
+                        <div class="bigcircle small" style="background:var(--c-legs)">🦵</div>
+                        <div class="en">Суммарный тоннаж</div>
+                    </div>
+                    <div class="rec-num">540 <small>кг</small></div>
+                    <div class="rec-bar"><i style="width:64%"></i></div>
+                    <div class="rec-sub"><span>цель недели: 850 кг</span><span>64%</span></div>
+                </div>
+
+                <div class="glass">
+                    <div class="dhead">
+                        <div class="bigcircle" style="background:var(--c-abs); width:42px; height:42px; font-size:18px">🔥</div>
+                        <div style="flex:1;min-width:0">
+                            <div class="dn">Серия: 3 тренировки подряд</div>
+                            <span class="dd">Пн · Вт · Сб — самая длинная за месяц</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="rec-l">Мышечные группы · эта неделя</div>
+                    <div class="mgroups">
+                        <div class="mg"><div class="bigcircle" style="background:var(--c-bench)">🏋</div><span>Грудь</span><b>8 подх.</b></div>
+                        <div class="mg"><div class="bigcircle" style="background:var(--c-legs)">🦵</div><span>Ноги</span><b>6 подх.</b></div>
+                        <div class="mg"><div class="bigcircle" style="background:var(--c-back)">💪</div><span>Спина</span><b>9 подх.</b></div>
+                        <div class="mg"><div class="bigcircle" style="background:var(--c-abs)">⚙</div><span>Плечи</span><b>5 подх.</b></div>
+                    </div>
+                </div>
+
+                <div class="nav">
+                    <button class="nbtn"><span class="nic">⌂</span>История</button>
+                    <button class="nbtn on"><span class="nic">📈</span>Статистика</button>
+                    <button class="nfab">+</button>
+                    <button class="nbtn"><span class="nic">📖</span>Каталог</button>
+                    <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<script>
+(function(){
+    function num(v){ return parseFloat(String(v).replace(',', '.')) || 0; }
+    function fmt(v){ return String(Math.round(v*100)/100).replace('.', ','); }
+    document.addEventListener('click', function(ev){
+        var t = ev.target.closest('[data-wadd],[data-wset],[data-sset],[data-rset],[data-radd],[data-prev]');
+        if(!t) return;
+        var w = document.getElementById('inpWeight');
+        if(w){
+            if(t.hasAttribute('data-wadd')) w.value = fmt(num(w.value) + parseFloat(t.dataset.wadd));
+            if(t.hasAttribute('data-wset')) w.value = t.dataset.wset;
+            if(t.hasAttribute('data-prev')) w.value = t.dataset.prev;
+        }
+        var s = document.getElementById('inpSets');
+        if(s && t.hasAttribute('data-sset')) s.value = t.dataset.sset;
+        var r = document.getElementById('inpReps');
+        if(r){
+            if(t.hasAttribute('data-rset')) r.value = t.dataset.rset;
+            if(t.hasAttribute('data-radd')){
+                var m = String(r.value).match(/\d+/g);
+                var cur = m ? +m[m.length-1] : 0;
+                r.value = (cur + parseInt(t.dataset.radd,10));
+            }
+        }
+    });
+})();
+</script>
+</body>
+</html>
