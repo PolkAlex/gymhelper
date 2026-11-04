@@ -14,7 +14,7 @@ module.exports = defineConfig({
     webServer: {
         command: 'node tests/server-test.js',
         port: 8099,
-        reuseExistingServer: true,
+        reuseExistingServer: !process.env.CI,
         timeout: 15000
     },
     projects: [
