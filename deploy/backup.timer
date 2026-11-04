@@ -1,0 +1,11 @@
+[Unit]
+Description=GymHelper: ежедневный запуск бэкапа data/ в 04:30
+
+[Timer]
+# Ежедневно в 04:30 по времени сервера
+OnCalendar=*-*-* 04:30:00
+# Если сервер был выключен в момент запуска — догоняем при старте
+Persistent=true
+
+[Install]
+WantedBy=timers.target
