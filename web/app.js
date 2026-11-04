@@ -1318,10 +1318,21 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     if (!isNew) h += '<button class="btn danger wide" data-act="deleteEntry">🗑 Удалить запись</button>';
     h += '<button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
     openModal(h);
-    /* при фокусе поле выделяется целиком — ввод с клавиатуры заменяет значение, а не дописывает */
+    /* при фокусе поле выделяется целиком — ввод с клавиатуры заменяет значение, а не дописывает.
+       WebKit (iOS Safari) ставит каретку ПОСЛЕ клика и затирает выделение из focus,
+       поэтому отменяем дефолтный mousedown и ставим фокус + выделение сами */
     ['mWeight', 'mSets', 'mReps'].forEach(function (id) {
         const el = document.getElementById(id);
-        if (el) el.addEventListener('focus', function () { try { el.select(); } catch (err) { /* noop */ } });
+        if (!el) return;
+        const sel = function () { try { el.select(); } catch (err) { /* noop */ } };
+        el.addEventListener('focus', sel);
+        el.addEventListener('mousedown', function (ev) {
+            if (document.activeElement !== el) {
+                ev.preventDefault();
+                el.focus();
+                sel();
+            }
+        });
     });
 }
 function chipW(i) {
