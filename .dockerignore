@@ -1,0 +1,29 @@
+# в образ сборки не нужны
+.git
+.gitignore
+.github
+.idea
+data
+out
+build
+.gradle
+testout
+test-results
+node_modules
+docs
+*.iml
+sources.txt
+update.bat
+update.ps1
+fix-nav.ps1
+test.bat
+package.json
+package-lock.json
+playwright.config.js
+
+# секреты — никогда не попадают в контекст/образ
+token.txt
+webapp.txt
+deploy_key
+deploy_key.pub
+.env
