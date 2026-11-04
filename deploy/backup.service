@@ -1,0 +1,11 @@
+[Unit]
+Description=GymHelper: бэкап data/ (/usr/local/bin/gym-backup.sh)
+# Сеть нужна для Telegram-уведомления; без неё бэкап всё равно отработает
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gym-backup.sh
+# data/ маленький (~сотни КБ на пользователя), 10 минут с запасом
+TimeoutStartSec=600
