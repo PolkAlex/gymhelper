@@ -1,0 +1,46 @@
+name: 🐛 Баг
+description: Что-то работает не так
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Что произошло
+      description: Ожидаемое и фактическое поведение
+      placeholder: Нажал «Завершить», но тренировка осталась активной…
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Шаги воспроизведения
+      placeholder: |
+        1. Начать тренировку
+        2. Добавить упражнение
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Где проявляется
+      options:
+        - Telegram-бот
+        - Mini App (приложение)
+        - Оба
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Устройство / платформа
+      options:
+        - Android (телефон)
+        - iOS (iPhone)
+        - Десктоп
+        - Не важно
+  - type: textarea
+    id: logs
+    attributes:
+      label: Логи / скриншоты
+      description: Если есть. Токены и личные данные не прикладывать!

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Справка по агентам и тестам
+    url: https://github.com/PolkAlex/gymhelper/blob/main/docs/СПРАВКА-АГЕНТЫ.md
+    about: Как гонять тесты и работать с агентами opencode

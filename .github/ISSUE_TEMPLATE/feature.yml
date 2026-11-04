@@ -1,0 +1,34 @@
+name: ✨ Фича
+description: Предложение новой функциональности
+labels: [feature]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Проблема / потребность
+      description: Какую задачу пользователя решаем
+      placeholder: Хочу экспортировать историю в CSV, чтобы анализировать в Excel
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Предложение
+      description: Как это должно работать (кратко)
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Где — бот, Mini App или оба
+      options:
+        - Telegram-бот
+        - Mini App (приложение)
+        - Оба
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Альтернативы и отсечённые варианты
+      description: Что ещё рассматривали и почему нет
