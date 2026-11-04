@@ -3,14 +3,15 @@
 # gym-backup.sh — ежедневный бэкап data/ GymHelper на VPS ([BAK-T1], issue #16)
 #
 # Что делает:
-#   1. Упаковывает DATA_DIR в BACKUP_DIR/PREFIX-YYYY-MM-DD-HHMM.tar.gz
-#      (внутри архива путь data/..., восстановление: tar -xzf в /opt/gym)
+#   1. Упаковывает DATA_DIR во временный файл и атомарно переименовывает в
+#      BACKUP_DIR/PREFIX-YYYY-MM-DD-HHMM.tar.gz (внутри архива путь data/...,
+#      восстановление: tar -xzf в /opt/gym); частичный архив не публикуется
 #   2. Ретеншн (решение владельца): 14 дневных + 8 недельных + 12 месячных
 #   3. Лог в LOG_FILE + stdout; опционально уведомление в Telegram
 #
 # Установка и восстановление данных: deploy/README-backup.md
 # Exit-коды: 0 — успех; 1 — ошибка; 2 — предыдущий запуск ещё не закончился.
-# Требования: bash, GNU date/tar/find; curl — только для Telegram-уведомлений.
+# Требования: bash, GNU date/tar; curl — только для Telegram-уведомлений.
 # =============================================================================
 
 # ---------- Настройки ----------
@@ -34,6 +35,7 @@ set -euo pipefail
 
 tmp=""            # временный файл ретеншна, чистится в on_exit
 LOCK_MODE=""      # "flock" | "dir" — способ захвата замка
+TG_SENT=0         # 1 = конкретное TG-уведомление об ошибке уже отправлено
 
 log() {
   local line="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -57,7 +59,8 @@ on_exit() {
   local code=$?
   if [ -n "$tmp" ] && [ -f "$tmp" ]; then rm -f "$tmp"; fi
   if [ "$LOCK_MODE" = "dir" ]; then rmdir "${LOCK_FILE}.dir" 2>/dev/null || true; fi
-  if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
+  # Общее уведомление об ошибке — только если конкретное ещё не отправлено (TG_SENT)
+  if [ "$code" -ne 0 ] && [ "$code" -ne 2 ] && [ "$TG_SENT" -eq 0 ]; then
     log "ERROR: бэкап завершился с кодом $code"
     tg_send "❌ GymHelper backup FAILED (exit $code)"
   fi
@@ -88,21 +91,27 @@ else
 fi
 
 # =============================================================================
-# Упаковка data/
+# Упаковка data/ (атомарно: сначала во временный файл, затем mv)
 # =============================================================================
 mkdir -p "$BACKUP_DIR"
 
 STAMP=$(date '+%Y-%m-%d-%H%M')
 ARCHIVE="$BACKUP_DIR/${ARCHIVE_PREFIX}-${STAMP}.tar.gz"
+# Временный файл: точка в начале + суффикс .partial => не попадает в маску
+# ретеншна и в листинг pull-стороны; частичный архив не считается валидным
+PARTIAL="$BACKUP_DIR/.${ARCHIVE_PREFIX}-${STAMP}.tar.gz.partial"
 
 log "Старт бэкапа: $DATA_DIR -> $ARCHIVE"
 # Внутри архива путь data/... : восстановление = tar -xzf в каталог /opt/gym
-if ! tar -czf "$ARCHIVE" -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")"; then
-  rm -f "$ARCHIVE"
+if ! tar -czf "$PARTIAL" -C "$(dirname "$DATA_DIR")" "$(basename "$DATA_DIR")"; then
+  rm -f "$PARTIAL"
   log "ERROR: tar завершился с ошибкой"
   tg_send "❌ GymHelper backup FAILED: tar error"
+  TG_SENT=1
   exit 1
 fi
+# mv в том же каталоге = атомарно: в BACKUP_DIR появляются только полные архивы
+mv "$PARTIAL" "$ARCHIVE"
 SIZE=$(du -h "$ARCHIVE" | cut -f1)
 log "Архив создан: $ARCHIVE ($SIZE)"
 
@@ -131,30 +140,38 @@ weekly_start=$(date -d "$this_monday - $(( (KEEP_WEEKLY - 1) * 7 )) days" '+%F')
 monthly_start=$(date -d "${today:0:7}-01 - $((KEEP_MONTHLY - 1)) months" '+%Y-%m')
 
 tmp=$(mktemp)
-# Список «дата|путь» всех архивов, сортировка по дате
+# Список «дата|путь» всех архивов, сортировка по дате.
+# WARN-лог внутри цикла идёт в stderr (>&2), чтобы не замусорить пайплайн в $tmp.
 for f in "$BACKUP_DIR/${ARCHIVE_PREFIX}"-*.tar.gz; do
   [ -e "$f" ] || continue                    # маска не совпала ни с одним файлом
   base=$(basename "$f")
   d=${base#"${ARCHIVE_PREFIX}-"}             # YYYY-MM-DD-HHMM.tar.gz
   d=${d:0:10}                                # YYYY-MM-DD
   if ! date -d "$d" '+%F' >/dev/null 2>&1 || [ "${d:4:1}${d:7:1}" != "--" ]; then
-    log "WARN: не разобрал дату в имени '$base' — файл не трогаю"
+    log "WARN: не разобрал дату в имени '$base' — файл не трогаю" >&2
     continue
   fi
   printf '%s|%s\n' "$d" "$f"
 done | sort > "$tmp"
 
+# Защита в глубину: оставляем только строки строго вида «YYYY-MM-DD|...»,
+# чтобы любая посторонняя строка (лог/мусор) не дошла до date/rm ниже
+grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\|' "$tmp" > "${tmp}.ok" || true
+mv "${tmp}.ok" "$tmp"
+
 # Якоря недель/месяцев: в каждой неделе и месяце запоминаем самый поздний архив
+# (>= : при нескольких архивах одной даты поздний по штампу побеждает первый)
 declare -A week_date=() week_file=() month_date=() month_file=()
 while IFS='|' read -r d f; do
-  [ -n "$d" ] || continue
+  [ -n "$d" ] && [ -n "${f:-}" ] || continue
+  [[ "$d" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
   # Понедельник недели, к которой относится дата d
   monday=$(date -d "$d - $(( $(date -d "$d" '+%u') - 1 )) days" '+%F')
   m=${d:0:7}
-  if [ -z "${week_date[$monday]:-}" ] || [[ "$d" > "${week_date[$monday]}" ]]; then
+  if [ -z "${week_date[$monday]:-}" ] || [[ "$d" > "${week_date[$monday]}" || "$d" == "${week_date[$monday]}" ]]; then
     week_date[$monday]="$d"; week_file[$monday]="$f"
   fi
-  if [ -z "${month_date[$m]:-}" ] || [[ "$d" > "${month_date[$m]}" ]]; then
+  if [ -z "${month_date[$m]:-}" ] || [[ "$d" > "${month_date[$m]}" || "$d" == "${month_date[$m]}" ]]; then
     month_date[$m]="$d"; month_file[$m]="$f"
   fi
 done < "$tmp"
@@ -165,7 +182,7 @@ n_daily=0; n_weekly=0; n_monthly=0
 
 # 1) Дневные: всё внутри дневного окна
 while IFS='|' read -r d f; do
-  [ -n "$d" ] || continue
+  [ -n "$d" ] && [ -n "${f:-}" ] || continue
   if [[ "$d" > "$daily_cutoff" || "$d" == "$daily_cutoff" ]]; then
     keep[$f]=1; n_daily=$((n_daily + 1))
   fi
@@ -188,7 +205,7 @@ done
 # Удаляем всё, что не попало ни в одну категорию
 n_deleted=0
 while IFS='|' read -r d f; do
-  [ -n "$d" ] || continue
+  [ -n "$d" ] && [ -n "${f:-}" ] || continue
   if [ -z "${keep[$f]:-}" ]; then
     rm -f "$f"
     log "Ретеншн: удаляю $(basename "$f") (от $d)"

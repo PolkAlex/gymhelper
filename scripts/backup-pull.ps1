@@ -57,7 +57,15 @@ try {
     }
     $latestName = ($latest -split '/')[ -1 ]     # имя файла без пути (пути с '/' — юникс)
 
-    # --- 2. Сравнить с маркером: не скачан ли этот архив раньше ---
+    # --- 2. Санитизация имени: строго маска gym-data-YYYY-MM-DD-HHMM.tar.gz.
+    # Защита от инъекций пути (../, слеши) и странного вывода сервера: файл с
+    # любым другим именем не качаем и не кладём в локальные пути.
+    if ($latestName -notmatch '^gym-data-\d{4}-\d{2}-\d{2}-\d{4}\.tar\.gz$') {
+        Write-Log "ERROR: с VPS получено неожиданное имя архива: '$latestName' — не соответствует маске, прерываю"
+        exit 1
+    }
+
+    # --- 3. Сравнить с маркером: не скачан ли этот архив раньше ---
     $lastPulled = ''
     if (Test-Path -LiteralPath $MarkerFile) {
         $raw = Get-Content -LiteralPath $MarkerFile -Raw
@@ -68,24 +76,36 @@ try {
         exit 0
     }
 
-    # --- 3. Скачать scp'ом в LocalDir ---
+    # --- 4. Проверить целостность архива на VPS до скачивания (gzip -t).
+    # Выбран gzip -t, а не проверка размера: CRC в конце потока ловит и обрыв
+    # записи, и битый архив; дешевле полного tar -tzf (не читает содержимое).
+    # На сервере backup.sh пишет архив во временный файл и делает mv — частичных
+    # файлов в $RemoteDir быть не должно, но проверка страхует от сбоев диска.
+    Write-Log "Проверяю целостность $latestName на VPS (gzip -t) ..."
+    & ssh -o BatchMode=yes -o ConnectTimeout=20 $VpsHost ("gzip -t '{0}/{1}'" -f $RemoteDir, $latestName)
+    if ($LASTEXITCODE -ne 0) {
+        throw "проверка целостности на VPS (gzip -t) не прошла для $latestName — архив битый/частичный, попробуем позже"
+    }
+
+    # --- 5. Скачать scp'ом в LocalDir ---
     $localPath = Join-Path $LocalDir $latestName
     Write-Log "Скачиваю $latestName с ${VpsHost}:$RemoteDir ..."
     & scp -o BatchMode=yes -o ConnectTimeout=20 ("{0}:{1}/{2}" -f $VpsHost, $RemoteDir, $latestName) $localPath
     if ($LASTEXITCODE -ne 0) {
         throw "scp завершился с кодом $LASTEXITCODE"
     }
+    # Проверка самого канала: файл существует и не пуст (gzip -t проверял копию на VPS)
     $file = Get-Item -LiteralPath $localPath
     if ($file.Length -le 0) {
         throw "скачанный файл пуст: $localPath"
     }
     Write-Log ("Скачано: {0} ({1:N0} байт)" -f $latestName, $file.Length)
 
-    # --- 4. Обновить маркер (только после успешного скачивания) ---
+    # --- 6. Обновить маркер (только после успешного скачивания) ---
     Set-Content -LiteralPath $MarkerFile -Value $latestName -Encoding ASCII
     Write-Log "Маркер обновлён: $MarkerFile -> $latestName"
 
-    # --- 5. Локальный ретеншн: удалить архивы старше $KeepDays дней ---
+    # --- 7. Локальный ретеншн: удалить архивы старше $KeepDays дней ---
     $cutoff = (Get-Date).AddDays(-$KeepDays)
     $deleted = 0
     Get-ChildItem -LiteralPath $LocalDir -Filter $ArchiveMask -File |
