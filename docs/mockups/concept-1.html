@@ -1,0 +1,439 @@
+﻿<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Концепт 1 · Mint Ledger — тёмный finance с мятным акцентом</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9d2dc;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption {
+    margin: 42px 2px 12px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #e9eef4;
+    letter-spacing: .2px;
+}
+.caption span { color: #3ddc97; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d8a98; line-height: 1.5; }
+
+/* ============ телефон ============ */
+.phone {
+    position: relative;
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+    height: 780px;
+    border-radius: 36px;
+    border: 1px solid #232a33;
+    overflow: hidden;
+    background: #0e1116;
+    box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+
+/* ============ тема Mint Ledger ============ */
+.p {
+    --bg: #0e1116; --card: #171d25; --card2: #202833; --entry: #131922;
+    --text: #e9eef4; --muted: #8b98a8;
+    --accent: #3ddc97; --accent-deep: #2bb37f; --on-accent: #0b1f16;
+    --danger: #ff7a7a; --border: #262f3a;
+    height: 100%; overflow-y: auto; overflow-x: hidden;
+    background: var(--bg);
+    scrollbar-width: none;
+}
+.p::-webkit-scrollbar { display: none; }
+
+/* ---- хедер Telegram (UX-I2: контент под шапкой) ---- */
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(14,17,22,.96) 60%, rgba(14,17,22,.78));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { letter-spacing: 1px; font-size: 10px; color: var(--muted); }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apphead .tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: var(--card2); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.fhrow .tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: none; color: var(--muted); font-size: 16px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.content { padding: 4px 14px 120px; }
+
+/* ---- hero (тоннаж недели) ---- */
+.hero {
+    border-radius: 20px;
+    background: linear-gradient(135deg, #2bb37f, #3ddc97);
+    color: var(--on-accent);
+    padding: 16px 16px 14px;
+    position: relative;
+    overflow: hidden;
+}
+.hero::after {
+    content: ''; position: absolute; right: -34px; top: -34px;
+    width: 130px; height: 130px; border-radius: 50%;
+    background: rgba(255,255,255,.14);
+}
+.hero .hlabel { font-size: 12px; font-weight: 600; opacity: .8; letter-spacing: .4px; }
+.hero .hnum { font-size: 40px; font-weight: 800; line-height: 1.05; margin-top: 4px; font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+.hero .hsub { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12.5px; font-weight: 600; }
+.delta { background: rgba(11,31,22,.18); border-radius: 9px; padding: 3px 9px; font-variant-numeric: tabular-nums; }
+
+/* ---- карточки ---- */
+.card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 18px; padding: 14px; margin-top: 12px;
+}
+.chead { display: flex; align-items: center; gap: 10px; }
+.chead .cn { flex: 1; min-width: 0; }
+.chead .cn b { display: block; font-size: 15.5px; font-weight: 700; color: var(--text); }
+.chead .cn span { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.spark { flex: none; }
+.wsum { font-size: 18px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.exblock { margin-top: 12px; border-radius: 14px; background: var(--entry); border: 1px solid var(--border); padding: 12px; }
+.exhead { display: flex; align-items: center; gap: 10px; }
+.exico {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    background: rgba(61,220,151,.12); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.exhead .en { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--text); }
+.setrow {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 8px 2px 8px 0; margin-top: 6px; border-top: 1px solid rgba(255,255,255,.04);
+    font-size: 13px; color: var(--text);
+}
+.setrow:first-of-type { border-top: none; }
+.setrow .idx { color: var(--muted); font-size: 12px; width: 18px; flex: none; font-variant-numeric: tabular-nums; }
+.setrow .st { flex: 1; min-width: 0; }
+.setrow .sw { font-weight: 700; font-variant-numeric: tabular-nums; }
+.addex {
+    margin-top: 12px; width: 100%; border: none; cursor: pointer;
+    background: var(--card2); color: var(--accent);
+    border-radius: 12px; padding: 11px; font-size: 13.5px; font-weight: 700;
+}
+
+/* ---- нижняя навигация: 4 таба + центральная FAB ---- */
+.nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -14px; padding: 8px 18px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(14,17,22,.2), rgba(14,17,22,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6b7887; font-size: 10px; font-weight: 600; padding: 2px 0; min-width: 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { font-size: 19px; line-height: 1; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(61,220,151,.35);
+}
+
+/* ============ форма «Новая запись» (полноэкранная, UX-I2) ============ */
+.formhead {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(14,17,22,.96) 60%, rgba(14,17,22,.78));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.fhrow { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.fhrow .ft { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); }
+.fhrow .fsub { font-size: 12px; color: var(--accent); font-weight: 600; }
+.flabel { font-size: 12.5px; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+.inp {
+    width: 100%; border: 1px solid var(--border); border-radius: 14px;
+    background: var(--entry); color: var(--text);
+    font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums;
+    padding: 12px 14px; outline: none; font-family: inherit;
+}
+.inp:focus { border-color: var(--accent); }
+.prevpill {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    margin-top: 8px; border: 1px dashed rgba(61,220,151,.45);
+    background: rgba(61,220,151,.08); color: var(--accent);
+    border-radius: 999px; padding: 7px 12px; font-size: 12.5px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.keyrow { display: flex; gap: 5px; margin-top: 8px; }
+.keyrow .k {
+    flex: 1 1 0; min-width: 0; border: none; cursor: pointer;
+    background: var(--card2); color: var(--text);
+    border-radius: 10px; padding: 10px 0; font-size: 13px; font-weight: 700;
+    font-variant-numeric: tabular-nums; font-family: inherit;
+    transition: transform .12s ease;
+}
+.keyrow .k:active { transform: scale(.95); background: #2a333f; }
+.keyrow .k.plus { color: var(--accent); }
+.bigadd {
+    margin-top: 20px; width: 100%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 16px; padding: 15px;
+    font-size: 16px; font-weight: 800; font-family: inherit;
+}
+.bigadd:active { transform: scale(.98); }
+
+/* ============ отличительный компонент: спарклайн-тренд ============ */
+.trendcard { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 16px; }
+.trendcard .th { font-size: 13px; color: var(--muted); font-weight: 600; }
+.trendcard .tv { display: flex; align-items: baseline; gap: 10px; margin-top: 4px; }
+.trendcard .tv b { font-size: 30px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.up { color: var(--accent); font-weight: 700; font-size: 13px; }
+.down { color: var(--danger); font-weight: 700; font-size: 13px; }
+.tlegend { display: flex; gap: 14px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+.tlegend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+
+/* адаптация под узкие экраны */
+@media (max-width: 379px) {
+    .keyrow { gap: 4px; }
+    .keyrow .k { font-size: 12px; padding: 10px 0; border-radius: 9px; }
+    .hero .hnum { font-size: 34px; }
+}
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">Концепт 1 · Mint Ledger <span>тёмный finance · мятный акцент</span></div>
+    <div class="note">Референс: Stockline. Метафора «тренировка = инвестиция»: hero-карточка тоннажа как портфель,
+    дельты ↑/↓, спарклайны. Контент заходит под шапку Telegram (UX-I2). Форма ниже — рабочая: кнопки нажимаются.</div>
+
+    <!-- ================= ЭКРАН 1: ИСТОРИЯ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">Дневник тренировок</div>
+                    <button class="tbtn">⋯</button><button class="tbtn">×</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="hero">
+                    <div class="hlabel">ТОННАЖ НЕДЕЛИ</div>
+                    <div class="hnum">4 260 кг</div>
+                    <div class="hsub"><span class="delta">↑ +12%</span><span style="opacity:.75">прошлая неделя: 3 805 кг</span></div>
+                </div>
+
+                <div class="card">
+                    <div class="chead">
+                        <div class="cn"><b>Жим лёжа · присед</b><span>3 ноября, вторник · 18:20–19:05 · 470 ккал</span></div>
+                        <svg class="spark" width="64" height="24" viewBox="0 0 64 24"><polyline points="2,18 12,14 22,16 32,10 42,12 52,6 62,4" fill="none" stroke="#3ddc97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="exblock">
+                        <div class="exhead"><span class="exico">🏋</span><span class="en">Жим лёжа</span><span class="wsum">195 кг</span></div>
+                        <div class="setrow"><span class="idx">1</span><span class="st"><span class="sw">65 кг,</span> 3 подхода по 10 повторений</span></div>
+                        <div class="setrow"><span class="idx">2</span><span class="st"><span class="sw">70 кг,</span> 3 подхода по 8 повторений</span></div>
+                    </div>
+                    <div class="exblock">
+                        <div class="exhead"><span class="exico">🦵</span><span class="en">Приседания</span><span class="wsum">270 кг</span></div>
+                        <div class="setrow"><span class="idx">1</span><span class="st"><span class="sw">90 кг,</span> 4 подхода по 8 повторений</span></div>
+                    </div>
+                    <button class="addex">+ Добавить упражнение</button>
+                </div>
+
+                <div class="card">
+                    <div class="chead">
+                        <div class="cn"><b>Спина · тяга</b><span>1 ноября, воскресенье · 17:40–18:25 · 410 ккал</span></div>
+                        <svg class="spark" width="64" height="24" viewBox="0 0 64 24"><polyline points="2,16 12,12 22,14 32,8 42,10 52,8 62,6" fill="none" stroke="#3ddc97" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <div class="exblock">
+                        <div class="exhead"><span class="exico">💪</span><span class="en">Подтягивания</span><span class="wsum">—</span></div>
+                        <div class="setrow"><span class="idx">1</span><span class="st">3 подхода по 8 повторений</span></div>
+                    </div>
+                    <div class="exblock">
+                        <div class="exhead"><span class="exico">🏋</span><span class="en">Тяга штанги</span><span class="wsum">180 кг</span></div>
+                        <div class="setrow"><span class="idx">1</span><span class="st"><span class="sw">60 кг,</span> 3 подхода по 10 повторений</span></div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="chead">
+                        <div class="cn"><b>Плечи · руки</b><span>29 октября, четверг · 19:00–19:35</span></div>
+                        <svg class="spark" width="64" height="24" viewBox="0 0 64 24"><polyline points="2,14 12,16 22,12 32,14 42,10 52,12 62,8" fill="none" stroke="#8b98a8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                </div>
+
+                <div class="nav">
+                    <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                    <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                    <button class="nfab">+</button>
+                    <button class="nbtn"><span class="nic">📖</span>Каталог</button>
+                    <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="caption">Экран 2 · Новая запись <span>полноэкранная форма · UX-I2</span></div>
+    <div class="note">Без чипсов-подсказок (решения #9/#10). Бейдж «Предыдущий подход: 65 кг» (UX-I1) — тап подставляет
+    значение в поле веса. Подпись повторений — ровно «Повторения (например 12, 8-10)», слова «макс» нет.</div>
+
+    <!-- ================= ЭКРАН 2: НОВАЯ ЗАПИСЬ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="formhead">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="fhrow">
+                    <button class="tbtn" style="background:none">×</button>
+                    <div class="ft">Новая запись <div class="fsub">Жим лёжа · вторая тренировка недели</div></div>
+                </div>
+            </div>
+            <div class="content">
+                <div class="flabel">Вес, кг</div>
+                <input class="inp" id="inpWeight" type="text" inputmode="decimal" value="70">
+                <button class="prevpill" data-prev="65">↺ Предыдущий подход: 65 кг — подставить</button>
+                <div class="keyrow">
+                    <button class="k plus" data-wadd="0.5">+0,5</button>
+                    <button class="k plus" data-wadd="1">+1</button>
+                    <button class="k plus" data-wadd="2">+2</button>
+                    <button class="k plus" data-wadd="5">+5</button>
+                    <button class="k plus" data-wadd="10">+10</button>
+                    <button class="k plus" data-wadd="15">+15</button>
+                    <button class="k plus" data-wadd="20">+20</button>
+                    <button class="k plus" data-wadd="50">+50</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k" data-wset="10">10</button>
+                    <button class="k" data-wset="20">20</button>
+                    <button class="k" data-wset="30">30</button>
+                    <button class="k" data-wset="50">50</button>
+                    <button class="k" data-wset="60">60</button>
+                    <button class="k" data-wset="80">80</button>
+                    <button class="k" data-wset="100">100</button>
+                    <button class="k" data-wset="200">200</button>
+                </div>
+
+                <div class="flabel">Подходы</div>
+                <input class="inp" id="inpSets" type="text" inputmode="numeric" value="3">
+                <div class="keyrow">
+                    <button class="k" data-sset="1">1</button>
+                    <button class="k" data-sset="2">2</button>
+                    <button class="k" data-sset="3">3</button>
+                    <button class="k" data-sset="4">4</button>
+                    <button class="k" data-sset="5">5</button>
+                    <button class="k" data-sset="6">6</button>
+                    <button class="k" data-sset="7">7</button>
+                    <button class="k" data-sset="8">8</button>
+                </div>
+
+                <div class="flabel">Повторения (например 12, 8-10)</div>
+                <input class="inp" id="inpReps" type="text" value="10">
+                <div class="keyrow">
+                    <button class="k" data-rset="1">1</button>
+                    <button class="k" data-rset="2">2</button>
+                    <button class="k" data-rset="3">3</button>
+                    <button class="k" data-rset="4">4</button>
+                    <button class="k" data-rset="5">5</button>
+                    <button class="k" data-rset="6">6</button>
+                    <button class="k" data-rset="7">7</button>
+                    <button class="k" data-rset="8">8</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k plus" data-radd="1">+1</button>
+                    <button class="k plus" data-radd="2">+2</button>
+                    <button class="k plus" data-radd="5">+5</button>
+                    <button class="k plus" data-radd="10">+10</button>
+                </div>
+
+                <button class="bigadd">Добавить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="caption">Экран 3 · Отличительный компонент <span>финансовый тренд + спарклайны</span></div>
+    <div class="note">Карточка тренда веса упражнения — как график акции: большая цифра, дельта за неделю, спарклайн.</div>
+
+    <!-- ================= ЭКРАН 3: КОМПОНЕНТ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">Жим лёжа · тренд</div>
+                    <button class="tbtn">⋯</button><button class="tbtn">×</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="trendcard">
+                    <div class="th">СРЕДНИЙ ВЕС ПОДХОДА · 4 НЕДЕЛИ</div>
+                    <div class="tv"><b>72,5 кг</b><span class="up">↑ +5,0 кг за неделю</span></div>
+                    <svg width="100%" height="120" viewBox="0 0 340 120" preserveAspectRatio="none" style="margin-top:10px">
+                        <defs>
+                            <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0" stop-color="#3ddc97" stop-opacity=".28"/>
+                                <stop offset="1" stop-color="#3ddc97" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+                        <path d="M10,88 L58,74 L106,80 L154,56 L202,62 L250,38 L298,30 L330,20 L330,120 L10,120 Z" fill="url(#g1)"/>
+                        <path d="M10,88 L58,74 L106,80 L154,56 L202,62 L250,38 L298,30 L330,20" fill="none" stroke="#3ddc97" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        <circle cx="330" cy="20" r="4" fill="#3ddc97"/>
+                    </svg>
+                    <div class="tlegend">
+                        <span><i style="background:#3ddc97"></i>70 кг · 3×8</span>
+                        <span><i style="background:#2bb37f"></i>72,5 кг · 3×8</span>
+                    </div>
+                </div>
+
+                <div class="trendcard" style="margin-top:12px">
+                    <div class="th">ПОСЛЕДНИЕ ПОДХОДЫ</div>
+                    <div class="setrow" style="border-top:none"><span class="idx">1</span><span class="st"><span class="sw">70 кг,</span> 8 повторений</span><span class="up">↑ +5</span></div>
+                    <div class="setrow"><span class="idx">2</span><span class="st"><span class="sw">72,5 кг,</span> 8 повторений</span><span class="up">↑ +2,5</span></div>
+                    <div class="setrow"><span class="idx">3</span><span class="st"><span class="sw">70 кг,</span> 10 повторений</span><span class="down">↓ −2,5</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+<script>
+(function(){
+    function num(v){ return parseFloat(String(v).replace(',', '.')) || 0; }
+    function fmt(v){ return String(Math.round(v*100)/100).replace('.', ','); }
+    document.addEventListener('click', function(ev){
+        var t = ev.target.closest('[data-wadd],[data-wset],[data-sset],[data-rset],[data-radd],[data-prev]');
+        if(!t) return;
+        var w = document.getElementById('inpWeight');
+        if(w){
+            if(t.hasAttribute('data-wadd')) w.value = fmt(num(w.value) + parseFloat(t.dataset.wadd));
+            if(t.hasAttribute('data-wset')) w.value = t.dataset.wset;
+            if(t.hasAttribute('data-prev')) w.value = t.dataset.prev;
+        }
+        var s = document.getElementById('inpSets');
+        if(s && t.hasAttribute('data-sset')) s.value = t.dataset.sset;
+        var r = document.getElementById('inpReps');
+        if(r){
+            if(t.hasAttribute('data-rset')) r.value = t.dataset.rset;
+            if(t.hasAttribute('data-radd')){
+                var m = String(r.value).match(/\d+/g);
+                var cur = m ? +m[m.length-1] : 0;
+                r.value = (cur + parseInt(t.dataset.radd,10));
+            }
+        }
+    });
+})();
+</script>
+</body>
+</html>
