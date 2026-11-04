@@ -16,18 +16,18 @@ test.beforeEach(async function ({ context }) {
 
 async function openApp(page) {
     await page.goto('/');
-    await expect(page.locator('#app .hero')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
 }
 async function startAndPick(page, name) {
-    await page.locator('[data-act="startWorkout"]').click();
+    await page.locator('.nav .nfab').click();
     const modal = page.locator('.modal.open');
     await modal.waitFor({ state: 'visible', timeout: 5000 });
     await modal.locator('.excard', { hasText: name }).first().click();
     await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
 }
-/* активная тренировка на вкладке Тренировка свёрнута в пилюлю — тап открывает её карточку */
+/* активная тренировка в истории свёрнута в стеклянную превью-карточку — тап открывает её карточку */
 async function startWorkoutUi(page) {
-    await page.locator('[data-act="startWorkout"]').click();
+    await page.locator('.nav .nfab').click();
     await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
     await page.locator('.modal.open [data-act="closeModal"]').click();
     await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
@@ -36,7 +36,7 @@ async function openActiveDetail(page) {
     if (await page.locator('.expill').first().isVisible().catch(function () { return false; })) return;
     /* уже внутри карточки (после старта попадаем сразу сюда) */
     if (await page.locator('.backbar').isVisible().catch(function () { return false; })) return;
-    await page.locator('.wrow').first().click();
+    await page.locator('.pcard').first().click();
     await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
 }
 
@@ -44,7 +44,7 @@ test.describe('GymHelper e2e', function () {
 
     test('старт: пикер открывается сразу после начала тренировки', async ({ page }) => {
         await openApp(page);
-        await page.locator('[data-act="startWorkout"]').click();
+        await page.locator('.nav .nfab').click();
         /* после старта — сразу экран редактирования (карточка тренировки), а не Главный */
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
         await page.locator('.modal.open [data-act="closeModal"]').click();
@@ -171,7 +171,8 @@ test.describe('GymHelper e2e', function () {
         await openActiveDetail(page);
         await page.locator('.wcicons [data-act="confirmModal"]').click();
         await page.locator('.modal.open [data-act="confirmYes"]').click();
-        await expect(page.locator('.empty')).toBeVisible({ timeout: 5000 });
+        /* пустая история: hero-карточка старта вместо превью */
+        await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.pcard')).toHaveCount(0);
     });
 
@@ -192,13 +193,18 @@ test.describe('GymHelper e2e', function () {
 
     test('навигация по вкладкам, тренер и профиль', async ({ page }) => {
         await openApp(page);
-        for (const label of ['История', 'Тренер', 'Техника', 'Статистика']) {
+        for (const label of ['Статистика', 'Техника']) {
             await page.locator('.nav button', { hasText: label }).click();
             await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
         }
         await page.locator('.topbar .tb-user').click();
-        await expect(page.locator('#app .themegrid')).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.themecard.on')).toHaveCount(1);
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        /* переключатель темы: ровно одна активная из двух */
+        await expect(page.locator('.themetoggle')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.themetoggle .btn:not(.sec)')).toHaveCount(1);
+        /* раздел «Тренер» доступен из профиля */
+        await page.locator('#app button', { hasText: 'Открыть раздел' }).click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Тренер', { timeout: 5000 });
     });
 
     test('время и дата тренировки: маски ввода', async ({ page }) => {
@@ -281,7 +287,7 @@ test.describe('GymHelper e2e', function () {
             }]
         } } });
         await page.goto('/');
-        await expect(page.locator('#app .hero')).toBeVisible({ timeout: 10000 });
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
         await page.locator('.pcard').first().click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
 
@@ -349,7 +355,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="saveWorkout"]').click();
         await expect(page.locator('.toast.show')).toBeVisible({ timeout: 5000 });
         await page.reload();
-        await expect(page.locator('#app .hero')).toBeVisible({ timeout: 10000 });
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
     });
@@ -468,13 +474,73 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' })).toBeVisible();
     });
 
-    test('навигация сворачивается при скролле и разворачивается наверху', async ({ page }) => {
+    test('нижняя панель: 4 таба, янтарная FAB, закреплена при скролле', async ({ page }) => {
         await openApp(page);
+        const nav = page.locator('.nav');
+        await expect(nav.locator('.nbtn')).toHaveCount(4);
+        await expect(nav.locator('.nfab')).toHaveCount(1);
+        await expect(nav.locator('.nbtn', { hasText: 'История' })).toHaveClass(/on/);
         await page.evaluate(function () { document.body.style.minHeight = '2200px'; });
         await page.evaluate(function () { window.scrollTo(0, 500); });
-        await expect(page.locator('.nav.min')).toHaveCount(1, { timeout: 5000 });
-        await page.evaluate(function () { window.scrollTo(0, 0); });
-        await expect(page.locator('.nav.min')).toHaveCount(0, { timeout: 5000 });
+        await page.waitForTimeout(300);
+        const box = await nav.boundingBox();
+        const vh = await page.evaluate(function () { return window.innerHeight; });
+        if (!box) throw new Error('навигация не найдена');
+        if (Math.abs(box.y + box.height - vh) > 5) throw new Error('навигация не закреплена внизу при скролле: y=' + box.y.toFixed(1) + ', vh=' + vh);
+        await expect(nav.locator('.nfab')).toBeVisible();
+        /* FAB начинает тренировку */
+        await nav.locator('.nfab').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('UX-I1: бейдж предыдущего подхода подставляет вес в один тап', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        /* первый подход: бейджа ещё нет — подходов с весом в упражнении нет */
+        await expect(page.locator('.prevpill')).toHaveCount(0);
+        await page.locator('#mWeight').fill('70');
+        await page.locator('[data-act="setsSet"][data-a="1"]').click();
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+
+        /* второй подход: бейдж показывает последний подход с весом и подставляет его */
+        await openActiveDetail(page);
+        await page.locator('.expill .btnrow [data-act="openEntryModal"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        const pill = page.locator('.prevpill');
+        await expect(pill).toContainText('↺ Предыдущий подход: 70 кг — подставить', { timeout: 5000 });
+        await page.locator('#mWeight').fill('0');
+        await pill.click();
+        await expect(page.locator('#mWeight')).toHaveValue('70');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry')).toHaveCount(2, { timeout: 5000 });
+        await expect(page.locator('.expill .entry').nth(1)).toContainText('70 кг, 1 подход по 10 повторений', { timeout: 5000 });
+    });
+
+    test('форма записи: без чипсов-подсказок, подписи по макету', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        /* чипсов-подсказок нет (старые 70/90/95/100 кг, «Без веса», чипсы повторений удалены) */
+        await expect(page.locator('.modal.open .chip')).toHaveCount(0);
+        await expect(page.locator('.modal.open .mini-row, .modal.open .mbtn')).toHaveCount(0);
+        /* подписи по гибриду */
+        await expect(page.locator('.modal.open .flabel', { hasText: 'Вес, кг (0 — без веса)' })).toHaveCount(1);
+        await expect(page.locator('.modal.open .flabel', { hasText: 'Повторения (например 12, 8-10)' })).toHaveCount(1);
+        /* инкременты веса +0,5…+50 и ряд 10…200 */
+        await expect(page.locator('.modal.open [data-act="wAdd"]')).toHaveCount(8);
+        await expect(page.locator('.modal.open [data-act="wSet"]')).toHaveCount(8);
+        await expect(page.locator('.modal.open .modal-box', { hasText: '+0,5' })).toBeVisible();
+        /* подходы 1-8, повторения 1-8 + +1/+2/+5/+10 (ряда 9-12 нет) */
+        await expect(page.locator('.modal.open [data-act="setsSet"]')).toHaveCount(8);
+        await expect(page.locator('.modal.open [data-act="repsSet"]')).toHaveCount(8);
+        await expect(page.locator('.modal.open [data-act="repsAdd"]')).toHaveCount(4);
+        await page.locator('[data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible();
     });
 
     test('вес: кнопки +N прибавляют к значению, дефолт 0', async ({ page }) => {
@@ -485,7 +551,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="wAdd"][data-a="15"]').click();
         await expect(page.locator('#mWeight')).toHaveValue('35');
         await page.locator('[data-act="setsSet"][data-a="2"]').click();
-        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('#mReps').fill('12');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -497,7 +563,7 @@ test.describe('GymHelper e2e', function () {
         await startAndPick(page, EX);
         await expect(page.locator('#mWeight')).toHaveValue('0');
         await page.locator('[data-act="setsSet"][data-a="1"]').click();
-        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('#mReps').fill('12');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -527,7 +593,7 @@ test.describe('GymHelper e2e', function () {
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
         await page.locator('[data-act="setsSet"][data-a="1"]').click();
-        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('#mReps').fill('10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -548,7 +614,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="wAdd"][data-a="50"]').click();
         await expect(page.locator('#mWeight')).toHaveValue('50.5');
         await page.locator('[data-act="setsSet"][data-a="1"]').click();
-        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('#mReps').fill('12');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -563,14 +629,14 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="wSet"][data-a="60"]').click();
         await expect(page.locator('#mWeight')).toHaveValue('60');
         await page.locator('[data-act="setsSet"][data-a="3"]').click();
-        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('#mReps').fill('10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry').first()).toContainText('60 кг, 3 подхода по 10 повторений', { timeout: 5000 });
     });
 
-    test('повторения: ряд 1-8 и нижний 9-12/+N', async ({ page }) => {
+    test('повторения: кнопки 1-8 и инкременты +N', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('[data-act="repsSet"][data-a="7"]').click();
@@ -598,7 +664,7 @@ test.describe('GymHelper e2e', function () {
         /* после очистки значение вводится заново и сохраняется */
         await page.locator('[data-act="wAdd"][data-a="50"]').click();
         await page.locator('[data-act="setsSet"][data-a="3"]').click();
-        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('#mReps').fill('10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -610,7 +676,7 @@ test.describe('GymHelper e2e', function () {
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
         await page.locator('[data-act="setsSet"][data-a="3"]').click();
-        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('#mReps').fill('10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -618,12 +684,12 @@ test.describe('GymHelper e2e', function () {
         /* второе и третье упражнения — чтобы в превью было ровно 3 строки упражнений */
         await page.locator('[data-act="openPicker"]').click();
         await page.locator('.modal.open .excard', { hasText: 'Подтягивания' }).first().click();
-        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await page.locator('#mReps').fill('10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="openPicker"]').click();
         await page.locator('.modal.open .excard', { hasText: 'Жим ногами' }).first().click();
-        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await page.locator('#mReps').fill('12');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -724,13 +790,20 @@ test.describe('GymHelper e2e', function () {
     });
 
 
-    test('выбранная тема сохраняется после перезагрузки', async ({ page, request }) => {
+    test('темы: подсказка клиента при первом входе, выбор сохраняется после перезагрузки', async ({ page }) => {
         await openApp(page);
+        /* telegram-web-app.js вне Telegram отдаёт светлую тему клиента — подсказка = light */
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light', { timeout: 5000 });
         await page.locator('.topbar .tb-user').click();
-        await page.locator('.themecard', { hasText: 'Stockline' }).click();
-        await expect(page.locator('html')).toHaveAttribute('data-theme', 'stockline', { timeout: 5000 });
+        await page.locator('.themetoggle [data-act="setTheme"][data-a="dark"]').click();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark', { timeout: 5000 });
         await page.reload();
-        await expect(page.locator('html')).toHaveAttribute('data-theme', 'stockline', { timeout: 5000 });
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark', { timeout: 5000 });
+        /* возврат на светлую тоже сохраняется */
+        await page.locator('.topbar .tb-user').click();
+        await page.locator('.themetoggle [data-act="setTheme"][data-a="light"]').click();
+        await page.reload();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light', { timeout: 5000 });
     });
 
     test('id удалённой тренировки не переиспользуется (tombstone-защита от коллизий)', async ({ page, request }) => {
@@ -757,9 +830,8 @@ test.describe('GymHelper e2e', function () {
     test('повторный «Начать тренировку» не создаёт дубликат', async ({ page, request }) => {
         await openApp(page);
         await startWorkoutUi(page);
-        /* после старта мы на экране редактирования — возвращаемся на Главный и жмём «Начать» ещё раз */
-        await page.locator('.nav button', { hasText: 'Тренировка' }).click();
-        await page.locator('[data-act="startWorkout"]').click();
+        /* после старта мы на экране карточки — жмём FAB ещё раз: активная тренировка открывается, дубликат не создаётся */
+        await page.locator('.nav .nfab').click();
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
         await page.locator('.modal.open [data-act="closeModal"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
@@ -800,7 +872,7 @@ test.describe('мобильный (тач-экран)', function () {
 
     test('полный флоу с тача: старт, вес с клавиатуры, запись сохраняется', async ({ page }) => {
         await openApp(page);
-        await touchTap(page, page.locator('[data-act="startWorkout"]'));
+        await touchTap(page, page.locator('.nav .nfab'));
         const modal = page.locator('.modal.open');
         await modal.waitFor({ state: 'visible', timeout: 5000 });
         await touchTap(page, modal.locator('.excard', { hasText: EX }).first());
@@ -816,7 +888,7 @@ test.describe('мобильный (тач-экран)', function () {
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
         await page.reload();
-        await expect(page.locator('#app .hero')).toBeVisible({ timeout: 10000 });
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
     });
