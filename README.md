@@ -1,5 +1,7 @@
 # 💪 MyHelper — Telegram-бот: дневник тренировок
 
+[![CI](https://github.com/PolkAlex/gymhelper/actions/workflows/ci.yml/badge.svg)](https://github.com/PolkAlex/gymhelper/actions/workflows/ci.yml)
+
 Бот для записи занятий в тренажёрном зале, по аналогии с мобильными приложениями
 (Strong, Hevy): пошаговый ввод упражнений с подсказками, история, статистика,
 расчёт калорий и прогресс от тренировки к тренировке.
@@ -48,11 +50,24 @@
 
 ### Из консоли (PowerShell)
 ```powershell
+# через Gradle (сборка + контрактный тест + jar)
+.\gradlew.bat --no-daemon build
+java -jar build\libs\gymhelper-1.0.0.jar
+
+# по-старинке, без Gradle
 javac -encoding UTF-8 -d out (Get-ChildItem -Recurse src -Filter *.java).FullName
 java -cp out gym.Main
 ```
 
 Остановить бота — `Ctrl+C`.
+
+### Docker (VPS или локально с Docker Desktop)
+```powershell
+# токен в файл .env (в .gitignore): GYM_BOT_TOKEN=123456:ABC-DEF...
+docker compose up -d --build     # сборка + запуск, data/ в том же месте
+docker compose logs -f           # логи
+docker compose down              # остановить
+```
 
 ## 📱 Telegram Mini App (приложение)
 
@@ -106,7 +121,7 @@ ngrok http --domain=xxx.ngrok-free.app 8080
 ## Структура проекта
 
 ```
-src/gym/
+src/gym/                — Java-код бота (без внешних зависимостей)
 ├── Main.java          — точка входа, цикл long polling
 ├── BotLogic.java      — вся логика бота (мастер ввода, редактирование, ккал, прогресс)
 ├── TelegramApi.java   — клиент Telegram Bot API (HTTP, HTML parse_mode, inline-клавиатуры)
@@ -119,6 +134,12 @@ src/gym/
 ├── Exercises.java     — каталог упражнений (личный список)
 ├── Storage.java       — загрузка/сохранение данных в data/*.json
 ├── UserState.java     — состояние диалога (шаг мастера, редактирование, подсказки)
-├── web/WebServer.java — HTTP-сервер Mini App (статика + API + проверка initData)
-└── web/ (корень)      — index.html, app.js, style.css — фронтенд приложения
+└── web/WebServer.java — HTTP-сервер Mini App (статика + API + проверка initData)
+
+web/ (корень)           — index.html, app.js, catalog.js, style.css — фронтенд приложения
+tests/                  — e2e.spec.js (Playwright), GymContractTest.java, check.js, server-test.js
+.github/workflows/ci.yml — CI: сборка + контрактный тест + e2e на 4 устройствах
+build.gradle / gradlew  — сборка Gradle (jar: build/libs/gymhelper-1.0.0.jar)
+Dockerfile / docker-compose.yml — контейнер для VPS
+docs/                   — дизайн-спецификации, макеты, карта покрытия тестами
 ```

@@ -1,4 +1,4 @@
-const { defineConfig } = require('@playwright/test');
+const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
     testDir: 'tests',
@@ -16,5 +16,11 @@ module.exports = defineConfig({
         port: 8099,
         reuseExistingServer: true,
         timeout: 15000
-    }
+    },
+    projects: [
+        { name: 'desktop', use: { viewport: { width: 1280, height: 720 } } },
+        { name: 'iphone13', use: { ...devices['iPhone 13'] } },
+        { name: 'pixel7', use: { ...devices['Pixel 7'] } },
+        { name: 'android360', use: { viewport: { width: 360, height: 740 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } }
+    ]
 });
