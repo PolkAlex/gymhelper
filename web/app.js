@@ -1292,15 +1292,14 @@ function openEntryModalIdx(w, exIdx, setIdx) {
             return '<button class="k" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
         '</div>' +
-        '<div class="keyrow">' +
-        ['1', '2', '5', '10'].map(function (n) {
-            return '<button class="k plus" data-act="repsAdd" data-a="' + n + '">+' + n + '</button>';
-        }).join('') +
-        '</div>' +
-        /* пресеты частых значений: тап вставляет значение целиком (как старые чипсы) */
+        /* второй ряд: пресеты частых значений в начале (тап вставляет значение целиком,
+           как старые чипсы), инкременты дальше — всего два ряда, без третьей строки */
         '<div class="keyrow">' +
         ['10', '12'].map(function (n) {
             return '<button class="k" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
+        }).join('') +
+        ['1', '2', '5', '10'].map(function (n) {
+            return '<button class="k plus" data-act="repsAdd" data-a="' + n + '">+' + n + '</button>';
         }).join('') +
         '</div>' +
         '</div>';

@@ -336,7 +336,7 @@ textarea { min-height: 70px; resize: vertical; }
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     border-radius: 14px;
-    padding: 7px 12px;
+    padding: 6px 12px;
     background: var(--field);
 }
 /* строка ввода с кнопкой «Очистить» справа (прозрачная, только текст) */
@@ -366,7 +366,7 @@ textarea { min-height: 70px; resize: vertical; }
     background: var(--btn);
     color: var(--text);
     border-radius: 10px;
-    padding: 7px 0;
+    padding: 6px 0;
     font-size: 13px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
