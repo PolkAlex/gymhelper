@@ -39,6 +39,15 @@ async function openActiveDetail(page) {
     await page.locator('.pcard').first().click();
     await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
 }
+function isoDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+/* завершённая тренировка с одним упражнением и одним подходом */
+function doneWorkout(id, day, name, w, sets) {
+    return { id: id, date: day, started: day + 'T09:30:00', ended: day + 'T10:30:00', finished: true, title: '', nutrition: '',
+        exercises: [{ name: name, st: day + 'T09:31:00', en: day + 'T10:00:00',
+            sets: [{ w: w, s: sets, r: '8-10', t: day + 'T09:32:00' }] }] };
+}
 
 test.describe('GymHelper e2e', function () {
 
@@ -333,6 +342,64 @@ test.describe('GymHelper e2e', function () {
         const kcal = await page.locator('.wpill.wp-k').boundingBox();
         const firstEx = await page.locator('.expill').first().boundingBox();
         if (kcal.y + kcal.height > firstEx.y) throw new Error('пилюля ккал провалилась ниже карточки упражнения');
+    });
+
+    test('статистика: карточка рекорда недели со шкалой', async ({ page, request }) => {
+        /* тренировка этой недели (жим 100) и старая тренировка 3 недели назад (личный рекорд 120) */
+        const now = new Date();
+        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+        const weekDay = isoDate(now);
+        const oldDay = isoDate(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 21));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, oldDay, EX, '120', 3), doneWorkout(2, weekDay, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const card = page.locator('.reccard', { hasText: 'Рекорд недели · ' + EX });
+        await expect(card).toHaveCount(1, { timeout: 5000 });
+        await expect(card.locator('.rec-num')).toContainText('100');
+        await expect(card.locator('.rec-num')).toContainText('кг');
+        /* шкала = % от личного рекорда: 100 из 120 = 83% */
+        await expect(card.locator('.rec-bar i')).toHaveAttribute('style', /width:\s*83%/);
+        const sub = card.locator('.rec-sub');
+        await expect(sub).toContainText('личный рекорд: 120 кг');
+        await expect(sub).toContainText('83%');
+        /* тренировки не подряд: карточка серии (даже из одного дня) не показывается */
+        await expect(page.locator('.strow')).toHaveCount(0);
+        /* мышечные группы этой недели: жим = грудь, 3 подхода */
+        const mg = page.locator('.mg', { hasText: 'Грудь' });
+        await expect(mg).toBeVisible({ timeout: 5000 });
+        await expect(mg).toContainText('3 подх.');
+        /* старые блоки на месте в компактном виде */
+        await expect(page.locator('.statgrid')).toContainText('тренировок всего');
+        await expect(page.locator('.statgrid')).toContainText('подходов всего');
+        await expect(page.locator('.card', { hasText: 'Тренды' })).toBeVisible();
+        await expect(page.locator('.card', { hasText: 'Упражнения' })).toBeVisible();
+    });
+
+    test('статистика: серия из двух дней подряд и группы недели', async ({ page, request }) => {
+        const now = new Date();
+        const today = isoDate(now);
+        const yesterday = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+        const DOWS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+        const dow = function (iso) { const p = iso.split('-'); return DOWS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; };
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, yesterday, 'Подтягивания', '0', 4), doneWorkout(2, today, EX, '80', 4)]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const st = page.locator('.strow');
+        await expect(st).toBeVisible({ timeout: 5000 });
+        await expect(st.locator('b')).toContainText('Серия: 2 тренировки подряд');
+        /* дни недели серии в хронологическом порядке + «самая длинная за месяц» */
+        await expect(st).toContainText(dow(yesterday) + ' · ' + dow(today) + ' — самая длинная за месяц');
+        /* группы: жим = грудь, подтягивания = спина, по 4 подхода */
+        await expect(page.locator('.mg', { hasText: 'Грудь' })).toContainText('4 подх.', { timeout: 5000 });
+        await expect(page.locator('.mg', { hasText: 'Спина' })).toContainText('4 подх.');
     });
 
     test('запись не теряется, если сохранение на сервер не ушло', async ({ page }) => {

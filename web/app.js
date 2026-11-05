@@ -601,10 +601,12 @@ function topbarHtml() {
 }
 
 /* ---------- карточка рекорда недели ---------- */
-function weekRecord() {
+/* топ-упражнений недели (Пн–Вс): наибольший подход с весом по каждому упражнению;
+   all — личный рекорд этого упражнения за всю историю (для шкалы %) */
+function weekRecords(limit) {
     const now = new Date();
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
-    let best = null;
+    const byEx = {};
     for (const w of G.workouts) {
         if (!w.finished) continue;
         const d = parseDateISO(w.date);
@@ -612,18 +614,22 @@ function weekRecord() {
         for (const e of (w.exercises || [])) {
             for (const s of e.sets) {
                 const mw = maxNum(s.w);
-                if (mw > 0 && (!best || mw > best.w)) best = { name: e.name, w: mw };
+                if (mw > 0 && (!byEx[e.name] || mw > byEx[e.name])) byEx[e.name] = mw;
             }
         }
     }
-    if (!best) return null;
-    let all = 0;
-    for (const w of G.workouts) {
-        const e = findEx(w, best.name);
-        if (e) for (const s of e.sets) { const mw = maxNum(s.w); if (mw > all) all = mw; }
-    }
-    return { name: best.name, w: best.w, all: Math.max(all, best.w) };
+    const list = Object.keys(byEx).map(function (name) {
+        let all = 0;
+        for (const w of G.workouts) {
+            const e = findEx(w, name);
+            if (e) for (const s of e.sets) { const mw = maxNum(s.w); if (mw > all) all = mw; }
+        }
+        return { name: name, w: byEx[name], all: Math.max(all, byEx[name]) };
+    });
+    list.sort(function (a, b) { return b.w - a.w; });
+    return list.slice(0, limit || 3);
 }
+function weekRecord() { return weekRecords(1)[0] || null; }
 function recordCardHtml(rec) {
     const pct = Math.max(1, Math.min(100, Math.round(rec.w / rec.all * 100)));
     return '<div class="reccard glow">' +
@@ -925,9 +931,90 @@ function renderTechTab() {
 }
 
 /* ---------- статистика ---------- */
+/* серия: самая длинная череда ПОДРЯД идущих календарных дней с тренировками
+   за последний месяц (30 дней); n — число тренировок в череде, days — её дни */
+function trainWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'тренировка';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'тренировки';
+    return 'тренировок';
+}
+function monthStreak() {
+    const now = new Date();
+    const monthAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    const perDay = {};
+    for (const w of G.workouts) {
+        if (!w.finished) continue;
+        const d = parseDateISO(w.date);
+        if (!d || d < monthAgo) continue;
+        perDay[w.date.slice(0, 10)] = (perDay[w.date.slice(0, 10)] || 0) + 1;
+    }
+    const sorted = Object.keys(perDay).sort();
+    let best = null, run = null;
+    for (const iso of sorted) {
+        if (run && Math.round((parseDateISO(iso) - parseDateISO(run.last)) / 86400000) === 1) {
+            run.last = iso;
+            run.days.push(iso);
+            run.n += perDay[iso];
+        } else {
+            run = { last: iso, days: [iso], n: perDay[iso] };
+        }
+        if (!best || run.days.length > best.days.length) best = run;
+    }
+    return best;
+}
+function streakCardHtml(st) {
+    const dows = st.days.map(function (iso) { return DOW[(parseDateISO(iso).getDay() + 6) % 7]; });
+    return '<div class="card strow"><span class="mgc mgc-fire">🔥</span>' +
+        '<span class="sttxt"><b>Серия: ' + st.n + ' ' + trainWord(st.n) + ' подряд</b>' +
+        '<span class="tn">' + dows.join(' · ') + ' — самая длинная за месяц</span></span></div>';
+}
+
+/* мышечные группы недели: источник — каталог упражнений (первый мышечный тег);
+   показываются только группы, по которым были подходы на этой неделе (Пн–Вс) */
+const MG_STYLE = {
+    chest: 'var(--c-bench)', back: 'var(--c-back)', legs: 'var(--c-legs)',
+    glutes: 'var(--c-glutes)', shoulders: 'var(--c-shoulders)', arms: 'var(--c-arms)', core: 'var(--c-abs)'
+};
+function weekMuscleGroups() {
+    const now = new Date();
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const byGroup = {};
+    for (const w of G.workouts) {
+        if (!w.finished) continue;
+        const d = parseDateISO(w.date);
+        if (!d || d < monday) continue;
+        for (const e of (w.exercises || [])) {
+            if (!e.sets.length) continue;
+            const c = findCatalog(e.name);
+            if (!c) continue;
+            const g = c.t.find(function (t) { return MG_STYLE[t]; });
+            if (g) byGroup[g] = (byGroup[g] || 0) + setsCount(e);
+        }
+    }
+    return Object.keys(byGroup).map(function (g) {
+        const meta = (CATS.muscle || []).find(function (m) { return m.id === g; }) || { n: g, icon: 'custom' };
+        return { id: g, n: meta.n, icon: meta.icon, sets: byGroup[g] };
+    }).sort(function (a, b) { return b.sets - a.sets; });
+}
+function muscleGroupsCardHtml(groups) {
+    let h = '<div class="card"><div class="rec-l">Мышечные группы · эта неделя</div><div class="mgroups">';
+    for (const g of groups) {
+        h += '<div class="mg"><span class="mgc" style="background:' + MG_STYLE[g.id] + '">' + (ICONS[g.icon] || ICONS.custom) + '</span>' +
+            '<span class="mgn">' + esc(g.n) + '</span><b>' + g.sets + ' подх.</b></div>';
+    }
+    return h + '</div></div>';
+}
+
 function renderStatsTab() {
     const fin = G.workouts.filter(w => w.finished);
-    if (!fin.length) return '<p class="empty">Нет данных. Заверши первую тренировку! 💪</p>';
+    if (!fin.length) {
+        /* пустое состояние как в истории */
+        return '<div class="card hero"><p class="t1">Пока пусто 💪</p>' +
+            '<p class="muted">Начни первую тренировку — кнопка ниже или «+» в нижнем меню.</p>' +
+            '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
+    }
     const month = todayISO().slice(0, 7);
     let monthCount = 0, totalMin = 0, totalSets = 0;
     const byEx = {};
@@ -949,11 +1036,20 @@ function renderStatsTab() {
         }
     }
     const names = Object.keys(byEx).sort((a, b) => byEx[b].sessions - byEx[a].sessions);
-    let h = '<div class="card"><p class="t1">📊 Статистика</p>' +
-        '<p class="meta">Тренировок всего: ' + fin.length + '</p>' +
-        '<p class="meta">В этом месяце: ' + monthCount + '</p>';
-    if (totalMin > 0) h += '<p class="meta">Общее время: ' + durationText(totalMin) + '</p>';
-    h += '<p class="meta">Подходов всего: ' + totalSets + '</p></div>';
+    /* новые блоки: рекорды недели, серия, мышечные группы */
+    let h = '';
+    for (const rec of weekRecords(3)) h += recordCardHtml(rec);
+    const st = monthStreak();
+    if (st && st.days.length >= 2) h += streakCardHtml(st);
+    const groups = weekMuscleGroups();
+    if (groups.length) h += muscleGroupsCardHtml(groups);
+    /* старые блоки ниже — компактно, состав решит владелец */
+    h += '<div class="card"><div class="rec-l">Тренировки</div><div class="statgrid">' +
+        '<div class="sg"><b>' + fin.length + '</b><span>тренировок всего</span></div>' +
+        '<div class="sg"><b>' + monthCount + '</b><span>в этом месяце</span></div>' +
+        (totalMin > 0 ? '<div class="sg"><b>' + durationText(totalMin) + '</b><span>общее время</span></div>' : '') +
+        '<div class="sg"><b>' + totalSets + '</b><span>подходов всего</span></div>' +
+        '</div></div>';
     h += '<div class="card"><p class="t1">📈 Тренды</p>';
     const trendNames = names.slice(0, 5);
     for (const name of trendNames) {
