@@ -594,7 +594,7 @@ public final class BotLogic {
         if (!st.sugReps.isEmpty()) {
             b.append("\nПрошлый раз: ").append(String.join(", ", st.sugReps));
         } else {
-            b.append("\nНапример: 12, 8-10 или макс");
+            b.append("\nНапример: 12, 8-10");
         }
         send(chatId, mid, b.toString(), repsKb(st));
     }
@@ -625,7 +625,7 @@ public final class BotLogic {
         }
         String reps = text.trim();
         if (reps.isEmpty() || reps.length() > 15) {
-            send(chatId, mid, "Введи количество повторений, например: 12, 8-10 или макс", repsKb(st));
+            send(chatId, mid, "Введи количество повторений, например: 12, 8-10", repsKb(st));
             return;
         }
         if (st.editing) {
@@ -787,7 +787,7 @@ public final class BotLogic {
             default -> {
                 st.mode = UserState.Mode.EX_REPS;
                 st.sugReps = lastReps(data, e.name);
-                StringBuilder b = new StringBuilder("Текущие повторения: ").append(s.reps).append("\nВведи новые (например 12, 8-10, макс)");
+                StringBuilder b = new StringBuilder("Текущие повторения: ").append(s.reps).append("\nВведи новые (например 12, 8-10)");
                 if (!st.sugReps.isEmpty()) b.append("\nПрошлый раз: ").append(String.join(", ", st.sugReps));
                 List<List<Map<String, Object>>> kb = new ArrayList<>();
                 if (!st.sugReps.isEmpty()) {
