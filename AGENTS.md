@@ -81,24 +81,32 @@ gh project item-add 1 --owner PolkAlex --url <issue-url>   # добавить з
 
 | Статус | Смысл | option_id |
 |---|---|---|
-| Backlog | идея в бэклоге, в работу не взята | `d1369032` |
-| Todo | взята в работу, не начата | `00097c75` |
-| In Design | работа с макетами и требованиями (агент design) | `7b50778a` |
-| In Dev | в работе у кодера | `a53adf79` |
-| Code Review | проверка кода (агент reviewer) | `8d74da89` |
-| In Test | в тестировании (агент tester) | `90546254` |
-| Ready To Deploy | тесты зелёные, ждёт выкатки на прод | `8add0c0d` |
-| Done | доставлено на прод | `aec62ec8` |
+| Inbox | сырая идея до проработки (только Тип=Idea) | `6bc5de3f` |
+| Backlog | оформленная идея/задача, ждёт спринта | `2e3878d2` |
+| Todo | взята в работу, не начата | `ad15b45b` |
+| In Design | работа с макетами и требованиями (агент design) | `74ab3bf7` |
+| In Dev | в работе у кодера | `7f04ec34` |
+| Code Review | проверка кода (агент reviewer) | `06d2ba77` |
+| In Test | в тестировании (агент tester) | `a020ad5e` |
+| Ready To Deploy | тесты зелёные, ждёт выкатки на прод | `6ae3a488` |
+| Done | доставлено на прод | `83ca014d` |
 
 ⚠️ При любом изменении набора опций поля Status (например, добавление статуса) GitHub
 пересоздаёт ВСЕ option_id и сбрасывает статусы items — после правки обновить эту таблицу
 и проставить статусы заново.
 
-Порядок: Backlog → Todo → (In Design) → In Dev → Code Review → In Test → Ready To Deploy → Done
+Порядок: Inbox → Backlog → Todo → (In Design) → In Dev → Code Review → In Test → Ready To Deploy → Done
 (ревью ДО тестов; блокер ревью/тестов возвращает задачу в In Dev; In Design — только для
 тикетов с меткой `need_design`). Тикет уходит в In Test в момент, когда tester берёт его
 в работу; полный цикл тестов гоняется уже в статусе In Test; зелёный → Ready To Deploy,
 красный → обратно In Dev.
+
+**Статусы по типам тикетов** (правила движения):
+- **Idea**: Inbox (сырая) → Backlog (проработана/оформлена) → при взятии в работу потомки
+  едут по конвейеру; Idea не покидает Backlog, пока потомки не Done
+- **Epic**: Backlog → Todo → In Dev → Done (статус = состояние детей; Design/Test-статусы не используются)
+- **Story**: Backlog → Todo → In Dev → Done (аналогично — состояние её Task'ов)
+- **Task/Bug**: полный конвейер (Inbox не используется — это только для Idea)
 
 Двигать item по статусам:
 
@@ -137,14 +145,23 @@ field-id поля «Направление»: `PVTSSF_lAHOChl8UM4BqICLzhohnTs`
 
 | Направление | Код | option_id |
 |---|---|---|
-| Монетизация | `MON` | `6c904d41` |
-| Бэкапы и мониторинг | `BAK` | `75064733` |
-| Docker на VPS | `DKR` | `ab2712a7` |
-| Тестовое покрытие | `TST` | `621286dd` |
-| SQLite | `SQL` | `e5d3242c` |
-| Дизайн | `DSN` | `0baeb2f6` |
-| UX | `UX` | `62367ae9` |
-| Цели | `GOA` | `3005ca8d` |
+| Монетизация | `MON` | `91b45ecc` |
+| Бэкапы и мониторинг | `BAK` | `92395161` |
+| Docker на VPS | `DKR` | `eee963fc` |
+| Тестовое покрытие | `TST` | `d26fe06e` |
+| SQLite | `SQL` | `b7c5ff26` |
+| Дизайн | `DSN` | `ead36214` |
+| UX | `UX` | `f7aa4d76` |
+| Цели | `GOA` | `6712896f` |
+| База упражнений | `EXR` | `4e547981` |
+| Метрики и калории | `FIT` | `8361acf5` |
+| Онбординг и помощь | `ONB` | `a30e87cf` |
+| Аналитика | `ANA` | `ee32f98b` |
+| Тренер | `TRN` | `e71ee0d4` |
+| Контент | `CNT` | `150b994d` |
+
+⚠️ Цвета GitHub (8 шт.) закончились — новые направления создаются без цвета/с повтором
+уже занятого. Это ок.
 
 ⚠️ Правка набора опций любого single-select поля через GraphQL пересоздаёт ВСЕ option_id
 этого поля — после правки обновить таблицы id в этом файле и перезаполнить значения у items.
@@ -157,6 +174,15 @@ field-id поля «Направление»: `PVTSSF_lAHOChl8UM4BqICLzhohnTs`
 field-id поля «Приоритет»: `PVTF_lAHOChl8UM4BqICLzhok_ho`
 
 Установка: `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOChl8UM4BqICL --field-id PVTF_lAHOChl8UM4BqICLzhok_ho --number <N>`
+
+### Поле «Спринт» (итерации)
+
+Поле типа Iteration: спринты по 2 недели, серия стартует 09.11.2026 (понедельник).
+Вместимость спринта — п.11 (ОДИН эпик или ДВА мелких тикета). Тикетам спринта
+проставляется поле «Спринт»; views доски: «Спринт N» (фильтр по итерации) и «Бэклог»
+(всё без итерации). Создано владельцем через веб-UI (API этой версии schema
+ITERATION-поля не создаёт); id поля/итераций: `gh project field-list 1 --owner PolkAlex`.
+Установка тикету: `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOChl8UM4BqICL --field-id <SPRINT_FIELD_ID> --iteration-id <ITERATION_ID>`
 
 ### Коды тикетов в заголовках
 
