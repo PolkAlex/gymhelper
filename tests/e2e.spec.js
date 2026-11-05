@@ -535,7 +535,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open [data-act="wAdd"]')).toHaveCount(8);
         await expect(page.locator('.modal.open [data-act="wSet"]')).toHaveCount(8);
         await expect(page.locator('.modal.open .modal-box', { hasText: '+0,5' })).toBeVisible();
-        /* подходы 1-8, повторения 1-8 + +1/+2/+5/+10 + пресеты 10/12 (только эти пресеты, ряда 9-11 нет) */
+        /* подходы 1-8; повторения — два ряда: 1-8 и 10/12 (пресеты) + +1/+2/+5/+10, третьего ряда нет */
         await expect(page.locator('.modal.open [data-act="setsSet"]')).toHaveCount(8);
         await expect(page.locator('.modal.open [data-act="repsSet"]')).toHaveCount(10);
         await expect(page.locator('.modal.open [data-act="repsAdd"]')).toHaveCount(4);
