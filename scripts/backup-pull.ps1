@@ -45,7 +45,7 @@ try {
     # --- 1. Найти свежий архив на VPS (ssh: ls | sort | tail) ---
     # Если маска ничего не совпала, ls вернёт пусто (ошибка уходит в /dev/null),
     # а код возврата пайплайна определяется tail => 0. Пустой вывод = архивов нет.
-    $remoteCmd = "ls -1 '$RemoteDir/$ArchiveMask' 2>/dev/null | sort | tail -n 1"
+    $remoteCmd = "ls -1 $RemoteDir/$ArchiveMask 2>/dev/null | sort | tail -n 1"
     $latest = (& ssh -o BatchMode=yes -o ConnectTimeout=20 $VpsHost $remoteCmd 2>$null)
     if ($LASTEXITCODE -ne 0) {
         throw "ssh $VpsHost завершился с кодом $LASTEXITCODE (сеть/ключ/хост?)"
