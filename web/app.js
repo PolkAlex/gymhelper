@@ -646,10 +646,7 @@ function previewCard(w) {
     const sets = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
     const p = G.profile;
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
-    const first = exs[0];
-    const c = first ? findCatalog(first.name) : null;
     let h = '<div class="pcard' + (w.finished ? '' : ' glow') + '" data-act="openHistory" data-a="' + w.id + '">';
-    h += '<div class="pc-ico">' + (c ? ico(c.i) : ico('custom')) + '</div>';
     h += '<div class="pc-daterow">' +
         '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + dp.i + '</span> ' : '') + esc(hasTitle ? String(w.title).split('\n')[0].trim() : dateStr) + '</span>' +
         (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
@@ -1298,6 +1295,12 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '<div class="keyrow">' +
         ['1', '2', '5', '10'].map(function (n) {
             return '<button class="k plus" data-act="repsAdd" data-a="' + n + '">+' + n + '</button>';
+        }).join('') +
+        '</div>' +
+        /* пресеты частых значений: тап вставляет значение целиком (как старые чипсы) */
+        '<div class="keyrow">' +
+        ['10', '12'].map(function (n) {
+            return '<button class="k" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
         '</div>' +
         '</div>';
