@@ -1,11 +1,17 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "lead",
-    "provider": {
-        "zai": {
-            "options": {
-                "baseURL": "https://api.z.ai/api/coding/paas/v4"
-            }
-        }
+  "permission": {
+    "edit": "allow",
+    "bash": { "*": "allow" },
+    "webfetch": "allow",
+    "external_directory": { "*": "allow" }
+  },
+  "provider": {
+    "zai": {
+      "options": {
+        "baseURL": "https://api.z.ai/api/coding/paas/v4"
+      }
     }
+  }
 }
