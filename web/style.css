@@ -219,8 +219,8 @@ button { font-family: inherit; }
     background: var(--glass);
     border: 1px solid var(--glass-brd);
     border-radius: 20px;
-    padding: 16px;
-    margin-bottom: 12px;
+    padding: 14px;
+    margin-bottom: 10px;
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--card-shadow);
@@ -235,16 +235,16 @@ button { font-family: inherit; }
 /* ============ текст ============ */
 .t1 { font-size: 18px; font-weight: 700; margin: 0 0 2px; letter-spacing: .2px; }
 .tn { font-size: 13px; color: var(--muted); }
-.meta { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.meta { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
 .muted { color: var(--muted); font-size: 13px; }
 .empty { text-align: center; color: var(--muted); margin: 34px 12px; }
 
 /* ============ кнопки ============ */
-.btnrow { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; margin-bottom: 2px; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; margin-bottom: 2px; }
 .btn {
     border: none;
     border-radius: 14px;
-    padding: 11px 14px;
+    padding: 9px 14px;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -264,7 +264,7 @@ button { font-family: inherit; }
     border-color: transparent;
     color: var(--on-accent);
     font-weight: 700;
-    padding: 15px;
+    padding: 11px;
     font-size: 15px;
     box-shadow: 0 8px 26px var(--cta-shadow);
 }
@@ -320,7 +320,7 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus { border-color: var(--accent); }
 textarea { min-height: 70px; resize: vertical; }
-.flabel { font-size: 12.5px; color: var(--muted); margin: 2px 0 6px; font-weight: 600; }
+.flabel { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
 .fglass {
     background: var(--glass);
     border: 1px solid var(--glass-brd);
@@ -328,15 +328,15 @@ textarea { min-height: 70px; resize: vertical; }
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
     box-shadow: inset 0 1px 0 var(--blik);
-    padding: 14px;
-    margin-top: 12px;
+    padding: 10px;
+    margin-top: 8px;
 }
 .fglass input {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     border-radius: 14px;
-    padding: 12px 14px;
+    padding: 7px 12px;
     background: var(--field);
 }
 /* строка ввода с кнопкой «Очистить» справа (прозрачная, только текст) */
@@ -357,7 +357,7 @@ textarea { min-height: 70px; resize: vertical; }
 .inwrap .clr:active { color: var(--text); }
 
 /* ряды кнопок-значений формы (как в макете) */
-.keyrow { display: flex; gap: 5px; margin-top: 8px; }
+.keyrow { display: flex; gap: 4px; margin-top: 5px; }
 .keyrow .k {
     flex: 1 1 0;
     min-width: 0;
@@ -366,7 +366,7 @@ textarea { min-height: 70px; resize: vertical; }
     background: var(--btn);
     color: var(--text);
     border-radius: 10px;
-    padding: 10px 0;
+    padding: 7px 0;
     font-size: 13px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -560,9 +560,9 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 /* ============ превью-карточка истории ============ */
 .pcard {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    column-gap: 10px;
-    padding: 12px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    padding: 10px;
     border-radius: 20px;
     background: var(--glass);
     border: 1px solid var(--glass-brd);
@@ -570,21 +570,19 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     -webkit-backdrop-filter: blur(18px);
     box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--card-shadow);
     cursor: pointer;
-    margin-top: 10px;
+    margin-top: 8px;
     transition: transform .1s ease;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
 }
 .pcard:active { transform: scale(.99); }
-.pc-ico { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
-.pc-ico .ico { width: 46px; height: 46px; border-radius: 50%; }
 .pc-daterow {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 2px;
-    grid-column: 2;
+    grid-column: 1;
     grid-row: 1;
     min-width: 0;
 }
@@ -608,7 +606,7 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     letter-spacing: 1.5px;
     color: var(--muted);
     margin-top: 3.5px;
-    grid-column: 3;
+    grid-column: 2;
     grid-row: 1;
     justify-self: center;
     white-space: nowrap;
@@ -626,8 +624,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     flex-direction: column;
     justify-content: center;
     min-width: 0;
-    min-height: 72px;
-    grid-column: 2;
+    min-height: 56px;
+    grid-column: 1;
     grid-row: 2;
 }
 .pc-right {
@@ -643,15 +641,15 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     border-radius: 12px;
     padding: 5px 9px;
     align-self: center;
-    grid-column: 3;
+    grid-column: 2;
     grid-row: 2;
 }
 
 /* ============ карточка рекорда ============ */
 .reccard {
     border-radius: 20px;
-    padding: 18px;
-    margin-top: 10px;
+    padding: 14px;
+    margin-top: 8px;
     position: relative;
     overflow: hidden;
     background: var(--glass);
@@ -701,11 +699,11 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 .backbar .btn { width: 100%; padding: 10px 12px; font-size: 13.5px; }
 
 /* ============ статистика ============ */
-.statline { margin-top: 6px; font-size: 14px; }
+.statline { margin-top: 4px; font-size: 14px; }
 .dl { font-weight: 600; white-space: nowrap; }
 .dl-up { color: var(--accent); }
 .dl-down { color: var(--danger); }
-.trendline { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.trendline { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
 .trendline b { font-size: 14px; }
 
 /* ============ профиль ============ */
@@ -734,13 +732,13 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     width: 100%;
     max-width: 560px;
     border-radius: 22px 22px 0 0;
-    padding: 18px 16px calc(22px + env(safe-area-inset-bottom));
+    padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
     max-height: 92vh;
     overflow-y: auto;
     box-sizing: border-box;
 }
-.mtitle { font-size: 17px; font-weight: 700; margin: 0 0 8px; }
-.msub { color: var(--accent); font-size: 12.5px; font-weight: 600; margin: 0 0 4px; }
+.mtitle { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+.msub { color: var(--accent); font-size: 12.5px; font-weight: 600; margin: 0 0 2px; }
 @keyframes mslide { from { transform: translateY(28px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .modal.open .modal-box { animation: mslide .3s cubic-bezier(.2,.8,.25,1); }
 
@@ -800,9 +798,8 @@ html.has-bg body::after {
 /* ============ узкие экраны (360px) ============ */
 @media (max-width: 379px) {
     .keyrow { gap: 4px; }
-    .keyrow .k { font-size: 12px; padding: 10px 0; border-radius: 9px; }
+    .keyrow .k { font-size: 12px; padding: 7px 0; border-radius: 9px; }
     .rec-num { font-size: 38px; }
-    .pc-ico .ico { width: 40px; height: 40px; }
     .ico { width: 36px; height: 36px; }
     .ico svg { width: 21px; height: 21px; }
     body { padding-left: 10px; padding-right: 10px; }

@@ -535,9 +535,9 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open [data-act="wAdd"]')).toHaveCount(8);
         await expect(page.locator('.modal.open [data-act="wSet"]')).toHaveCount(8);
         await expect(page.locator('.modal.open .modal-box', { hasText: '+0,5' })).toBeVisible();
-        /* подходы 1-8, повторения 1-8 + +1/+2/+5/+10 (ряда 9-12 нет) */
+        /* подходы 1-8, повторения 1-8 + +1/+2/+5/+10 + пресеты 10/12 (только эти пресеты, ряда 9-11 нет) */
         await expect(page.locator('.modal.open [data-act="setsSet"]')).toHaveCount(8);
-        await expect(page.locator('.modal.open [data-act="repsSet"]')).toHaveCount(8);
+        await expect(page.locator('.modal.open [data-act="repsSet"]')).toHaveCount(10);
         await expect(page.locator('.modal.open [data-act="repsAdd"]')).toHaveCount(4);
         await page.locator('[data-act="closeModal"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible();
@@ -647,6 +647,20 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry').first()).toContainText('7 подходов по 17 повторений', { timeout: 5000 });
+    });
+
+    test('пресеты повторений 10 и 12 подставляют значение в один тап', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('[data-act="repsSet"][data-a="10"]').click();
+        await expect(page.locator('#mReps')).toHaveValue('10');
+        await page.locator('[data-act="repsSet"][data-a="12"]').click();
+        await expect(page.locator('#mReps')).toHaveValue('12');
+        await page.locator('[data-act="setsSet"][data-a="3"]').click();
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('3 подхода по 12 повторений', { timeout: 5000 });
     });
 
     test('кнопки «Очистить» сбрасывают значения к дефолтам', async ({ page }) => {
