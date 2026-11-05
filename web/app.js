@@ -28,6 +28,11 @@ const OLD_THEME_DARK = ['forest', 'khaki', 'pine', 'graphite', 'midnight', 'stoc
 function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+/* экранизация значения внутри HTML-атрибута: как esc + кавычки */
+function escAttr(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 function pad2(n) { return String(n).padStart(2, '0'); }
 function fmtW(w) {
     if (w == null || isNaN(w)) return '0';
@@ -1257,7 +1262,7 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '<div class="flabel">Вес, кг (0 — без веса)</div>' +
         '<div class="inwrap"><input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
         '<button class="clr" data-act="wClr">Очистить</button></div>' +
-        (prevW != null ? '<button class="prevpill" data-act="wSet" data-a="' + esc(prevW) + '">↺ Предыдущий подход: ' +
+        (prevW != null ? '<button class="prevpill" data-act="wSet" data-a="' + escAttr(prevW) + '">↺ Предыдущий подход: ' +
             esc(String(prevW).replace('.', ',')) + ' кг — подставить</button>' : '') +
         '<div class="keyrow">' +
         ['0.5', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {

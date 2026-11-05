@@ -806,6 +806,19 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'light', { timeout: 5000 });
     });
 
+    test('легаси-темы маппятся на пару Amber Glass: forest→dark, sage→light', async ({ page }) => {
+        /* кладём значение до загрузки приложения: на живой странице localStorage,
+           затем reload — приложение читает gymTheme при старте */
+        await page.goto('/');
+        await page.evaluate(function () { try { localStorage.setItem('gymTheme', 'forest'); } catch (e) { /* noop */ } });
+        await page.reload();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark', { timeout: 10000 });
+
+        await page.evaluate(function () { try { localStorage.setItem('gymTheme', 'sage'); } catch (e) { /* noop */ } });
+        await page.reload();
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'light', { timeout: 10000 });
+    });
+
     test('id удалённой тренировки не переиспользуется (tombstone-защита от коллизий)', async ({ page, request }) => {
         /* сервер: тренировка id 5 жива, id 3 удалена, nextId=6 (клиент мог прислать устаревший) */
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {

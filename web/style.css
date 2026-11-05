@@ -39,6 +39,11 @@
     --amb1: rgba(255,178,32,.15);
     --amb2: rgba(255,138,60,.09);
     --amb3: rgba(150,92,25,.18);
+    /* fallback-градиенты шапки/навигации для webview без color-mix (значения из макета) */
+    --chrome-a: rgba(16,17,20,.8);
+    --chrome-b: rgba(16,17,20,.96);
+    --nav-a: rgba(16,17,20,.2);
+    --nav-b: rgba(16,17,20,.94);
     /* круги мышечных групп */
     --c-bench: rgba(255,194,32,.15);
     --c-legs: rgba(90,176,255,.15);
@@ -76,6 +81,10 @@
     --amb1: rgba(255,176,0,.10);
     --amb2: rgba(255,138,60,.06);
     --amb3: rgba(150,92,25,.08);
+    --chrome-a: rgba(246,246,244,.8);
+    --chrome-b: rgba(246,246,244,.96);
+    --nav-a: rgba(246,246,244,.2);
+    --nav-b: rgba(246,246,244,.94);
 }
 
 /* ============ база ============ */
@@ -110,6 +119,8 @@ button { font-family: inherit; }
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    /* fallback для старых webview без color-mix (макет concept-hybrid.html:175) */
+    background: linear-gradient(180deg, var(--chrome-b) 62%, var(--chrome-a));
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 96%, transparent) 62%, color-mix(in srgb, var(--bg) 80%, transparent));
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
@@ -153,6 +164,8 @@ button { font-family: inherit; }
     display: flex;
     align-items: flex-end;
     padding: 8px 18px calc(12px + env(safe-area-inset-bottom));
+    /* fallback для старых webview без color-mix (макет concept-hybrid.html:149) */
+    background: linear-gradient(180deg, var(--nav-a), var(--nav-b) 40%);
     background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 20%, transparent), color-mix(in srgb, var(--bg) 94%, transparent) 40%);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
