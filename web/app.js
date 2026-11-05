@@ -3,12 +3,10 @@
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 let INIT = '';
 let G = null;
-let tab = 'workout';
+let tab = 'history';
 let viewWid = 0;
 let modalCtx = null;
 let PENDING = null;
-let SUG_W = [];
-let SUG_R = [];
 let CUR = null;
 let PICKER = null;
 let TECH = { section: 'all', cat: null, open: null };
@@ -22,25 +20,18 @@ let railOpen = false;
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
 
-const THEMES = [
-    { id: 'sage', name: 'Шалфей', dots: ['#f6f3ec', '#fdfbf6', '#87a592'] },
-    { id: 'forest', name: 'Тёмный лес', dots: ['#20211c', '#2a2b24', '#87a592'] },
-    { id: 'khaki', name: 'Хаки', dots: ['#1e211a', '#262a20', '#9caf7a'] },
-    { id: 'pine', name: 'Хвоя', dots: ['#141f19', '#1b2921', '#7fae94'] },
-    { id: 'peach', name: 'Персик', dots: ['#fdf1e7', '#fffaf4', '#d99a7a'] },
-    { id: 'lavender', name: 'Лаванда', dots: ['#f4f1fa', '#fdfcff', '#9a8cc4'] },
-    { id: 'rose', name: 'Пудра', dots: ['#fbf0f2', '#fff8fa', '#cf8ba0'] },
-    { id: 'mint', name: 'Мята', dots: ['#eef6f1', '#fbfefb', '#6aa88f'] },
-    { id: 'ice', name: 'Голубой лёд', dots: ['#eef3f7', '#fbfdff', '#7397b5'] },
-    { id: 'graphite', name: 'Графит', dots: ['#1c1d1f', '#26272a', '#8d9db6'] },
-    { id: 'coffee', name: 'Кофе с молоком', dots: ['#efe7dc', '#faf5ee', '#b08b68'] },
-    { id: 'midnight', name: 'Полночь', dots: ['#171c26', '#1f2532', '#7d95c9'] },
-    { id: 'stockline', name: 'Stockline', dots: ['#16181d', '#1e2228', '#3ddc97'] }
-];
+/* старые темы из прошлых версий: маппинг на тёмную/светлую (совместимость localStorage) */
+const OLD_THEME_LIGHT = ['sage', 'peach', 'lavender', 'rose', 'mint', 'ice', 'coffee'];
+const OLD_THEME_DARK = ['forest', 'khaki', 'pine', 'graphite', 'midnight', 'stockline'];
 
 /* ============ утилиты ============ */
 function esc(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+/* экранизация значения внутри HTML-атрибута: как esc + кавычки */
+function escAttr(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 function pad2(n) { return String(n).padStart(2, '0'); }
 function fmtW(w) {
@@ -102,7 +93,7 @@ function avgNum(t) {
     for (const v of nums) sum += v;
     return sum / nums.length;
 }
-/* среднее число повторений: «8-10» → 9, «5+1» → 6, «макс» → 10, «12» → 12 */
+/* среднее число повторений: «8-10» → 9, «5+1» → 6, нечисловой текст → 10, «12» → 12 */
 function repsAvg(r) {
     const str = String(r || '');
     const nums = [];
@@ -172,52 +163,6 @@ function prevOf(w) {
 function findEx(w, name) {
     if (!w || name == null) return null;
     return w.exercises.find(e => e.name.toLowerCase() === String(name).toLowerCase()) || null;
-}
-function lastWorkoutWith(name) {
-    let last = null;
-    for (const w of G.workouts) {
-        const e = findEx(w, name);
-        if (e && e.sets.length) last = w;
-    }
-    return last;
-}
-function lastWeights(name) {
-    const last = lastWorkoutWith(name);
-    const out = [];
-    if (!last) return out;
-    const e = findEx(last, name);
-    for (const s of e.sets) {
-        if (s.w && !out.includes(s.w)) out.push(s.w);
-        if (out.length >= 4) break;
-    }
-    return out;
-}
-function lastReps(name) {
-    const last = lastWorkoutWith(name);
-    const out = [];
-    if (!last) return out;
-    const e = findEx(last, name);
-    for (const s of e.sets) {
-        if (!out.includes(s.r)) out.push(s.r);
-        if (out.length >= 4) break;
-    }
-    return out;
-}
-function popularWeight(name) {
-    const cnt = {};
-    for (const w of G.workouts) {
-        const e = findEx(w, name);
-        if (!e) continue;
-        for (const s of e.sets) {
-            if (!s.w) continue;
-            cnt[s.w] = (cnt[s.w] || 0) + 1;
-        }
-    }
-    let best = null, bc = 0;
-    for (const k in cnt) {
-        if (cnt[k] >= bc) { bc = cnt[k]; best = k; }
-    }
-    return best;
 }
 function entryLine(s) {
     const w = s.w ? String(s.w).replace('.', ',') : '';
@@ -464,16 +409,52 @@ function toast(msg, isErr) {
     __toastTimer = setTimeout(function () { t.className = 'toast'; }, 2200);
 }
 
-/* ============ темы ============ */
+/* ============ темы: тёмная (базовая) и светлая «Amber Glass» ============ */
+function bgLum(hex) {
+    const m = /^#([0-9a-fA-F]{6})$/.exec(String(hex || '').trim());
+    if (!m) return null;
+    const n = parseInt(m[1], 16);
+    return (0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255;
+}
+/* подсказка темы от клиента Telegram (themeParams) */
+function themeHint() {
+    if (tg && tg.colorScheme === 'light') return 'light';
+    if (tg && tg.colorScheme === 'dark') return 'dark';
+    if (tg && tg.themeParams && tg.themeParams.bg_color) {
+        const lum = bgLum(tg.themeParams.bg_color);
+        if (lum != null) return lum > 0.55 ? 'light' : 'dark';
+    }
+    return 'dark';
+}
+/* сохранённый выбор пользователя: новые значения или старые темы (маппинг) */
+function savedTheme() {
+    let v = null;
+    try { v = localStorage.getItem('gymTheme'); } catch (e) { /* noop */ }
+    if (v === 'dark' || v === 'light') return v;
+    if (OLD_THEME_DARK.indexOf(v) >= 0) return 'dark';
+    if (OLD_THEME_LIGHT.indexOf(v) >= 0) return 'light';
+    return null;
+}
 function applyTheme(id) {
-    document.documentElement.setAttribute('data-theme', id);
-    try { localStorage.setItem('gymTheme', id); } catch (e) { /* noop */ }
-    if (tg && tg.setHeaderColor) { try { tg.setHeaderColor('secondary_bg_color'); } catch (e2) { /* noop */ } }
+    document.documentElement.setAttribute('data-theme', id === 'light' ? 'light' : 'dark');
+    if (tg && tg.setHeaderColor) { try { tg.setHeaderColor('secondary_bg_color'); } catch (e) { /* noop */ } }
+}
+function setTheme(id) {
+    applyTheme(id);
+    try { localStorage.setItem('gymTheme', id === 'light' ? 'light' : 'dark'); } catch (e) { /* noop */ }
 }
 function loadTheme() {
-    let id = 'sage';
-    try { id = localStorage.getItem('gymTheme') || 'sage'; } catch (e) { /* noop */ }
-    applyTheme(id);
+    const saved = savedTheme();
+    if (saved) { applyTheme(saved); return; }
+    /* выбора нет — берём подсказку от клиента Telegram */
+    applyTheme(themeHint());
+    if (tg && tg.onEvent) {
+        try {
+            tg.onEvent('themeChanged', function () {
+                if (!savedTheme()) applyTheme(themeHint());
+            });
+        } catch (e) { /* noop */ }
+    }
 }
 
 /* ============ ACTIONS ============ */
@@ -528,8 +509,6 @@ const ACTIONS = {
     techBack: function () { TECH.open = null; render(); },
     techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
-    chipW: function (a) { chipW(+a); },
-    chipR: function (a) { chipR(+a); },
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
     wClr: function () { wClr(); },
@@ -556,7 +535,7 @@ const ACTIONS = {
     saveTime: function (a) { saveTime(+a); },
     confirmModal: function (a, b, c) { confirmModal(a, b, +c); },
     confirmYes: function () { confirmYes(); },
-    setTheme: function (a) { applyTheme(a); render(); },
+    setTheme: function (a) { setTheme(a); render(); },
     setSex: function (a) { profileSex = a; render(); },
     saveProfile: function () { saveProfile(); },
     closeModal: function () { closeModal(); },
@@ -573,7 +552,6 @@ const ACTIONS = {
 function render() {
     const app = document.getElementById('app');
     let h = topbarHtml();
-    if (tab === 'workout') h += renderWorkoutTab();
     if (tab === 'history') h += renderHistoryTab();
     if (tab === 'tech') h += renderTechTab();
     if (tab === 'stats') h += renderStatsTab();
@@ -592,8 +570,6 @@ function render() {
         h += '<div style="height:70px"></div>';
     }
     app.innerHTML = h;
-    const nv = document.querySelector('.nav');
-    if (nv && (window.scrollY || 0) > 60) nv.classList.add('min');
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
         if (q) q.addEventListener('input', function () { TECH.q = this.value; const list = document.getElementById('techList'); if (list) list.innerHTML = techListHtml(); });
@@ -601,58 +577,64 @@ function render() {
     dbgMsg('rev ' + (G ? G.rev : '-'));
 }
 function navHtml() {
-    const items = [
-        ['coach', 'user', 'Тренер'],
+    const left = [
         ['history', 'timer', 'История'],
-        ['workout', 'dumbbell', 'Тренировка'],
-        ['tech', 'pilates', 'Техника'],
         ['stats', 'chart', 'Статистика']
     ];
-    return '<div class="nav">' + items.map(function (it) {
-        return '<button class="' + (tab === it[0] ? 'on' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
-            '<span class="nwrap"><span class="nico">' + (ICONS[it[1]] || '') + '</span></span>' +
+    const right = [
+        ['tech', 'pilates', 'Техника'],
+        ['profile', 'user', 'Профиль']
+    ];
+    const btn = function (it) {
+        return '<button class="nbtn' + (tab === it[0] ? ' on' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
+            '<span class="nico">' + (ICONS[it[1]] || '') + '</span>' +
             '<span class="nlabel">' + it[2] + '</span></button>';
-    }).join('') + '</div>';
+    };
+    return '<div class="nav">' + left.map(btn).join('') +
+        '<button class="nfab" data-act="startWorkout" title="Начать тренировку">' + ICONS.plus + '</button>' +
+        right.map(btn).join('') + '</div>';
 }
 function topbarHtml() {
-    const names = { workout: 'Тренировка', history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
-    return '<div class="topbar"><span class="tb-title">GymHelper · ' + names[tab] + '</span>' +
+    const names = { history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
+    return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' +
         '<button class="tb-user" data-act="switchTab" data-a="profile" title="Настройки">' + ico('user') + '</button></div>';
 }
 
-/* ---------- вкладка тренировки ---------- */
-function renderWorkoutTab() {
-    const fin = G.workouts.filter(w => w.finished);
-    const unfin = G.workouts.filter(w => !w.finished).slice().reverse();
-    const last = fin.length ? fin[fin.length - 1] : null;
-    let h = heroHtml(fin);
-    if (unfin.length) {
-        h += '<div class="card" style="padding:10px"><p class="t1" style="font-size:15px">⚡ Незавершённые тренировки</p>';
-        for (const w of unfin) {
-            const dpw = dayPart(w);
-            h += '<div class="wrow" data-act="openHistory" data-a="' + w.id + '">' +
-                '<span class="ico">' + ICONS.timer + '</span>' +
-                '<span class="wt"><div class="exn">' + (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') + esc(firstLine(w)) + '</div></span>' +
-                '<span class="badge">открыть</span></div>';
+/* ---------- карточка рекорда недели ---------- */
+function weekRecord() {
+    const now = new Date();
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    let best = null;
+    for (const w of G.workouts) {
+        if (!w.finished) continue;
+        const d = parseDateISO(w.date);
+        if (!d || d < monday) continue;
+        for (const e of (w.exercises || [])) {
+            for (const s of e.sets) {
+                const mw = maxNum(s.w);
+                if (mw > 0 && (!best || mw > best.w)) best = { name: e.name, w: mw };
+            }
         }
-        h += '</div>';
     }
-    if (last) h += '<div class="card"><p class="t1">👀 Последняя тренировка</p>' + previewCard(last) + '</div>';
-    if (!G.workouts.length) h += '<p class="empty">Пока пусто. Начни первую тренировку! 💪</p>';
-    return h;
+    if (!best) return null;
+    let all = 0;
+    for (const w of G.workouts) {
+        const e = findEx(w, best.name);
+        if (e) for (const s of e.sets) { const mw = maxNum(s.w); if (mw > all) all = mw; }
+    }
+    return { name: best.name, w: best.w, all: Math.max(all, best.w) };
 }
-function heroHtml(fin) {
-    const d = new Date();
-    const days = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
-    const months = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
-    const month = todayISO().slice(0, 7);
-    const mCount = fin.filter(w => (w.date || '').startsWith(month)).length;
-    return '<div class="card hero">' +
-        '<div class="hero-date">' + days[d.getDay()] + ', ' + d.getDate() + ' ' + months[d.getMonth()] + '</div>' +
-        '<p class="t1" style="font-size:21px;margin-top:4px">Готов к тренировке?</p>' +
-        '<p class="muted">Всего тренировок: ' + fin.length + ' · в этом месяце: ' + mCount + '</p>' +
-        '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
+function recordCardHtml(rec) {
+    const pct = Math.max(1, Math.min(100, Math.round(rec.w / rec.all * 100)));
+    return '<div class="reccard glow">' +
+        '<div class="rec-l">Рекорд недели · ' + esc(rec.name) + '</div>' +
+        '<div class="rec-num">' + fmtW(rec.w) + ' <small>кг</small></div>' +
+        '<div class="rec-bar"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="rec-sub"><span>личный рекорд: ' + fmtW(rec.all) + ' кг</span><span>' + pct + '%</span></div>' +
+        '</div>';
 }
+
+/* ---------- превью-карточки истории ---------- */
 function previewCard(w) {
     const d = parseDateISO(w.date);
     const dateStr = firstLine(w);
@@ -664,7 +646,10 @@ function previewCard(w) {
     const sets = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
     const p = G.profile;
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
-    let h = '<div class="pcard" data-act="openHistory" data-a="' + w.id + '">';
+    const first = exs[0];
+    const c = first ? findCatalog(first.name) : null;
+    let h = '<div class="pcard' + (w.finished ? '' : ' glow') + '" data-act="openHistory" data-a="' + w.id + '">';
+    h += '<div class="pc-ico">' + (c ? ico(c.i) : ico('custom')) + '</div>';
     h += '<div class="pc-daterow">' +
         '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + dp.i + '</span> ' : '') + esc(hasTitle ? String(w.title).split('\n')[0].trim() : dateStr) + '</span>' +
         (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
@@ -695,11 +680,16 @@ function renderHistoryTab() {
     }
     const fin = G.workouts.filter(w => w.finished).slice().reverse();
     const act = activeW();
-    if (!fin.length && !act) return '<p class="empty">Пока нет завершённых тренировок 💪</p>';
-    let h = '<div class="card" style="padding:10px">';
+    if (!fin.length && !act) {
+        return '<div class="card hero"><p class="t1">Пока пусто 💪</p>' +
+            '<p class="muted">Начни первую тренировку — кнопка ниже или «+» в нижнем меню.</p>' +
+            '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
+    }
+    let h = '';
+    const rec = weekRecord();
+    if (rec) h += recordCardHtml(rec);
     if (act) h += previewCard(act);
     for (const w of fin) h += previewCard(w);
-    h += '</div>';
     return h;
 }
 function openHistory(id) {
@@ -979,7 +969,7 @@ function renderStatsTab() {
     for (const name of names.slice(0, 15)) {
         const s = byEx[name];
         h += '<div class="statline"><b>' + esc(name) + '</b> (' + s.sessions + ' раз.)</div>' +
-            '<div class="tn">Максимум: ' + (s.hasW ? fmtW(s.maxW) + ' кг' : 'без веса') + '</div>' +
+            '<div class="tn">Рекорд веса: ' + (s.hasW ? fmtW(s.maxW) + ' кг' : 'без веса') + '</div>' +
             '<div class="tn">Последний: ' + esc(s.last) + (s.lastDate ? ' (' + esc(s.lastDate.split('-').reverse().slice(0, 2).join('-')) + ')' : '') + '</div>';
     }
     h += '</div>';
@@ -1016,14 +1006,16 @@ function renderProfileTab() {
         '<label>Рост (см)</label><input id="pfHeight" type="number" inputmode="numeric" value="' + p.height + '">' +
         '<label>Вес (кг)</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '">' +
         '<div class="btnrow"><button class="btn wide" data-act="saveProfile">💾 Сохранить профиль</button></div></div>';
-    h += '<div class="card"><p class="t1">🎨 Тема оформления</p><div class="themegrid">';
-    const cur = document.documentElement.getAttribute('data-theme') || 'sage';
-    for (const t of THEMES) {
-        h += '<div class="themecard' + (cur === t.id ? ' on' : '') + '" data-act="setTheme" data-a="' + t.id + '">' +
-            '<span class="themedots">' + t.dots.map(c => '<i style="background:' + c + '"></i>').join('') + '</span>' +
-            '<span style="font-size:13px">' + t.name + '</span></div>';
-    }
-    h += '</div></div>';
+    h += '<div class="card"><p class="t1">🎨 Тема оформления</p>' +
+        '<p class="meta">Без выбора используется тема клиента Telegram</p>' +
+        '<div class="sexbtns themetoggle">';
+    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+    h += '<button class="btn' + (cur === 'dark' ? '' : ' sec') + '" data-act="setTheme" data-a="dark">🌙 Тёмная</button>' +
+        '<button class="btn' + (cur === 'light' ? '' : ' sec') + '" data-act="setTheme" data-a="light">☀️ Светлая</button>' +
+        '</div></div>';
+    h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
+        '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
     h += '<div class="card"><p class="t1">🖼 Фон приложения</p>' +
         '<p class="meta">Картинка хранится только на этом устройстве</p>' +
         '<div class="split2">' +
@@ -1222,10 +1214,6 @@ function pickCatEx(name) {
 function storage_after_pick(w, e) {
     save();
     closeModal();
-    SUG_W = lastWeights(e.name);
-    SUG_R = lastReps(e.name);
-    const pop = popularWeight(e.name);
-    if (pop && !SUG_W.includes(pop)) SUG_W.push(pop);
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
 }
 function customExerciseModal() {
@@ -1247,8 +1235,6 @@ function createCustom() {
     closeCurrentExercise();
     const e = startExercise(w, name);
     save();
-    SUG_W = lastWeights(name);
-    SUG_R = lastReps(name);
     closeModal();
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
 }
@@ -1264,57 +1250,58 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     const isNew = setIdx < 0;
     const s = isNew ? { w: '', s: 1, r: '' } : e.sets[setIdx];
     modalCtx = { wid: w.id, exIdx, setIdx, name: e.name };
+    /* UX-I1: последний подход с весом в текущем упражнении (кроме редактируемого) */
+    let prevW = null;
+    for (let i = e.sets.length - 1; i >= 0; i--) {
+        if (i === setIdx) continue;
+        if (maxNum(e.sets[i].w) > 0) { prevW = e.sets[i].w; break; }
+    }
     let h = '<p class="mtitle">' + (isNew ? 'Новая запись' : 'Изменить запись') + '</p>' +
-        '<p class="muted">' + esc(e.name) + '</p>' +
-        '<label>Вес, кг (0 — без веса)</label>' +
+        '<p class="msub">' + esc(e.name) + '</p>' +
+        '<div class="fglass">' +
+        '<div class="flabel">Вес, кг (0 — без веса)</div>' +
         '<div class="inwrap"><input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
         '<button class="clr" data-act="wClr">Очистить</button></div>' +
-        '<div class="mini-row">' +
+        (prevW != null ? '<button class="prevpill" data-act="wSet" data-a="' + escAttr(prevW) + '">↺ Предыдущий подход: ' +
+            esc(String(prevW).replace('.', ',')) + ' кг — подставить</button>' : '') +
+        '<div class="keyrow">' +
         ['0.5', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {
             const label = n === '0.5' ? '+0,5' : '+' + n;
-            return '<button class="mbtn" data-act="wAdd" data-a="' + n + '">' + label + '</button>';
+            return '<button class="k plus" data-act="wAdd" data-a="' + n + '">' + label + '</button>';
         }).join('') +
         '</div>' +
-        '<div class="mini-row">' +
+        '<div class="keyrow">' +
         ['10', '20', '30', '50', '60', '80', '100', '200'].map(function (n) {
-            return '<button class="mbtn" data-act="wSet" data-a="' + n + '">' + n + '</button>';
+            return '<button class="k" data-act="wSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
-        '</div>';
-    if (isNew && SUG_W.length) {
-        h += '<div class="chips">';
-        SUG_W.forEach((v, i) => { h += '<button class="chip" data-act="chipW" data-a="' + i + '">' + esc(v) + ' кг</button>'; });
-        h += '<button class="chip" data-act="chipW" data-a="-1">🚫 Без веса</button></div>';
-    }
-    h += '<label>Подходы</label>' +
+        '</div>' +
+        '</div>' +
+        '<div class="fglass">' +
+        '<div class="flabel">Подходы</div>' +
         '<div class="inwrap"><input id="mSets" type="number" inputmode="numeric" value="' + (+s.s || 1) + '">' +
         '<button class="clr" data-act="sClr">Очистить</button></div>' +
-        '<div class="mini-row">' +
+        '<div class="keyrow">' +
         ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
-            return '<button class="mbtn" data-act="setsSet" data-a="' + n + '">' + n + '</button>';
+            return '<button class="k" data-act="setsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
         '</div>' +
-        '<label>Повторения (12, 8-10, макс, 5+1)</label>' +
+        '</div>' +
+        '<div class="fglass">' +
+        '<div class="flabel">Повторения (например 12, 8-10)</div>' +
         '<div class="inwrap"><input id="mReps" type="text" value="' + esc(s.r) + '">' +
         '<button class="clr" data-act="rClr">Очистить</button></div>' +
-        '<div class="mini-row">' +
+        '<div class="keyrow">' +
         ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
-            return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
+            return '<button class="k" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
         '</div>' +
-        '<div class="mini-row">' +
-        ['9', '10', '11', '12'].map(function (n) {
-            return '<button class="mbtn" data-act="repsSet" data-a="' + n + '">' + n + '</button>';
-        }).join('') +
+        '<div class="keyrow">' +
         ['1', '2', '5', '10'].map(function (n) {
-            return '<button class="mbtn" data-act="repsAdd" data-a="' + n + '">+' + n + '</button>';
+            return '<button class="k plus" data-act="repsAdd" data-a="' + n + '">+' + n + '</button>';
         }).join('') +
+        '</div>' +
         '</div>';
-    if (isNew && SUG_R.length) {
-        h += '<div class="chips">';
-        SUG_R.forEach((v, i) => { h += '<button class="chip" data-act="chipR" data-a="' + i + '">' + esc(v) + '</button>'; });
-        h += '</div>';
-    }
-    h += '<div class="btnrow"><button class="btn wide" data-act="saveEntry">' + (isNew ? '➕ Добавить' : '💾 Сохранить') + '</button>';
+    h += '<div class="btnrow"><button class="btn prime wide" data-act="saveEntry">' + (isNew ? '➕ Добавить' : '💾 Сохранить') + '</button>';
     if (!isNew) h += '<button class="btn danger wide" data-act="deleteEntry">🗑 Удалить запись</button>';
     h += '<button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
     openModal(h);
@@ -1334,12 +1321,6 @@ function openEntryModalIdx(w, exIdx, setIdx) {
             }
         });
     });
-}
-function chipW(i) {
-    document.getElementById('mWeight').value = i < 0 ? '0' : SUG_W[i];
-}
-function chipR(i) {
-    document.getElementById('mReps').value = SUG_R[i];
 }
 function fmtNum2(v) {
     return String(Math.round(v * 100) / 100);
@@ -1394,7 +1375,7 @@ async function saveEntry() {
     }
     if (weight === '' || +weight === 0) weight = '';
     if (!(sets >= 1 && sets <= 30)) { toast('Подходы: число от 1 до 30', true); return; }
-    if (!reps || reps.length > 15) { toast('Повторения: например 12, 8-10 или макс', true); return; }
+    if (!reps || reps.length > 15) { toast('Повторения: например 12, 8-10', true); return; }
     await reloadSilently();
     const w = findW(wid);
     const e = w ? findEx(w, name) : null;
@@ -1774,10 +1755,6 @@ async function init() {
             '<br><br>Открой приложение через меню бота (кнопка ☰ → «🏋️ Дневник»).</p>';
     }
 }
-window.addEventListener('scroll', function () {
-    const nv = document.querySelector('.nav');
-    if (nv) nv.classList.toggle('min', (window.scrollY || 0) > 60);
-}, { passive: true });
 init();
 
 /* ============ тестовый крюк (используется tests/render-smoke.js) ============ */
