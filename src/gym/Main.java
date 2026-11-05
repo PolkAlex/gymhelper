@@ -43,7 +43,7 @@ public final class Main {
         Path webDir = Path.of("web");
         if (Files.isDirectory(webDir)) {
             new WebServer(token, storage, webDir).start(port);
-            System.out.println("Web app server: http://127.0.0.1:" + port);
+            System.out.println("Web app server: http://" + WebServer.bindAddress() + ":" + port);
         } else {
             System.out.println("[warn] web/ folder not found - Mini App disabled");
         }

@@ -45,7 +45,7 @@ public final class WebServer {
     }
 
     public void start(int port) throws IOException {
-        server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        server = HttpServer.create(new InetSocketAddress(bindAddress(), port), 0);
         server.createContext("/", this::handle);
         server.setExecutor(Executors.newFixedThreadPool(4, r -> {
             Thread t = new Thread(r, "web");
@@ -53,6 +53,14 @@ public final class WebServer {
             return t;
         }));
         server.start();
+    }
+
+    /* адрес HTTP-сервера из env GYM_BIND_ADDR, по умолчанию 127.0.0.1 (как раньше).
+       В контейнере DNAT доставляет внешние соединения на eth0, и слушатель на loopback
+       их не принимает — поэтому compose задаёт GYM_BIND_ADDR=0.0.0.0 */
+    public static String bindAddress() {
+        String addr = System.getenv("GYM_BIND_ADDR");
+        return (addr == null || addr.isBlank()) ? "127.0.0.1" : addr.trim();
     }
 
     private void handle(HttpExchange ex) throws IOException {

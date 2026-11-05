@@ -14,7 +14,11 @@ RUN ./gradlew --no-daemon build -x test
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
-COPY --from=build /build/libs/gymhelper-1.0.0.jar app.jar
+# curl нужен для healthcheck в docker-compose (запрос /health)
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# WORKDIR = /build, поэтому Gradle кладёт jar в /build/build/libs/
+COPY --from=build /build/build/libs/gymhelper-1.0.0.jar app.jar
 # статика Mini App раздаётся с диска из рабочей папки
 COPY web ./web
 
