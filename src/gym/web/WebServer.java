@@ -16,6 +16,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -34,6 +35,7 @@ public final class WebServer {
     private final String token;
     private final Storage storage;
     private final Path webDir;
+    private final long startedAt = System.currentTimeMillis();
     private HttpServer server;
 
     public WebServer(String token, Storage storage, Path webDir) {
@@ -56,6 +58,10 @@ public final class WebServer {
     private void handle(HttpExchange ex) throws IOException {
         String path = ex.getRequestURI().getPath();
         try {
+            if ("/health".equals(path)) {
+                handleHealth(ex);
+                return;
+            }
             if ("/api/init".equals(path)) {
                 if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
                     sendJson(ex, 405, Map.of("ok", false));
@@ -78,6 +84,51 @@ public final class WebServer {
             sendJson(ex, 500, Map.of("ok", false));
         } finally {
             ex.close();
+        }
+    }
+
+    /* лёгкий эндпоинт для внешнего монитора (UptimeRobot) — без Telegram-валидации; HEAD поддерживается, т.к. мониторы часто стучатся им */
+    private void handleHealth(HttpExchange ex) throws IOException {
+        String method = ex.getRequestMethod();
+        boolean head = "HEAD".equalsIgnoreCase(method);
+        if (!head && !"GET".equalsIgnoreCase(method)) {
+            sendJson(ex, 405, Map.of("ok", false));
+            return;
+        }
+        long uptimeSec = (System.currentTimeMillis() - startedAt) / 1000;
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("uptimeSec", uptimeSec);
+        resp.put("chats", countChats());
+        byte[] body = Json.write(resp).getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        ex.getResponseHeaders().set("Cache-Control", "no-store");
+        if (head) {
+            ex.sendResponseHeaders(200, -1);
+        } else {
+            ex.sendResponseHeaders(200, body.length);
+            try (OutputStream os = ex.getResponseBody()) {
+                os.write(body);
+            }
+        }
+    }
+
+    /* число чатов = количество *.json в каталоге data (сосед web/); -1, если посчитать не удалось */
+    private int countChats() {
+        try {
+            Path parent = webDir.getParent();
+            if (parent == null) return -1;
+            Path dataDir = parent.resolve("data");
+            if (!Files.isDirectory(dataDir)) return -1;
+            int n = 0;
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(dataDir, "*.json")) {
+                for (Path p : stream) {
+                    if (Files.isRegularFile(p)) n++;
+                }
+            }
+            return n;
+        } catch (Exception e) {
+            return -1;
         }
     }
 
