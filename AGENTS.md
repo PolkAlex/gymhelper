@@ -57,6 +57,9 @@ gh project item-add 1 --owner PolkAlex --url <issue-url>   # добавить з
 - Тип тикета задаётся полем «Тип» на доске (см. ниже); старые метки `bug`/`feature`/`infra`/`testing`
   для новых задач НЕ использовать
 - Метки-атрибуты: `need_design` (нужен дизайн/спека — задача идёт через In Design),
+  `auto_test` (тестирование только автоматическое: CI/e2e; ручная проверка владельцем
+  не требуется — после зелёного Code Review тикет проходит In Test без участия
+  владельца и уходит в Ready To Deploy),
   `tech` (техническая работа: инфраструктура, рефакторинг, тесты — без видимых изменений
   для пользователя), `documentation`
 - Завершённую работу по задаче закрывайте: `gh issue close N --comment "что сделано"` (коммит с `fixes #N` закрывает сам)
@@ -192,6 +195,23 @@ field-id поля «Приоритет»: `PVTF_lAHOChl8UM4BqICLzhok_ho`
 field-id поля «Story Points»: `PVTF_lAHOChl8UM4BqICLzhotCMg`
 
 Установка: `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOChl8UM4BqICL --field-id PVTF_lAHOChl8UM4BqICLzhotCMg --number <N>`
+
+### Технические грабли (gh + PowerShell) — НЕ НАСТУПАТЬ
+
+1. **Инлайн-кавычки в длинных командах**: bash-слой съедает `"` внутри PowerShell-строк
+   → GraphQL-мутации НЕ собирать инлайном-конкатенацией. Пиши mutation в JSON-файл
+   (Write tool, с реальными значениями сразу) и запускай `gh api graphql --input файл`.
+2. **PS 5.1 кодировки**: `.ps1`/файлы с кириллицей — только UTF-8 **С BOM** (WriteAllText
+   с UTF8Encoding($true)); Set-Content/Get-Content без `-Encoding` перекодируют UTF-8
+   в ANSI (mojibake). Продуктовые файлы (web/, src/) править только Write/Edit tool,
+   после правки — Read-проверка кириллицы.
+3. **Плейсхолдеры-замены**: не гоняй цепочки Replace поверх изменённых файлов — сначала
+   получи все значения (выведи/прочитай), затем ОДИН Write файла с готовым содержимым,
+   перед запуском — Read-проверка.
+4. **`$pid` и прочие автоматические переменные** — readonly, не использовать как имена.
+5. **`--jq` надёжнее инлайна** для извлечения значений из gh api вывода; лимитированные
+   поля: `gh api ... --jq '.data.r.iNN.id'` — работает стабильно.
+6. **gh project item-delete** требует: `gh project item-delete 1 --owner PolkAlex --id <ITEM_ID>`.
 
 ### Коды тикетов в заголовках
 
