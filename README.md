@@ -64,7 +64,9 @@ java -cp out gym.Main
 ### Docker (VPS или локально с Docker Desktop)
 ```powershell
 # токен в файл .env (в .gitignore): GYM_BOT_TOKEN=123456:ABC-DEF...
-docker compose up -d --build     # сборка + запуск, data/ в том же месте
+# пакет приватный: перед pull нужен docker login ghcr.io (PAT с read:packages)
+docker compose pull               # образ из ghcr.io (публикует CI на push в main)
+docker compose up -d              # запуск, data/ в том же месте
 docker compose logs -f           # логи
 docker compose down              # остановить
 ```

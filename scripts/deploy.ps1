@@ -1,5 +1,7 @@
-# Deploy GymHelper to PROD VPS (gym-vps ssh alias).
-# RULE: run ONLY after explicit owner approval ("deploy approved").
+﻿# Деплой GymHelper на ПРОД VPS (ssh-алиас gym-vps) через ghcr-образ.
+# Сборка происходит в CI: push в main публикует ghcr.io/polkalex/gymhelper:latest;
+# этот скрипт только ждёт зелёного CI, пуллит образ на VPS и перезапускает compose.
+# ПРАВИЛО: подтверждение владельца обязательно ("деплой разрешён") — это прод.
 # Usage: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy.ps1 [-Yes]
 param([switch]$Yes)
 $ErrorActionPreference = "Continue"
@@ -9,32 +11,77 @@ if (-not $Yes) {
     if ($a -ne "y") { Write-Host "Aborted."; exit 1 }
 }
 
+# деплой только из main: CI публикует образ из main, pull чужого sha ничего не найдёт
+$branch = git rev-parse --abbrev-ref HEAD
+if ($LASTEXITCODE -ne 0 -or $null -eq $branch) { Write-Host "GIT REV-PARSE FAILED (branch)"; exit 1 }
+$branch = $branch.Trim()
+if ($branch -ne "main") {
+    Write-Host "Деплой только из main (текущая ветка: $branch)."
+    exit 1
+}
+
 Write-Host "== 1/5 git pull =="
 git pull
 if ($LASTEXITCODE -ne 0) { Write-Host "GIT PULL FAILED"; exit 1 }
 
-Write-Host "== 2/5 compile (Java 17 target - VPS runs Java 17!) =="
-Remove-Item out\gym -Recurse -Force -ErrorAction SilentlyContinue
-javac --release 17 -encoding UTF-8 -d out (Get-ChildItem -Recurse src -Filter *.java).FullName
-if ($LASTEXITCODE -ne 0) { Write-Host "COMPILE FAILED"; exit 1 }
-Write-Host "compile OK"
+$sha = git rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or $null -eq $sha) { Write-Host "GIT REV-PARSE FAILED (HEAD sha)"; exit 1 }
+$sha = $sha.Trim()
 
-Write-Host "== 3/5 upload (classes + web) =="
-scp -r out gym-vps:/opt/gym/
-if ($LASTEXITCODE -ne 0) { Write-Host "SCP CLASSES FAILED"; exit 1 }
-foreach ($f in "index.html","style.css","app.js","catalog.js") {
-    scp "web\$f" "gym-vps:/opt/gym/web/$f"
-    if ($LASTEXITCODE -ne 0) { Write-Host "SCP FAILED: web/$f"; exit 1 }
+# CI на свежезапулнутый коммит мог ещё не стартовать — ждём появления run с этим sha
+# до 3 минут, опрос раз в 20 секунд
+Write-Host "== 2/5 waiting for green CI on HEAD ($sha) =="
+$runId = $null
+$deadline = (Get-Date).AddMinutes(3)
+while ($true) {
+    $runsJson = gh run list --workflow ci.yml --branch main --limit 5 --json databaseId,headSha,status,conclusion
+    if ($LASTEXITCODE -eq 0 -and $runsJson) {
+        $runs = $runsJson | ConvertFrom-Json
+        $mine = @($runs | Where-Object { $_.headSha -eq $sha })
+        if ($mine.Count -gt 0) { $runId = $mine[0].databaseId; break }
+    }
+    if ((Get-Date) -gt $deadline) { break }
+    Write-Host "CI run for $sha not started yet, waiting 20s..."
+    Start-Sleep -Seconds 20
 }
-Write-Host "upload OK"
+if (-not $runId) {
+    Write-Host "ERROR: CI run for commit $sha not found on main (commits pushed?)."; exit 1
+}
+Write-Host "CI run found: $runId"
 
-Write-Host "== 4/5 restart bot =="
-ssh gym-vps "systemctl restart gymbot"
-Start-Sleep -Seconds 8
-ssh gym-vps "systemctl is-active gymbot"
-ssh gym-vps "curl -s http://127.0.0.1:8080/health"
-if ($LASTEXITCODE -ne 0) { Write-Host "HEALTH CHECK FAILED"; exit 1 }
+# ждём завершения CI (внутри и публикация образа), таймаут ~20 минут
+$proc = Start-Process -FilePath "gh" -ArgumentList @("run","watch","$runId","--exit-status") -NoNewWindow -PassThru
+if (-not $proc.WaitForExit(1200000)) {
+    try { $proc.Kill() } catch {}
+    Write-Host "ERROR: timeout (20 min) waiting for CI run $runId — image NOT published."; exit 1
+}
+if ($proc.ExitCode -ne 0) {
+    Write-Host "ERROR: CI run $runId FAILED — image NOT published."; exit 1
+}
+Write-Host "CI green, image published to ghcr.io"
 
-Write-Host "== 5/5 verify web version =="
-ssh gym-vps "grep -o 'v=[0-9]*' /opt/gym/web/index.html | head -1"
-Write-Host "Deploy finished. Check PROD in Telegram: new design, /start shows hints without legacy words."
+Write-Host "== 3/5 upload docker-compose.yml =="
+scp docker-compose.yml gym-vps:/opt/gym/docker-compose.yml
+if ($LASTEXITCODE -ne 0) { Write-Host "SCP COMPOSE FAILED"; exit 1 }
+
+Write-Host "== 4/5 pull image and restart =="
+ssh gym-vps "cd /opt/gym && docker compose pull && docker compose up -d --remove-orphans"
+if ($LASTEXITCODE -ne 0) { Write-Host "COMPOSE UP FAILED"; exit 1 }
+
+# даём боту время подняться, затем опрашиваем health: до 8 попыток с интервалом 10 сек
+Write-Host "== 5/5 health check =="
+$health = $null
+for ($i = 1; $i -le 8; $i++) {
+    $health = ssh gym-vps "curl -s http://127.0.0.1:8080/health"
+    if ($health -and $health -like '*"ok":true*') { break }
+    Write-Host "attempt $i/8: no ok:true yet, waiting 10s..."
+    Start-Sleep -Seconds 10
+}
+if (-not $health -or $health -notlike '*"ok":true*') {
+    Write-Host "HEALTH CHECK FAILED after 8 attempts: no ok:true in response"; exit 1
+}
+Write-Host $health
+ssh gym-vps "docker compose -f /opt/gym/docker-compose.yml ps"
+if ($LASTEXITCODE -ne 0) { Write-Host "COMPOSE PS FAILED"; exit 1 }
+
+Write-Host "Deploy finished. Image: ghcr.io/polkalex/gymhelper:latest. Check PROD in Telegram."

@@ -1,15 +1,24 @@
+# Прод-запуск GymHelper на VPS. Образ тянется из ghcr.io — его публикует CI на push в main,
+# локально ничего не собирается (на VPS 1 GB RAM сборка невозможна). Рядом лежит .env с токеном.
 services:
   gymbot:
-    build: .
-    image: gymhelper:latest
+    image: ghcr.io/polkalex/gymhelper:latest
     container_name: gymbot
     restart: unless-stopped
     ports:
       - "127.0.0.1:8080:8080"
     environment:
-      # положите токен в файл .env рядом с compose (в .gitignore) или экспортируйте в шелл
-      - GYM_BOT_TOKEN=${GYM_BOT_TOKEN:?не задан GYM_BOT_TOKEN}
+      # токен берётся из файла .env рядом с compose (в .gitignore)
+      - GYM_BOT_TOKEN=${GYM_BOT_TOKEN:?не задан GYM_BOT_TOKEN — создайте .env со строкой GYM_BOT_TOKEN=...}
       - GYM_PORT=8080
+      # публикуем порт только на loopback хоста (127.0.0.1:8080), поэтому внутри контейнера слушаем все интерфейсы
+      - GYM_BIND_ADDR=0.0.0.0
       # - GYM_WEBAPP_URL=https://ваш-домен.example
     volumes:
       - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
