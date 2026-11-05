@@ -11,9 +11,15 @@
 
 ## Шаг 1. Сгенерировать отдельный ключ (в PowerShell)
 
+Если каталога `.ssh` ещё нет — создайте его, затем сгенерируйте ключ:
+
 ```powershell
+mkdir "$env:USERPROFILE\.ssh" -Force
 ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\backup_key" -C "gym-backup-pull"
 ```
+
+⚠️ Важно: команды — для **PowerShell** (`$env:USERPROFILE`). В cmd.exe синтаксис другой
+(`%USERPROFILE%`), и при запуске из cmd пути с `$env:` не сработают.
 
 Passphrase оставить пустой (иначе планировщик не сможет запускать без ввода пароля).
 Ключ посвящён только бэкапам: если что-то подозрительное — просто удалите его строку
@@ -21,7 +27,7 @@ Passphrase оставить пустой (иначе планировщик не
 
 ## Шаг 2. Описать хост в ssh config
 
-Файл `%USERPROFILE%\.ssh\config` (создать, если нет), добавить блок:
+Файл `$env:USERPROFILE\.ssh\config` (создать, если нет), добавить блок:
 
 ```
 Host gym-vps
