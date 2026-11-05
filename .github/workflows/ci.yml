@@ -100,12 +100,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Теги: latest + sha-хеш коммита; github.repository переживает переименование репо
+      # Теги: latest + sha-хеш коммита. Обязателен префикс ghcr.io/ — без него
+      # metadata-action таргетит Docker Hub (там GITHUB_TOKEN не авторизован);
+      # lowercase пути metadata-action делает сам, переименование репо переживёт
       - if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=raw,value=latest
             type=sha
