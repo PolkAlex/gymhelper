@@ -10,6 +10,7 @@
 - Compose-файл лежит в `/opt/gym/docker-compose.yml` (доставляется `scripts/deploy.ps1` по scp).
 - Данные — там же, `/opt/gym/data` (volume `./data:/app/data`), как и раньше.
 - Токен бота — `/opt/gym/.env`, строка `GYM_BOT_TOKEN=...`.
+- URL кнопки Mini App — там же в `.env`, строка `GYM_WEBAPP_URL=...` (значение из `webapp.txt`).
 - Порт слушается только на loopback: `127.0.0.1:8080` (снаружи прокси sslip.io).
 
 ## Установка Docker на VPS
@@ -46,9 +47,18 @@ Docker сохранит учётку в `/root/.docker/config.json`. Никак�
 
 ```bash
 cd /opt/gym
-# .env из существующего token.txt (значение берётся из него же, руками не копируем):
-printf 'GYM_BOT_TOKEN=%s\n' "$(cat token.txt)" > .env && chmod 600 .env
+# .env из существующих файлов (значения руками не копируем):
+printf 'GYM_BOT_TOKEN=%s\n' "$(cat token.txt)" > .env
+printf 'GYM_WEBAPP_URL=%s\n' "$(cat webapp.txt)" >> .env
+chmod 600 .env
 ```
+
+⚠️ Эти `printf`-команды выполняйте **на VPS внутри bash-скрипта** (не вставкой
+через ssh из PowerShell): экранирование `\n` при передаче команды через слои
+PowerShell → ssh может исказиться — вместо перевода строки в файл попадёт
+литеральная `n`, и токен станет невалидным (Telegram ответит 401).
+Реальный случай из миграции 05.11.2026: 61 байт «токен + n» вместо 62 байт
+«токен + перевод строки» — диагностировалось по длине значения в контейнере.
 
 `docker-compose.yml` попадёт на VPS при деплое через `scripts/deploy.ps1` (scp)
 или вручную: `scp docker-compose.yml gym-vps:/opt/gym/`.
@@ -112,8 +122,13 @@ curl http://127.0.0.1:8080/health                        # {"ok":true,...}
 ```
 
 - Бот отвечает в Telegram (`/start`).
+- В логах есть строка `Mini App menu button set: <URL>` — иначе кнопка Mini App
+  не назначена (проверьте `GYM_WEBAPP_URL` в `.env`).
 - Mini App открывается и сохраняет тренировки (данные из `data/` на месте —
   старые тренировки видны).
+- В логах нет `HTTP 409 Conflict` — иначе где-то запущен второй инстанс бота
+  с тем же токеном (проверьте другие машины: два поллера «рвут» друг другу
+  апдейты и расшивают данные).
 
 ## Особенности
 

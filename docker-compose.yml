@@ -13,7 +13,8 @@ services:
       - GYM_PORT=8080
       # публикуем порт только на loopback хоста (127.0.0.1:8080), поэтому внутри контейнера слушаем все интерфейсы
       - GYM_BIND_ADDR=0.0.0.0
-      # - GYM_WEBAPP_URL=https://ваш-домен.example
+      # URL кнопки Mini App: перенесите содержимое webapp.txt в .env на VPS (GYM_WEBAPP_URL=...)
+      - GYM_WEBAPP_URL=${GYM_WEBAPP_URL:-}
     volumes:
       - ./data:/app/data
     healthcheck:
