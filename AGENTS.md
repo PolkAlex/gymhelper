@@ -177,12 +177,21 @@ field-id поля «Приоритет»: `PVTF_lAHOChl8UM4BqICLzhok_ho`
 
 ### Поле «Спринт» (итерации)
 
-Поле типа Iteration: спринты по 2 недели, серия стартует 09.11.2026 (понедельник).
-Вместимость спринта — п.11 (ОДИН эпик или ДВА мелких тикета). Тикетам спринта
-проставляется поле «Спринт»; views доски: «Спринт N» (фильтр по итерации) и «Бэклог»
-(всё без итерации). Создано владельцем через веб-UI (API этой версии schema
-ITERATION-поля не создаёт); id поля/итераций: `gh project field-list 1 --owner PolkAlex`.
-Установка тикету: `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOChl8UM4BqICL --field-id <SPRINT_FIELD_ID> --iteration-id <ITERATION_ID>`
+Поле типа Iteration (`PVTIF_lAHOChl8UM4BqICLzhos4e4`), создано владельцем через веб-UI
+(API этой версии schema ITERATION-поля не создаёт). Спринты по 2 недели, серия стартует
+09.11.2026 (понедельник). Вместимость спринта — п.11 (ОДИН эпик или ДВА мелких тикета).
+Тикетам спринта проставляется поле «Спринт»; views доски: «Спринт N» (фильтр по итерации) и «Бэклог»
+(всё без итерации). id поля/итераций: `gh project field-list 1 --owner PolkAlex`.
+Установка тикету: `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOChl8UM4BqICL --field-id PVTIF_lAHOChl8UM4BqICLzhos4e4 --iteration-id <ITERATION_ID>`
+
+### Поле «Story Points»
+
+Числовое поле для оценки объёма эпиков/тикетов. Оценку предлагает lead (по опыту похожих
+задач), утверждает владелец. В спринт берём по вместимости (п.11) согласно приоритету.
+
+field-id поля «Story Points»: `PVTF_lAHOChl8UM4BqICLzhotCMg`
+
+Установка: `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOChl8UM4BqICL --field-id PVTF_lAHOChl8UM4BqICLzhotCMg --number <N>`
 
 ### Коды тикетов в заголовках
 
