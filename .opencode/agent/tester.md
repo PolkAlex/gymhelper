@@ -3,14 +3,7 @@ description: QA-инженер. Пишет e2e-сценарии поведени
 mode: subagent
 permission:
   bash:
-    "*": ask
-    "node *": allow
-    "npm *": allow
-    "npx *": allow
-    "javac *": allow
-    "java *": allow
-    "git status": allow
-    "git diff*": allow
+    "*": allow
   edit:
     "*": deny
     "tests/**": allow

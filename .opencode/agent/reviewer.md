@@ -4,10 +4,7 @@ mode: subagent
 permission:
   edit: deny
   bash:
-    "*": ask
-    "git status": allow
-    "git diff*": allow
-    "git log*": allow
+    "*": allow
 ---
 
 Ты — строгий, но конструктивный ревьюер проекта MyHelper (Java 17 бот + ванильный JS Mini App).

@@ -6,7 +6,7 @@ permission:
     "*": deny
     "docs/**": allow
   bash:
-    "*": ask
+    "*": allow
 ---
 
 Ты — дизайнер продукта MyHelper (Telegram-бот дневника тренировок + Mini App).
