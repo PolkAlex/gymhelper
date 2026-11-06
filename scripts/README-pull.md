@@ -3,7 +3,7 @@
 `scripts/backup-pull.ps1` раз в час (и при каждом входе в Windows) проверяет на VPS
 свежий архив `/opt/gym/backups/gym-data-*.tar.gz` (его создаёт `deploy/backup.sh`, см.
 `deploy/README-backup.md`) и, если он новее скачанного ранее (маркер `last-pulled.txt`),
-забирает его по SSH в `D:\Backups\Gym`. Старше 14 дней локальные архивы удаляются.
+забирает его по SSH в `C:\Backups\Gym`. Старше 14 дней локальные архивы удаляются.
 
 **Секретов в скрипте нет** — только пути. Аутентификация через отдельный ключ
 `backup_key`, прописанный в ssh config. **`deploy_key` и `token.txt` не трогать** —
@@ -58,9 +58,9 @@ ssh gym-vps "echo ok"
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup-pull.ps1
 ```
 
-Ожидаемо: скачает свежий архив в `D:\Backups\Gym` (путь настраивается в шапке скрипта:
+Ожидаемо: скачает свежий архив в `C:\Backups\Gym` (путь настраивается в шапке скрипта:
 `$VpsHost`, `$RemoteDir`, `$LocalDir`, `$KeepDays`). Повторный запуск скажет
-«Новых архивов нет». Лог: `D:\Backups\Gym\backup-pull.log`, маркер: `last-pulled.txt`.
+«Новых архивов нет». Лог: `C:\Backups\Gym\backup-pull.log`, маркер: `last-pulled.txt`.
 Маркер можно удалить — тогда скрипт перекачает тот же архив поверх (безопасно).
 
 ## Шаг 5. Задача планировщика
@@ -93,7 +93,7 @@ schtasks /Create /TN "GymBackupPull" /SC HOURLY /MO 1 /F /TR "powershell -NoProf
 ```powershell
 ssh gym-vps "ls -1 /opt/gym/backups"                 # архивы на VPS есть?
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\backup-pull.ps1   # код 0
-Get-Content D:\Backups\Gym\backup-pull.log -Tail 10  # лог без ERROR
+Get-Content C:\Backups\Gym\backup-pull.log -Tail 10  # лог без ERROR
 schtasks /Run /TN "GymBackupPull"                    # задача запускается
 schtasks /Query /TN "GymBackupPull" /V /FO LIST      # последний результат: 0x0
 ```

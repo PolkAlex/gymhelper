@@ -19,7 +19,7 @@
 # ---------- Настройки (под машину владельца) ----------
 $VpsHost     = 'gym-vps'                 # Host из ~/.ssh/config (ключ backup_key)
 $RemoteDir   = '/opt/gym/backups'        # каталог архивов на VPS
-$LocalDir    = 'D:\Backups\Gym'          # локальный каталог для архивов
+$LocalDir    = 'C:\Backups\Gym'          # локальный каталог для архивов
 $ArchiveMask = 'gym-data-*.tar.gz'       # маска имён архивов (создаёт deploy/backup.sh)
 $KeepDays    = 14                        # локальный ретеншн: хранить архивов не старше N дней
 $MarkerFile  = Join-Path $LocalDir 'last-pulled.txt'  # имя последнего скачанного архива
