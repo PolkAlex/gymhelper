@@ -187,6 +187,12 @@ field-id поля «Приоритет»: `PVTF_lAHOChl8UM4BqICLzhok_ho`
 (всё без итерации). id поля/итераций: `gh project field-list 1 --owner PolkAlex`.
 Установка тикету: `gh project item-edit --id <ITEM_ID> --project-id PVT_kwHOChl8UM4BqICL --field-id PVTIF_lAHOChl8UM4BqICLzhos4e4 --iteration-id <ITERATION_ID>`
 
+⚠️ Поле «Спринт» — ОБЯЗАТЕЛЬНОЕ для каждого тикета, взятого в работу (правило владельца,
+06.11.2026): пока идёт текущий спринт, он проставляется ЛЮБОМУ тикету, который едет по
+конвейеру (Bug, Task, Story, Epic, Idea-контейнер — всем), в момент взятия в работу.
+Тикет без спринта на доске = ошибка lead'а. Backlog-идеи, не взятые в работу, могут
+оставаться без итерации (они видны во view «Бэклог»).
+
 ### Поле «Story Points»
 
 Числовое поле — оценка объёма. **Оцениваются ТОЛЬКО эпики** (Story/Task не оцениваются).
