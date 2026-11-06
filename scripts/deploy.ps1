@@ -49,14 +49,26 @@ if (-not $runId) {
 }
 Write-Host "CI run found: $runId"
 
-# ждём завершения CI (внутри и публикация образа), таймаут ~20 минут
-$proc = Start-Process -FilePath "gh" -ArgumentList @("run","watch","$runId","--exit-status") -NoNewWindow -PassThru
-if (-not $proc.WaitForExit(1200000)) {
-    try { $proc.Kill() } catch {}
-    Write-Host "ERROR: timeout (20 min) waiting for CI run $runId — image NOT published."; exit 1
+# ждём завершения CI (внутри и публикация образа), таймаут ~20 минут.
+# Опрос статуса вместо `gh run watch`: watch через Start-Process в не-интерактивной
+# консоли возвращает мусорный exit-код даже для зелёного прогона (случай 06.11.2026)
+Write-Host "waiting for CI run $runId to complete (poll 30s, timeout 20 min)..."
+$deadline = (Get-Date).AddMinutes(20)
+$ciOk = $false
+while ($true) {
+    $statusJson = gh run view $runId --json status,conclusion
+    if ($LASTEXITCODE -eq 0 -and $statusJson) {
+        $st = $statusJson | ConvertFrom-Json
+        if ($st.status -eq "completed") {
+            if ($st.conclusion -eq "success") { $ciOk = $true }
+            break
+        }
+    }
+    if ((Get-Date) -gt $deadline) { break }
+    Start-Sleep -Seconds 30
 }
-if ($proc.ExitCode -ne 0) {
-    Write-Host "ERROR: CI run $runId FAILED — image NOT published."; exit 1
+if (-not $ciOk) {
+    Write-Host "ERROR: CI run $runId not green in 20 min (or failed) — image NOT published."; exit 1
 }
 Write-Host "CI green, image published to ghcr.io"
 
