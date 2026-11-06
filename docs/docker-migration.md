@@ -11,7 +11,9 @@
 - Данные — там же, `/opt/gym/data` (volume `./data:/app/data`), как и раньше.
 - Токен бота — `/opt/gym/.env`, строка `GYM_BOT_TOKEN=...`.
 - URL кнопки Mini App — там же в `.env`, строка `GYM_WEBAPP_URL=...` (значение из `webapp.txt`).
-- Порт слушается только на loopback: `127.0.0.1:8080` (снаружи прокси sslip.io).
+- Порт слушается только на loopback: `127.0.0.1:8080`; наружу — nginx-прокси с HTTPS
+  на `https://gym-helper.com` (сертификат Let's Encrypt на два имени: gym-helper.com +
+  45.91.169.125.sslip.io, продлевается certbot-ом автоматически).
 
 ## Установка Docker на VPS
 
