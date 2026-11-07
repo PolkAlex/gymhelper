@@ -221,6 +221,40 @@ public class GymContractTest {
         check(BotLogic.plural(11, "тренировка", "тренировки", "тренировок").equals("тренировок"), "plural: 11");
         check(BotLogic.plural(21, "тренировка", "тренировки", "тренировок").equals("тренировка"), "plural: 21");
 
+        /* рассылка владельцем [UX-T16]: разбор /announce и /announce_dry, строгий матчинг */
+        String[] a1 = BotLogic.parseAnnounce("/announce Релиз 1.18 в 21:00");
+        check(a1 != null && "0".equals(a1[0]) && "Релиз 1.18 в 21:00".equals(a1[1]), "parseAnnounce: /announce с текстом");
+        String[] a2 = BotLogic.parseAnnounce("/announce_dry Техработы ночью");
+        check(a2 != null && "1".equals(a2[0]) && "Техработы ночью".equals(a2[1]), "parseAnnounce: /announce_dry с текстом");
+        String[] a3 = BotLogic.parseAnnounce("/announce");
+        check(a3 != null && "0".equals(a3[0]) && a3[1].isEmpty(), "parseAnnounce: /announce без текста — пустой текст");
+        String[] a4 = BotLogic.parseAnnounce("/ANNOUNCE капитал");
+        check(a4 != null && "0".equals(a4[0]) && "капитал".equals(a4[1]), "parseAnnounce: регистр команды не важен");
+        check(BotLogic.parseAnnounce("/announcex нет") == null, "parseAnnounce: /announcex не матчится");
+        check(BotLogic.parseAnnounce("/announce_dryx нет") == null, "parseAnnounce: /announce_dryx не матчится");
+        check(BotLogic.parseAnnounce("/announce_x") == null, "parseAnnounce: /announce_x не матчится");
+        check(BotLogic.parseAnnounce("привет") == null, "parseAnnounce: не команда — null");
+        check(BotLogic.parseAnnounce(null) == null, "parseAnnounce: null — null");
+
+        /* Storage.chatIds [UX-T16]: id из имён chat_<id>.json, чужие/мусорные файлы и бэкапы не попадают */
+        try {
+            java.nio.file.Path tmpChats = java.nio.file.Files.createTempDirectory("gymchats");
+            Storage stChats = new Storage(tmpChats);
+            java.nio.file.Files.writeString(tmpChats.resolve("chat_111.json"), "{}");
+            java.nio.file.Files.writeString(tmpChats.resolve("chat_222.json"), "{}");
+            java.nio.file.Files.writeString(tmpChats.resolve("chat_notanumber.json"), "{}");
+            java.nio.file.Files.writeString(tmpChats.resolve("chat_333.old.json"), "{}");
+            /* >18 цифр: regex проходит, parseLong даёт overflow → файл пропускается, а не валит листинг */
+            java.nio.file.Files.writeString(tmpChats.resolve("chat_99999999999999999999.json"), "{}");
+            java.nio.file.Files.createDirectories(tmpChats.resolve("backups"));
+            java.nio.file.Files.writeString(tmpChats.resolve("backups").resolve("chat_444.1700000000000.json"), "{}");
+            java.util.List<Long> ids = stChats.chatIds();
+            check(ids.size() == 2 && ids.contains(111L) && ids.contains(222L),
+                "chatIds: только chat_<id>.json, мусор и backups не попадают");
+        } catch (Exception chatsErr) {
+            throw new AssertionError("CONTRACT FAIL: chatIds " + chatsErr);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }
