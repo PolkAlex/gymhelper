@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-I3] Набор иконок Amber Glass · до/после</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 430px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption:first-child { margin-top: 0; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.note b { color: #a8adb6; font-weight: 600; }
+
+/* ============ темы демо-блоков (токены из web/style.css) ============ */
+.demo {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glass-brd: rgba(255,255,255,.10);
+    --btn: rgba(255,255,255,.07); --nested: rgba(0,0,0,.18);
+    --nav-idle: #6d737d;
+    --c-chest: rgba(255,194,32,.15); --c-legs: rgba(90,176,255,.15);
+    --c-back: rgba(255,138,92,.15); --c-abs: rgba(126,224,129,.15);
+    --c-shoulders: rgba(70,210,200,.15); --c-arms: rgba(186,140,255,.15);
+    --c-glutes: rgba(255,110,170,.15);
+    color: var(--text);
+}
+.demo.light {
+    --bg: #f6f6f4; --text: #16181b; --muted: #8a9099;
+    --accent: #ffb000; --accent-deep: #e09000;
+    --glass: rgba(255,255,255,.6); --glass-brd: rgba(22,24,27,.08);
+    --btn: rgba(255,255,255,.70); --nested: rgba(22,24,27,.05);
+    --nav-idle: #8a9099;
+    background: var(--bg);
+}
+.demo.light .frame { background: var(--bg); }
+
+/* ============ сетка иконок до/после ============ */
+.igrid {
+    background: #101114; border: 1px solid #23262c; border-radius: 20px;
+    padding: 14px 14px 6px; margin-top: 12px;
+}
+.demo.light .igrid { background: #efefec; border-color: rgba(22,24,27,.08); }
+.igroup {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    color: #ffc220; margin: 16px 2px 8px;
+}
+.demo.light .igroup { color: #b57d00; }
+.irow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 6px; border-radius: 12px;
+}
+.irow:hover { background: rgba(255,255,255,.04); }
+.demo.light .irow:hover { background: rgba(22,24,27,.04); }
+.ibox {
+    width: 40px; height: 40px; flex: none; border-radius: 12px;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.ibox.old { background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07); color: #8a9099; }
+.ibox.new { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10); color: var(--accent); }
+.demo.light .ibox.old { background: rgba(22,24,27,.05); border-color: rgba(22,24,27,.08); color: #8a9099; }
+.demo.light .ibox.new { background: rgba(255,255,255,.7); border-color: rgba(22,24,27,.08); color: #e09000; }
+.ibox svg { width: 24px; height: 24px; }
+.iarrow { flex: none; color: #4a4f58; font-size: 13px; }
+.demo.light .iarrow { color: #b6bbc3; }
+.imeta { min-width: 0; }
+.imeta .k { font-size: 12px; font-weight: 700; color: var(--text); font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+.imeta .k em { font-style: normal; color: #7d838e; font-weight: 400; }
+.imeta .d { font-size: 11px; color: #7d838e; margin-top: 1px; line-height: 1.35; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    width: 390px; max-width: 100%; margin: 12px auto 0;
+    border-radius: 36px; border: 1px solid #23262c; overflow: hidden;
+    background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.demo.light .phone { border-color: rgba(22,24,27,.15); background: #f6f6f4; box-shadow: 0 24px 70px rgba(0,0,0,.25); }
+.frame { background: #101114; padding: 10px 14px 14px; }
+.demo.light .frame { background: #f6f6f4; }
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; padding-top: 6px; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.apphead .ttl { flex: 1; font-size: 17px; font-weight: 700; color: var(--text); }
+.tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: var(--btn); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* стекло/карточки */
+.glass {
+    background: var(--glass); border: 1px solid var(--glass-brd);
+    border-radius: 20px; padding: 14px; margin-top: 12px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+.demo.light .glass { box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 8px 24px rgba(22,24,27,.08); }
+.dhead { display: flex; align-items: center; gap: 12px; }
+.dhead .dn { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; color: var(--text); }
+.dhead .dd { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; font-weight: 400; }
+
+/* шапка карточки упражнения: .exhead .ico (32px, янтарный на стекле) */
+.exhead { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.exhead:first-of-type { margin-top: 2px; }
+.exhead .ico {
+    width: 32px; height: 32px; flex: none; border-radius: 10px;
+    background: var(--btn); border: 1px solid var(--glass-brd);
+    display: inline-flex; align-items: center; justify-content: center; color: var(--accent);
+}
+.exhead .ico svg { width: 19px; height: 19px; }
+.exhead .en { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 700; color: var(--text); }
+.exhead .ev { font-size: 13px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.setline {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 14px; padding: 9px 12px; margin-top: 8px;
+    font-size: 13px; color: var(--text);
+}
+.demo.light .setline { border-color: rgba(22,24,27,.05); }
+.setline b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.wtag {
+    margin-left: auto; background: rgba(255,194,32,.12);
+    border: 1px solid rgba(255,194,32,.2); color: var(--accent);
+    border-radius: 9px; padding: 3px 9px; font-size: 12px; font-weight: 700; white-space: nowrap;
+}
+
+/* пилюли-чипы карточки (wpill): clock/flame/trophy вместо 🕐🔥🏆 */
+.dchiprow { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.wpill {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 999px; padding: 4px 10px;
+    font-size: 11.5px; font-weight: 600; color: var(--text); white-space: nowrap;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08);
+    font-variant-numeric: tabular-nums;
+}
+.demo.light .wpill { background: rgba(22,24,27,.05); border-color: rgba(22,24,27,.07); }
+.wpill svg { width: 13px; height: 13px; color: var(--muted); }
+.wpill.k { color: var(--accent); }
+.wpill.k svg { color: var(--accent); }
+
+/* круги мышечных групп (mgc): иконка-силуэт на цветном фоне */
+.mgroups { display: flex; justify-content: space-between; gap: 6px; margin-top: 4px; }
+.mg { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted); font-weight: 600; }
+.mgc {
+    width: 44px; height: 44px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid rgba(255,255,255,.10); color: var(--text);
+}
+.demo.light .mgc { border-color: rgba(22,24,27,.08); }
+.mgc svg { width: 22px; height: 22px; }
+.mg b { color: var(--text); font-weight: 700; font-size: 11px; }
+
+/* док-панель (nav): 4 таба + FAB */
+.nav {
+    margin: 14px -14px -14px; padding: 8px 16px 14px;
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); display: flex; align-items: flex-end;
+}
+.demo.light .nav { background: linear-gradient(180deg, rgba(246,246,244,.2), rgba(246,246,244,.96) 40%); }
+.nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--nav-idle); font-size: 10px; font-weight: 600; padding: 2px 0;
+    font-family: inherit;
+}
+.nbtn.on { color: var(--text); }
+.nbtn.on .nico { color: var(--accent); }
+.nico { display: inline-flex; line-height: 1; }
+.nico svg { width: 20px; height: 20px; }
+.nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.nfab svg { width: 24px; height: 24px; stroke-width: 2.2; }
+
+/* размерная линейка */
+.sizerow { display: flex; align-items: flex-end; gap: 16px; margin-top: 12px; background: #101114; border: 1px solid #23262c; border-radius: 20px; padding: 14px; }
+.demo.light .sizerow { background: #efefec; border-color: rgba(22,24,27,.08); }
+.scell { display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--accent); }
+.scell span { font-size: 10px; color: #7d838e; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">[UX-I3] Набор иконок · Amber Glass <span>до → после</span></div>
+    <div class="note">Иконки концепта 2 (Amber Drive) перерисованы в геометрию: <b>никаких
+    «человечков»</b> — мышцы читаются силуэтом в цветных кругах, упражнения — как механика
+    движения (вектор, снаряд, траектория). Сетка 24×24, stroke 1.7, currentColor, round caps.
+    Имена ключей <b>не менялись</b>; добавлены <b>flame, trophy, clock, history</b>
+    (вместо эмодзи 🔥🏆🕐 и секундомера в доке). Спека: docs/spec-i3-icons.md.</div>
+
+    <div class="caption">Сетка 1 · до → после <span>тёмная тема</span></div>
+    <div id="gridDark" class="demo"></div>
+
+    <div class="caption">Сетка 2 · новый набор <span>светлая тема</span></div>
+    <div class="note">Тот же набор на светлой теме: цвет — currentColor, фон боксов — стеклянные
+    токены light-варианта. Оптический вес и различимость сохраняются.</div>
+    <div id="gridLight" class="demo light"></div>
+
+    <div class="caption">Живой пример · док-панель <span>тёмная тема · 390px</span></div>
+    <div class="note">Нижнее меню: «История» — новый ключ <b>history</b> (часы со стрелкой, рекомендация
+    спеки §7), «Статистика» — chart, «Техника» — pilates, «Профиль» — user. FAB — plus (толщина 2.2 из CSS).
+    В карточке — пилюли с clock/flame/trophy вместо 🕐🔥🏆.</div>
+    <div class="demo">
+      <div class="phone"><div class="frame">
+        <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+        <div class="apphead"><div class="ttl">GymHelper · История</div><button class="tbtn" id="tbUser1"></button></div>
+        <div class="glass">
+          <div class="dhead">
+            <div style="flex:1;min-width:0"><div class="dn">Жим лёжа · присед</div><span class="dd">3 ноября, вторник · 18:20–19:05</span></div>
+          </div>
+          <div class="dchiprow">
+            <span class="wpill" id="wCl1"></span>
+            <span class="wpill k" id="wFl1"></span>
+            <span class="wpill" id="wTr1"></span>
+          </div>
+        </div>
+        <div class="glass" style="padding-bottom:0">
+          <div class="nav" id="nav1"></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="caption">Живой пример · шапка карточки и круги мышц <span>тёмная тема</span></div>
+    <div class="note">Шапка упражнения: .exhead .ico 32px — силуэт chest в янтарном боксе читается,
+    даже когда строка сжата. Круги мышц (.mgc): цвет фона остаётся за группой, иконка — нейтральный
+    силуэт (chest / row / squat / lateral).</div>
+    <div class="demo">
+      <div class="phone"><div class="frame">
+        <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+        <div class="glass">
+          <div class="exhead"><span class="ico" id="exChest"></span><span class="en">Жим лёжа</span><span class="ev">195 кг</span></div>
+          <div class="setline"><span><b>65 кг,</b> 3 подхода по 10 повторений</span></div>
+          <div class="setline"><span><b>70 кг,</b> 3 подхода по 8 повторений</span><span class="wtag">210 кг</span></div>
+          <div class="exhead"><span class="ico" id="exSquat"></span><span class="en">Приседания</span><span class="ev">360 кг</span></div>
+          <div class="setline"><span><b>90 кг,</b> 4 подхода по 8 повторений</span></div>
+        </div>
+        <div class="glass">
+          <div class="dhead"><div class="dn">Мышечные группы · эта неделя</div></div>
+          <div class="mgroups" id="mg1"></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="caption">Живые примеры <span>светлая тема</span></div>
+    <div class="note">Те же компоненты на light-токенах: иконки рисуются currentColor, правки CSS не нужны.</div>
+    <div class="demo light">
+      <div class="phone"><div class="frame">
+        <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+        <div class="apphead"><div class="ttl">GymHelper · История</div><button class="tbtn" id="tbUser2"></button></div>
+        <div class="glass">
+          <div class="dhead">
+            <div style="flex:1;min-width:0"><div class="dn">Жим лёжа · присед</div><span class="dd">3 ноября, вторник · 18:20–19:05</span></div>
+          </div>
+          <div class="dchiprow">
+            <span class="wpill" id="wCl2"></span>
+            <span class="wpill k" id="wFl2"></span>
+            <span class="wpill" id="wTr2"></span>
+          </div>
+        </div>
+        <div class="glass" style="padding-bottom:0">
+          <div class="nav" id="nav2"></div>
+        </div>
+      </div></div>
+      <div class="phone"><div class="frame">
+        <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+        <div class="glass">
+          <div class="exhead"><span class="ico" id="exChest2"></span><span class="en">Жим лёжа</span><span class="ev">195 кг</span></div>
+          <div class="setline"><span><b>65 кг,</b> 3 подхода по 10 повторений</span></div>
+          <div class="exhead"><span class="ico" id="exSquat2"></span><span class="en">Приседания</span><span class="ev">360 кг</span></div>
+          <div class="setline"><span><b>90 кг,</b> 4 подхода по 8 повторений</span></div>
+        </div>
+        <div class="glass">
+          <div class="dhead"><div class="dn">Мышечные группы · эта неделя</div></div>
+          <div class="mgroups" id="mg2"></div>
+        </div>
+      </div></div>
+    </div>
+
+    <div class="caption">Размерная линейка <span>18 / 20 / 22 / 24 / 40 px</span></div>
+    <div class="note">Реальные размеры UI: 18px — barebtn, 20px — док, 22px — круги мышц, 24px — боксы .ico,
+    40px — крупный .ico. Проверялись самые мелкие детали набора: ручки cup, корона timer, капля flame.</div>
+    <div class="demo"><div class="sizerow" id="sizes"></div></div>
+
+</div>
+<script>
+/* ---------- SVG helper (как _s() в web/catalog.js) ---------- */
+function S(inner) {
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + inner + '</svg>';
+}
+/* ---------- [UX-I3] сет: [ключ, было (path из catalog.js), стало, комментарий] ---------- */
+var DATA = [
+['Мышцы · силуэты (круги .mgc)', [
+['chest','<path d="M3 17h13"/><path d="M5 17v3M13 17v3"/><circle cx="7" cy="13.5" r="1.7"/><path d="M8.5 14.5l3-2.5"/><path d="M13 8h8M15 6v4M19 6v4"/>','<path d="M4.5 18v-5.5c0-3.3 2.1-6 4.8-6 1.3 0 2.2.6 2.7 1.7.5-1.1 1.4-1.7 2.7-1.7 2.7 0 4.8 2.7 4.8 6V18"/><path d="M4.5 18h15"/>','двуарочная клетка: читается силуэтом'],
+['row','<path d="M3 18h18"/><circle cx="8" cy="9" r="1.7"/><path d="M8 11v3.5M8 11.5l7-3 5 2"/><path d="M20 10.5v4"/>','<path d="M5 6.5h14"/><path d="M8.5 6.5c0 5.5 1.4 9.3 3.5 11.5 2.1-2.2 3.5-6 3.5-11.5"/>','плечи + клин спины'],
+['lateral','<circle cx="12" cy="5" r="1.8"/><path d="M12 7v6"/><path d="M11 8L5 11M13 8l6 3"/><path d="M4 12l1 3M20 12l-1 3"/>','<path d="M12 4v2.5"/><path d="M5 12.5c0-3.3 3.1-6 7-6s7 2.7 7 6"/><path d="M5 12.5c0 2.3 1.1 4 3 4.6"/><path d="M19 12.5c0 2.3-1.1 4-3 4.6"/>','ярмо: дуга плеч + две дельты'],
+['curl','<circle cx="7" cy="5" r="1.7"/><path d="M7 7v10"/><path d="M7 9l5 1.5c2 .6 3 2 3 4"/><path d="M15 9h4"/>','<path d="M5 19c0-8 4.3-12.5 9.5-12.5"/><circle cx="16.7" cy="6.3" r="2.4"/><path d="M13.7 13.7c2.7-.6 4.4-2.5 4.6-4.9"/>','согнутая рука с кулаком'],
+['squat','<circle cx="12" cy="4" r="1.7"/><path d="M12 6v5"/><path d="M12 11l-4 2.5v3M12 11l4 2.5v3"/><path d="M12 6l-2.5 2M12 6l2.5 2"/>','<path d="M4.5 8.5H10V19"/><path d="M19.5 8.5H14V19"/>','зеркальные «согнутые ноги»'],
+['glute','<circle cx="8" cy="7" r="1.7"/><path d="M8 9v4l-3 6M8 13h5l3 6"/><path d="M8 9l4 1"/>','<circle cx="12" cy="13.5" r="6"/><path d="M12 7.5v5.5"/><path d="M7.2 10h9.6"/>','круг со складкой — силуэт в круге .mgc'],
+['core','<circle cx="7" cy="6" r="1.7"/><path d="M7 8l5 4 5-1"/><path d="M12 12l-1.5 4M16.5 11l1 4"/><path d="M10.5 16h5"/>','<rect x="7" y="5" width="10" height="14" rx="4.5"/><path d="M9.3 10.2h5.4"/><path d="M9.3 13.8h5.4"/>','капсула-корпус + полосы пресса']
+]],
+['Упражнения · механика движения', [
+['incline','<path d="M3 19l10-6"/><path d="M5.5 20v-2M11 16.7v-2"/><circle cx="6" cy="16.5" r="1.6"/><path d="M13 10h8M15 8v4M19 8v4"/>','<path d="M4 19h16"/><path d="M6.5 19L17.5 8"/><path d="M6.5 15L16 5.5"/>','наклонная скамья двумя линиями'],
+['fly','<circle cx="12" cy="5" r="1.8"/><path d="M12 7v5"/><path d="M12 8.5L6 12M12 8.5l6 3.5"/><path d="M4.5 12.5c1.5 2 3 2.6 4.5 2.2M19.5 12.5c-1.5 2-3 2.6-4.5 2.2"/>','<path d="M12 5v7"/><path d="M12 6.5C8 6.5 5.3 9.2 4.3 13"/><path d="M12 6.5c4 0 6.7 2.7 7.7 6.5"/>','дуги разведения от оси груди'],
+['pushup','<path d="M3 18h18"/><path d="M5 15.5L16 9"/><circle cx="17.5" cy="8" r="1.7"/><path d="M6 18v-1M18 18v-1"/>','<path d="M3.5 19h17"/><path d="M5.5 19v-4c0-3.2 2.9-5.5 6.5-5.5s6.5 2.3 6.5 5.5v4"/>','арка тела над полом — «свой вес»'],
+['dip','<path d="M6 4v8M18 4v8"/><path d="M6 6h12"/><circle cx="12" cy="10" r="1.8"/><path d="M12 12l-1.5 5M12 12l1.5 5"/>','<path d="M6 4.5v5.5"/><path d="M18 4.5v5.5"/><path d="M6 5.5h12"/><path d="M8.8 10c0 4.2 1.2 6.8 3.2 9 2-2.2 3.2-4.8 3.2-9"/>','стойки брусьев + V-корпус'],
+['pullup','<path d="M4 4h16"/><circle cx="12" cy="8" r="1.7"/><path d="M10 9l-1.5 3M14 9l1.5 3M12 10v6M10.5 16h3"/>','<path d="M4 5.5h16"/><path d="M8.5 5.5v2.7a3.5 3.5 0 007 0V5.5"/>','перекладина + U-хват'],
+['deadlift','<circle cx="12" cy="4" r="1.6"/><path d="M12 6v6M12 12l-2 3M12 12l2 3"/><path d="M5 13h14M6.5 11v4M17.5 11v4"/>','<path d="M8 10.5v7"/><path d="M16 10.5v7"/><path d="M8 14h8"/><path d="M12 11.5V6.3"/><path d="M9.8 8.5L12 6.3l2.2 2.2"/>','штанга с блинами + вектор вверх'],
+['legpress','<path d="M3 15h10"/><path d="M4.5 12v6"/><circle cx="6" cy="12.5" r="1.6"/><path d="M7.5 13l7-5"/><path d="M15 6l5 3"/>','<path d="M4 19h10"/><path d="M9.5 19l7.5-7.5"/><path d="M14 8l4 4"/>','платформа + диагональ саней'],
+['legext','<path d="M4 8h10"/><path d="M4 14h9"/><circle cx="15" cy="11" r="1.7"/><path d="M16.5 11.5l4-1"/>','<circle cx="8" cy="15.5" r="2.3"/><path d="M10 14.5l6.5-4"/><path d="M16.5 10.5l2.5 3.5"/>','ось + рычаг вверх + валик'],
+['legcurl','<path d="M4 8h13"/><circle cx="17" cy="9.5" r="1.6"/><path d="M15.5 10.5l-4 3"/><path d="M10 14l-4.5 1"/>','<circle cx="16" cy="8.5" r="2.3"/><path d="M14 9.3l-6.5 4"/><path d="M7.5 13.3L5 16.8"/>','зеркало legext: рычаг вниз'],
+['lunge','<circle cx="10" cy="4" r="1.7"/><path d="M10 6v5M10 11l-3 7M10 11l3.5 2 2.5 5"/><path d="M7 8.5l3-2.5"/>','<path d="M3.5 19.5h17"/><path d="M9.5 4.5v15"/><path d="M9.5 12l6.5 7.5"/>','шаг-треугольник на линии пола'],
+['calf','<circle cx="12" cy="4" r="1.7"/><path d="M12 6v8"/><path d="M12 14l-1 5h4"/><path d="M4 20h16"/>','<path d="M4.5 19.5h15"/><path d="M12 4.5v10.5"/><path d="M8.5 19.5l3.5-4.5 3.5 4.5"/>','голень + клин-носок: подъём'],
+['ohp','<circle cx="12" cy="4" r="1.7"/><path d="M12 6v4"/><path d="M9.5 6L7 9M14.5 6l2.5 3"/><path d="M6 9h12M7.5 7.5v3M16.5 7.5v3"/>','<path d="M5 6h14"/><path d="M8 6L5.5 11.5"/><path d="M16 6l2.5 5.5"/><path d="M5.5 11.5h13"/>','гриф сверху + руки + плечи'],
+['triceps','<circle cx="8" cy="5" r="1.7"/><path d="M8 7v11"/><path d="M8 9l6 1.5 4-1"/><path d="M17 7v5"/>','<path d="M7 4.5h10"/><path d="M12 4.5V12"/><path d="M9.5 9.5L12 12l2.5-2.5"/>','блок + вектор вниз'],
+['plank','<path d="M3 17h18"/><circle cx="5" cy="13" r="1.6"/><path d="M6.5 14l5-2h7v3"/><path d="M8 18v-2M16 18v-1"/>','<path d="M3.5 12.5h17"/><path d="M7 12.5V19"/><path d="M17 12.5V19"/><path d="M3.5 19h17"/>','доска: линия + опоры + пол']
+]],
+['Кардио и движение · траектории', [
+['run','<circle cx="14" cy="4.5" r="1.7"/><path d="M13 7l-3 4 2.5 2.5L11 20"/><path d="M13 7l3 2 3-.5M10 11l-4 1M12.5 13.5l4 1.5 1.5 4"/>','<path d="M4.5 16.5L10 11l3.5 2.5L19 7"/><path d="M15.5 7H19v3.5"/>','траектория бега + стрелка'],
+['bike','<circle cx="6" cy="16" r="3.2"/><circle cx="18" cy="16" r="3.2"/><path d="M6 16l4-6h6l2 6M10 10l3 6"/><circle cx="12" cy="5" r="1.4"/>','<circle cx="6" cy="16.5" r="3.3"/><circle cx="18" cy="16.5" r="3.3"/><path d="M6 16.5l4-6h4l4 6"/><path d="M10 10.5l2 6"/>','убрана «голова», рама плотнее'],
+['rope','<circle cx="12" cy="4" r="1.7"/><path d="M12 6v5"/><path d="M9 6c-3 3-4 8-1 11M15 6c3 3 4 8 1 11"/>','<path d="M5.5 11.5v-1C5.5 6.6 8.4 4 12 4s6.5 2.6 6.5 6.5v1"/><path d="M5.5 11v4"/><path d="M18.5 11v4"/>','дуга скакалки + две ручки'],
+['burpee','<circle cx="6" cy="8" r="1.6"/><path d="M7.5 9l4 3M11.5 12l3-4M14.5 8l2-3"/><path d="M4 18h16"/><path d="M11.5 12L8 15M11.5 12l4 1.5 3 4.5"/>','<path d="M12 4.5v15"/><path d="M9.5 7L12 4.5 14.5 7"/><path d="M9.5 17L12 19.5l2.5-2.5"/>','цикл вниз-вверх двойной стрелкой'],
+['warmup','<circle cx="12" cy="12" r="3.4"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/>','<path d="M3 12h4l2.5-5.5L13.5 17.5 16 12h5"/>','«солнце» → пульс-линия разогрева'],
+['stretch','<circle cx="9" cy="5" r="1.7"/><path d="M9 7v5"/><path d="M9 8.5L4 11M9 8.5l7 1M9 12l-2.5 8M9 12l4 3 1 5"/>','<path d="M8.5 5c-2.5 4.7-2.5 9.3 0 14"/><path d="M15.5 5c2.5 4.7 2.5 9.3 0 14"/><path d="M12 5v14"/>','расходящиеся дуги + ось'],
+['pilates','<path d="M4 18c2-6 5-9 8-9s6 3 8 9"/><circle cx="12" cy="6" r="1.8"/><path d="M9.5 9L8 14M14.5 9l1.5 5"/><path d="M4 20h16"/>','<path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/>','арка-мост крупнее: иконка дока «Техника»']
+]],
+['Инвентарь', [
+['home','<path d="M4 11l8-7 8 7"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/>','<path d="M4.5 11L12 4.5 19.5 11"/><path d="M6.5 9.5V19h11V9.5"/><path d="M10 19v-4a2 2 0 014 0v4"/>','дверь аркой до пола'],
+['barbell','<path d="M2 12h20M5 8v8M9 6.5v11M15 6.5v11M19 8v8"/>','<path d="M3 12h18"/><path d="M6.5 8.5v7"/><path d="M9.5 6.5v11"/><path d="M14.5 6.5v11"/><path d="M17.5 8.5v7"/>','4 симметричных пары блинов'],
+['dumbbell','<path d="M7 12h10M4.5 8.5v7M8 7v10M16 7v10M19.5 8.5v7"/>','<path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/>','сохранена, выровнены поля'],
+['smith','<path d="M4 3v18M20 3v18M4 5h16"/><path d="M8 12h8M9 10v4M15 10v4"/>','<path d="M5.5 3v18"/><path d="M18.5 3v18"/><path d="M5.5 5.5h13"/><path d="M9.5 10.5v4"/><path d="M14.5 10.5v4"/><path d="M9.5 12.5h5"/>','направляющие + блин-пара на балке'],
+['cable','<rect x="4" y="3" width="4" height="18" rx="1"/><path d="M8 6c6 0 9 2 9 6v7"/><path d="M15 16h4M17 14v4"/>','<rect x="4" y="4" width="5" height="16" rx="1.5"/><path d="M9 6.5c5 0 8 2.2 8 5.5v5"/><path d="M16.5 17h4"/><path d="M18.5 14.5v5"/>','тумба + трос-дуга + ручка'],
+['machine','<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 8h8M12 8v8"/><circle cx="12" cy="16" r="1.6"/>','<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M9 8.5h6"/><path d="M9 12h6"/><path d="M9 15.5h6"/>','рама + стопка плит'],
+['pullbar','<path d="M4 5h16"/><path d="M8 5v3M16 5v3"/><circle cx="12" cy="12" r="2.4"/><path d="M12 14.5v5"/>','<path d="M4 5h16"/><path d="M4 5v2.5"/><path d="M20 5v2.5"/><path d="M10 5v3a2 2 0 004 0V5"/>','железо, а не человечек; отличён от pullup']
+]],
+['Интерфейс', [
+['custom','<circle cx="12" cy="12" r="8.5"/><path d="M12 8v8M8 12h8"/>','<circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/>','fallback, микро-правка полей'],
+['pencil','<path d="M4 20l1-4L16.5 4.5a2 2 0 012.8 0l.2.2a2 2 0 010 2.8L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>','<path d="M4 20l1-4L16.5 4.5a2 2 0 012.8 0l.2.2a2 2 0 010 2.8L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>','сохранена (резерв)'],
+['trash','<path d="M4 7h16M9 7V5h6v2M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/>','<path d="M4.5 7h15"/><path d="M9.5 7V5.5A1.5 1.5 0 0111 4h2a1.5 1.5 0 011.5 1.5V7"/><path d="M6.5 7l.8 11.6A2 2 0 009.3 20.5h5.4a2 2 0 002-1.9L17.5 7"/><path d="M10 11v4.5M14 11v4.5"/>','крышка-арка, бочка плотнее'],
+['cup','<path d="M6 4h10v6a5 5 0 01-10 0V4z"/><path d="M16 5h2a2.5 2.5 0 010 5h-2"/><path d="M4 20h14"/>','<path d="M7 4.5h10V10a5 5 0 01-10 0V4.5z"/><path d="M17 6h1.7a2.2 2.2 0 010 4.4H17"/><path d="M7 6H5.3a2.2 2.2 0 000 4.4H7"/><path d="M12 15v2.5"/><path d="M8.5 20.5a3.5 3.5 0 017 0"/>','ножка + дуга-база'],
+['chart','<path d="M4 20v-9M10 20V5M16 20v-6M21 20H3"/>','<path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/>','симметричные колонны: вкладка «Статистика»'],
+['user','<circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.2-3.5 3.8-5 7-5s5.8 1.5 7 5"/>','<circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/>','док «Профиль» + топбар'],
+['timer','<circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M9.5 3h5"/>','<circle cx="12" cy="13.5" r="7"/><path d="M12 10.2v3.3l2.2 1.6"/><path d="M9.8 3.5h4.4"/><path d="M12 3.5v3"/>','секундомер со штоком: «Время», таймер'],
+['check','<path d="M20 6L9 17l-5-5"/>','<path d="M20 6.5L9.5 17 4.5 12"/>','выровнен наклон'],
+['cross','<path d="M18 6L6 18M6 6l12 12"/>','<path d="M18.5 5.5l-13 13M5.5 5.5l13 13"/>','сохранена, поля 5.5'],
+['plus','<path d="M12 5v14M5 12h14"/>','<path d="M12 5v14M5 12h14"/>','сохранена: FAB + «Упражнение»'],
+['tag','<path d="M20.6 13.4L12.6 21.4a2 2 0 01-2.8 0L3 14.6V3h11.6l6 6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>','<path d="M20.6 13.4l-8 8a2 2 0 01-2.8 0L3 14.6V3h11.6l6 6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.6"/>','сохранена (резерв)'],
+['repeat','<path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>','<path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>','сохранена: «Повторить»'],
+['save','<path d="M15.2 3a2 2 0 011.4.6l3.8 3.8a2 2 0 01.6 1.4V19a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M17 21v-7a1 1 0 00-1-1H8a1 1 0 00-1 1v7"/><path d="M7 3v4a1 1 0 001 1h7"/>','<path d="M15.2 3a2 2 0 011.4.6l3.8 3.8a2 2 0 01.6 1.4V19a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M17 21v-7a1 1 0 00-1-1H8a1 1 0 00-1 1v7"/><path d="M7 3v4a1 1 0 001 1h7"/>','сохранена: «В шаблоны»']
+]],
+['Новые ключи [UX-I3]', [
+['flame','','<path d="M12 3.5c1.2 2.6 4.5 4.7 4.5 9a4.5 4.5 0 01-9 0c0-1.7.6-3.1 1.5-4.4"/><path d="M12 17.5c-1.4 0-2.4-1-2.4-2.3 0-1.2.9-2 2.4-3.4 1.5 1.4 2.4 2.2 2.4 3.4 0 1.3-1 2.3-2.4 2.3z"/>','🔥 ккал: wpill, restbar, mgc-fire'],
+['trophy','','<path d="M7.5 4.5h9V9.5a4.5 4.5 0 01-9 0z"/><path d="M7.5 6H5.5a2.2 2.2 0 000 4.4h2"/><path d="M16.5 6h2a2.2 2.2 0 010 4.4h-2"/><path d="M12 14v3.5"/><path d="M8.5 20.5a3.5 3.5 0 017 0"/>','🏆 рекорды: prtag, статистика'],
+['clock','','<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3.2 1.9"/>','🕐 длительность: wpill'],
+['history','','<path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/>','док «История» вместо секундомера']
+]]
+];
+
+/* ---------- рендер сеток ---------- */
+function irowHtml(item, showOld) {
+    return '<div class="irow">' +
+        (showOld ? '<span class="ibox old">' + (item[1] ? S(item[1]) : '<span style="font-size:11px;color:#5a5f68">—</span>') + '</span><span class="iarrow">' + (item[1] ? '→' : '+') + '</span>' : '') +
+        '<span class="ibox new">' + S(item[2]) + '</span>' +
+        '<span class="imeta"><span class="k">' + item[0] + '</span><span class="d">' + item[3] + '</span></span></div>';
+}
+function renderGrid(elId, showOld) {
+    var h = '';
+    for (var g = 0; g < DATA.length; g++) {
+        h += '<div class="igroup">' + DATA[g][0] + '</div>';
+        var items = DATA[g][1];
+        for (var i = 0; i < items.length; i++) h += irowHtml(items[i], showOld);
+    }
+    document.getElementById(elId).innerHTML = h;
+}
+renderGrid('gridDark', true);
+renderGrid('gridLight', false);
+
+/* ---------- живые примеры ---------- */
+var NAV = [
+    ['history', 'История', true],
+    ['chart', 'Статистика', false],
+    ['pilates', 'Техника', false],
+    ['user', 'Профиль', false]
+];
+function navHtml() {
+    var h = '';
+    for (var i = 0; i < NAV.length; i++) {
+        var n = NAV[i];
+        h += '<button class="nbtn' + (n[2] ? ' on' : '') + '"><span class="nico">' + S(NEW[n[0]]) + '</span>' + n[1] + '</button>';
+    }
+    return h + '<button class="nfab">' + S(NEW.plus) + '</button>';
+}
+/* NEW — итоговый набор (спека §6) */
+var NEW = {};
+for (var g = 0; g < DATA.length; g++) { var it = DATA[g][1]; for (var i = 0; i < it.length; i++) NEW[it[i][0]] = it[i][2]; }
+document.getElementById('nav1').innerHTML = navHtml();
+document.getElementById('nav2').innerHTML = navHtml();
+document.getElementById('tbUser1').innerHTML = S(NEW.user);
+document.getElementById('tbUser2').innerHTML = S(NEW.user);
+document.getElementById('exChest').innerHTML = S(NEW.chest);
+document.getElementById('exSquat').innerHTML = S(NEW.squat);
+document.getElementById('exChest2').innerHTML = S(NEW.chest);
+document.getElementById('exSquat2').innerHTML = S(NEW.squat);
+function pill(id, icon, txt, k) {
+    var el = document.getElementById(id);
+    el.innerHTML = S(NEW[icon]) + '<span>' + txt + '</span>';
+    if (k) el.className += ' k';
+}
+pill('wCl1', 'clock', '45 мин'); pill('wFl1', 'flame', '470 ккал', true); pill('wTr1', 'trophy', 'РР · 195 кг');
+pill('wCl2', 'clock', '45 мин'); pill('wFl2', 'flame', '470 ккал', true); pill('wTr2', 'trophy', 'РР · 195 кг');
+var MGS = [['chest', 'Грудь', '8 подх.', '--c-chest'], ['squat', 'Ноги', '6 подх.', '--c-legs'], ['row', 'Спина', '9 подх.', '--c-back'], ['lateral', 'Плечи', '5 подх.', '--c-shoulders']];
+var mgH = '';
+for (var m = 0; m < MGS.length; m++) {
+    mgH += '<div class="mg"><span class="mgc" style="background:var(' + MGS[m][3] + ')">' + S(NEW[MGS[m][0]]) + '</span><span>' + MGS[m][1] + '</span><b>' + MGS[m][2] + '</b></div>';
+}
+document.getElementById('mg1').innerHTML = mgH;
+document.getElementById('mg2').innerHTML = mgH;
+
+/* ---------- размерная линейка ---------- */
+var SZ = [['chest', 18], ['timer', 20], ['glute', 22], ['flame', 24], ['cup', 40]];
+var szH = '';
+for (var s = 0; s < SZ.length; s++) {
+    szH += '<div class="scell"><span style="width:' + SZ[s][1] + 'px;height:' + SZ[s][1] + 'px;display:inline-flex">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="width:' + SZ[s][1] + 'px;height:' + SZ[s][1] + 'px">' + NEW[SZ[s][0]] + '</svg></span><span>' + SZ[s][1] + 'px · ' + SZ[s][0] + '</span></div>';
+}
+document.getElementById('sizes').innerHTML = szH;
+</script>
+</body>
+</html>
