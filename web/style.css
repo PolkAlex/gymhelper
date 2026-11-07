@@ -481,6 +481,10 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .wchead.act .wcicons .trash-bare svg { width: 18px; height: 18px; }
 .wchead.act .wctitles { padding-top: 6px; }
 .wchead.act .wctitles .t1 { font-size: 15.5px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* [UX-T19] завершённая тренировка: 5 иконок в шапке (🔁 💾 ⏱ 🚪 🗑) — компактные тапы
+   как у активной; backbar внизу больше не рендерится */
+.wchead.fin .wcicons .barebtn { padding: 5px; }
+.wchead.fin .wcicons .trash-bare svg { width: 18px; height: 18px; }
 .barebtn {
     background: none;
     border: none;
@@ -881,6 +885,20 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .prof .split2 { margin-top: 6px; }
 .prof .split2 .btn { padding: 9px 8px; font-size: 13px; }
 .prof .sexbtns .btn { padding: 8px 12px; font-size: 13px; }
+/* [UX-T19] профиль: возраст/рост/вес + «Сохранить» одним рядом (компактные поля ~40px,
+   мелкие метки над полями; на 320px кнопка уходит под ряд и остаётся компактной) */
+.prow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+.prow .pf { flex: 1 1 0; min-width: 58px; }
+.prow .pf label { margin: 6px 0 3px; font-size: 11px; white-space: nowrap; }
+.prow .pf input { padding: 8px; height: 40px; text-align: center; font-size: 15px; }
+.prow .pfsave {
+    flex: 0 0 auto;
+    margin-left: auto;
+    height: 40px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 700;
+}
 
 /* ============ модалки ============ */
 .modal {

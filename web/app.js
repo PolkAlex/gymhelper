@@ -9,7 +9,7 @@ let modalCtx = null;
 let PENDING = null;
 let CUR = null;
 let PICKER = null;
-let TECH = { section: 'all', cat: null, open: null };
+let TECH = { section: 'all', cat: null, open: null, fromTab: 'history', q: '' };
 let profileSex = 'м';
 let editSnap = null;
 let pendingTab = null;
@@ -573,9 +573,11 @@ function restLeftSec() {
     if (!REST) return 0;
     return REST.paused ? (REST.left || 0) : Math.max(0, Math.ceil((REST.end - Date.now()) / 1000));
 }
-/* панель над навигацией; на экране с backbar — стопкой выше (§1.3) */
+/* панель над навигацией; на экране с backbar — стопкой выше (§1.3). [UX-T19] backbar
+   остался только у АКТИВНОЙ карточки — у завершённой панель не поднимается */
 function restRaised() {
-    return (tab === 'history' && viewWid && !!findW(viewWid)) || (tab === 'tech' && !!TECH.open);
+    const w = (tab === 'history' && viewWid) ? findW(viewWid) : null;
+    return (!!w && !w.finished) || (tab === 'tech' && !!TECH.open);
 }
 function renderRestbar() {
     const el = document.getElementById('restbar');
@@ -776,6 +778,14 @@ function loadTheme() {
 /* ============ ACTIONS ============ */
 const ACTIONS = {
     switchTab: function (a) {
+        /* [UX-T19] вход на «Технику» через навигацию: запоминаем вкладку-источник (для
+           кнопки «Назад») и сбрасываем фильтр к «Все» — как при первом входе */
+        if (a === 'tech' && tab !== 'tech') {
+            TECH.fromTab = tab;
+            TECH.section = 'all';
+            TECH.cat = null;
+            TECH.q = '';
+        }
         tab = a; viewWid = 0; render();
     },
     openHistory: function (a) {
@@ -835,8 +845,16 @@ const ACTIONS = {
     techBack: function () { TECH.open = null; render(); },
     techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
-    /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые» */
-    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; tab = 'tech'; viewWid = 0; render(); },
+    /* [UX-T19] «Назад» с «Техники»: на вкладку-источник (nav-тап/openFavs запомнили её
+       в TECH.fromTab); по умолчанию — История */
+    techExit: function () {
+        const t = (TECH.fromTab && TECH.fromTab !== 'tech') ? TECH.fromTab : 'history';
+        TECH.fromTab = 'history';
+        tab = t; viewWid = 0; render();
+    },
+    /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые»;
+       [UX-T19] источник для «Назад» — вкладка, с которой пришли */
+    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; TECH.q = ''; TECH.fromTab = tab; tab = 'tech'; viewWid = 0; render(); },
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
     wClr: function () { wClr(); },
@@ -900,14 +918,14 @@ function render() {
     if (tab === 'coach') h += renderCoachTab();
     if (tab === 'profile') h += renderProfileTab();
     h += navHtml();
-    /* [UX-T18] backbar: у активной три компактные кнопки — Сохранить / Удалить (confirm) /
-       Выйти; у завершённой из истории backbar без изменений (корзина уже в шапке) */
+    /* [UX-T18] backbar: только у АКТИВНОЙ тренировки — три компактные кнопки
+       (Сохранить / Удалить c confirm / Выйти); [UX-T19] у завершённой из истории backbar
+       больше не рендерится — все действия переехали в шапку карточки (🔁 💾 ⏱ 🚪 🗑) */
     const bw = (tab === 'history' && viewWid) ? findW(viewWid) : null;
-    if (bw) {
+    if (bw && !bw.finished) {
         h += '<div class="backbar"><div class="ab-row">' +
             '<button class="btn prime" data-act="saveWorkout">💾 Сохранить</button>' +
-            (bw.finished ? '' :
-                '<button class="btn sec icbtn bb-del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + bw.id + '" title="Удалить" aria-label="Удалить тренировку">' + ICONS.trash + '<span>Удалить</span></button>') +
+            '<button class="btn sec icbtn bb-del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + bw.id + '" title="Удалить" aria-label="Удалить тренировку">' + ICONS.trash + '<span>Удалить</span></button>' +
             '<button class="btn sec" data-act="closeHistory">🚪 Выйти</button>' +
             '</div></div>';
         h += '<div style="height:70px"></div>';
@@ -1081,20 +1099,26 @@ function workoutCard(w) {
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
     /* [UX-T8]: у завершённых «Повторить» переехала в шапку круглой иконкой;
-       [UX-T18]: «💾 В шаблоны» из шапки убрана (сохранение шаблона — только в боте),
-       остаются 🔁 ⏱ 🗑; [UX-T17]: у активной — «Упражнение/Отменить/Завершить» в шапке */
+       [UX-T18]: «💾 В шаблоны» из шапки убрана (сохранение шаблона — только в боте);
+       [UX-T19]: у завершённой все действия в шапке в порядке 🔁 💾 ⏱ 🚪 🗑 — нижний
+       backbar больше не рендерится; у активной — «Упражнение/Отменить/Завершить» в шапке */
     const wcacts = w.finished
-        ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>'
+        ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
+          '<button class="barebtn" data-act="saveWorkout" title="Сохранить" aria-label="Сохранить">' + ICONS.save + '</button>'
         : '';
     const wcact = w.finished ? '' :
         '<button class="barebtn" data-act="openPicker" data-a="' + w.id + '" title="Добавить упражнение" aria-label="Добавить упражнение">' + ICONS.plus + '</button>' +
         '<button class="barebtn" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Отменить тренировку" aria-label="Отменить тренировку">' + ICONS.cross + '</button>' +
         '<button class="barebtn" data-act="finishWorkout" data-a="' + w.id + '" title="Завершить тренировку" aria-label="Завершить тренировку">' + ICONS.check + '</button>';
-    h += '<div class="wchead' + (w.finished ? '' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
+    const wcexit = w.finished
+        ? '<button class="barebtn" data-act="closeHistory" title="Выйти" aria-label="Выйти">' + ICONS.door + '</button>'
+        : '';
+    h += '<div class="wchead' + (w.finished ? ' fin' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
         (dpw ? '<span class="dp-inline">' + (ICONS[dpw.i] || '') + '</span> ' : '') +
         esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' + wcacts +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
+        wcexit +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
         wcact +
         '</div></div>';
@@ -1383,10 +1407,14 @@ function techFiltered() {
     if (TECH.q) list = list.filter(c => c.n.toLowerCase().includes(TECH.q.toLowerCase()));
     return list;
 }
+/* [UX-T19] порядок чипов секций «Техники» — как просил владелец: «Мышцы · Все ·
+   ★ Любимые · Вид · Блок · Коллекции»; «Все» — фильтр по умолчанию (весь каталог) */
+const TECH_CHIPS = ['muscle', 'all', 'fav', 'type', 'block', 'coll'];
 function techChipsHtml() {
     let h = '<div class="secrow">';
-    for (const s of CAT_SECTIONS) {
-        if (s.id === 'all') continue;
+    for (const id of TECH_CHIPS) {
+        const s = CAT_SECTIONS.find(x => x.id === id);
+        if (!s) continue;
         h += '<button class="chip' + (TECH.section === s.id ? ' on' : '') + '" data-act="techSection" data-a="' + s.id + '">' + s.n + '</button>';
     }
     h += '</div>';
@@ -1421,7 +1449,9 @@ function renderTechTab() {
             return h;
         }
     }
-    let h = '<div class="card"><p class="t1">📖 Техника упражнений</p>' +
+    /* [UX-T19] «Назад» на уровне заголовка карточки (правый угол): возврат на вкладку-источник */
+    let h = '<div class="card"><div class="exhead"><p class="t1">📖 Техника упражнений</p>' +
+        '<button class="barebtn" data-act="techExit" title="Назад" aria-label="Назад">' + ICONS.back + '</button></div>' +
         '<div class="searchbox"><input id="techQ" type="text" placeholder="Поиск упражнения..." value="' + esc(TECH.q) + '"></div>' +
         techChipsHtml() + '</div>';
     h += '<div class="exgrid" id="techList">';
@@ -1625,11 +1655,16 @@ function renderProfileTab() {
         '<button class="seg-btn' + (profileSex === 'м' ? ' on' : '') + '" data-act="setSex" data-a="м" title="Мужской" aria-label="Мужской">М</button>' +
         '<button class="seg-btn' + (profileSex === 'ж' ? ' on' : '') + '" data-act="setSex" data-a="ж" title="Женский" aria-label="Женский">Ж</button>' +
         '</div></div>';
+    /* [UX-T19] возраст/рост/вес + сохранение в одном ряду: компактные поля ~40px с мелкими
+       метками, кнопка справа; на 320px кнопка уходит под ряд, оставаясь компактной.
+       Логика saveProfile не тронута (те же id полей) */
     h += '<div class="card">' +
-        '<label>Возраст</label><input id="pfAge" type="number" inputmode="numeric" value="' + p.age + '">' +
-        '<label>Рост (см)</label><input id="pfHeight" type="number" inputmode="numeric" value="' + p.height + '">' +
-        '<label>Вес (кг)</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '">' +
-        '<div class="btnrow"><button class="btn wide" data-act="saveProfile">💾 Сохранить профиль</button></div></div>';
+        '<div class="prow">' +
+        '<div class="pf"><label for="pfAge">Возраст</label><input id="pfAge" type="number" inputmode="numeric" value="' + p.age + '"></div>' +
+        '<div class="pf"><label for="pfHeight">Рост, см</label><input id="pfHeight" type="number" inputmode="numeric" value="' + p.height + '"></div>' +
+        '<div class="pf"><label for="pfWeight">Вес, кг</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '"></div>' +
+        '<button class="btn pfsave" data-act="saveProfile">💾 Сохранить</button>' +
+        '</div></div>';
     h += '<div class="card"><p class="t1">🎨 Тема оформления</p>' +
         '<p class="meta">Без выбора используется тема клиента Telegram</p>' +
         '<div class="sexbtns themetoggle">';
@@ -2717,6 +2752,7 @@ if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
         prCheck: prCheck,
         setsWord: setsWord,
         repsPhrase: repsPhrase,
+        dayPart: dayPart,
         calcWorkoutKcal: calcWorkoutKcal,
         workoutVolume: workoutVolume,
         modalCtx: function () { return modalCtx; }
