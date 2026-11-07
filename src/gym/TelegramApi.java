@@ -10,7 +10,9 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
+/* HTTP-клиент Telegram Bot API: чистый JDK (HttpURLConnection), JSON — через gym.Json */
 public final class TelegramApi {
     private final String base;
 
@@ -77,6 +79,44 @@ public final class TelegramApi {
         postSilent("sendMessage", req);
     }
 
+    /* отправка файла в чат: multipart/form-data вручную (чистый JDK, как и весь HTTP здесь) */
+    public void sendDocument(long chatId, String filename, byte[] content, String caption) throws Exception {
+        String boundary = "gymbot" + UUID.randomUUID().toString().replace("-", "");
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        multipartField(buf, boundary, "chat_id", String.valueOf(chatId));
+        if (caption != null && !caption.isBlank()) multipartField(buf, boundary, "caption", caption);
+        buf.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+        buf.write(("Content-Disposition: form-data; name=\"document\"; filename=\"" + filename + "\"\r\n").getBytes(StandardCharsets.UTF_8));
+        buf.write("Content-Type: text/csv\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+        buf.write(content);
+        buf.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+
+        HttpURLConnection c = (HttpURLConnection) new URL(base + "/sendDocument").openConnection();
+        c.setRequestMethod("POST");
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(60000);
+        c.setDoOutput(true);
+        c.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        try (OutputStream os = c.getOutputStream()) {
+            os.write(buf.toByteArray());
+        }
+        int code = c.getResponseCode();
+        InputStream is = code >= 400 ? c.getErrorStream() : c.getInputStream();
+        String resp = read(is);
+        if (code >= 400) throw new IllegalStateException("sendDocument HTTP " + code + ": " + resp);
+        Map<String, Object> m = Json.map(Json.parse(resp));
+        if (!Boolean.TRUE.equals(m.get("ok"))) {
+            throw new IllegalStateException("sendDocument: " + m.get("description"));
+        }
+    }
+
+    private static void multipartField(ByteArrayOutputStream buf, String boundary, String name, String value) throws Exception {
+        buf.write(("--" + boundary + "\r\n").getBytes(StandardCharsets.UTF_8));
+        buf.write(("Content-Disposition: form-data; name=\"" + name + "\"\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+        buf.write(value.getBytes(StandardCharsets.UTF_8));
+        buf.write("\r\n".getBytes(StandardCharsets.UTF_8));
+    }
+
     public static Map<String, Object> appKeyboard(String webAppUrl) {
         Map<String, Object> webApp = new LinkedHashMap<>();
         webApp.put("url", webAppUrl);
@@ -89,14 +129,44 @@ public final class TelegramApi {
         return kb;
     }
 
-    public void editMessageText(long chatId, long messageId, String text, List<List<Map<String, Object>>> keyboard) {
+    /* правка сообщения; false — Telegram отклонил (например, сообщение удалено юзером) */
+    public boolean editMessageText(long chatId, long messageId, String text, List<List<Map<String, Object>>> keyboard) {
         Map<String, Object> req = new LinkedHashMap<>();
         req.put("chat_id", chatId);
         req.put("message_id", messageId);
         req.put("text", text);
         req.put("parse_mode", "HTML");
         if (keyboard != null) req.put("reply_markup", markup(keyboard));
-        postSilent("editMessageText", req);
+        return postSilent("editMessageText", req);
+    }
+
+    /* тихий пуш (disable_notification): баннер без звука — финал таймера отдыха [UX-T5] */
+    public void sendMessageSilent(long chatId, String text) {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("chat_id", chatId);
+        req.put("text", text);
+        req.put("parse_mode", "HTML");
+        req.put("disable_notification", true);
+        postSilent("sendMessage", req);
+    }
+
+    /* отправка с возвратом message_id — нужно сообщению-отсчёту таймера, которое потом правится */
+    public long sendMessageGetId(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("chat_id", chatId);
+        req.put("text", text);
+        req.put("parse_mode", "HTML");
+        if (keyboard != null) req.put("reply_markup", markup(keyboard));
+        try {
+            Map<String, Object> m = Json.map(post("sendMessage", Json.write(req)));
+            if (Boolean.TRUE.equals(m.get("ok"))) {
+                Map<String, Object> r = Json.map(m.get("result"));
+                return Json.lng(r.get("message_id"));
+            }
+        } catch (Exception e) {
+            System.out.println("[warn] sendMessage: " + e.getMessage());
+        }
+        return 0;
     }
 
     public void answerCallbackQuery(String callbackId, String text) {
@@ -117,8 +187,12 @@ public final class TelegramApi {
         cmds.add(cmd("view", "Посмотреть тренировку"));
         cmds.add(cmd("history", "История тренировок"));
         cmds.add(cmd("stats", "Статистика"));
+        cmds.add(cmd("export", "Выгрузка дневника в CSV"));
+        cmds.add(cmd("templates", "Шаблоны тренировок"));
+        cmds.add(cmd("rest", "Таймер отдыха: /rest 120"));
         cmds.add(cmd("app", "Открыть приложение"));
         cmds.add(cmd("profile", "Профиль: рост, вес, возраст"));
+        cmds.add(cmd("help", "Справка по командам"));
         Map<String, Object> req = new LinkedHashMap<>();
         req.put("commands", cmds);
         postSilent("setMyCommands", req);
@@ -149,14 +223,18 @@ public final class TelegramApi {
         return m;
     }
 
-    private void postSilent(String method, Map<String, Object> req) {
+    /* true при ok от Telegram; лог ошибок здесь, решение о ретрае — у вызывающего */
+    private boolean postSilent(String method, Map<String, Object> req) {
         try {
             Map<String, Object> m = Json.map(post(method, Json.write(req)));
             if (!Boolean.TRUE.equals(m.get("ok"))) {
                 System.out.println("[warn] " + method + ": " + m.get("description"));
+                return false;
             }
+            return true;
         } catch (Exception e) {
             System.out.println("[warn] " + method + ": " + e.getMessage());
+            return false;
         }
     }
 

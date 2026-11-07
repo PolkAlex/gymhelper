@@ -1,5 +1,6 @@
 package gym;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -12,6 +13,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,18 +29,202 @@ public final class BotLogic {
     private static final Pattern WEIGHT_PATTERN = Pattern.compile("^[0-9.,\\-\\s]+$");
     private static final Pattern TIME_PATTERN = Pattern.compile("^(\\d{1,2}):(\\d{2})$");
     private static final int KCAL_MAX_MIN = 240;
+    /* шаблоны тренировок [UX-T6/T7]: лимиты из спеки §0.2 */
+    private static final int TPL_LIMIT = 20;
+    private static final int TPL_EX_LIMIT = 20;
+    /* таймер отдыха [UX-T5]: тик 1 с, обычная фаза — правка раз в 5 с, финальные 15 с — раз в 1 с */
+    private static final int REST_BAR_CELLS = 18;
+    private static final int REST_FINAL_PHASE = 15;
+    private static final long REST_EDIT_MS = 5000;
+    private static final long REST_EDIT_FINAL_MS = 1000;
+    private static final long REST_FREEZE_MS = 5 * 60 * 1000; /* юзер молчит 5 мин — правки замирают */
 
     private final TelegramApi api;
     private final Storage storage;
     private final String webAppUrl;
     private final String appLink;
     private final Map<Long, UserState> states = new ConcurrentHashMap<>();
+    private final Map<Long, RestSession> rests = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService restScheduler;
 
     public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink) {
         this.api = api;
         this.storage = storage;
         this.webAppUrl = webAppUrl;
         this.appLink = appLink;
+        /* daemon-поток: фоновые правки не должны мешать long polling и не держат JVM */
+        this.restScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "rest-timer");
+            t.setDaemon(true);
+            return t;
+        });
+        this.restScheduler.scheduleAtFixedRate(this::restTickSafe, 1, 1, TimeUnit.SECONDS);
+    }
+
+    /* Сессия таймера одного чата — только в памяти (§2.9): после рестарта бота сообщение
+       просто замирает, следующий лог подхода создаст новое. Поля, мутируемые из разных
+       потоков (callback-поток и планировщик), — volatile. */
+    private static final class RestSession {
+        volatile long messageId;      /* 0 — сообщение не отправилось, правки не идут */
+        volatile long end;            /* абсолютная метка окончания, epoch ms — заморозка её не сдвигает */
+        volatile long dur;            /* полная длительность шкалы, сек (+30 сек удлиняет) */
+        volatile String ex;           /* название упражнения в подписи */
+        volatile String push;         /* «75 кг × 8» для тихого пуша; null — блок без веса */
+        volatile long lastActivity;   /* любой update юзера (сообщение/callback), epoch ms */
+        volatile long lastEdit;       /* последняя правка сообщения, epoch ms */
+        volatile String lastText;     /* последний отправленный текст — защита «message is not modified» */
+        volatile boolean frozen;      /* юзер молчит > 5 мин — правки заморожены до его возврата */
+        volatile boolean stopped;     /* сессия завершена (финал/стоп/5 неудачных правок) */
+        volatile int fails;           /* неудачные правки подряд */
+    }
+
+    private void restTickSafe() {
+        try {
+            restTick();
+        } catch (Exception e) {
+            System.out.println("[warn] rest tick: " + e.getMessage());
+        }
+    }
+
+    private void restTick() {
+        long now = System.currentTimeMillis();
+        for (Map.Entry<Long, RestSession> en : rests.entrySet()) {
+            long chatId = en.getKey();
+            RestSession s = en.getValue();
+            if (s.stopped) {
+                rests.remove(chatId);
+                continue;
+            }
+            if (now - s.lastActivity > REST_FREEZE_MS) {
+                s.frozen = true; /* правки замирают, финальный пуш не отправляется (§2.6) */
+                continue;
+            }
+            if (s.frozen) continue; /* разморозка — одна ресинк-правка в touchRest при любом update */
+            long left = restLeft(s, now);
+            if (left <= 0) {
+                restFinalize(chatId, s, true);
+                continue;
+            }
+            long interval = left <= REST_FINAL_PHASE ? REST_EDIT_FINAL_MS : REST_EDIT_MS;
+            if (now - s.lastEdit < interval) continue;
+            restEdit(chatId, s, restCountdownText(s.ex, left, s.dur), restKb());
+        }
+    }
+
+    private static long restLeft(RestSession s, long now) {
+        return Math.max(0, (s.end - now + 999) / 1000);
+    }
+
+    /* текст отсчёта: «⏱ Отдых: 1:22» + бар из 18 ячеек + упражнение */
+    static String restCountdownText(String ex, long left, long dur) {
+        int filled = (int) Math.round(REST_BAR_CELLS * Math.min(left, dur) / (double) Math.max(dur, 1));
+        StringBuilder bar = new StringBuilder();
+        for (int i = 0; i < REST_BAR_CELLS; i++) bar.append(i < filled ? '▰' : '▱');
+        return "⏱ Отдых: " + (left / 60) + ":" + String.format("%02d", left % 60)
+            + "\n" + bar
+            + "\n" + esc(ex == null ? "" : ex) + " — следующий подход";
+    }
+
+    private static List<List<Map<String, Object>>> restKb() {
+        return List.of(List.of(
+            TelegramApi.button("+30 сек", "rest:more"),
+            TelegramApi.button("⏹ Стоп", "rest:stop")
+        ));
+    }
+
+    /* клавиатура удаляется: Telegram убирает inline-клавиатуру только по пустой */
+    private static final List<List<Map<String, Object>>> REST_NO_KB = List.of();
+
+    private static final String REST_FINAL_TEXT = "✅ Отдых окончен — подход сам себя не сделает";
+
+    /* правка с защитой «message is not modified»; подряд 5 неудач — сообщение удалено юзером,
+       сессия мертва: следующий лог создаст новое сообщение (§2.3) */
+    private void restEdit(long chatId, RestSession s, String text, List<List<Map<String, Object>>> kb) {
+        if (s.stopped) return; /* гонка «Стоп → оживание»: финал/стоп уже был — правки не идут */
+        if (s.messageId <= 0) return;
+        if (text.equals(s.lastText)) return;
+        long now = System.currentTimeMillis();
+        if (api.editMessageText(chatId, s.messageId, text, kb)) {
+            s.lastText = text;
+            s.lastEdit = now;
+            s.fails = 0;
+        } else if (++s.fails >= 5) {
+            s.stopped = true;
+        }
+    }
+
+    /* финал: правка отсчёта в итоговый вид; пуш — только по истечении времени, не по «Стоп» */
+    private void restFinalize(long chatId, RestSession s, boolean push) {
+        s.stopped = true;
+        String desc = s.push;
+        restEditFinal(chatId, s, REST_FINAL_TEXT);
+        if (push) {
+            api.sendMessageSilent(chatId, desc == null
+                ? "⏰ Перерыв окончен — подходы ждут продолжения"
+                : "⏰ Перерыв окончен — " + desc + " ждут продолжения");
+        }
+    }
+
+    /* финальная правка идёт мимо защиты «text changed» (текст совпадать не должен, но
+       повторный финал не должен и спамить) — прямо через api */
+    private void restEditFinal(long chatId, RestSession s, String text) {
+        if (s.messageId > 0) api.editMessageText(chatId, s.messageId, text, REST_NO_KB);
+    }
+
+    /* запуск/перезапуск отсчёта: одно сообщение на сессию, перезапуск правит его же (§2.3) */
+    private void restStart(long chatId, GymData data, String exercise, SetEntry block) {
+        int dur = data.restSec != null ? data.restSec : 90;
+        long now = System.currentTimeMillis();
+        RestSession s = rests.get(chatId);
+        if (s == null || s.stopped || s.messageId <= 0) {
+            s = new RestSession();
+            String text = restCountdownText(exercise, dur, dur);
+            s.messageId = api.sendMessageGetId(chatId, text, restKb());
+            if (s.messageId <= 0) return;
+            s.lastText = text;
+            s.lastEdit = now;
+            rests.put(chatId, s);
+        } else {
+            restEdit(chatId, s, restCountdownText(exercise, dur, dur), restKb());
+        }
+        s.end = now + dur * 1000L;
+        s.dur = dur;
+        s.ex = exercise;
+        s.push = restPushDesc(block);
+        s.lastActivity = now;
+        s.frozen = false;
+        s.stopped = false;
+        s.fails = 0;
+    }
+
+    /* «75 кг × 8» для финального пуша; блок без веса — описания не даёт */
+    static String restPushDesc(SetEntry block) {
+        if (block == null || block.weight == null || block.weight.isEmpty()) return null;
+        return block.weight + " кг × " + block.reps;
+    }
+
+    /* любой update юзера: активность продлевает окно правок, после заморозки — одна ресинк-правка */
+    private void touchRest(long chatId) {
+        RestSession s = rests.get(chatId);
+        if (s == null) return;
+        long now = System.currentTimeMillis();
+        s.lastActivity = now;
+        if (!s.frozen) return;
+        s.frozen = false;
+        long left = restLeft(s, now);
+        if (left <= 0) {
+            /* время истекло, пока юзера не было: финальный вид без пуша, сессия закрывается */
+            restEditFinal(chatId, s, REST_FINAL_TEXT);
+            s.stopped = true;
+            return;
+        }
+        restEdit(chatId, s, restCountdownText(s.ex, left, s.dur), restKb());
+    }
+
+    /* остановка без пуша: «⏹ Стоп», завершение/отмена тренировки */
+    private void restStop(long chatId) {
+        RestSession s = rests.get(chatId);
+        if (s != null && !s.stopped) restFinalize(chatId, s, false);
     }
 
     public void handle(Map<String, Object> update) {
@@ -49,6 +237,7 @@ public final class BotLogic {
             long messageId = Json.lng(msg.get("message_id"));
             String data = Json.str(cb, "data");
             String cbId = Json.str(cb, "id");
+            touchRest(chatId);
             try {
                 onCallback(chatId, messageId, data);
             } catch (Exception e) {
@@ -64,6 +253,7 @@ public final class BotLogic {
         if (msg == null) return;
         Map<String, Object> chat = Json.map(msg.get("chat"));
         long chatId = Json.lng(chat.get("id"));
+        touchRest(chatId);
         String text = Json.str(msg, "text");
         if (text == null) {
             api.sendMessage(chatId, "Я понимаю только текст 🙂 Открой меню командой /start", null);
@@ -106,6 +296,26 @@ public final class BotLogic {
             startProfile(chatId, null, data, st);
             return;
         }
+        /* строго, как /rest: /exports не матчится (§2.7) */
+        if (low.equals("/export") || low.startsWith("/export ")) {
+            exportCsv(chatId, null, data, st);
+            return;
+        }
+        /* строго: /rest и /rest N; /restx и /restfoo не матчатся (§2.7) */
+        if (low.equals("/rest") || low.startsWith("/rest ")) {
+            showRest(chatId, null, data, text);
+            return;
+        }
+        /* строго, как /rest: /templatesX не матчится (§2.7) */
+        if (low.equals("/templates") || low.startsWith("/templates ")) {
+            showTemplates(chatId, null, data, st);
+            return;
+        }
+        /* строго, как /rest: /helpx не матчится (§2.7) */
+        if (low.equals("/help") || low.startsWith("/help ")) {
+            showHelp(chatId, null, data, st);
+            return;
+        }
         if (low.startsWith("/app")) {
             showMenu(chatId, null, data, st);
             return;
@@ -124,6 +334,7 @@ public final class BotLogic {
             case NUTR -> handleNutrInput(chatId, null, data, st, text);
             case TIME -> handleTimeInput(chatId, null, data, st, text);
             case PROFILE -> handleProfileInput(chatId, null, data, st, text);
+            case TPL_NAME -> handleTplNameInput(chatId, null, data, st, text);
             case WORKOUT -> renderWorkoutScreen(chatId, null, data, st, data.active() == null ? 0 : data.active().id);
             default -> showMenu(chatId, null, data, st);
         }
@@ -140,6 +351,7 @@ public final class BotLogic {
             case "menu:view" -> viewWorkout(chatId, messageId, dataModel, st);
             case "menu:hist" -> showHistory(chatId, messageId, dataModel, st, 0);
             case "menu:stats" -> showStats(chatId, messageId, dataModel, st);
+            case "menu:tpl" -> showTemplates(chatId, messageId, dataModel, st);
             case "wk:editmode" -> {
                 Workout a = dataModel.active();
                 if (a == null) {
@@ -152,11 +364,29 @@ public final class BotLogic {
                 showEditEx(chatId, messageId, dataModel, st);
             }
             case "pr" -> startProfile(chatId, messageId, dataModel, st);
-            case "wk:resume" -> showWorkout(chatId, messageId, dataModel, st);
+            case "wk:resume" -> {
+                st.pendingTplId = 0;
+                st.pendingRepWid = 0;
+                showWorkout(chatId, messageId, dataModel, st);
+            }
             case "wk:discard" -> {
                 Workout a = dataModel.active();
                 if (a != null) dataModel.workouts.remove(a);
                 storage.save(chatId, dataModel);
+                /* «Удалить и начать новую» после старта из шаблона/повтора — применяем отложенное (§4.6) */
+                long tplId = st.pendingTplId;
+                long repWid = st.pendingRepWid;
+                st.pendingTplId = 0;
+                st.pendingRepWid = 0;
+                Template tpl = tplId > 0 ? findTemplate(dataModel, tplId) : null;
+                if (tpl != null) {
+                    startFromTemplate(chatId, messageId, dataModel, st, tpl, null);
+                    return;
+                }
+                if (repWid > 0) {
+                    tplRepeat(chatId, messageId, dataModel, st, repWid);
+                    return;
+                }
                 openWorkout(chatId, messageId, dataModel, st);
             }
             case "wk:add" -> {
@@ -164,14 +394,32 @@ public final class BotLogic {
                 st.editing = false;
                 showCatalog(chatId, messageId, st);
             }
-            case "wk:finish" -> finishWorkout(chatId, messageId, dataModel, st);
+            case "wk:finish" -> {
+                restStop(chatId);
+                finishWorkout(chatId, messageId, dataModel, st);
+            }
             case "wk:cancel" -> confirmCancel(chatId, messageId, dataModel);
             case "wk:cancelok" -> {
+                restStop(chatId);
                 Workout a = dataModel.active();
                 if (a != null) dataModel.workouts.remove(a);
                 storage.save(chatId, dataModel);
                 showMenu(chatId, messageId, dataModel, st);
             }
+            case "rest:more" -> {
+                RestSession s = rests.get(chatId);
+                if (s != null && !s.stopped) {
+                    long now = System.currentTimeMillis();
+                    s.end += 30000;
+                    s.dur += 30;
+                    s.lastActivity = now;
+                    s.frozen = false;
+                    restEdit(chatId, s, restCountdownText(s.ex, restLeft(s, now), s.dur), restKb());
+                }
+            }
+            case "rest:stop" -> restStop(chatId);
+            case "tpl:canc" -> showMenu(chatId, messageId, dataModel, st);
+            case "tpl:back" -> showTemplates(chatId, messageId, dataModel, st);
             case "wk:cancelno" -> showWorkout(chatId, messageId, dataModel, st);
             case "ex:back", "set:done" -> {
                 closeCurrentExercise(chatId, dataModel, st);
@@ -302,6 +550,18 @@ public final class BotLogic {
                     confirmDelete(chatId, messageId, dataModel, st, Long.parseLong(data.substring(7)));
                 } else if (data.startsWith("hist:dok_")) {
                     deleteWorkout(chatId, messageId, dataModel, st, Long.parseLong(data.substring(9)));
+                } else if (data.startsWith("tpl:new_")) {
+                    tplNew(chatId, messageId, dataModel, st, Long.parseLong(data.substring(8)));
+                } else if (data.startsWith("tpl:auto_")) {
+                    tplAutoSave(chatId, messageId, dataModel, st, Long.parseLong(data.substring(9)));
+                } else if (data.startsWith("tpl:start_")) {
+                    tplStart(chatId, messageId, dataModel, st, Long.parseLong(data.substring(10)));
+                } else if (data.startsWith("tpl:rep_")) {
+                    tplRepeat(chatId, messageId, dataModel, st, Long.parseLong(data.substring(8)));
+                } else if (data.startsWith("tpl:delok_")) {
+                    tplDelete(chatId, messageId, dataModel, st, Long.parseLong(data.substring(10)));
+                } else if (data.startsWith("tpl:del_")) {
+                    tplDelAsk(chatId, messageId, dataModel, st, Long.parseLong(data.substring(8)));
                 } else {
                     showMenu(chatId, messageId, dataModel, st);
                 }
@@ -312,6 +572,8 @@ public final class BotLogic {
     private void showMenu(long chatId, Long mid, GymData data, UserState st) {
         st.mode = UserState.Mode.MENU;
         st.currentExercise = null;
+        st.pendingTplId = 0;
+        st.pendingRepWid = 0;
         StringBuilder b = new StringBuilder("💪 Мой дневник тренировок\n\n");
         b.append("Завершённых тренировок: ").append(countFinished(data));
         Workout active = data.active();
@@ -337,6 +599,7 @@ public final class BotLogic {
                 TelegramApi.button("📜 История", "menu:hist"),
                 TelegramApi.button("📊 Статистика", "menu:stats")
             ),
+            List.of(TelegramApi.button("📋 Шаблоны", "menu:tpl")),
             List.of(TelegramApi.button("⚙️ Профиль", "pr"))
         ));
         if (appLink != null) {
@@ -379,6 +642,11 @@ public final class BotLogic {
     }
 
     private void renderWorkoutScreen(long chatId, Long mid, GymData data, UserState st, long id) {
+        renderWorkoutScreen(chatId, mid, data, st, id, null);
+    }
+
+    /* header — разовая шапка поверх текста экрана (шаблон применён / повторяем), только при первом рендере */
+    private void renderWorkoutScreen(long chatId, Long mid, GymData data, UserState st, long id, String header) {
         Workout w = id > 0 ? data.findById(id) : data.active();
         if (w == null) {
             showMenu(chatId, mid, data, st);
@@ -390,6 +658,7 @@ public final class BotLogic {
                 List.of(TelegramApi.button("✏️ Редактировать", "ed_" + w.id), TelegramApi.button("🥤 Питание", "nu_" + w.id)),
                 List.of(TelegramApi.button("⏱ Время", "tm_" + w.id), TelegramApi.button("🏷 Название", "ti_" + w.id)),
                 List.of(TelegramApi.button("📈 Прогресс", "pg_" + w.id), TelegramApi.button("🔥 Ккал", "kc_" + w.id)),
+                List.of(TelegramApi.button("🔁 Повторить", "tpl:rep_" + w.id), TelegramApi.button("💾 В шаблоны", "tpl:new_" + w.id)),
                 List.of(TelegramApi.button("🗑 Удалить", "hist:d_" + w.id)),
                 List.of(TelegramApi.button("↩️ К истории", "hist:back"), TelegramApi.button("🏠 Меню", "home"))
             );
@@ -405,7 +674,7 @@ public final class BotLogic {
             st.mode = UserState.Mode.WORKOUT;
         }
         st.currentExercise = null;
-        send(chatId, mid, screenText(w), kb);
+        send(chatId, mid, (header == null ? "" : header) + screenText(w), kb);
     }
 
     private void backToWorkoutScreen(long chatId, Long mid, GymData data, UserState st) {
@@ -650,10 +919,17 @@ public final class BotLogic {
             return;
         }
         if (block.t == null) block = new SetEntry(block.weight, block.sets, block.reps, LocalDateTime.now().toString());
+        /* живой рекорд [UX-T2]: проверяем ДО добавления блока — база только из прошлых
+           тренировок, а записанные блоки этой тренировки показывают, не праздновали ли уже */
+        String pr = Records.congratulation(data, w, e.name, block);
         e.sets.add(block);
         storage.save(chatId, data);
         st.mode = UserState.Mode.WORKOUT;
-        send(chatId, mid, "✅ Записано: " + esc(renderLine(e.name, block)), entryDoneKb());
+        String msg = "✅ Записано: " + esc(renderLine(e.name, block));
+        if (pr != null) msg += "\n" + esc(pr);
+        send(chatId, mid, msg, entryDoneKb());
+        /* таймер отдыха: запуск/перезапуск после каждого нового лога подхода [UX-T5] */
+        restStart(chatId, data, e.name, block);
     }
 
     private List<List<Map<String, Object>>> entryDoneKb() {
@@ -1003,7 +1279,14 @@ public final class BotLogic {
         storage.save(chatId, data);
         st.mode = UserState.Mode.MENU;
         st.currentExercise = null;
-        send(chatId, mid, "🎉 Тренировка завершена!\n\n" + screenText(w), mainKb());
+        send(chatId, mid, "🎉 Тренировка завершена!\n\n" + screenText(w), finishedKb(w.id));
+    }
+
+    /* клавиатура после завершения: первым рядом — сохранить как шаблон [UX-T6 §4.3] */
+    private List<List<Map<String, Object>>> finishedKb(long wid) {
+        List<List<Map<String, Object>>> kb = new ArrayList<>(mainKb());
+        kb.add(0, List.of(TelegramApi.button("💾 Сохранить как шаблон", "tpl:new_" + wid)));
+        return kb;
     }
 
     private List<List<Map<String, Object>>> workoutKb(long id) {
@@ -1117,6 +1400,363 @@ public final class BotLogic {
             storage.save(chatId, data);
         }
         showHistory(chatId, mid, data, st, 0);
+    }
+
+    /* /export — выгрузка дневника CSV-файлом в чат.
+       Выгружаются только ЗАВЕРШЁННЫЕ тренировки (как в /history и /stats): у незавершённой
+       ещё нет финального набора записей, дублировать её в файл и отдельным файлом не считаю
+       нужным — пользователь может завершить тренировку и выгрузить снова.
+       Приватность: имя пользователя и id чата в файл не попадают, только данные тренировок. */
+    private void exportCsv(long chatId, Long mid, GymData data, UserState st) {
+        st.mode = UserState.Mode.MENU;
+        st.currentExercise = null;
+        List<Workout> fin = new ArrayList<>();
+        for (Workout w : data.workouts) {
+            if (w.finished) fin.add(w);
+        }
+        if (fin.isEmpty()) {
+            send(chatId, mid, "Пока нет завершённых тренировок — выгружать нечего 💪\nЗаверши первую тренировку и попробуй снова.", mainKb());
+            return;
+        }
+        StringBuilder csv = new StringBuilder("Дата;Название тренировки;Упражнение;Подходы\r\n");
+        int rows = 0;
+        for (Workout w : fin) {
+            String title = csvTitle(w);
+            for (ExerciseEntry e : w.exercises) {
+                if (e.sets.isEmpty()) continue;
+                csv.append(csvField(fmtDate(w.date))).append(';')
+                    .append(csvField(title)).append(';')
+                    .append(csvField(e.name)).append(';')
+                    .append(csvField(csvSets(e))).append("\r\n");
+                rows++;
+            }
+        }
+        /* UTF-8 BOM: без него Excel на русской Windows открывает файл как cp1251 — кириллица в кракозябрах */
+        byte[] text = csv.toString().getBytes(StandardCharsets.UTF_8);
+        byte[] body = new byte[3 + text.length];
+        body[0] = (byte) 0xEF;
+        body[1] = (byte) 0xBB;
+        body[2] = (byte) 0xBF;
+        System.arraycopy(text, 0, body, 3, text.length);
+        String filename = "gymhelper_export_" + LocalDate.now() + ".csv";
+        String caption = "🏋️ Выгрузка дневника: " + fin.size() + " " + plural(fin.size(), "тренировка", "тренировки", "тренировок")
+            + ", " + rows + " " + plural(rows, "запись", "записи", "записей") + ".";
+        try {
+            api.sendDocument(chatId, filename, body, caption);
+        } catch (Exception e) {
+            System.out.println("[warn] export: " + e.getMessage());
+            send(chatId, mid, "Не получилось отправить файл 😕 Попробуй ещё раз.", mainKb());
+        }
+    }
+
+    /* /rest — просмотр и установка длительности отдыха (общее GymData.restSec с Mini App) */
+    private void showRest(long chatId, Long mid, GymData data, String text) {
+        UserState st = states.computeIfAbsent(chatId, k -> new UserState());
+        st.mode = UserState.Mode.MENU;
+        st.currentExercise = null;
+        String arg = text.length() > 6 ? text.substring(6).trim() : "";
+        if (arg.isEmpty()) {
+            int cur = data.restSec != null ? data.restSec : 90;
+            send(chatId, mid, "⏱ Длительность отдыха: " + cur + " сек."
+                + "\nИзменить: /rest 180 (от 30 до 600)."
+                + "\nТаймер запускается автоматически после записи подхода.", mainKb());
+            return;
+        }
+        int n;
+        try {
+            n = Integer.parseInt(arg);
+        } catch (NumberFormatException e) {
+            send(chatId, mid, "Число от 30 до 600, например: /rest 180", mainKb());
+            return;
+        }
+        if (n < 30 || n > 600) {
+            send(chatId, mid, "Число от 30 до 600, например: /rest 180", mainKb());
+            return;
+        }
+        data.restSec = n;
+        storage.save(chatId, data);
+        /* если отсчёт идёт — перезапуск на новую длительность одной правкой (§2.7) */
+        RestSession s = rests.get(chatId);
+        if (s != null && !s.stopped) {
+            long now = System.currentTimeMillis();
+            s.dur = n;
+            s.end = now + n * 1000L;
+            s.lastActivity = now;
+            s.frozen = false;
+            restEdit(chatId, s, restCountdownText(s.ex, n, n), restKb());
+        }
+        send(chatId, mid, "✅ Отдых: " + n + " сек.", mainKb());
+    }
+
+    /* ================= Шаблоны тренировок [UX-T6/T7] (спека §4) ================= */
+
+    private static Template findTemplate(GymData data, long id) {
+        for (Template t : data.templates) {
+            if (t.id == id) return t;
+        }
+        return null;
+    }
+
+    /* /templates и «📋 Шаблоны»: список с запуском и удалением [§4.4], новые сверху */
+    private void showTemplates(long chatId, Long mid, GymData data, UserState st) {
+        st.mode = UserState.Mode.MENU;
+        st.currentExercise = null;
+        st.pendingTplId = 0;
+        st.pendingRepWid = 0;
+        if (data.templates.isEmpty()) {
+            send(chatId, mid, "📋 Шаблонов пока нет.\n\nЗаверши тренировку и нажми «💾 Сохранить как шаблон» — "
+                + "в следующий раз начнёшь с готового списка упражнений.", mainKb());
+            return;
+        }
+        List<Template> tpls = new ArrayList<>(data.templates);
+        tpls.sort((a, b) -> String.valueOf(b.createdAt).compareTo(String.valueOf(a.createdAt)));
+        StringBuilder b = new StringBuilder("📋 Шаблоны · ").append(tpls.size()).append(" из ").append(TPL_LIMIT)
+            .append("\n\nТапни по названию, чтобы начать тренировку.");
+        List<List<Map<String, Object>>> kb = new ArrayList<>();
+        for (Template t : tpls) {
+            kb.add(List.of(
+                TelegramApi.button("▶️ " + t.name, "tpl:start_" + t.id),
+                TelegramApi.button("🗑", "tpl:del_" + t.id)
+            ));
+        }
+        kb.add(List.of(TelegramApi.button("↩️ Меню", "home")));
+        send(chatId, mid, b.toString(), kb);
+    }
+
+    /* «💾 Сохранить как шаблон»: диалог имени [§4.3] */
+    private void tplNew(long chatId, Long mid, GymData data, UserState st, long wid) {
+        Workout w = data.findById(wid);
+        if (w == null) {
+            showMenu(chatId, mid, data, st);
+            return;
+        }
+        if (data.templates.size() >= TPL_LIMIT) {
+            send(chatId, mid, "Лимит — " + TPL_LIMIT + " шаблонов. Удали лишний: /templates", mainKb());
+            return;
+        }
+        if (templateFromWorkout(data, w).exercises.isEmpty()) {
+            send(chatId, mid, "В этой тренировке нет записей — сохранять нечего 💪", mainKb());
+            return;
+        }
+        st.editWorkoutId = wid;
+        st.mode = UserState.Mode.TPL_NAME;
+        send(chatId, mid, "💾 Сохраним тренировку как шаблон.\n\nНазвание (до 60 символов), например: Спина и бицепс",
+            List.of(
+                List.of(
+                    TelegramApi.button("🔤 Авто-имя", "tpl:auto_" + wid),
+                    TelegramApi.button("↩️ Отмена", "tpl:canc")
+                )
+            ));
+    }
+
+    /* ввод имени шаблона [§4.3]; дубликаты имён разрешены (различимы по составу) */
+    private void handleTplNameInput(long chatId, Long mid, GymData data, UserState st, String text) {
+        Workout w = data.findById(st.editWorkoutId);
+        if (w == null) {
+            showMenu(chatId, mid, data, st);
+            return;
+        }
+        String name = text.trim();
+        if (name.isEmpty() || name.length() > 60) {
+            send(chatId, mid, "Название от 1 до 60 символов 🤔", List.of(
+                List.of(
+                    TelegramApi.button("🔤 Авто-имя", "tpl:auto_" + w.id),
+                    TelegramApi.button("↩️ Отмена", "tpl:canc")
+                )
+            ));
+            return;
+        }
+        if (data.templates.size() >= TPL_LIMIT) {
+            st.mode = UserState.Mode.MENU;
+            send(chatId, mid, "Лимит — " + TPL_LIMIT + " шаблонов. Удали лишний: /templates", mainKb());
+            return;
+        }
+        Template t = templateFromWorkout(data, w);
+        if (t.exercises.isEmpty()) {
+            st.mode = UserState.Mode.MENU;
+            send(chatId, mid, "В этой тренировке нет записей — сохранять нечего 💪", mainKb());
+            return;
+        }
+        t.name = name;
+        tplSaved(chatId, mid, data, st, t);
+    }
+
+    /* «🔤 Авто-имя»: сохранить без ввода текста [§4.3] */
+    private void tplAutoSave(long chatId, Long mid, GymData data, UserState st, long wid) {
+        Workout w = data.findById(wid);
+        if (w == null) {
+            showMenu(chatId, mid, data, st);
+            return;
+        }
+        if (data.templates.size() >= TPL_LIMIT) {
+            st.mode = UserState.Mode.MENU;
+            send(chatId, mid, "Лимит — " + TPL_LIMIT + " шаблонов. Удали лишний: /templates", mainKb());
+            return;
+        }
+        Template t = templateFromWorkout(data, w);
+        if (t.exercises.isEmpty()) {
+            st.mode = UserState.Mode.MENU;
+            send(chatId, mid, "В этой тренировке нет записей — сохранять нечего 💪", mainKb());
+            return;
+        }
+        t.name = trimName(templateAutoName(w));
+        tplSaved(chatId, mid, data, st, t);
+    }
+
+    private void tplSaved(long chatId, Long mid, GymData data, UserState st, Template t) {
+        data.templates.add(t);
+        storage.save(chatId, data);
+        st.mode = UserState.Mode.MENU;
+        send(chatId, mid, "✅ Шаблон «" + esc(t.name) + "» сохранён (" + data.templates.size() + " из " + TPL_LIMIT + ")."
+            + "\n\nНачать из него: /templates или кнопка «📋 Шаблоны».", mainKb());
+    }
+
+    /* авто-имя: своя первая строка названия → первые 2 упражнения через « · » → «Тренировка ДД-ММ» [§4.3] */
+    static String templateAutoName(Workout w) {
+        if (w.title != null && !w.title.isBlank()) return w.title.split("\n")[0].trim();
+        StringBuilder b = new StringBuilder();
+        int n = 0;
+        for (ExerciseEntry e : w.exercises) {
+            if (e.sets.isEmpty()) continue;
+            if (n > 0) b.append(" · ");
+            b.append(e.name);
+            if (++n == 2) break;
+        }
+        if (n > 0) return b.toString();
+        LocalDate d = parseDate(w.date);
+        return "Тренировка " + (d == null ? "" : d.format(DDM));
+    }
+
+    static String trimName(String raw) {
+        String n = raw == null ? "" : raw.trim();
+        return n.length() > 60 ? n.substring(0, 60).trim() : n;
+    }
+
+    /* снимок тренировки → шаблон: упражнения с записями по порядку, план = последний блок [§4.2] */
+    private static Template templateFromWorkout(GymData data, Workout w) {
+        Template t = new Template();
+        long maxId = 0;
+        for (Template x : data.templates) maxId = Math.max(maxId, x.id);
+        t.id = maxId + 1;
+        t.createdAt = LocalDateTime.now().toString();
+        for (ExerciseEntry e : w.exercises) {
+            if (e.sets.isEmpty() || t.exercises.size() >= TPL_EX_LIMIT) continue;
+            TemplateExercise te = new TemplateExercise();
+            te.name = e.name;
+            SetEntry last = e.sets.get(e.sets.size() - 1);
+            te.w = last.weight;
+            te.s = last.sets;
+            te.r = last.reps;
+            t.exercises.add(te);
+        }
+        return t;
+    }
+
+    /* старт из шаблона [§4.6]: при активной тренировке — стандартный диалог, шаблон применится
+       после «Удалить и начать новую» */
+    private void tplStart(long chatId, Long mid, GymData data, UserState st, long tplId) {
+        Template t = findTemplate(data, tplId);
+        if (t == null) {
+            showTemplates(chatId, mid, data, st);
+            return;
+        }
+        if (data.active() != null) {
+            st.pendingTplId = tplId;
+            st.pendingRepWid = 0;
+            send(chatId, mid, "У тебя есть незавершённая тренировка от " + fmtDate(data.active().date)
+                + ". Что делаем?", activeConflictKb());
+            return;
+        }
+        String header = "📋 Шаблон «" + esc(t.name) + "» применён — " + t.exercises.size() + " "
+            + plural(t.exercises.size(), "упражнение", "упражнения", "упражнений") + ". Записывай как обычно.\n\n";
+        startFromTemplate(chatId, mid, data, st, t, header);
+    }
+
+    /* «Повторить прошлую тренировку» [§4.5]: временный шаблон из завершённой, в список не пишется */
+    private void tplRepeat(long chatId, Long mid, GymData data, UserState st, long wid) {
+        Workout src = data.findById(wid);
+        if (src == null || !src.finished) {
+            showMenu(chatId, mid, data, st);
+            return;
+        }
+        if (data.active() != null) {
+            st.pendingTplId = 0;
+            st.pendingRepWid = wid;
+            send(chatId, mid, "У тебя есть незавершённая тренировка от " + fmtDate(data.active().date)
+                + ". Что делаем?", activeConflictKb());
+            return;
+        }
+        String header = "🔁 Повторяем тренировку от " + firstLineText(src) + "\n\n";
+        startFromTemplate(chatId, mid, data, st, templateFromWorkout(data, src), header);
+    }
+
+    private static List<List<Map<String, Object>>> activeConflictKb() {
+        return List.of(
+            List.of(TelegramApi.button("▶️ Продолжить", "wk:resume")),
+            List.of(TelegramApi.button("🗑 Удалить и начать новую", "wk:discard")),
+            List.of(TelegramApi.button("🏠 Меню", "home"))
+        );
+    }
+
+    /* создание незавершённой тренировки из шаблона: упражнения списком, записи пустые [§4.6] */
+    private void startFromTemplate(long chatId, Long mid, GymData data, UserState st, Template t, String header) {
+        Workout w = new Workout();
+        w.id = data.nextId++;
+        w.date = LocalDate.now().toString();
+        w.startedAt = LocalDateTime.now().toString();
+        for (TemplateExercise te : t.exercises) {
+            ExerciseEntry e = new ExerciseEntry(te.name);
+            e.startedAt = w.startedAt;
+            w.exercises.add(e);
+        }
+        data.workouts.add(w);
+        storage.save(chatId, data);
+        st.editWorkoutId = 0;
+        st.editing = false;
+        st.pendingTplId = 0;
+        st.pendingRepWid = 0;
+        renderWorkoutScreen(chatId, mid, data, st, w.id, header);
+    }
+
+    /* удаление: confirm на том же сообщении [§4.4] */
+    private void tplDelAsk(long chatId, Long mid, GymData data, UserState st, long tplId) {
+        Template t = findTemplate(data, tplId);
+        if (t == null) {
+            showTemplates(chatId, mid, data, st);
+            return;
+        }
+        send(chatId, mid, "Удалить шаблон «" + esc(t.name) + "»?", List.of(
+            List.of(
+                TelegramApi.button("🗑 Да, удалить", "tpl:delok_" + tplId),
+                TelegramApi.button("↩️ Отмена", "tpl:back")
+            )
+        ));
+    }
+
+    private void tplDelete(long chatId, Long mid, GymData data, UserState st, long tplId) {
+        data.templates.removeIf(t -> t.id == tplId);
+        storage.save(chatId, data);
+        showTemplates(chatId, mid, data, st);
+    }
+
+    private void showHelp(long chatId, Long mid, GymData data, UserState st) {
+        st.mode = UserState.Mode.MENU;
+        st.currentExercise = null;
+        StringBuilder b = new StringBuilder("ℹ️ Справка по командам\n\n");
+        b.append("/start — главное меню\n");
+        b.append("/workout — начать или продолжить тренировку\n");
+        b.append("/view — посмотреть тренировку\n");
+        b.append("/history — история тренировок\n");
+        b.append("/stats — статистика\n");
+        b.append("/templates — шаблоны тренировок\n");
+        b.append("/rest — таймер отдыха: /rest 180\n");
+        b.append("/export — выгрузить дневник CSV-файлом\n");
+        b.append("/profile — профиль: пол, возраст, рост, вес\n");
+        if (webAppUrl != null) {
+            b.append("/app — открыть приложение\n");
+        }
+        b.append("\nВсё то же самое доступно кнопками меню 💪");
+        send(chatId, mid, b.toString(), mainKb());
     }
 
     private void showKcal(long chatId, Long mid, GymData data, long id) {
@@ -1250,6 +1890,8 @@ public final class BotLogic {
                     double mw = maxWeight(block.weight);
                     if (mw > s.maxW) s.maxW = mw;
                     if (mw > 0) s.hasW = true;
+                    double er = Records.e1rm(block);
+                    if (er > s.e1rm) s.e1rm = er;
                     s.lastLine = renderLine(e.name, block);
                     s.lastDate = w.date;
                 }
@@ -1270,6 +1912,7 @@ public final class BotLogic {
             ExStat s = top.get(i).getValue();
             b.append("\n\n• ").append(esc(name)).append(" (").append(s.sessions).append(" раз.)");
             b.append("\n  Максимум: ").append(s.hasW ? fmtW(s.maxW) + " кг" : "без веса");
+            if (s.e1rm > 0) b.append("\n  1ПМ ≈ ").append(Math.round(s.e1rm)).append(" кг");
             if (s.lastLine != null) {
                 b.append("\n  Последний: ").append(esc(s.lastLine));
                 if (s.lastDate != null) b.append(" (").append(fmtDate(s.lastDate)).append(")");
@@ -1282,6 +1925,7 @@ public final class BotLogic {
         int sessions;
         double maxW;
         boolean hasW;
+        double e1rm;
         String lastLine;
         String lastDate;
     }
@@ -1445,6 +2089,58 @@ public final class BotLogic {
         int m10 = last % 10, m100 = last % 100;
         String word = (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) ? "повторения" : "повторений";
         return " по " + str + " " + word;
+    }
+
+    /* Название тренировки для CSV: кастомное одной строкой (переводы строк → « / »),
+       иначе автоматическое «ДД-ММ ДН» — то, что бот и показывает как имя тренировки. */
+    private static String csvTitle(Workout w) {
+        if (w.title != null && !w.title.isBlank()) {
+            return w.title.replaceAll("\\r\\n|\\r|\\n", " / ").trim();
+        }
+        return firstLineText(w);
+    }
+
+    /* Подходы одной строкой. В данных один блок = вес + число подходов + повторения, поэтому:
+       45×12            — одиночный подход с весом (пирамида: «45×12, 50×10»)
+       45×12 (4 подхода) — блок из 4 подходов с весом 45 по 12 повторений
+       4×12             — без веса (подходы×повторы) */
+    private static String csvSets(ExerciseEntry e) {
+        List<String> parts = new ArrayList<>();
+        for (SetEntry s : e.sets) {
+            if (s.weight.isEmpty()) {
+                parts.add(s.sets + "×" + s.reps);
+            } else if (s.sets == 1) {
+                parts.add(s.weight + "×" + s.reps);
+            } else {
+                parts.add(s.weight + "×" + s.reps + " (" + s.sets + " " + setsWord(s.sets) + ")");
+            }
+        }
+        return String.join(", ", parts);
+    }
+
+    /* RFC 4180: поле берём в кавычки, если содержит ; " или перевод строки.
+       CSV-инъекция формулами: Excel выполняет ячейку, начинающуюся с = + - @, как формулу —
+       опасный первый символ экранируется апострофом (стандартная защита экспортёров).
+       Даты и числа (fmtDate/csvSets) с таких символов не начинаются — не затрагиваются. */
+    public static String csvField(String v) {
+        if (v == null) return "";
+        if (!v.isEmpty()) {
+            char c = v.charAt(0);
+            if (c == '=' || c == '+' || c == '-' || c == '@') v = "'" + v;
+        }
+        if (v.indexOf(';') >= 0 || v.indexOf('"') >= 0 || v.indexOf('\n') >= 0 || v.indexOf('\r') >= 0) {
+            return '"' + v.replace("\"", "\"\"") + '"';
+        }
+        return v;
+    }
+
+    /* «1 тренировка», «2 тренировки», «5 тренировок» — общее склонение для подписей */
+    public static String plural(int n, String one, String few, String many) {
+        n = Math.abs(n);
+        int m10 = n % 10, m100 = n % 100;
+        if (m10 == 1 && m100 != 11) return one;
+        if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+        return many;
     }
 
     private static Workout resolveWorkout(GymData data, UserState st) {

@@ -427,6 +427,31 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
     });
 
+    test('экран истории: «🚪 Выйти» непрозрачна, видима целиком и клик закрывает карточку (#87)', async ({ page, request }) => {
+        const now = new Date();
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, isoDate(now), EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        const exit = page.locator('[data-act="closeHistory"]');
+        await expect(exit).toBeVisible({ timeout: 5000 });
+        /* корень #87: backbar fixed и при скролле под ним проходит красная «Удалить
+           тренировку»; сквозь полупрозрачный sec-фон тексты сливались («…тренировку Выйти»).
+           Кнопка обязана быть непрозрачной (alpha > 0.5) */
+        const bg = await exit.evaluate(function (el) { return getComputedStyle(el).backgroundColor; });
+        const parts = String(bg).split(',');
+        const alpha = parts.length > 3 ? parseFloat(parts[3]) : 1;
+        if (!(alpha > 0.5)) throw new Error('«Выйти» просвечивает (' + bg + ') — тексты сливаются с контентом под backbar');
+        /* видима целиком в зоне backbar, клик закрывает экран карточки */
+        await expect(exit).toBeInViewport({ ratio: 1 });
+        await exit.click();
+        await expect(page.locator('.backbar')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+    });
+
     test('превью-карточки: дата как в шапке (эмодзи + дд.мм, дн), жирное название, правый угол без дня недели', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
@@ -911,7 +936,10 @@ test.describe('GymHelper e2e', function () {
                     sets: [{ w: '100', s: 3, r: '8-10', t: '2026-10-29T09:32:00' }] }] }]
         } } });
         await openApp(page);
-        await startWorkoutUi(page);
+        /* есть история → FAB открывает модалку «Новая тренировка» [UX-T7]; стартуем с пустого списка */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="newBlank"]').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
         const st = await request.get('/api/state');
         const state = await st.json().catch(function () { return null; });
         if (!state || !Array.isArray(state.workouts)) throw new Error('нет состояния заглушки');
@@ -985,5 +1013,351 @@ test.describe('мобильный (тач-экран)', function () {
         await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
+    });
+});
+
+/* ===== спринт 1: таймер отдыха [UX-T4], live-PR + 1ПМ [UX-T2], шаблоны [UX-T6/T7] ===== */
+
+/* формат остатка таймера — как restFmt в app.js: «M:SS» */
+function restFmt(s) {
+    s = Math.max(0, Math.round(s));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function pad2(n) { return String(n).padStart(2, '0'); }
+/* лог блока в открытой модалке ввода: вес/подходы/повторения → «Добавить» */
+async function fillEntry(page, w, s, r) {
+    await page.locator('#mWeight').fill(String(w));
+    if (s != null) await page.locator('#mSets').fill(String(s));
+    await page.locator('#mReps').fill(String(r));
+    await page.locator('[data-act="saveEntry"]').click();
+    await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+}
+
+test.describe('таймер отдыха [UX-T4]', function () {
+
+    test('автозапуск после записи подхода: отсчёт, подпись упражнения; новый подход перезапускает; пилюля разворачивается', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await fillEntry(page, '60', '1', '10');
+        const bar = page.locator('#restbar');
+        await expect(bar).toBeVisible({ timeout: 5000 });
+        await expect(bar).not.toHaveClass(/hidden/);
+        /* дефолт 90 сек: остаток 1:30 и дальше по убывающей */
+        await expect(bar.locator('#rbTime')).toHaveText(/^(1:28|1:29|1:30)$/, { timeout: 5000 });
+        await expect(bar.locator('.rb-label')).toHaveText('Отдых');
+        await expect(bar.locator('.rb-ex')).toHaveText(EX);
+        /* лог нового подхода перезапускает таймер на полную длительность (§1.8) */
+        const end1 = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymRest')).end; });
+        await page.waitForTimeout(2100);
+        await page.locator('.expill .btnrow [data-act="openEntryModal"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await fillEntry(page, '60', '1', '10');
+        const end2 = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymRest')).end; });
+        if (end2 - end1 < 1500) throw new Error('новый подход не перезапустил таймер: сдвиг end ' + (end2 - end1) + ' мс');
+        await expect(bar.locator('#rbTime')).toHaveText(/^(1:28|1:29|1:30)$/, { timeout: 5000 });
+        /* сворачивается в пилюлю и разворачивается обратно */
+        await bar.locator('[data-act="restFold"]').click();
+        await expect(bar.locator('.rb-pill')).toBeVisible({ timeout: 5000 });
+        await expect(bar.locator('.rb-pill')).toContainText('⏱');
+        await bar.locator('[data-act="restUnfold"]').click();
+        await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('перезагрузка страницы: таймер восстанавливается с правильным остатком (абсолютная метка end, Date не мокаем)', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await fillEntry(page, '80', '1', '10');
+        await expect(page.locator('#restbar #rbTime')).toBeVisible({ timeout: 5000 });
+        /* сворачиваем в пилюлю — свёрнутость тоже должна пережить перезагрузку (§1.7) */
+        await page.locator('#restbar [data-act="restFold"]').click();
+        await expect(page.locator('#restbar .rb-pill')).toBeVisible({ timeout: 5000 });
+        await page.waitForTimeout(2000);
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        const bar = page.locator('#restbar');
+        await expect(bar.locator('.rb-pill')).toBeVisible({ timeout: 5000 });
+        /* остаток считаем от абсолютной метки end локальным временем;
+           допустимый разброс ±1 сек — цифру рисует секундный тик */
+        const left = await page.evaluate(function () {
+            const r = JSON.parse(localStorage.getItem('gymRest'));
+            return Math.ceil((r.end - Date.now()) / 1000);
+        });
+        if (!(left > 60 && left <= 89)) throw new Error('остаток после перезагрузки: ' + left + ' сек (жи 90, прошло ~2 с)');
+        const pillTxt = (await bar.locator('.rb-pill').textContent()) || '';
+        if (!pillTxt.includes(restFmt(left)) && !pillTxt.includes(restFmt(left + 1)) && !pillTxt.includes(restFmt(left - 1))) {
+            throw new Error('пилюля показывает ' + JSON.stringify(pillTxt) + ', ожидали ~' + restFmt(left));
+        }
+        /* разворачиваем: панель с подписью упражнения восстановилась */
+        await bar.locator('[data-act="restUnfold"]').click();
+        await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
+        await expect(bar.locator('.rb-ex')).toHaveText(EX);
+    });
+
+    test('пауза замораживает остаток, продолжение тикает, «+30 сек» удлиняет отсчёт и шкалу', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await fillEntry(page, '60', '1', '10');
+        const bar = page.locator('#restbar');
+        await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
+        /* пауза: left сохранён, end удалён, цифры замерли */
+        await bar.locator('[data-act="restPause"]').click();
+        await expect(bar.locator('[data-act="restPause"]')).toHaveText('▶ Продолжить');
+        await expect(bar.locator('#rbTime')).toHaveClass(/paused/);
+        const p = await page.evaluate(function () {
+            const r = JSON.parse(localStorage.getItem('gymRest'));
+            return { paused: r.paused, left: r.left || 0, hasEnd: 'end' in r };
+        });
+        if (!p.paused || !(p.left > 0) || p.hasEnd) throw new Error('пауза не записала left / не удалила end: ' + JSON.stringify(p));
+        const t1 = await bar.locator('#rbTime').textContent();
+        await page.waitForTimeout(2200);
+        const t2 = await bar.locator('#rbTime').textContent();
+        if (t1 !== t2) throw new Error('остаток тикает на паузе: ' + t1 + ' → ' + t2);
+        /* продолжение: отсчёт пошёл дальше (poll: фаза секундного тика не привязана к клику) */
+        await bar.locator('[data-act="restPause"]').click();
+        await expect(bar.locator('[data-act="restPause"]')).toHaveText('⏸ Пауза');
+        const t3 = await bar.locator('#rbTime').textContent();
+        await expect.poll(async function () { return bar.locator('#rbTime').textContent(); }, { timeout: 5000 }).not.toBe(t3);
+        /* +30 сек: end += 30 c, полная длительность 90 → 120 */
+        const endBefore = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymRest')).end; });
+        await bar.locator('[data-act="restMore"]').click();
+        const st = await page.evaluate(function () {
+            const r = JSON.parse(localStorage.getItem('gymRest'));
+            return { end: r.end, dur: r.dur };
+        });
+        if (st.end - endBefore !== 30000) throw new Error('+30 сек: end сдвинулся на ' + (st.end - endBefore) + ' мс');
+        if (st.dur !== 120) throw new Error('+30 сек: dur = ' + st.dur + ', ожидалось 120');
+        const leftNow = await page.evaluate(function () {
+            return Math.ceil((JSON.parse(localStorage.getItem('gymRest')).end - Date.now()) / 1000);
+        });
+        const txt = await bar.locator('#rbTime').textContent();
+        if (txt !== restFmt(leftNow) && txt !== restFmt(leftNow + 1) && txt !== restFmt(leftNow - 1)) {
+            throw new Error('после «+30» на панели ' + txt + ', ожидали ~' + restFmt(leftNow));
+        }
+    });
+
+    test('истечение: glow-состояние «Перерыв окончен», тост, «Скрыть» убирает панель и ключ', async ({ page }) => {
+        /* короткий остаток кладём напрямую в localStorage (тест-сетап), Date не мокаем:
+           end — абсолютная метка, приложение считает от неё (§1.7) */
+        await page.addInitScript(function () {
+            try {
+                localStorage.setItem('gymRest', JSON.stringify({ end: Date.now() + 2500, dur: 90, paused: false, mini: false, ex: 'Жим штанги лёжа' }));
+            } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        const bar = page.locator('#restbar');
+        await expect(bar).toBeVisible({ timeout: 5000 });
+        await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
+        /* сигнал по окончании: тост «⏱ Отдых окончен» */
+        await expect(page.locator('.toast.show')).toHaveText('⏱ Отдых окончен', { timeout: 8000 });
+        /* состояние «Истёк»: glow-карточка с кнопкой «Скрыть» */
+        await expect(bar.locator('.rb-done .txt')).toHaveText('Перерыв окончен — время работать 💪');
+        await expect(bar.locator('[data-act="restHide"]')).toHaveText('Скрыть');
+        await bar.locator('[data-act="restHide"]').click();
+        await expect(bar).toHaveClass(/hidden/);
+        const key = await page.evaluate(function () { return localStorage.getItem('gymRest'); });
+        if (key !== null) throw new Error('ключ gymRest не удалён после «Скрыть»: ' + key);
+    });
+
+    test('профиль: чип 180 меняет дефолт (сервер хранит restSec), «Своё…» 700 отклоняется / 240 сохраняется, таймер стартует на выбранное', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
+        /* дефолт 90 активен из коробки */
+        await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
+        /* чип 180: сохранение в G.restSec → на сервер (merge-политика /api/save) */
+        await card.locator('.chip', { hasText: '180' }).click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: '180' })).toHaveClass(/on/);
+        let st = await (await request.get('/api/state')).json();
+        if (st.restSec !== 180) throw new Error('сервер не хранит restSec=180: ' + JSON.stringify(st.restSec));
+        /* «Своё…»: вне диапазона отклоняется, 30–600 сохраняется */
+        await card.locator('.chip', { hasText: 'Своё…' }).click();
+        await page.locator('#restCustomSec').fill('700');
+        await page.locator('[data-act="restCustomSave"]').click();
+        await expect(page.locator('.toast.err')).toBeVisible({ timeout: 5000 });
+        await page.locator('#restCustomSec').fill('240');
+        /* dedup-гвардия действий 400 мс: кнопка «ОК» та же нода (render при ошибке не было) — ждём окно */
+        await page.waitForTimeout(450);
+        await page.locator('[data-act="restCustomSave"]').click();
+        /* тост = подтверждение, что save() дошёл до сервера (класс on у чипа появляется и до сохранения) */
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: 'Своё…' })).toHaveClass(/on/);
+        st = await (await request.get('/api/state')).json();
+        if (st.restSec !== 240) throw new Error('сервер не хранит restSec=240: ' + JSON.stringify(st.restSec));
+        /* следующий подход отдыхает 240 сек */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await startAndPick(page, EX);
+        await fillEntry(page, '50', '1', '10');
+        await expect(page.locator('#rbTime')).toHaveText(/^(3:58|3:59|4:00)$/, { timeout: 5000 });
+    });
+});
+
+test.describe('live-PR и оценка 1ПМ [UX-T2]', function () {
+
+    test('тост «Новый рекорд» появляется и исчезает, чип 🏆 у записи, «Оценка 1ПМ · Эпли» в статистике', async ({ page, request }) => {
+        const now = new Date();
+        const yesterday = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
+        /* база: жим 100 кг × 3 × 8-10 → e1RM = 100 × (1 + 9/30) = 130 */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, yesterday, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="newBlank"]').click();
+        await page.locator('.modal.open .excard', { hasText: EX }).first().click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        /* новый блок 110 кг × 1 × 8 → e1RM = 110 × (1 + 8/30) ≈ 139 > 130 → PR */
+        const e1rm = Math.round(110 * (1 + 8 / 30));
+        await fillEntry(page, '110', '1', '8');
+        const toast = page.locator('.toast.show');
+        await expect(toast).toHaveText('🏆 Новый рекорд! 1ПМ ≈ ' + e1rm + ' кг', { timeout: 5000 });
+        await expect(toast).toHaveClass(/pr/);
+        /* тост исчезает (PR-тост живёт 3.5 с) */
+        await expect(page.locator('.toast.show')).not.toBeVisible({ timeout: 6000 });
+        /* чип 🏆 с оценкой 1ПМ у подхода-рекордсмена */
+        await expect(page.locator('.expill .entry .prtag').first()).toHaveText('🏆 ' + e1rm, { timeout: 5000 });
+        /* завершаем: статистика считает только завершённые */
+        await page.locator('[data-act="finishWorkout"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const card = page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' });
+        await expect(card).toBeVisible({ timeout: 5000 });
+        const row = card.locator('.prmrow', { hasText: EX });
+        await expect(row.locator('.prmval')).toContainText('≈ ' + e1rm);
+        await expect(row).toContainText('лучший подход: 110 кг × 8');
+    });
+});
+
+test.describe('шаблоны тренировок [UX-T6/T7]', function () {
+
+    test('новичок: без истории и шаблонов FAB стартует мгновенно, без модалки выбора', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        /* открылся пикер («Добавить упражнение»), а не модалка «Новая тренировка» */
+        await expect(page.locator('#pickerQ')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.modal.open')).not.toContainText('Новая тренировка');
+        const st = await (await request.get('/api/state')).json();
+        const unfin = (st.workouts || []).filter(function (w) { return !w.finished; });
+        if (unfin.length !== 1) throw new Error('мгновенный старт не создал ровно одну тренировку: ' + unfin.length);
+    });
+
+    test('«💾 В шаблоны» сохраняет последний план; FAB начинает открывать модалку; старт из шаблона даёт пустой список упражнений', async ({ page, request }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await fillEntry(page, '100', '3', '10');
+        await page.locator('[data-act="finishWorkout"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        /* карточка завершённой: модалка сохранения с авто-именем и планом последнего блока */
+        await page.locator('[data-act="tplSaveModal"]').click();
+        const modal = page.locator('.modal.open');
+        await expect(modal).toContainText('💾 Сохранить как шаблон', { timeout: 5000 });
+        await expect(page.locator('#mTplName')).toHaveValue(EX);
+        await expect(modal).toContainText('В шаблон войдут (1)');
+        await expect(modal).toContainText('100 кг × 3 × 10');
+        await modal.locator('[data-act="tplSave"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Шаблон сохранён', { timeout: 5000 });
+        await expect(modal).not.toBeVisible({ timeout: 5000 });
+        /* шаблон доехал до сервера: имя + последний план */
+        const st = await (await request.get('/api/state')).json();
+        const t = (st.templates || [])[0];
+        if (!t || t.name !== EX) throw new Error('шаблон не сохранён: ' + JSON.stringify(st.templates));
+        const te = (t.exercises || [])[0];
+        if (!te || te.name !== EX || te.w !== '100' || te.s !== 3 || te.r !== '10') {
+            throw new Error('план шаблона неверен: ' + JSON.stringify(te));
+        }
+        /* выходим из карточки: теперь FAB открывает модалку «Новая тренировка» */
+        await page.locator('[data-act="saveWorkout"]').click();
+        await page.locator('.nav .nfab').click();
+        const m2 = page.locator('.modal.open');
+        await expect(m2).toContainText('Новая тренировка', { timeout: 5000 });
+        await expect(m2).toContainText('📋 Шаблоны · 1 из 20');
+        const tcard = m2.locator('.tcard');
+        await expect(tcard).toHaveCount(1);
+        await expect(tcard).toContainText(EX);
+        await expect(tcard).toContainText('1 упр.');
+        /* старт из шаблона: тост + незавершённая тренировка с пустыми записями */
+        await tcard.click();
+        await expect(page.locator('.toast.show')).toHaveText('📋 Шаблон применён: 1 упражнение', { timeout: 5000 });
+        await expect(page.locator('.backbar', { hasText: 'Сохранить' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .exname')).toHaveText(EX);
+        await expect(page.locator('.expill .entry')).toHaveCount(0);
+        const st2 = await (await request.get('/api/state')).json();
+        const fresh = (st2.workouts || []).filter(function (w) { return !w.finished; })[0];
+        if (!fresh || !fresh.exercises.length || fresh.exercises[0].name !== EX || fresh.exercises[0].sets.length) {
+            throw new Error('старт из шаблона создал не то: ' + JSON.stringify(fresh));
+        }
+    });
+
+    test('«Повторить прошлую» копирует упражнения; удаление шаблона отражается в модалке старта и на сервере', async ({ page, request }) => {
+        const now = new Date();
+        const d7 = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, d7, 'Подтягивания', '0', 4), doneWorkout(2, isoDate(now), EX, '80', 3)],
+            templates: [{ id: 1, name: 'Спина и бицепс', createdAt: '2026-11-06T18:30:00',
+                exercises: [{ name: 'Тяга верхнего блока', w: '60', s: 3, r: '10' }, { name: 'Подтягивания', w: '', s: 4, r: '8' }] }]
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        const m = page.locator('.modal.open');
+        await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
+        await expect(m).toContainText('📋 Шаблоны · 1 из 20');
+        /* подпись повтора: дата последней завершённой (спека §4.7) + число упражнений */
+        const rep = m.locator('[data-act="newRepeat"]');
+        await expect(rep).toContainText('🔁 Повторить прошлую');
+        await expect(rep).toContainText(pad2(now.getDate()) + '.' + pad2(now.getMonth() + 1));
+        await expect(rep).toContainText('1 упражнение');
+        await rep.click();
+        await expect(page.locator('.toast.show')).toHaveText('📋 Шаблон применён: 1 упражнение', { timeout: 5000 });
+        await expect(page.locator('.expill .exname')).toHaveText(EX);
+        await expect(page.locator('.expill .entry')).toHaveCount(0);
+        /* удаляем созданную тренировку, чтобы снова попасть в модалку старта */
+        await page.locator('.wcicons [data-act="confirmModal"]').click();
+        await page.locator('.modal.open [data-act="confirmYes"]').click();
+        await page.locator('.nav .nfab').click();
+        await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
+        /* удаление шаблона: 🗑 → confirm → модалка отражает состав */
+        await m.locator('.tcard .tdel').click();
+        await expect(page.locator('.modal.open')).toContainText('Удалить шаблон «Спина и бицепс»?', { timeout: 5000 });
+        await page.locator('.modal.open [data-act="confirmYes"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Шаблон удалён', { timeout: 5000 });
+        await expect(m).toContainText('Новая тренировка');
+        await expect(m.locator('.tcard')).toHaveCount(0);
+        await expect(m).not.toContainText('📋 Шаблоны');
+        const st = await (await request.get('/api/state')).json();
+        if ((st.templates || []).length !== 0) throw new Error('шаблон не удалён на сервере: ' + JSON.stringify(st.templates));
+    });
+
+    test('legacy JSON без restSec/templates: дефолт отдыха 90, секции шаблонов нет, флоу работает', async ({ page, request }) => {
+        const now = new Date();
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, isoDate(now), EX, '70', 3)]
+            /* намеренно нет ни restSec, ни templates — как в старом data/*.json */
+        } } });
+        await openApp(page);
+        /* профиль: активен дефолтный чип 90 */
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
+        await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: '180' })).not.toHaveClass(/on/);
+        /* старт: модалка выбора есть (история), но секции «📋 Шаблоны» нет */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await page.locator('.nav .nfab').click();
+        const m = page.locator('.modal.open');
+        await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
+        await expect(m).not.toContainText('📋 Шаблоны');
+        await expect(m).toContainText('🔁 Повторить прошлую');
+        /* таймер отдыха стартует с дефолта 90 сек */
+        await m.locator('[data-act="newBlank"]').click();
+        await page.locator('.modal.open .excard', { hasText: EX }).first().click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await fillEntry(page, '70', '1', '10');
+        await expect(page.locator('#rbTime')).toHaveText(/^(1:28|1:29|1:30)$/, { timeout: 5000 });
     });
 });

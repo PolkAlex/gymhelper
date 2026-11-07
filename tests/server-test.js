@@ -11,7 +11,8 @@ function initialStore() {
         rev: 1,
         del: [],
         profile: { sex: 'м', age: 30, height: 180, weight: 90 },
-        workouts: []
+        workouts: [],
+        templates: []
     };
 }
 let store = initialStore();
@@ -51,6 +52,10 @@ http.createServer(function (req, res) {
                 const j = JSON.parse(body);
                 const d = j.data || {};
                 if (Array.isArray(d.workouts)) store.workouts = d.workouts;
+                if (Array.isArray(d.templates)) store.templates = d.templates;
+                /* restSec: merge-политика реального WebServer — null у клиента (ещё не настраивал)
+                   серверное значение не затирает [UX-T4/T5, спека §0.1] */
+                if (typeof d.restSec === 'number') store.restSec = d.restSec;
                 if (typeof d.nextId === 'number') store.nextId = d.nextId;
                 if (Array.isArray(d.del)) store.del = d.del;
                 if (d.profile) store.profile = d.profile;

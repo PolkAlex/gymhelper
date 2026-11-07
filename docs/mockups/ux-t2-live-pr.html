@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-T2] #71 · Live-PR + 1ПМ — Amber Glass</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --nested: rgba(0,0,0,.18); --btn: rgba(255,255,255,.07);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+.glass {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-top: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+.glass.glow { border-color: var(--glowbrd); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28), 0 0 26px rgba(255,194,32,.08); }
+
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: rgba(255,255,255,.07); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.content { padding: 4px 12px 120px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -12px; padding: 8px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { font-size: 19px; line-height: 1; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+
+/* карточка тренировки (фрагмент) */
+.wct { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wct .t1 { font-size: 17px; font-weight: 700; margin: 0; }
+.wcpill {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;
+    background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 12px; padding: 7px 12px; margin: 8px 0 2px;
+}
+.wpill { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wpill.k { color: var(--accent); }
+.expill {
+    background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 14px; padding: 10px; margin-top: 10px;
+}
+.exhead { display: flex; align-items: center; gap: 8px; }
+.exhead .ic {
+    width: 32px; height: 32px; border-radius: 10px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--btn); border: 1px solid var(--glassbrd); font-size: 15px;
+}
+.exhead .en { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; }
+.entry { margin-top: 4px; padding: 4px 2px; border-radius: 8px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+.entry .prtag {
+    margin-left: auto; background: rgba(255,194,32,.12); border: 1px solid rgba(255,194,32,.2);
+    color: var(--accent); border-radius: 9px; padding: 2px 8px;
+    font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* ============ PR-тост (герой) ============ */
+.toast {
+    position: sticky; bottom: 158px; z-index: 40;
+    margin: 0 auto; width: fit-content; max-width: 88%;
+    background: rgba(36,39,45,.94); border: 1px solid var(--glassbrd);
+    border-radius: 14px; padding: 10px 18px; font-size: 14px; font-weight: 600; color: var(--text);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 28px rgba(0,0,0,.4);
+}
+.toast.pr {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent);
+    font-size: 14.5px; font-weight: 800;
+    box-shadow: 0 10px 32px rgba(255,194,32,.35);
+}
+.toast.pr small { display: block; font-size: 11.5px; font-weight: 600; opacity: .75; margin-top: 2px; }
+
+/* ============ карточка «Оценка 1ПМ» (герой) ============ */
+.recl { font-size: 12px; font-weight: 600; letter-spacing: .4px; color: var(--muted); text-transform: uppercase; }
+.prmrow { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.prmrow:first-of-type { margin-top: 10px; }
+.prmrow .ic {
+    width: 38px; height: 38px; border-radius: 12px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 17px;
+    background: var(--btn); border: 1px solid var(--glassbrd);
+}
+.prmrow .who { flex: 1; min-width: 0; }
+.prmrow .nm { font-size: 14px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prmrow .src { font-size: 11.5px; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.prmrow .val {
+    font-size: 20px; font-weight: 800; color: var(--accent);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.prmrow .val small { font-size: 12px; color: var(--muted); font-weight: 700; }
+.formula {
+    margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.06);
+    font-size: 11.5px; color: var(--muted); line-height: 1.5;
+}
+
+/* ============ чат бота ============ */
+.chat {
+    position: relative; height: 100%;
+    background: #0e1621;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    display: flex; flex-direction: column;
+}
+.chathead {
+    padding: 12px 14px; background: #17212b; border-bottom: 1px solid #0b0f14;
+    display: flex; align-items: center; gap: 10px;
+}
+.chathead .av {
+    width: 38px; height: 38px; border-radius: 50%; flex: none;
+    background: linear-gradient(135deg, #ffb000, #ffc220);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.chathead .cn { font-size: 15px; font-weight: 700; color: #eef4f9; }
+.chathead .cs { font-size: 12px; color: #70808f; }
+.chatbody { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.bub {
+    max-width: 82%; background: #182533; border-radius: 12px 12px 12px 4px;
+    padding: 8px 11px; font-size: 13.5px; line-height: 1.4; color: #eef4f9;
+    box-shadow: 0 1px 2px rgba(0,0,0,.35);
+}
+.bub .tm { display: block; font-size: 10.5px; color: #70808f; text-align: right; margin-top: 3px; }
+.bub b.prline { color: #ffc220; }
+.bub .bar { color: #ffc220; letter-spacing: 1px; font-size: 12px; }
+.bub .grncell { color: #3a6478; }
+.kbd { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+.kbd span {
+    background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: #c9d4e0;
+}
+.kbd span.gold { background: rgba(255,194,32,.14); border-color: rgba(255,194,32,.25); color: #ffc220; }
+.chatinput {
+    padding: 10px 12px calc(14px + env(safe-area-inset-bottom)); background: #17212b;
+}
+.chatinput .field {
+    background: #182533; border-radius: 18px; padding: 10px 14px;
+    font-size: 13.5px; color: #70808f;
+}
+
+@media (max-width: 379px) {
+    .prmrow .val { font-size: 18px; }
+    .bub { font-size: 13px; }
+}
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">Live-PR + 1ПМ <span>[UX-T2] #71 · Amber Glass</span></div>
+    <div class="note">e1RM = вес × (1 + повторения ÷ 30), средние по диапазонам. Празднуется ровно один вид рекорда:
+    для упражнений с весом — e1RM, для веса тела — объём (повторения за тренировку). Первый подход упражнения —
+    не рекорд; равный результат — не рекорд; максимум 1 поздравление на упражнение за тренировку.</div>
+
+    <!-- ================= ЭКРАН 1: PR-ТОСТ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass glow">
+                    <div class="wct"><p class="t1">🏋️ 06-11, Пт · Жим · Присед</p></div>
+                    <div class="wcpill">
+                        <span class="wpill">🕐 с 18:20</span>
+                        <span class="wpill k">🔥 210 ккал</span>
+                        <span class="wpill">🏋 6 подх.</span>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🏋</span><span class="en">Жим штанги лёжа</span></div>
+                        <div class="entry"><span>70 кг, 3 подхода по 8</span></div>
+                        <div class="entry"><span>75 кг, 3 подхода по 8</span><span class="prtag">🏆 95</span></div>
+                        <div class="entry"><span>77,5 кг, 2 подхода по 6</span></div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">⚙️</span><span class="en">Приседания</span></div>
+                        <div class="entry"><span>90 кг, 4 подхода по 8</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PR-тост: янтарная заливка, 3.5 сек, хаптика success -->
+            <div class="toast pr">🏆 Новый рекорд! 1ПМ ≈ 95 кг
+                <small>прошлый ≈ 89 кг · Жим штанги лёжа</small>
+            </div>
+
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+    <div class="note">Экран 1. Вместо обычного «✓ Сохранено» — янтарный PR-тост на 3.5 с (обычный — 2.2 с).
+    В карточке подход-рекордсмен помечен чипом 🏆 95 (e1RM этого блока; P2 — можно вторым коммитом).
+    Для подхода без веса тост был бы «🏆 Рекорд объёма! 40 повторений за тренировку».</div>
+
+    <!-- ================= ЭКРАН 2: СТАТИСТИКА · ОЦЕНКА 1ПМ ================= -->
+    <div class="caption">Экран 2 · Статистика: блок «Оценка 1ПМ» <span>топ-5 по e1RM</span></div>
+    <div class="note">Новая карточка в Статистике — сразу после «Рекордов недели», до «Серии».
+    Упражнения без веса в блок не попадают; нет ни одного с весом — карточка не показывается вовсе.
+    В боте (/stats) та же цифра добавляется строкой «1ПМ ≈ N кг» к каждому упражнению.</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · Статистика</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content">
+                <!-- существующая карточка рекорда недели — для контекста -->
+                <div class="glass glow" style="position:relative;overflow:hidden">
+                    <div class="recl">Рекорд недели · жим штанги лёжа</div>
+                    <div style="font-size:40px;font-weight:800;color:var(--accent);line-height:1.1;margin-top:6px;font-variant-numeric:tabular-nums">
+                        75 <small style="font-size:17px;color:var(--muted)">кг</small>
+                    </div>
+                    <div style="height:8px;border-radius:999px;background:rgba(255,255,255,.08);margin-top:12px;overflow:hidden">
+                        <i style="display:block;height:100%;width:78%;border-radius:999px;background:linear-gradient(90deg,var(--accent-deep),var(--accent))"></i>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-top:7px;font-size:11.5px;color:var(--muted);font-weight:600">
+                        <span>личный рекорд: 77,5 кг</span><span>97%</span>
+                    </div>
+                </div>
+
+                <!-- НОВОЕ: оценка 1ПМ -->
+                <div class="glass">
+                    <div class="recl">Оценка 1ПМ · Эпли</div>
+
+                    <div class="prmrow">
+                        <span class="ic">🏋</span>
+                        <span class="who">
+                            <span class="nm">Становая тяга</span>
+                            <span class="src">лучший подход: 120 кг × 5</span>
+                        </span>
+                        <span class="val">≈ 140 <small>кг</small></span>
+                    </div>
+                    <div class="prmrow">
+                        <span class="ic">⚙️</span>
+                        <span class="who">
+                            <span class="nm">Приседания</span>
+                            <span class="src">лучший подход: 100 кг × 6</span>
+                        </span>
+                        <span class="val">≈ 120 <small>кг</small></span>
+                    </div>
+                    <div class="prmrow">
+                        <span class="ic">🏋</span>
+                        <span class="who">
+                            <span class="nm">Жим штанги лёжа</span>
+                            <span class="src">лучший подход: 75 кг × 8</span>
+                        </span>
+                        <span class="val">≈ 95 <small>кг</small></span>
+                    </div>
+                    <div class="prmrow">
+                        <span class="ic">🧷</span>
+                        <span class="who">
+                            <span class="nm">Тяга верхнего блока</span>
+                            <span class="src">лучший подход: 60 кг × 12</span>
+                        </span>
+                        <span class="val">≈ 84 <small>кг</small></span>
+                    </div>
+                    <div class="prmrow">
+                        <span class="ic">💪</span>
+                        <span class="who">
+                            <span class="nm">Жим гантелей лёжа</span>
+                            <span class="src">лучший подход: 28 кг × 8</span>
+                        </span>
+                        <span class="val">≈ 35 <small>кг</small></span>
+                    </div>
+
+                    <div class="formula">
+                        e1RM = вес × (1 + повторения ÷ 30) · оценка по формуле Эпли,
+                        а не цель для разовых попыток
+                    </div>
+                </div>
+
+                <div class="glass">
+                    <div class="recl">Мышечные группы · эта неделя</div>
+                    <div style="display:flex;gap:12px 6px;margin-top:12px;flex-wrap:wrap">
+                        <div style="flex:1 0 70px;text-align:center"><div style="width:44px;height:44px;border-radius:50%;margin:0 auto;background:rgba(255,194,32,.15);display:flex;align-items:center;justify-content:center">🏋</div><div style="font-size:10.5px;color:var(--muted);font-weight:600;margin-top:4px">Грудь</div><b style="font-size:12px">8 подх.</b></div>
+                        <div style="flex:1 0 70px;text-align:center"><div style="width:44px;height:44px;border-radius:50%;margin:0 auto;background:rgba(90,176,255,.15);display:flex;align-items:center;justify-content:center">🦵</div><div style="font-size:10.5px;color:var(--muted);font-weight:600;margin-top:4px">Ноги</div><b style="font-size:12px">10 подх.</b></div>
+                        <div style="flex:1 0 70px;text-align:center"><div style="width:44px;height:44px;border-radius:50%;margin:0 auto;background:rgba(255,138,92,.15);display:flex;align-items:center;justify-content:center">💪</div><div style="font-size:10.5px;color:var(--muted);font-weight:600;margin-top:4px">Спина</div><b style="font-size:12px">9 подх.</b></div>
+                    </div>
+                </div>
+            </div>
+            <div class="nav">
+                <button class="nbtn"><span class="nic">⌂</span>История</button>
+                <button class="nbtn on"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= ЭКРАН 3: ЧАТ БОТА ================= -->
+    <div class="caption">Экран 3 · Чат бота <span>поздравление + отсчёт отдыха ([UX-T5] #79)</span></div>
+    <div class="note">Поздравление — второй строкой в «✅ Записано», не отдельным сообщением.
+    Отсчёт — единое сообщение на сессию: правки не чаще 1 раза в 5 сек (финальные 15 сек — раз в секунду).
+    По окончании — правка в финал + тихий пуш (disable_notification, без звука). Кнопки +30 сек / Стоп — на отсчёте.</div>
+
+    <div class="phone">
+        <div class="chat">
+            <div class="chathead">
+                <div class="av">💪</div>
+                <div style="flex:1">
+                    <div class="cn">GymHelper</div>
+                    <div class="cs">бот</div>
+                </div>
+            </div>
+            <div class="chatbody">
+
+                <div class="bub">
+                    ✅ Записано: 70 кг, 3 подхода по 8
+                    <span class="tm">18:24</span>
+                </div>
+
+                <div class="bub">
+                    ⏱ Отдых: 1:30<br>
+                    <span class="bar">▰▰▰▰▰▰▰▰▰<span class="grncell">▰▰▰▰▰▰▰▰▰</span></span><br>
+                    Жим штанги лёжа — следующий подход
+                    <div class="kbd"><span class="gold">+30 сек</span><span>⏹ Стоп</span></div>
+                    <span class="tm">18:24 ✔</span>
+                </div>
+
+                <div class="bub">
+                    ✅ Записано: 75 кг, 3 подхода по 8<br>
+                    <b class="prline">🏆 Рекорд! 1ПМ ≈ 95 кг (прошлый ≈ 89 кг)</b>
+                    <span class="tm">18:33</span>
+                </div>
+
+                <div class="bub">
+                    ⏱ Отдых: 1:22<br>
+                    <span class="bar">▰▰▰▰▰▰▰▰<span class="grncell">▰▰▰▰▰▰▰▰▰▰</span></span><br>
+                    Жим штанги лёжа — следующий подход
+                    <div class="kbd"><span class="gold">+30 сек</span><span>⏹ Стоп</span></div>
+                    <span class="tm">изменено · 18:33 ✔</span>
+                </div>
+
+                <div class="bub" style="border-color:rgba(255,194,32,.25)">
+                    ✅ Отдых окончен — подход сам себя не сделает
+                    <span class="tm">18:35</span>
+                </div>
+
+                <div class="bub" style="opacity:.92">
+                    ⏰ Перерыв окончан — 75 кг × 8 ждут продолжения
+                    <span class="tm">18:35 · 🔇 без звука</span>
+                </div>
+
+                <div class="bub">
+                    ✅ Записано: без веса, 4 подхода по 10<br>
+                    <b class="prline">🏆 Рекорд объёма! 40 повторений подтягивания за тренировку</b>
+                    <span class="tm">18:47</span>
+                </div>
+
+            </div>
+            <div class="chatinput"><div class="field">Сообщение</div></div>
+        </div>
+    </div>
+    <div class="note">Если юзер ушёл из чата — через 5 минут без активности правки замирают (сообщение
+    остаётся с последним значением), при возврате — одна ресинк-правка. /rest N меняет длительность по умолчанию
+    (общую с Mini App), /rest показывает текущую.</div>
+
+</div>
+</body>
+</html>

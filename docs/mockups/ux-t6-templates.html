@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-T6/T7] #82 #84 · Шаблоны тренировок — Amber Glass</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --nested: rgba(0,0,0,.18); --btn: rgba(255,255,255,.07);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+.glass {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-top: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+.glass.glow { border-color: var(--glowbrd); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28), 0 0 26px rgba(255,194,32,.08); }
+
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: rgba(255,255,255,.07); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.content { padding: 4px 12px 120px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -12px; padding: 8px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { font-size: 19px; line-height: 1; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+
+/* кнопки */
+.split2 { display: flex; gap: 8px; margin-top: 8px; }
+.split2 .btn { flex: 1 1 0; min-width: 0; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn {
+    border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+    background: var(--btn); color: var(--text); text-align: center;
+}
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent); font-weight: 700;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.btn.danger { background: var(--danger); border-color: transparent; color: #fff; }
+.btn.wide { flex: 1 1 100%; }
+
+/* карточка тренировки (фрагменты) */
+.wct { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wct .t1 { font-size: 17px; font-weight: 700; margin: 0; }
+.wcpill {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;
+    background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 12px; padding: 7px 12px; margin: 8px 0 2px;
+}
+.wpill { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wpill.k { color: var(--accent); }
+.expill {
+    background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 14px; padding: 10px; margin-top: 10px;
+}
+.exhead { display: flex; align-items: center; gap: 8px; }
+.exhead .ic {
+    width: 32px; height: 32px; border-radius: 10px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--btn); border: 1px solid var(--glassbrd); font-size: 15px;
+}
+.exhead .en { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; }
+.restline { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ============ модалки (шторки) ============ */
+.backdrop {
+    position: absolute; inset: 0; z-index: 50;
+    background: rgba(8,9,11,.55);
+    display: flex; align-items: flex-end;
+}
+.sheet {
+    background: rgba(30,32,38,.96); border: 1px solid var(--glassbrd); border-bottom: none;
+    width: 100%; border-radius: 22px 22px 0 0; padding: 12px 14px 16px;
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    max-height: 92%; overflow-y: auto; scrollbar-width: none;
+}
+.sheet::-webkit-scrollbar { display: none; }
+.mtitle { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+.msub { color: var(--accent); font-size: 12.5px; font-weight: 600; margin: 0 0 8px; }
+.hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+
+/* кнопка старта с подзаголовком */
+.bigstart {
+    display: block; width: 100%; border: none; cursor: pointer; font-family: inherit;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 16px; padding: 13px;
+    font-size: 15px; font-weight: 700; margin-top: 12px;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.bigstart:active { transform: scale(.98); }
+.bigstart.alt {
+    background: var(--btn); border: 1px solid rgba(255,255,255,.08);
+    color: var(--text); font-weight: 600; box-shadow: none;
+}
+.bigstart .sub { display: block; font-size: 11.5px; font-weight: 600; opacity: .72; margin-top: 2px; }
+
+/* карточка шаблона */
+.tcard {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 16px; padding: 11px 12px; margin-top: 8px; cursor: pointer;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+}
+.tcard:active { transform: scale(.985); }
+.tc-head { display: flex; align-items: center; gap: 10px; }
+.tc-head .tic {
+    width: 38px; height: 38px; border-radius: 12px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 17px;
+    background: rgba(255,194,32,.12); border: 1px solid rgba(255,194,32,.2);
+}
+.tc-head .tn { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.tc-head .meta { font-size: 11.5px; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.tc-del {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none; cursor: pointer;
+    background: none; color: var(--danger); font-size: 14px;
+}
+.tc-list { margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.06); }
+.tc-list .row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.tc-list .row b { color: var(--text); font-weight: 600; }
+.tc-list .row .plan { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 11.5px; }
+
+/* форма сохранения */
+label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+input[type="text"] {
+    width: 100%; border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+    padding: 10px 12px; font-size: 15px; background: rgba(0,0,0,.22); color: var(--text);
+    outline: none; font-family: inherit;
+}
+input[type="text"]:focus { border-color: var(--accent); }
+.savelex {
+    margin-top: 8px; background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 14px; padding: 10px 12px;
+}
+.savelex .lh { font-size: 12.5px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.savelex .row { display: flex; gap: 8px; font-size: 13px; color: var(--text); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.savelex .row .plan { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+/* тост */
+.toast {
+    position: sticky; bottom: 158px; z-index: 40;
+    margin: 0 auto; width: fit-content; max-width: 88%;
+    background: rgba(36,39,45,.94); border: 1px solid var(--glassbrd);
+    border-radius: 14px; padding: 10px 18px; font-size: 14px; font-weight: 600; color: var(--text);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 28px rgba(0,0,0,.4);
+}
+
+@media (max-width: 379px) {
+    .bigstart { font-size: 14px; }
+    .savelex .row .plan { display: none; }
+}
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">Шаблоны тренировок <span>[UX-T6] #82 · [UX-T7] #84 · Amber Glass</span></div>
+    <div class="note">Шаблон = снимок списка упражнений (+ план w/s/r для превью). Лимит 20 шаблонов.
+    Старт из шаблона создаёт незавершённую тренировку со списком упражнений — дальше обычный ввод.
+    «Повторить прошлую» — тот же механизм без сохранения в список. Данные: GymData.templates (см. спеку §0.2).</div>
+
+    <!-- ================= ЭКРАН 1: ВЫБОР ПРИ СТАРТЕ ================= -->
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content" style="filter:blur(2px);opacity:.55">
+                <div class="glass">
+                    <div class="wct"><p class="t1">03-11, Вт</p></div>
+                    <div class="wcpill"><span class="wpill">🏋 6 подх.</span><span class="wpill k">🔥 410 ккал</span></div>
+                </div>
+                <div class="glass">
+                    <div class="wct"><p class="t1">29-10, Чт</p></div>
+                </div>
+            </div>
+
+            <div class="backdrop">
+                <div class="sheet">
+                    <p class="mtitle">Новая тренировка</p>
+
+                    <button class="bigstart">🏋️ С пустого списка</button>
+
+                    <button class="bigstart alt">🔁 Повторить прошлую
+                        <span class="sub">03-11, Вт · 4 упражнения</span>
+                    </button>
+
+                    <p class="msub" style="margin-top:14px">📋 Шаблоны · 2 из 20</p>
+
+                    <div class="tcard">
+                        <div class="tc-head">
+                            <span class="tic">📋</span>
+                            <span style="flex:1;min-width:0">
+                                <span class="tn">Спина и бицепс</span>
+                                <span class="meta" style="display:block">4 упр. · 60 кг · свой вес</span>
+                            </span>
+                            <button class="tc-del" title="Удалить шаблон">🗑</button>
+                        </div>
+                        <div class="tc-list">
+                            <div class="row"><span>①</span><b>Тяга верхнего блока</b><span class="plan">60 кг × 3 × 10</span></div>
+                            <div class="row"><span>②</span><b>Подтягивания</b><span class="plan">свой вес × 4 × 8</span></div>
+                            <div class="row"><span>③</span><b>Тяга штанги в наклоне</b><span class="plan">50 кг × 3 × 10</span></div>
+                            <div class="row"><span>④</span><b>Бицепс со штангой</b><span class="plan">25 кг × 3 × 12</span></div>
+                        </div>
+                    </div>
+
+                    <div class="tcard">
+                        <div class="tc-head">
+                            <span class="tic">📋</span>
+                            <span style="flex:1;min-width:0">
+                                <span class="tn">Ноги · тяга</span>
+                                <span class="meta" style="display:block">3 упр. · 90 кг</span>
+                            </span>
+                            <button class="tc-del" title="Удалить шаблон">🗑</button>
+                        </div>
+                    </div>
+
+                    <div class="btnrow" style="margin-top:12px">
+                        <button class="btn wide">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+    <div class="note">Экран 1 — модалка старта. Появляется по FAB, когда нет активной тренировки И есть шаблоны или история;
+    у новичка FAB стартует мгновенно, как сейчас (без лишнего тапа). Тап по карточке шаблона = немедленный старт
+    (состав виден в мета-строке и в развёрнутой карточке). 🗑 удаляет шаблон с подтверждением.</div>
+
+    <!-- ================= ЭКРАН 2: СОХРАНИТЬ КАК ШАБЛОН ================= -->
+    <div class="caption">Экран 2 · «💾 В шаблоны» на завершённой тренировке <span>[UX-T6] #82</span></div>
+    <div class="note">Момент сохранения: после завершения / из истории (в активной тренировке кнопки нет —
+    состав ещё не финальный). Имя — префилл из названия тренировки; план = последний блок каждого упражнения.
+    21-й шаблон → тост «Лимит — 20 шаблонов, удали лишний при старте». В боте те же моменты:
+    кнопка «💾 Сохранить как шаблон» в сообщении «🎉 Тренировка завершена!» и на экране завершённой тренировки.</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass">
+                    <div class="wct"><p class="t1">🏋️ 03-11, Вт · Спина и грудь</p></div>
+                    <div class="wcpill">
+                        <span class="wpill">🕐 18:20–19:05</span>
+                        <span class="wpill k">🔥 470 ккал</span>
+                        <span class="wpill">🏋 8 подх.</span>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧷</span><span class="en">Тяга верхнего блока</span></div>
+                        <div class="entry"><span>60 кг, 3 подхода по 10</span></div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧗</span><span class="en">Подтягивания</span></div>
+                        <div class="entry"><span>без веса, 4 подхода по 8</span></div>
+                    </div>
+                    <!-- новые действия завершённой тренировки -->
+                    <div class="split2" style="margin-top:12px">
+                        <button class="btn">🔁 Повторить</button>
+                        <button class="btn prime">💾 В шаблоны</button>
+                    </div>
+                    <div class="btnrow">
+                        <button class="btn danger wide">🗑 Удалить тренировку</button>
+                    </div>
+                </div>
+            </div>
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="caption">Экран 2б · Модалка сохранения шаблона</div>
+    <div class="note">Упражнения показываются только для чтения — редактируется только имя.
+    Сохранить можно из карточки завершённой тренировки; в боте то же — диалогом с вводом имени
+    и кнопкой «🔤 Авто-имя».</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="backdrop" style="position:sticky;inset:auto;top:0;bottom:0;height:100%">
+                <div class="sheet">
+                    <p class="mtitle">💾 Сохранить как шаблон</p>
+                    <label>Название шаблона (до 60 символов)</label>
+                    <input type="text" value="Спина и грудь">
+                    <div class="savelex">
+                        <div class="lh">В шаблон войдут (4):</div>
+                        <div class="row"><span>①</span><b>Тяга верхнего блока</b><span class="plan">60 кг × 3 × 10</span></div>
+                        <div class="row"><span>②</span><b>Подтягивания</b><span class="plan">свой вес × 4 × 8</span></div>
+                        <div class="row"><span>③</span><b>Тяга штанги в наклоне</b><span class="plan">50 кг × 3 × 10</span></div>
+                        <div class="row"><span>④</span><b>Жим гантелей лёжа</b><span class="plan">28 кг × 3 × 8</span></div>
+                    </div>
+                    <p class="hint">Шаблон запоминает упражнения и последний план — при старте просто
+                    появится список, вводить подходы будешь как обычно.</p>
+                    <div class="btnrow">
+                        <button class="btn prime wide">💾 Сохранить шаблон</button>
+                    </div>
+                    <div class="btnrow">
+                        <button class="btn wide">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= ЭКРАН 3: ТРЕНИРОВКА ИЗ ШАБЛОНА ================= -->
+    <div class="caption">Экран 3 · Тренировка из шаблона <span>дальше — обычный ввод</span></div>
+    <div class="note">Создана незавершённая тренировка: упражнения из шаблона, записей нет.
+    Тап по упражнению / «➕ Запись» открывает обычную модалку ввода (подсказки прошлых весов работают как всегда).
+    При завершении упражнения без записей отбрасываются (существующая логика). В боте то же самое:
+    «📋 Шаблон «Спина и бицепс» применён — 4 упражнения» + экран тренировки.</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>9:41</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass glow">
+                    <div class="wct"><p class="t1">📋 Спина и бицепс · 06-11, Пт</p></div>
+                    <div class="wcpill"><span class="wpill">🕐 с 18:32</span></div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧷</span><span class="en">Тяга верхнего блока</span></div>
+                        <div class="restline">записей пока нет — тапни, чтобы добавить</div>
+                        <div class="btnrow"><button class="btn">➕ Запись</button></div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧗</span><span class="en">Подтягивания</span></div>
+                        <div class="restline">записей пока нет</div>
+                        <div class="btnrow"><button class="btn">➕ Запись</button></div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧷</span><span class="en">Тяга штанги в наклоне</span></div>
+                        <div class="entry"><span>50 кг, 1 подход по 10</span></div>
+                        <div class="btnrow"><button class="btn">➕ Запись</button></div>
+                    </div>
+                    <div class="split2" style="margin-top:10px">
+                        <button class="btn prime">➕ Упражнение</button>
+                    </div>
+                    <div class="split2">
+                        <button class="btn danger">✕ Отменить</button>
+                        <button class="btn prime">✓ Завершить</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toast">📋 Шаблон применён: 4 упражнения</div>
+
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

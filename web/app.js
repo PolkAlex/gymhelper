@@ -16,6 +16,11 @@ let pendingTab = null;
 let __delExerciseCtx = null;
 let __delSetCtx = null;
 let railOpen = false;
+/* таймер отдыха [UX-T4]: состояние в localStorage gymRest по абсолютной метке end */
+let REST = null;          /* {end, dur, paused, left, mini, ex} — см. спеку §1.7 */
+let REST_CUSTOM = false;  /* поле «Своё…» в Профиле открыто */
+let __restAudio = null;   /* ленивый AudioContext (мобильные браузеры блокируют звук) */
+let __restExpiredFired = false; /* сигнал «истёк» — один раз на цикл отсчёта */
 
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -108,7 +113,7 @@ function repsAvg(r) {
         const mn = Math.min.apply(null, nums), mx = Math.max.apply(null, nums);
         return Math.round((mn + mx) / 2);
     }
-    return nums.length > 1 ? sum / nums.length : nums[0];
+    return nums.length > 1 ? Math.round(sum / nums.length) : nums[0]; /* округление как Math.round в Java-Records */
 }
 function repsNum(r) {
     const m = /(\d+(?:[.,]\d+)?)/.exec(r || '');
@@ -130,6 +135,69 @@ function workoutVolume(w) {
         for (const s of e.sets) v += avgNum(s.w) * (+s.s || 0) * repsAvg(s.r);
     }
     return v;
+}
+/* e1RM блока по Эпли: вес × (1 + повторения ÷ 30); 0 — блок без веса [UX-T2] */
+function e1rmOf(s) {
+    const w = avgNum(s.w);
+    if (!w) return 0;
+    return w * (1 + repsAvg(s.r) / 30);
+}
+/* метрики упражнения в одной тренировке: лучший e1RM блока + объём (подходы × повторения) */
+function workoutExMetrics(w, nameLower) {
+    let bestE = 0, vol = 0, hasW = false, hasSets = false;
+    for (const e of (w.exercises || [])) {
+        if (e.name.toLowerCase() !== nameLower || !e.sets.length) continue;
+        hasSets = true;
+        for (const s of e.sets) {
+            const er = e1rmOf(s);
+            if (er > bestE) bestE = er;
+            if (er > 0) hasW = true;
+            vol += (+s.s || 0) * repsAvg(s.r);
+        }
+    }
+    return { bestE: bestE, vol: vol, hasW: hasW, hasSets: hasSets };
+}
+/* проверка живого рекорда нового блока [UX-T2]: база — только прошлые тренировки
+   (индекс строго меньше текущей); первый подход упражнения (база пуста) и равный
+   результат не празднуются; если упражнение в этой тренировке уже побило базу —
+   поздравление уже прозвучало (максимум 1 на упражнение за тренировку). null — не рекорд */
+function prCheck(w, name, block) {
+    const idx = G.workouts.indexOf(w);
+    if (idx < 0) return null;
+    const nl = String(name).toLowerCase();
+    let baseE = 0, baseHasE = false, baseVol = 0, baseHasVol = false;
+    /* база — только прошлые тренировки (i < idx), как в prChipSetIdx и Java-Records */
+    for (let i = 0; i < idx; i++) {
+        const m = workoutExMetrics(G.workouts[i], nl);
+        if (m.hasW) { baseHasE = true; if (m.bestE > baseE) baseE = m.bestE; }
+        if (m.hasSets) { baseHasVol = true; if (m.vol > baseVol) baseVol = m.vol; }
+    }
+    const here = workoutExMetrics(w, nl);
+    if (avgNum(block.w) > 0) {
+        const v = e1rmOf(block);
+        if (!baseHasE || v <= baseE || (here.hasW && here.bestE > baseE)) return null;
+        return { type: 'e1rm', val: v, prev: baseE };
+    }
+    const vol = (+block.s || 0) * repsAvg(block.r);
+    if (!baseHasVol || vol <= baseVol || here.vol > baseVol) return null;
+    return { type: 'vol', val: vol };
+}
+/* чип 🏆 у подхода-рекордсмена в карточке тренировки [UX-T2]: лучший e1RM блока
+   этой тренировки строго больше базы прошлых; у записей без веса чипа нет */
+function prChipSetIdx(w, e) {
+    const idx = G.workouts.indexOf(w);
+    if (idx < 0) return -1;
+    let best = 0, bestIdx = -1;
+    e.sets.forEach(function (s, si) {
+        const v = e1rmOf(s);
+        if (v > best) { best = v; bestIdx = si; }
+    });
+    if (bestIdx < 0) return -1;
+    const nl = e.name.toLowerCase();
+    for (let i = 0; i < idx; i++) {
+        if (workoutExMetrics(G.workouts[i], nl).bestE >= best) return -1;
+    }
+    return bestIdx;
 }
 function durationMin(w) {
     if (!w.started) return null;
@@ -318,6 +386,7 @@ async function reloadSilently(force) {
             }
             if (!G.workouts) G.workouts = [];
             if (!G.del) G.del = [];
+            if (!G.templates) G.templates = [];
             /* nextId не откатывается ниже локально известного — защита от id-коллизий */
             if (G.nextId < localNextId) G.nextId = localNextId;
             for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
@@ -408,6 +477,238 @@ function toast(msg, isErr) {
     if (__toastTimer) clearTimeout(__toastTimer);
     __toastTimer = setTimeout(function () { t.className = 'toast'; }, 2200);
 }
+/* PR-поздравление [UX-T2]: янтарный тост 3.5 с (обычный 2.2 с) + хаптика success */
+function toastPr(msg) {
+    const t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.className = 'toast show pr';
+    if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) {
+        try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) { /* noop */ }
+    }
+    if (__toastTimer) clearTimeout(__toastTimer);
+    __toastTimer = setTimeout(function () { t.className = 'toast'; }, 3500);
+}
+
+/* ============ таймер отдыха [UX-T4] ============ */
+/* остаток всегда вычисляется от абсолютной метки end — вкладки, сон устройства и
+   перезагрузка не уводят отсчёт (спека §1.7). Схема gymRest: {end, dur, paused, left, mini, ex} */
+function restRead() {
+    try { return JSON.parse(localStorage.getItem('gymRest') || 'null'); } catch (e) { return null; }
+}
+function restWrite() {
+    if (!REST) return;
+    try { localStorage.setItem('gymRest', JSON.stringify(REST)); } catch (e) { /* noop */ }
+}
+function restClear() {
+    REST = null;
+    try { localStorage.removeItem('gymRest'); } catch (e) { /* noop */ }
+    renderRestbar();
+}
+function restFmt(s) {
+    s = Math.max(0, Math.round(s));
+    return Math.floor(s / 60) + ':' + pad2(s % 60);
+}
+function restSoundOn() {
+    try { return localStorage.getItem('gymRestSound') !== 'off'; } catch (e) { return true; }
+}
+/* запуск/перезапуск: лог нового подхода всегда начинает полный отсчёт (§1.8) */
+function restStart(sec, ex) {
+    REST = { end: Date.now() + sec * 1000, dur: sec, paused: false, mini: false, ex: ex || '' };
+    __restExpiredFired = false;
+    restWrite();
+    renderRestbar();
+}
+/* восстановление при старте: пауза → показать left; идёт → продолжить; истёк < 60 с → «Истёк»;
+   иначе ключ протух и стирается (§1.7) */
+function restInitState() {
+    REST = restRead();
+    /* повреждённый ключ (нет ни end, ни paused): без guard в отсчёте остаётся NaN */
+    if (!REST || (!REST.paused && !(REST.end > 0))) REST = null;
+    if (REST) {
+        const now = Date.now();
+        if (REST.paused) {
+            if (!(REST.left > 0)) REST = null;
+        } else if (!(REST.end > now) && now - REST.end >= 60000) {
+            REST = null;
+        }
+    }
+    if (REST) restWrite();
+    else { try { localStorage.removeItem('gymRest'); } catch (e) { /* noop */ } }
+    renderRestbar();
+    setInterval(restTick, 1000);
+}
+function restTick() {
+    if (!REST) return;
+    const now = Date.now();
+    if (REST.paused) return; /* остаток заморожен */
+    const left = Math.ceil((REST.end - now) / 1000);
+    if (left <= 0) {
+        if (!__restExpiredFired) {
+            __restExpiredFired = true;
+            restSignal();
+            toast('⏱ Отдых окончен');
+            renderRestbar(); /* состояние «Истёк»: glow + «Скрыть» */
+        }
+        if (now - REST.end > 30000) restClear(); /* авто-скрытие через 30 с без тапа */
+        return;
+    }
+    /* у свёрнутой пилюли нет #rbTime/#rbFill — обновляем её перерисовкой */
+    if (REST.mini) renderRestbar();
+    else restUpdateDom();
+}
+function restLeftSec() {
+    if (!REST) return 0;
+    return REST.paused ? (REST.left || 0) : Math.max(0, Math.ceil((REST.end - Date.now()) / 1000));
+}
+/* панель над навигацией; на экране с backbar — стопкой выше (§1.3) */
+function restRaised() {
+    return (tab === 'history' && viewWid && !!findW(viewWid)) || (tab === 'tech' && !!TECH.open);
+}
+function renderRestbar() {
+    const el = document.getElementById('restbar');
+    if (!el) return;
+    if (!REST) { el.className = 'restbar hidden'; el.innerHTML = ''; return; }
+    const now = Date.now();
+    const expired = !REST.paused && REST.end <= now;
+    const cls = 'restbar' + (restRaised() ? ' raised' : '');
+    if (REST.mini && !expired) {
+        el.className = cls;
+        el.innerHTML = '<div class="rb-pillrow"><button class="rb-pill" data-act="restUnfold">⏱ ' + restFmt(restLeftSec()) +
+            ' <small>развернуть ⌃</small></button></div>';
+        return;
+    }
+    el.className = cls;
+    if (expired) {
+        el.innerHTML = '<div class="rb-main glow"><div class="rb-done"><span class="ok">✅</span>' +
+            '<span class="txt">Перерыв окончен — время работать 💪</span>' +
+            '<button class="hidebtn" data-act="restHide">Скрыть</button></div></div>';
+        return;
+    }
+    const left = restLeftSec();
+    const pct = Math.max(2, Math.min(100, Math.round(left / Math.max(REST.dur, 1) * 100)));
+    el.innerHTML = '<div class="rb-main"><div class="rb-top">' +
+        '<span class="rb-ico">⏱</span>' +
+        '<span class="rb-time' + (REST.paused ? ' paused' : '') + '" id="rbTime">' + restFmt(left) + '</span>' +
+        '<span class="rb-meta"><span class="rb-label">Отдых</span>' +
+        '<span class="rb-ex">' + esc(REST.ex || '') + '</span></span>' +
+        '<button class="rb-fold" data-act="restFold" title="Свернуть">⌄</button></div>' +
+        '<div class="rb-track"><i id="rbFill" style="width:' + pct + '%"></i></div>' +
+        '<div class="rb-actions">' +
+        '<button class="rb-btn" data-act="restPause">' + (REST.paused ? '▶ Продолжить' : '⏸ Пауза') + '</button>' +
+        '<button class="rb-btn plus" data-act="restMore">+30 сек</button>' +
+        '<button class="rb-btn sq" data-act="restReset" title="Сброс">✕</button>' +
+        '</div></div>';
+}
+/* дешёвое обновление цифр/шкалы раз в секунду, без перерисовки панели */
+function restUpdateDom() {
+    const t = document.getElementById('rbTime');
+    if (!t) return;
+    const left = restLeftSec();
+    t.textContent = restFmt(left);
+    const f = document.getElementById('rbFill');
+    if (f) f.style.width = Math.max(2, Math.min(100, Math.round(left / Math.max(REST.dur, 1) * 100))) + '%';
+}
+/* сигнал по окончании: хаптика → вибрация всегда; бип — если звук включён (§1.6) */
+function restSignal() {
+    if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) {
+        try { tg.HapticFeedback.notificationOccurred('success'); } catch (e) { /* noop */ }
+    } else if (navigator.vibrate) {
+        try { navigator.vibrate([180, 90, 180]); } catch (e) { /* noop */ }
+    }
+    if (restSoundOn()) restBeep();
+}
+function restAudioUnlock() {
+    try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        if (!__restAudio) __restAudio = new AC();
+        if (__restAudio.state === 'suspended') __restAudio.resume().catch(function () { /* noop */ });
+    } catch (e) { /* noop */ }
+}
+/* 3 коротких бипа 880/880/1318 Гц по ~0.18 с (последний выше — «финиш») */
+function restBeep() {
+    try {
+        restAudioUnlock();
+        if (!__restAudio) return;
+        const ac = __restAudio;
+        const t0 = ac.currentTime + 0.02;
+        [[880, 0], [880, 0.28], [1318, 0.56]].forEach(function (b) {
+            const o = ac.createOscillator();
+            const g = ac.createGain();
+            o.type = 'sine';
+            o.frequency.value = b[0];
+            g.gain.setValueAtTime(0.0001, t0 + b[1]);
+            g.gain.exponentialRampToValueAtTime(0.22, t0 + b[1] + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.0001, t0 + b[1] + 0.18);
+            o.connect(g);
+            g.connect(ac.destination);
+            o.start(t0 + b[1]);
+            o.stop(t0 + b[1] + 0.2);
+        });
+    } catch (e) { /* тихо: только визуал */ }
+}
+/* разблокировка звука на первом тапе (мобильные браузеры) */
+document.addEventListener('pointerdown', restAudioUnlock, { once: true, passive: true });
+/* синхронизация вкладок: ключ gymRest один, последняя запись побеждает (§1.8) */
+window.addEventListener('storage', function (ev) {
+    if (ev.key !== 'gymRest') return;
+    REST = restRead();
+    __restExpiredFired = false;
+    renderRestbar();
+});
+
+/* кнопки панели: пауза хранит остаток в left и удаляет end (§1.7) */
+function restFold() {
+    if (!REST) return;
+    REST.mini = true;
+    restWrite();
+    renderRestbar();
+}
+function restUnfold() {
+    if (!REST) return;
+    REST.mini = false;
+    restWrite();
+    renderRestbar();
+}
+function restPause() {
+    if (!REST) return;
+    if (REST.paused) {
+        REST.end = Date.now() + (REST.left || 0) * 1000;
+        REST.paused = false;
+        delete REST.left;
+        __restExpiredFired = false;
+    } else {
+        REST.left = Math.max(0, Math.ceil((REST.end - Date.now()) / 1000));
+        REST.paused = true;
+        delete REST.end;
+    }
+    restWrite();
+    renderRestbar();
+}
+function restMore() {
+    if (!REST) return;
+    if (REST.paused) REST.left = (REST.left || 0) + 30;
+    else REST.end += 30000;
+    REST.dur += 30; /* шкала удлиняется */
+    __restExpiredFired = false;
+    restWrite();
+    renderRestbar();
+}
+/* настройка длительности в Профиле: чипы 60/90/120/180 и «Своё…» (§1.5) */
+function restSet(n) {
+    if (!(n >= 30 && n <= 600)) return;
+    REST_CUSTOM = false;
+    G.restSec = n;
+    save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); render(); });
+}
+function restCustomSave() {
+    const v = parseInt(String((document.getElementById('restCustomSec') || {}).value || ''), 10);
+    if (!(v >= 30 && v <= 600)) { toast('Число от 30 до 600', true); return; }
+    REST_CUSTOM = false;
+    G.restSec = v;
+    save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); render(); });
+}
 
 /* ============ темы: тёмная (базовая) и светлая «Amber Glass» ============ */
 function bgLum(hex) {
@@ -497,6 +798,14 @@ const ACTIONS = {
         render();
     },
     startWorkout: function () { startWorkout(); },
+    newBlank: function () { closeModal(); startBlank(); },
+    newRepeat: function () { newRepeatLast(); },
+    newRepeatFrom: function (a) { newRepeatFrom(+a); },
+    tplStart: function (a) { tplStart(+a); },
+    tplDelAsk: function (a) { tplDelAsk(+a); },
+    tplDelete: function (a) { tplDelete(+a); },
+    tplSaveModal: function (a) { tplSaveModal(+a); },
+    tplSave: function (a) { tplSave(+a); },
     finishWorkout: function (a) { finishWorkout(+a); },
     deleteWorkout: function (a) { deleteWorkout(+a); },
     openPicker: function (a) { openPicker(+a); },
@@ -538,6 +847,19 @@ const ACTIONS = {
     setTheme: function (a) { setTheme(a); render(); },
     setSex: function (a) { profileSex = a; render(); },
     saveProfile: function () { saveProfile(); },
+    restFold: function () { restFold(); },
+    restUnfold: function () { restUnfold(); },
+    restPause: function () { restPause(); },
+    restMore: function () { restMore(); },
+    restReset: function () { restClear(); },
+    restHide: function () { restClear(); },
+    restSet: function (a) { restSet(+a); },
+    restCustom: function () { REST_CUSTOM = true; render(); },
+    restCustomSave: function () { restCustomSave(); },
+    restSound: function (a) {
+        try { localStorage.setItem('gymRestSound', a === 'off' ? 'off' : 'on'); } catch (e) { /* noop */ }
+        render();
+    },
     closeModal: function () { closeModal(); },
     modalBackdrop: function () { closeModal(); },
     pickBg: function () { const el = document.getElementById('bgFile'); if (el) el.click(); },
@@ -574,6 +896,7 @@ function render() {
         const q = document.getElementById('techQ');
         if (q) q.addEventListener('input', function () { TECH.q = this.value; const list = document.getElementById('techList'); if (list) list.innerHTML = techListHtml(); });
     }
+    renderRestbar(); /* панель/пилюля таймера переживает навигацию: класс raised и содержимое актуальны */
     dbgMsg('rev ' + (G ? G.rev : '-'));
 }
 function navHtml() {
@@ -736,10 +1059,15 @@ function workoutCard(w, showActions) {
     const lines = titleLines(w);
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
+    /* [UX-T8]: у завершённых «Повторить» и «В шаблоны» переехали в шапку круглыми иконками */
+    const wcacts = w.finished
+        ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
+          '<button class="barebtn" data-act="tplSaveModal" data-a="' + w.id + '" title="В шаблоны" aria-label="В шаблоны">' + ICONS.save + '</button>'
+        : '';
     h += '<div class="wchead"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
         (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') +
         esc(lines[0]) + '</p></div>' +
-        '<div class="wcicons">' +
+        '<div class="wcicons">' + wcacts +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
         '</div></div>';
@@ -768,9 +1096,12 @@ function workoutCard(w, showActions) {
             '<span class="exname">' + esc(e.name) + '</span>' +
             '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
             '</div>';
+        const prSi = prChipSetIdx(w, e);
         e.sets.forEach((s, si) => {
             h += '<div class="entry" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="' + si + '">' +
-                '<span class="rectext">' + esc(entryLine(s)) + '</span></div>';
+                '<span class="rectext">' + esc(entryLine(s)) + '</span>' +
+                (si === prSi ? '<span class="prtag">🏆 ' + Math.round(e1rmOf(s)) + '</span>' : '') +
+                '</div>';
         });
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
             h += '<div class="restline"> упражнение активно — время идёт</div>';
@@ -791,6 +1122,7 @@ function workoutCard(w, showActions) {
             '</div>';
     }
     if (showActions && w.finished) {
+        /* [UX-T8]: повторить и сохранить как шаблон — иконки в шапке карточки (см. wcacts); красная «Удалить» осталась строкой */
         h += '<button class="btn danger wide icbtn" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">' + ICONS.trash + '<span>Удалить тренировку</span></button>';
     }
     if (showActions) h += '</div>';
@@ -1024,21 +1356,24 @@ function renderStatsTab() {
         if (m != null) totalMin += m;
         for (const e of (w.exercises || [])) {
             totalSets += e.sets.length;
-            const s = byEx[e.name] = byEx[e.name] || { sessions: 0, maxW: 0, hasW: false, last: '', lastDate: '' };
+            const s = byEx[e.name] = byEx[e.name] || { sessions: 0, maxW: 0, hasW: false, last: '', lastDate: '', e1rm: 0, best: null };
             s.sessions++;
             for (const b of e.sets) {
                 const mw = maxNum(b.w);
                 if (mw > s.maxW) s.maxW = mw;
                 if (mw > 0) s.hasW = true;
+                const er = e1rmOf(b);
+                if (er > s.e1rm) { s.e1rm = er; s.best = b; }
                 s.last = entryLine(b);
                 s.lastDate = w.date;
             }
         }
     }
     const names = Object.keys(byEx).sort((a, b) => byEx[b].sessions - byEx[a].sessions);
-    /* новые блоки: рекорды недели, серия, мышечные группы */
+    /* новые блоки: рекорды недели, оценка 1ПМ (Эпли), серия, мышечные группы */
     let h = '';
     for (const rec of weekRecords(3)) h += recordCardHtml(rec);
+    h += e1rmCardHtml(byEx);
     const st = monthStreak();
     if (st && st.days.length >= 2) h += streakCardHtml(st);
     const groups = weekMuscleGroups();
@@ -1067,6 +1402,28 @@ function renderStatsTab() {
     }
     h += '</div>';
     return h;
+}
+
+/* ---------- оценка 1ПМ (Эпли) ---------- */
+/* карточка «Оценка 1ПМ · Эпли» [UX-T2]: топ-5 упражнений С ВЕСОМ по убыванию e1RM;
+   упражнений с весом нет — карточка не показывается вовсе */
+function e1rmCardHtml(byEx) {
+    const rows = Object.keys(byEx)
+        .filter(function (n) { return byEx[n].e1rm > 0 && byEx[n].best; })
+        .sort(function (a, b) { return byEx[b].e1rm - byEx[a].e1rm; })
+        .slice(0, 5)
+        .map(function (n) { return { name: n, val: byEx[n].e1rm, best: byEx[n].best }; });
+    if (!rows.length) return '';
+    let h = '<div class="card"><div class="rec-l">Оценка 1ПМ · Эпли</div>';
+    for (const r of rows) {
+        const c = findCatalog(r.name);
+        h += '<div class="prmrow">' + ico(c ? c.i : 'custom') +
+            '<span class="prmwho"><b>' + esc(r.name) + '</b>' +
+            '<span class="tn">лучший подход: ' + esc(String(r.best.w).replace('.', ',')) + ' кг × ' + esc(r.best.r || '—') + '</span></span>' +
+            '<span class="prmval">≈ ' + Math.round(r.val) + ' <small>кг</small></span></div>';
+    }
+    h += '<div class="formula">e1RM = вес × (1 + повторения ÷ 30) — оценка, а не цель для разовых попыток</div>';
+    return h + '</div>';
 }
 
 /* ---------- тренер ---------- */
@@ -1106,6 +1463,28 @@ function renderProfileTab() {
     h += '<button class="btn' + (cur === 'dark' ? '' : ' sec') + '" data-act="setTheme" data-a="dark">🌙 Тёмная</button>' +
         '<button class="btn' + (cur === 'light' ? '' : ' sec') + '" data-act="setTheme" data-a="light">☀️ Светлая</button>' +
         '</div></div>';
+    /* таймер отдыха: длительность в общем с ботом GymData.restSec, дефолт 90 (§1.5) */
+    const rs = G.restSec || 90;
+    const presets = [60, 90, 120, 180];
+    const custom = REST_CUSTOM || presets.indexOf(rs) < 0;
+    h += '<div class="card"><p class="t1">⏱ Таймер отдыха</p>' +
+        '<p class="meta">Запускается автоматически после записи подхода.</p>' +
+        '<div class="chips">' +
+        presets.map(function (n) {
+            return '<button class="chip' + (!custom && rs === n ? ' on' : '') + '" data-act="restSet" data-a="' + n + '">' + n + '</button>';
+        }).join('') +
+        '<button class="chip' + (custom ? ' on' : '') + '" data-act="restCustom">Своё…</button>' +
+        '</div>';
+    if (custom) {
+        h += '<div class="setrow"><span class="lbl">Своё, сек (30–600)</span>' +
+            '<input id="restCustomSec" type="number" inputmode="numeric" value="' + rs + '">' +
+            '<button class="btn" data-act="restCustomSave">ОК</button></div>';
+    }
+    const snd = restSoundOn();
+    h += '<div class="setrow"><span class="lbl">Звук по окончании</span><span class="toggle2">' +
+        '<button class="btn' + (snd ? ' on' : '') + '" data-act="restSound" data-a="on">🔊 Вкл</button>' +
+        '<button class="btn' + (snd ? '' : ' on') + '" data-act="restSound" data-a="off">🔇 Выкл</button>' +
+        '</span></div></div>';
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
@@ -1134,6 +1513,13 @@ function saveProfile() {
 function startWorkout() {
     const active = activeW();
     if (active) { openHistory(active.id); openPicker(active.id); return; }
+    /* [UX-T7 §4.7]: модалка «Новая тренировка» — только когда есть выбор (шаблоны или история);
+       у новичка без того и другого — прежний мгновенный старт */
+    const hasChoice = (G.templates || []).length > 0 || G.workouts.some(w => w.finished);
+    if (hasChoice) { openStartModal(); return; }
+    startBlank();
+}
+function startBlank() {
     const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '', exercises: [] };
     if (G.nextId < 1) G.nextId = 1;
     G.workouts.push(w);
@@ -1142,6 +1528,166 @@ function startWorkout() {
         /* сразу экран редактирования тренировки (карточка + пикер), а не главный экран */
         openHistory(w.id);
         openPicker(w.id);
+    });
+}
+
+/* ============ шаблоны тренировок [UX-T6/T7] (спека §4) ============ */
+const TPL_LIMIT = 20;
+function tplById(id) { return (G.templates || []).find(t => t.id === id) || null; }
+function tplNextId() {
+    let n = 0;
+    for (const t of (G.templates || [])) if (t.id > n) n = t.id;
+    return n + 1;
+}
+function tplExWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'упражнение';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'упражнения';
+    return 'упражнений';
+}
+function tplNewestFirst() {
+    return (G.templates || []).slice().sort(function (a, b) {
+        return String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
+    });
+}
+/* последняя завершённая тренировка (список хронологический) */
+function lastFinished() {
+    for (let i = G.workouts.length - 1; i >= 0; i--) if (G.workouts[i].finished) return G.workouts[i];
+    return null;
+}
+/* снимок тренировки: упражнения с записями по порядку, план = последний блок (для превью) */
+function tplFromWorkout(w) {
+    const exs = [];
+    for (const e of (w.exercises || [])) {
+        if (!e.sets.length || exs.length >= 20) continue;
+        const last = e.sets[e.sets.length - 1];
+        exs.push({ name: e.name, w: last.w || '', s: +last.s || 1, r: last.r || '' });
+    }
+    return exs;
+}
+/* авто-имя: своя первая строка названия → первые 2 упражнения через « · » → «Тренировка ДД-ММ» */
+function tplAutoName(w) {
+    if (w.title && w.title.trim()) return w.title.split('\n')[0].trim();
+    const names = (w.exercises || []).filter(e => e.sets.length).slice(0, 2).map(e => e.name);
+    if (names.length) return names.join(' · ');
+    const d = parseDateISO(w.date);
+    return 'Тренировка ' + (d ? pad2(d.getDate()) + '-' + pad2(d.getMonth() + 1) : '');
+}
+function tplMeta(t) {
+    const exs = t.exercises || [];
+    const names = exs.slice(0, 2).map(e => e.name);
+    let m = exs.length + ' упр.';
+    if (names.length) m += ' · ' + names.join(', ');
+    if (exs.length > 2) m += '…';
+    return m;
+}
+function tplPlan(te) {
+    return (te.w ? String(te.w).replace('.', ',') + ' кг' : 'свой вес') + ' × ' + te.s + ' × ' + te.r;
+}
+/* старт из шаблона / повтора: незавершённая тренировка со списком упражнений, записи пустые */
+function createFromList(t) {
+    const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '',
+        exercises: (t.exercises || []).slice(0, 20).map(e => ({ name: e.name, sets: [], st: nowLocalISO(), en: '' })) };
+    if (G.nextId < 1) G.nextId = 1;
+    G.workouts.push(w);
+    save().then(function (r) {
+        if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
+        toast('📋 Шаблон применён: ' + w.exercises.length + ' ' + tplExWord(w.exercises.length));
+        openHistory(w.id);
+    });
+}
+function tplStart(id) {
+    const t = tplById(id);
+    if (!t) return;
+    closeModal();
+    createFromList(t);
+}
+function newRepeatLast() {
+    const last = lastFinished();
+    if (!last) return;
+    closeModal();
+    createFromList({ exercises: tplFromWorkout(last) });
+}
+function newRepeatFrom(id) {
+    const w = findW(id);
+    if (!w || !w.finished) return;
+    createFromList({ exercises: tplFromWorkout(w) });
+}
+/* модалка «Новая тренировка» [§4.7]: пустой список / повторить прошлую / карточки шаблонов */
+function openStartModal() {
+    const last = lastFinished();
+    let h = '<p class="mtitle">Новая тренировка</p>';
+    h += '<div class="btnrow"><button class="btn prime wide" data-act="newBlank">🏋️ С пустого списка</button></div>';
+    if (last) {
+        const n = (last.exercises || []).filter(e => e.sets.length).length;
+        h += '<div class="btnrow"><button class="btn sec wide" data-act="newRepeat">🔁 Повторить прошлую' +
+            '<span class="bsub">' + esc(firstLine(last)) + ' · ' + n + ' ' + tplExWord(n) + '</span></button></div>';
+    }
+    const tpls = tplNewestFirst();
+    if (tpls.length) {
+        h += '<p class="msub" style="margin-top:14px">📋 Шаблоны · ' + tpls.length + ' из ' + TPL_LIMIT + '</p>';
+        for (const t of tpls) {
+            h += '<div class="tcard" data-act="tplStart" data-a="' + t.id + '">' +
+                '<div class="tchead"><span class="tico">📋</span>' +
+                '<span style="flex:1;min-width:0"><div class="tname">' + esc(t.name) + '</div>' +
+                '<div class="tmeta">' + esc(tplMeta(t)) + '</div></span>' +
+                '<button class="tdel" data-act="tplDelAsk" data-a="' + t.id + '" title="Удалить шаблон">🗑</button>' +
+                '</div></div>';
+        }
+    }
+    h += '<div class="btnrow"><button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
+    openModal(h);
+}
+function tplDelAsk(id) {
+    const t = tplById(id);
+    if (!t) return;
+    confirmModal('Удалить шаблон «' + t.name + '»?', 'tplDelete', id);
+}
+function tplDelete(id) {
+    G.templates = (G.templates || []).filter(t => t.id !== id);
+    save().then(function (r) {
+        if (r === 'ok') toast('Шаблон удалён');
+        openStartModal(); /* возвращаем к выбору — модалка, из которой удалили */
+    });
+}
+/* модалка сохранения завершённой тренировки как шаблона [§4.8] */
+function tplSaveModal(wid) {
+    const w = findW(wid);
+    if (!w || !w.finished) return;
+    if ((G.templates || []).length >= TPL_LIMIT) {
+        toast('Лимит — 20 шаблонов, удали лишний при старте', true);
+        return;
+    }
+    const exs = tplFromWorkout(w);
+    if (!exs.length) { toast('Сначала добавь хотя бы одно упражнение 💪', true); return; }
+    let h = '<p class="mtitle">💾 Сохранить как шаблон</p>' +
+        '<label>Название (до 60 символов)</label>' +
+        '<input id="mTplName" type="text" maxlength="60" value="' + escAttr(tplAutoName(w)) + '">' +
+        '<div class="savelex"><div class="lh">В шаблон войдут (' + exs.length + '):</div>';
+    for (const e of exs) {
+        h += '<div class="trow"><span>•</span><b>' + esc(e.name) + '</b><span class="plan">' + esc(tplPlan(e)) + '</span></div>';
+    }
+    h += '</div>';
+    h += '<p class="thint">Шаблон запоминает упражнения и последний план — при старте просто появится список, вводить подходы будешь как обычно.</p>';
+    h += '<div class="btnrow"><button class="btn prime wide" data-act="tplSave" data-a="' + wid + '">💾 Сохранить шаблон</button></div>';
+    h += '<div class="btnrow"><button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
+    openModal(h);
+}
+function tplSave(wid) {
+    const w = findW(wid);
+    if (!w) return;
+    const name = String((document.getElementById('mTplName') || {}).value || '').trim();
+    if (!name || name.length > 60) { toast('Название от 1 до 60 символов', true); return; }
+    const exs = tplFromWorkout(w);
+    if (!exs.length) { toast('Сначала добавь хотя бы одно упражнение 💪', true); return; }
+    if ((G.templates || []).length >= TPL_LIMIT) { toast('Лимит — 20 шаблонов, удали лишний при старте', true); return; }
+    if (!G.templates) G.templates = [];
+    G.templates.push({ id: tplNextId(), name: name, createdAt: nowLocalISO(), exercises: exs });
+    save().then(function (r) {
+        if (r === 'ok') toast('✓ Шаблон сохранён');
+        closeModal();
+        render();
     });
 }
 function finishWorkout(id) {
@@ -1463,6 +2009,7 @@ function repsAdd(n) {
 async function saveEntry() {
     if (!modalCtx) return;
     const wid = modalCtx.wid, setIdx = modalCtx.setIdx, name = modalCtx.name;
+    restAudioUnlock(); /* тап «Добавить»: разблокировать WebAudio для сигнала по окончании */
     let weight = String(document.getElementById('mWeight').value).trim().replace(/[.,;]+$/, '');
     const sets = parseInt(document.getElementById('mSets').value, 10);
     const reps = String(document.getElementById('mReps').value).trim();
@@ -1483,6 +2030,9 @@ async function saveEntry() {
         render();
         return;
     }
+    /* живой рекорд — только для НОВОГО блока, проверяем до добавления в e.sets:
+       база — прошлые тренировки, редактирование задним числом не празднуется [UX-T2] */
+    const pr = setIdx < 0 ? prCheck(w, name, { w: weight, s: sets, r: reps }) : null;
     if (setIdx < 0) {
         e.sets.push({ w: weight, s: sets, r: reps, t: nowLocalISO() });
     } else {
@@ -1490,7 +2040,17 @@ async function saveEntry() {
         e.sets[setIdx] = { w: weight, s: sets, r: reps, t: old ? (old.t || nowLocalISO()) : nowLocalISO() };
     }
     await save();
-    if (modalCtx) toast('✓ Сохранено');
+    /* таймер отдыха: автозапуск только для НОВОГО блока незавершённой тренировки [UX-T4] */
+    if (setIdx < 0 && w && !w.finished) restStart(G.restSec || 90, name);
+    if (modalCtx) {
+        if (pr) {
+            toastPr(pr.type === 'e1rm'
+                ? '🏆 Новый рекорд! 1ПМ ≈ ' + Math.round(pr.val) + ' кг'
+                : '🏆 Рекорд объёма! ' + pr.val + ' повторений');
+        } else {
+            toast('✓ Сохранено');
+        }
+    }
     closeModal();
     render();
 }
@@ -1795,6 +2355,7 @@ async function init() {
     loadTheme();
     loadBg();
     initBgPicker();
+    restInitState(); /* таймер независим от сети: восстанавливается до /api/init */
     if (tg) {
         try { tg.ready(); tg.expand(); } catch (e) { /* noop */ }
         INIT = tg.initData || '';
@@ -1830,6 +2391,7 @@ async function init() {
             G = j.data;
             if (!G.workouts) G.workouts = [];
             if (!G.del) G.del = [];
+            if (!G.templates) G.templates = [];
             if (G.nextId < 1) G.nextId = 1;
             /* id из tombstone-списка нельзя выдавать заново — иначе новая тренировка мгновенно «удалится» */
             for (const d of G.del) if (d >= G.nextId) G.nextId = d + 1;
@@ -1862,6 +2424,8 @@ if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
         setTab: function (t) { tab = t; },
         avgNum: avgNum,
         repsAvg: repsAvg,
+        e1rmOf: e1rmOf,
+        prCheck: prCheck,
         setsWord: setsWord,
         repsPhrase: repsPhrase,
         calcWorkoutKcal: calcWorkoutKcal,

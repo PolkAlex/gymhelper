@@ -701,6 +701,16 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     margin: 0 auto;
 }
 .backbar .btn { width: 100%; padding: 10px 12px; font-size: 13.5px; }
+/* backbar висит fixed над скроллящимся контентом карточки (#87): на промежуточных
+   позициях скролла под ним проходит красная «Удалить тренировку», и сквозь
+   полупрозрачный sec-фон тексты сливаются. Кнопка — непрозрачное стекло дизайн-системы
+   (как rb-main/модалки): фон --sheet + blur, ничего не просвечивает */
+.backbar .btn.sec {
+    background: var(--sheet);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 28px var(--card-shadow);
+}
 
 /* ============ статистика ============ */
 .statline { margin-top: 4px; font-size: 14px; }
@@ -764,6 +774,38 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 }
 .statgrid .sg span { font-size: 11px; color: var(--muted); font-weight: 600; }
 
+/* ============ живые рекорды и оценка 1ПМ [UX-T2] ============ */
+/* чип 🏆 у подхода-рекордсмена в карточке тренировки */
+.entry .prtag {
+    flex: none;
+    margin-left: auto;
+    background: rgba(255,194,32,.12);
+    border: 1px solid var(--glow-brd);
+    color: var(--accent);
+    border-radius: 9px;
+    padding: 2px 8px;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+/* строки карточки «Оценка 1ПМ · Эпли» */
+.prmrow { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.prmrow:first-of-type { margin-top: 10px; }
+.prmwho { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.prmwho b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prmwho .tn { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.prmval { font-size: 20px; font-weight: 800; color: var(--accent); white-space: nowrap; }
+.prmval small { font-size: 12px; color: var(--muted); font-weight: 700; }
+.formula {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--nested-brd);
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
 /* ============ профиль ============ */
 .sexbtns { display: flex; gap: 8px; margin-top: 6px; }
 .sexbtns .btn { flex: 1; }
@@ -825,6 +867,257 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.err { background: var(--danger); color: #fff; border-color: transparent; }
+/* PR-поздравление [UX-T2]: янтарный градиент CTA */
+.toast.pr {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent;
+    color: var(--on-accent);
+    font-size: 14.5px;
+    font-weight: 800;
+    box-shadow: 0 10px 32px var(--fab-shadow);
+}
+
+/* ============ таймер отдыха [UX-T4] ============ */
+/* плавающая плашка над навигацией; z 38 — ниже backbar (39), модалок (50), тоста (90).
+   pointer-events: none на всей панели, кликабельны только кнопки: панель висит над контентом
+   и не должна блокировать тапы по элементам под ней (кнопки карточки, записи) */
+.restbar {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: calc(88px + env(safe-area-inset-bottom));
+    z-index: 38;
+    max-width: 536px;
+    margin: 0 auto;
+    pointer-events: none;
+}
+/* на экране с backbar (карточка тренировки/техника) — стопкой выше (спека §1.3) */
+.restbar.raised { bottom: calc(140px + env(safe-area-inset-bottom)); }
+.restbar button { pointer-events: auto; }
+.rb-main {
+    background: var(--sheet);
+    border: 1px solid var(--glass-brd);
+    border-radius: 18px;
+    padding: 10px 12px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--card-shadow), 0 0 22px var(--glow);
+}
+.rb-main.glow { border-color: var(--glow-brd); }
+.rb-top { display: flex; align-items: center; gap: 10px; }
+.rb-ico {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    background: rgba(255,194,32,.12);
+    border: 1px solid var(--glow-brd);
+}
+.rb-time {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .5px;
+    min-width: 96px;
+}
+.rb-time.paused { color: var(--muted); }
+.rb-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rb-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    color: var(--muted);
+    text-transform: uppercase;
+}
+.rb-ex {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.rb-fold {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    border: none;
+    flex: none;
+    cursor: pointer;
+    background: var(--btn);
+    color: var(--muted);
+    font-size: 13px;
+}
+.rb-track {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--btn);
+    margin-top: 9px;
+    overflow: hidden;
+}
+.rb-track i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent));
+    transition: width 1s linear;
+}
+.rb-actions { display: flex; gap: 6px; margin-top: 9px; }
+.rb-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    border: 1px solid var(--btn-brd);
+    border-radius: 11px;
+    background: var(--btn);
+    color: var(--text);
+    padding: 8px 0;
+    font-size: 12.5px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+}
+.rb-btn.plus { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+.rb-btn.sq { flex: 0 0 40px; }
+/* свёрнутое состояние: пилюля */
+.rb-pillrow { display: flex; justify-content: flex-end; }
+.rb-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    background: var(--sheet);
+    border: 1px solid var(--glow-brd);
+    border-radius: 999px;
+    padding: 9px 14px;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 10px 30px var(--card-shadow);
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    font-family: inherit;
+}
+.rb-pill small { font-size: 11px; color: var(--muted); font-weight: 600; }
+/* состояние «Истёк» */
+.rb-done { display: flex; align-items: center; gap: 10px; }
+.rb-done .ok {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    background: rgba(255,194,32,.12);
+    border: 1px solid var(--glow-brd);
+}
+.rb-done .txt {
+    flex: 1;
+    min-width: 0;
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.35;
+}
+.rb-done .hidebtn {
+    border: 1px solid var(--btn-brd);
+    border-radius: 11px;
+    flex: none;
+    background: var(--btn);
+    color: var(--muted);
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+}
+/* настройки таймера в Профиле (§1.5) */
+.setrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.setrow .lbl { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.setrow input { width: 90px; flex: none; }
+.toggle2 { display: flex; gap: 6px; }
+.toggle2 .btn { padding: 8px 12px; font-size: 12.5px; }
+.toggle2 .btn.on {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent;
+    color: var(--on-accent);
+    font-weight: 700;
+}
+
+/* ============ шаблоны тренировок [UX-T6/T7] ============ */
+/* карточка шаблона в модалке старта: тап = немедленный старт, 🗑 — удалить */
+.tcard {
+    background: var(--glass);
+    border: 1px solid var(--glass-brd);
+    border-radius: 16px;
+    padding: 11px 12px;
+    margin-top: 8px;
+    cursor: pointer;
+}
+.tcard:active { transform: scale(.985); }
+.tchead { display: flex; align-items: center; gap: 10px; }
+.tico {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    background: rgba(255,194,32,.12);
+    border: 1px solid var(--glow-brd);
+}
+.tname { font-size: 14px; font-weight: 700; }
+.tmeta {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.tdel {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    border: none;
+    flex: none;
+    background: none;
+    color: var(--danger);
+    font-size: 14px;
+    cursor: pointer;
+    font-family: inherit;
+}
+/* подзаголовок внутри широкой кнопки («Повторить прошлую · 03-11, Вт · 4 упр.») */
+.btn .bsub { display: block; font-size: 11.5px; font-weight: 600; opacity: .72; margin-top: 2px; }
+/* модалка сохранения: список упражнений только для чтения */
+.savelex {
+    margin-top: 10px;
+    background: var(--nested);
+    border: 1px solid var(--nested-brd);
+    border-radius: 14px;
+    padding: 10px 12px;
+}
+.savelex .lh { font-size: 12.5px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.savelex .trow {
+    display: flex;
+    gap: 8px;
+    font-size: 13px;
+    margin-top: 4px;
+    font-variant-numeric: tabular-nums;
+}
+.savelex .trow .plan { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.thint { font-size: 12.5px; color: var(--muted); margin-top: 10px; line-height: 1.45; }
 
 /* ============ фон-картинка ============ */
 html.has-bg body::before {
@@ -864,8 +1157,10 @@ html.has-bg body::after {
     .mgc svg { width: 20px; height: 20px; }
     .strow .mgc { width: 38px; height: 38px; font-size: 16px; }
     body { padding-left: 10px; padding-right: 10px; }
+    .rb-time { font-size: 23px; min-width: 84px; }
 }
 
 /* все интерактивные элементы — курсор-палец */
 .btn, .chip, .entry, .excard, .star, .nav .nbtn, .nav .nfab, summary, .sexbtns .btn,
-.prevpill, .barebtn, .tb-user, .inwrap .clr, .keyrow .k, .expill .exhead { cursor: pointer; }
+.prevpill, .barebtn, .tb-user, .inwrap .clr, .keyrow .k, .expill .exhead,
+.rb-fold, .rb-btn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel { cursor: pointer; }

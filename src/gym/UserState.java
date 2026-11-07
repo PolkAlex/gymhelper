@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class UserState {
-    public enum Mode { MENU, WORKOUT, EX_WEIGHT, EX_SETS, EX_REPS, EDIT_EX, EDIT_ENTRY, EDIT_FIELD, RENAME, TITLE, NUTR, TIME, PROFILE }
+    public enum Mode { MENU, WORKOUT, EX_WEIGHT, EX_SETS, EX_REPS, EDIT_EX, EDIT_ENTRY, EDIT_FIELD, RENAME, TITLE, NUTR, TIME, PROFILE, TPL_NAME }
 
     public Mode mode = Mode.MENU;
     public String currentExercise;
@@ -18,4 +18,8 @@ public final class UserState {
     public String editName;
     public int editIdx;
     public long editWorkoutId;
+    /* старт из шаблона при активной тренировке: применится после «Удалить и начать новую» [UX-T7 §4.6] */
+    public long pendingTplId;
+    /* «Повторить прошлую» при активной тренировке: id завершённой, ждущей применения */
+    public long pendingRepWid;
 }
