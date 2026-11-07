@@ -473,6 +473,12 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 .dp-inline { display: inline-flex; align-items: center; font-size: 14px; color: var(--accent); }
 .dp-inline svg { width: 16px; height: 16px; }
 .wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
+/* [UX-T17] активная тренировка: 5 иконок в шапке — паддинги меньше, заголовок одной
+   строкой с ellipsis (проверено на 320px) */
+.wchead.act .wcicons .barebtn { padding: 5px; }
+.wchead.act .wcicons .trash-bare svg { width: 18px; height: 18px; }
+.wchead.act .wctitles { padding-top: 6px; }
+.wchead.act .wctitles .t1 { font-size: 15.5px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .barebtn {
     background: none;
     border: none;
@@ -923,97 +929,82 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 /* на экране с backbar (карточка тренировки/техника) — стопкой выше (спека §1.3) */
 .restbar.raised { bottom: calc(140px + env(safe-area-inset-bottom)); }
 .restbar button { pointer-events: auto; }
+/* [UX-T17] компактная панель: одна строка, заметно ниже прежней двухрядной.
+   relative + нижний паддинг — под линию прогресса 3px у нижнего края */
 .rb-main {
+    position: relative;
     background: var(--sheet);
     border: 1px solid var(--glass-brd);
     border-radius: 18px;
-    padding: 10px 12px;
+    padding: 8px 10px 13px;
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--card-shadow), 0 0 22px var(--glow);
 }
 .rb-main.glow { border-color: var(--glow-brd); }
-.rb-top { display: flex; align-items: center; gap: 10px; }
+.rb-row { display: flex; align-items: center; gap: 8px; }
 .rb-ico {
-    width: 36px;
-    height: 36px;
-    border-radius: 11px;
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
     flex: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 17px;
+    font-size: 15px;
     background: rgba(255,194,32,.12);
     border: 1px solid var(--glow-brd);
 }
 .rb-time {
-    font-size: 26px;
+    flex: 1;
+    min-width: 68px;
+    font-size: 22px;
     font-weight: 800;
     color: var(--accent);
     line-height: 1;
     font-variant-numeric: tabular-nums;
     letter-spacing: .5px;
-    min-width: 96px;
 }
 .rb-time.paused { color: var(--muted); }
-.rb-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.rb-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .5px;
-    color: var(--muted);
-    text-transform: uppercase;
-}
-.rb-ex {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.rb-fold {
-    width: 30px;
-    height: 30px;
-    border-radius: 9px;
-    border: none;
+.rb-btns { display: flex; gap: 6px; flex: none; }
+.rb-sqbtn {
+    width: 34px;
+    height: 34px;
     flex: none;
-    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--btn-brd);
+    border-radius: 10px;
     background: var(--btn);
-    color: var(--muted);
+    color: var(--text);
+    padding: 0;
     font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
 }
-.rb-track {
-    height: 6px;
+.rb-sqbtn:active { background: var(--btn-pressed); }
+/* прогресс — тонкая линия 3px по нижнему краю панели (не добавляет высоты) */
+.rb-line {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 5px;
+    height: 3px;
     border-radius: 999px;
     background: var(--btn);
-    margin-top: 9px;
     overflow: hidden;
+    pointer-events: none;
 }
-.rb-track i {
+.rb-line i {
     display: block;
     height: 100%;
     border-radius: 999px;
     background: linear-gradient(90deg, var(--accent-deep), var(--accent));
     transition: width 1s linear;
 }
-.rb-actions { display: flex; gap: 6px; margin-top: 9px; }
-.rb-btn {
-    flex: 1 1 0;
-    min-width: 0;
-    border: 1px solid var(--btn-brd);
-    border-radius: 11px;
-    background: var(--btn);
-    color: var(--text);
-    padding: 8px 0;
-    font-size: 12.5px;
-    font-weight: 700;
-    font-family: inherit;
-    cursor: pointer;
-    font-variant-numeric: tabular-nums;
-}
-.rb-btn.plus { border-color: transparent; background: var(--accent); color: var(--on-accent); }
-.rb-btn.sq { flex: 0 0 40px; }
 /* свёрнутое состояние: пилюля */
 .rb-pillrow { display: flex; justify-content: flex-end; }
 .rb-pill {
@@ -1196,10 +1187,13 @@ html.has-bg body::after {
     .mgc svg { width: 20px; height: 20px; }
     .strow .mgc { width: 38px; height: 38px; font-size: 16px; }
     body { padding-left: 10px; padding-right: 10px; }
-    .rb-time { font-size: 23px; min-width: 84px; }
+    /* [UX-T17] компактный таймер на узких экранах: кнопки 32px, отсчёт 20px */
+    .rb-ico { width: 26px; height: 26px; border-radius: 8px; font-size: 14px; }
+    .rb-time { font-size: 20px; min-width: 62px; }
+    .rb-sqbtn { width: 32px; height: 32px; font-size: 12px; }
 }
 
 /* все интерактивные элементы — курсор-палец */
 .btn, .chip, .entry, .excard, .star, .nav .nbtn, .nav .nfab, summary, .sexbtns .btn,
 .prevpill, .barebtn, .tb-user, .inwrap .clr, .keyrow .k, .expill .exhead,
-.rb-fold, .rb-btn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel { cursor: pointer; }
+.rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel { cursor: pointer; }

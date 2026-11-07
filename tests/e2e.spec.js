@@ -234,11 +234,54 @@ test.describe('GymHelper e2e', function () {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
-        await page.locator('.wcicons [data-act="confirmModal"]').click();
+        /* [UX-T17] в шапке активной две confirm-иконки: 🗑 «Удалить» и ✕ «Отменить» — берём корзину */
+        await page.locator('.wcicons .trash-bare[data-act="confirmModal"]').click();
         await page.locator('.modal.open [data-act="confirmYes"]').click();
         /* пустая история: hero-карточка старта вместо превью */
         await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.pcard')).toHaveCount(0);
+    });
+
+    test('[UX-T17] кнопки активной тренировки в шапке: 5 иконок, aria-label, ✕ спрашивает подтверждение', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        /* активная карточка: ⏱ Время, 🗑 Удалить, ➕ Упражнение, ✕ Отменить, ✓ Завершить */
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(5);
+        for (const label of ['Добавить упражнение', 'Отменить тренировку', 'Завершить тренировку']) {
+            const b = page.locator('.wcicons .barebtn[aria-label="' + label + '"]');
+            await expect(b).toHaveCount(1);
+            await expect(b).toHaveAttribute('title', label);
+        }
+        /* больших кнопок «Упражнение/Отменить/Завершить» в потоке карточки больше нет */
+        await expect(page.locator('.card .btnrow .icbtn')).toHaveCount(0);
+        /* ✕ «Отменить тренировку» — со своим текстом подтверждения (не путать с 🗑 «Удалить») */
+        await page.locator('.wcicons .barebtn[aria-label="Отменить тренировку"]').click();
+        await expect(page.locator('.modal.open')).toContainText('Отменить тренировку?', { timeout: 5000 });
+        await page.locator('.modal.open [data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(5); /* карточка не пострадала */
+    });
+
+    test('[UX-T17] «⭐ Любимые упражнения» в Профиле: переход на «Технику» с фильтром «★ Любимые»', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('[data-act="closeModal"]').click();
+        /* отмечаем жим ⭐ в пикере */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .excard', { hasText: EX }).first().locator('.star').click();
+        await expect(page.locator('.modal.open .excard', { hasText: EX }).first().locator('.star')).toHaveClass(/fav/, { timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').click();
+        /* Профиль → кнопка любимых */
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const card = page.locator('.card', { hasText: '⭐ Любимые упражнения' });
+        await expect(card.locator('[data-act="openFavs"]')).toBeVisible({ timeout: 5000 });
+        await card.locator('[data-act="openFavs"]').click();
+        /* вкладка «Техника», чип «★ Любимые» активен, в списке — только любимое */
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: EX })).toHaveCount(1);
+        await expect(page.locator('#techList .excard', { hasText: 'Подтягивания' })).toHaveCount(0);
     });
 
     test('фильтры каталога в пикере', async ({ page }) => {
@@ -527,6 +570,8 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
         /* своё название тренировки показывается В СТРОКЕ ДАТЫ, а не отдельной строкой среди упражнений */
         await expect(page.locator('.pc-date', { hasText: 'Вечерняя программа' }).first()).toBeVisible({ timeout: 5000 });
+        /* [UX-T17] время суток вернулось эмодзи (какой именно — зависит от часа запуска теста) */
+        await expect(page.locator('.pc-date').first()).toContainText(/🌞|☀️|🌙/);
         const dateTxt = ((await page.locator('.pc-date').first().textContent()) || '').trim();
         if (!dateTxt.includes('Вечерняя программа')) throw new Error('название тренировки не в строке даты: ' + JSON.stringify(dateTxt));
         const exTexts = await page.locator('.pc-ex').allTextContents();
@@ -641,7 +686,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
     });
 
-    test('UX-T12: второй подход — вес/повторения предыдущего сразу в полях, без пилюли-предложения', async ({ page }) => {
+    test('UX-T12/T17: второй подход — ТОЛЬКО вес предыдущего в поле, повторения/подходы дефолтные, без пилюли', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         /* первый подход: подстановки нет (в упражнении ещё нет подходов), дефолт повторений — 1 */
@@ -653,18 +698,19 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
 
-        /* второй подход: вес/повторения предыдущего подставлены СРАЗУ В ПОЛЯ, пилюли нет */
+        /* второй подход: вес предыдущего подставлен СРАЗУ В ПОЛЕ; повторения — дефолт «1» [UX-T17] */
         await openActiveDetail(page);
         await page.locator('.expill .btnrow [data-act="openEntryModal"]').click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await expect(page.locator('#mWeight')).toHaveValue('70');
-        await expect(page.locator('#mReps')).toHaveValue('10');
+        await expect(page.locator('#mReps')).toHaveValue('1');
+        await expect(page.locator('#mSets')).toHaveValue('1');
         await expect(page.locator('.prevpill')).toHaveCount(0);
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry')).toHaveCount(2, { timeout: 5000 });
-        await expect(page.locator('.expill .entry').nth(1)).toContainText('70 кг, 1 подход по 10 повторений', { timeout: 5000 });
+        await expect(page.locator('.expill .entry').nth(1)).toContainText('70 кг, 1 подход по 1 повторению', { timeout: 5000 });
     });
 
     test('форма записи: без чипсов-подсказок, подписи по макету', async ({ page }) => {
@@ -1098,8 +1144,8 @@ test.describe('таймер отдыха [UX-T4]', function () {
         await expect(bar).not.toHaveClass(/hidden/);
         /* дефолт 90 сек: остаток 1:30 и дальше по убывающей */
         await expect(bar.locator('#rbTime')).toHaveText(/^(1:28|1:29|1:30)$/, { timeout: 5000 });
-        await expect(bar.locator('.rb-label')).toHaveText('Отдых');
-        await expect(bar.locator('.rb-ex')).toHaveText(EX);
+        /* [UX-T17] «Отдых · Упражнение» — в title компактной панели */
+        await expect(bar.locator('.rb-main')).toHaveAttribute('title', 'Отдых · ' + EX);
         /* лог нового подхода перезапускает таймер на полную длительность (§1.8) */
         const end1 = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymRest')).end; });
         await page.waitForTimeout(2100);
@@ -1141,10 +1187,10 @@ test.describe('таймер отдыха [UX-T4]', function () {
         if (!pillTxt.includes(restFmt(left)) && !pillTxt.includes(restFmt(left + 1)) && !pillTxt.includes(restFmt(left - 1))) {
             throw new Error('пилюля показывает ' + JSON.stringify(pillTxt) + ', ожидали ~' + restFmt(left));
         }
-        /* разворачиваем: панель с подписью упражнения восстановилась */
+        /* разворачиваем: компактная панель восстановилась, подпись упражнения в title [UX-T17] */
         await bar.locator('[data-act="restUnfold"]').click();
         await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
-        await expect(bar.locator('.rb-ex')).toHaveText(EX);
+        await expect(bar.locator('.rb-main')).toHaveAttribute('title', 'Отдых · ' + EX);
     });
 
     test('пауза замораживает остаток, продолжение тикает, «+30 сек» удлиняет отсчёт и шкалу', async ({ page }) => {
@@ -1153,9 +1199,10 @@ test.describe('таймер отдыха [UX-T4]', function () {
         await fillEntry(page, '60', '1', '10');
         const bar = page.locator('#restbar');
         await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
-        /* пауза: left сохранён, end удалён, цифры замерли */
+        /* пауза: left сохранён, end удалён, цифры замерли ([UX-T17] кнопка-иконка: ⏸/▶ toggle) */
         await bar.locator('[data-act="restPause"]').click();
-        await expect(bar.locator('[data-act="restPause"]')).toHaveText('▶ Продолжить');
+        await expect(bar.locator('[data-act="restPause"]')).toHaveText('▶');
+        await expect(bar.locator('[data-act="restPause"]')).toHaveAttribute('title', 'Продолжить');
         await expect(bar.locator('#rbTime')).toHaveClass(/paused/);
         const p = await page.evaluate(function () {
             const r = JSON.parse(localStorage.getItem('gymRest'));
@@ -1168,7 +1215,7 @@ test.describe('таймер отдыха [UX-T4]', function () {
         if (t1 !== t2) throw new Error('остаток тикает на паузе: ' + t1 + ' → ' + t2);
         /* продолжение: отсчёт пошёл дальше (poll: фаза секундного тика не привязана к клику) */
         await bar.locator('[data-act="restPause"]').click();
-        await expect(bar.locator('[data-act="restPause"]')).toHaveText('⏸ Пауза');
+        await expect(bar.locator('[data-act="restPause"]')).toHaveText('⏸');
         const t3 = await bar.locator('#rbTime').textContent();
         await expect.poll(async function () { return bar.locator('#rbTime').textContent(); }, { timeout: 5000 }).not.toBe(t3);
         /* +30 сек: end += 30 c, полная длительность 90 → 120 */
@@ -1393,8 +1440,8 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
         await expect(page.locator('.toast.show')).toHaveText('🔁 Повтор прошлой тренировки: 1 упражнение', { timeout: 5000 });
         await expect(page.locator('.expill .exname')).toHaveText(EX);
         await expect(page.locator('.expill .entry')).toHaveCount(0);
-        /* удаляем созданную тренировку, чтобы снова попасть в модалку старта */
-        await page.locator('.wcicons [data-act="confirmModal"]').click();
+        /* удаляем созданную тренировку, чтобы снова попасть в модалку старта ([UX-T17]: корзина, не ✕) */
+        await page.locator('.wcicons .trash-bare[data-act="confirmModal"]').click();
         await page.locator('.modal.open [data-act="confirmYes"]').click();
         await page.locator('.nav .nfab').click();
         await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
@@ -1478,10 +1525,10 @@ test.describe('шаблоны с планом [UX-E5]', function () {
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await expect(page.locator('.expill .entry').first()).toContainText('60 кг, 3 подхода по 10 повторений', { timeout: 5000 });
-        /* после первого блока пилюля плана ушла — [UX-T12] поля заполнены предыдущим подходом */
+        /* после первого блока пилюля плана ушла — [UX-T12/T17] вес предыдущего в поле, повторения — дефолт «1» */
         await page.locator('.expill .btnrow [data-act="openEntryModal"]').first().click();
         await expect(page.locator('#mWeight')).toHaveValue('60', { timeout: 5000 });
-        await expect(page.locator('#mReps')).toHaveValue('10');
+        await expect(page.locator('#mReps')).toHaveValue('1');
         await expect(page.locator('.prevpill')).toHaveCount(0);
         await page.locator('[data-act="closeModal"]').click();
         /* план доехал до сервера внутри записи (pw/ps/pr) */
