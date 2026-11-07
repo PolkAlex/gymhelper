@@ -255,10 +255,11 @@ function isCustomEx(name) {
 function dayPart(w) {
     if (!w.started) return null;
     const hh = +String(w.started).slice(11, 13);
-    /* [UX-B8] SVG-иконки вместо эмодзи: 🌅 на Windows рисуется оранжевым квадратом */
-    if (hh < 12) return { n: 'утро', i: ICONS.sunrise };
-    if (hh < 18) return { n: 'день', i: ICONS.sun };
-    return { n: 'вечер', i: ICONS.moon };
+    /* [UX-T17] вернули эмодзи (SVG-ключи sunrise/sun/moon остались в ICONS, не используются);
+       утро — 🌞: 🌅 на части платформ рисуется квадратной градиентной плиткой */
+    if (hh < 12) return { n: 'утро', i: '🌞' };
+    if (hh < 18) return { n: 'день', i: '☀️' };
+    return { n: 'вечер', i: '🌙' };
 }
 function isWarmupName(name) {
     const c = findCatalog(name);
@@ -597,18 +598,20 @@ function renderRestbar() {
     }
     const left = restLeftSec();
     const pct = Math.max(2, Math.min(100, Math.round(left / Math.max(REST.dur, 1) * 100)));
-    el.innerHTML = '<div class="rb-main"><div class="rb-top">' +
+    /* [UX-T17] компактная панель — ОДНА строка: [⏱][отсчёт][пауза][+30][✕][⌄], кнопки одного
+       размера; подпись «Отдых · Упражнение» — в title панели; прогресс — линия 3px по низу */
+    el.innerHTML = '<div class="rb-main" title="Отдых' + (REST.ex ? ' · ' + esc(REST.ex) : '') + '">' +
+        '<div class="rb-row">' +
         '<span class="rb-ico">⏱</span>' +
         '<span class="rb-time' + (REST.paused ? ' paused' : '') + '" id="rbTime">' + restFmt(left) + '</span>' +
-        '<span class="rb-meta"><span class="rb-label">Отдых</span>' +
-        '<span class="rb-ex">' + esc(REST.ex || '') + '</span></span>' +
-        '<button class="rb-fold" data-act="restFold" title="Свернуть">⌄</button></div>' +
-        '<div class="rb-track"><i id="rbFill" style="width:' + pct + '%"></i></div>' +
-        '<div class="rb-actions">' +
-        '<button class="rb-btn" data-act="restPause">' + (REST.paused ? '▶ Продолжить' : '⏸ Пауза') + '</button>' +
-        '<button class="rb-btn plus" data-act="restMore">+30 сек</button>' +
-        '<button class="rb-btn sq" data-act="restReset" title="Сброс">✕</button>' +
-        '</div></div>';
+        '<span class="rb-btns">' +
+        '<button class="rb-sqbtn" data-act="restPause" title="' + (REST.paused ? 'Продолжить' : 'Пауза') + '" aria-label="' + (REST.paused ? 'Продолжить' : 'Пауза') + '">' + (REST.paused ? '▶' : '⏸') + '</button>' +
+        '<button class="rb-sqbtn" data-act="restMore" title="+30 сек" aria-label="Добавить 30 секунд">+30</button>' +
+        '<button class="rb-sqbtn" data-act="restReset" title="Закрыть" aria-label="Закрыть таймер">✕</button>' +
+        '<button class="rb-sqbtn" data-act="restFold" title="Свернуть" aria-label="Свернуть панель">⌄</button>' +
+        '</span></div>' +
+        '<div class="rb-line"><i id="rbFill" style="width:' + pct + '%"></i></div>' +
+        '</div>';
 }
 /* дешёвое обновление цифр/шкалы раз в секунду, без перерисовки панели */
 function restUpdateDom() {
@@ -831,6 +834,8 @@ const ACTIONS = {
     techBack: function () { TECH.open = null; render(); },
     techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
+    /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые» */
+    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; tab = 'tech'; viewWid = 0; render(); },
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
     wClr: function () { wClr(); },
@@ -1070,17 +1075,23 @@ function workoutCard(w, showActions) {
     const lines = titleLines(w);
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
-    /* [UX-T8]: у завершённых «Повторить» и «В шаблоны» переехали в шапку круглыми иконками */
+    /* [UX-T8]: у завершённых «Повторить» и «В шаблоны» переехали в шапку круглыми иконками;
+       [UX-T17]: у активной — «Упражнение/Отменить/Завершить» тоже в шапке, справа после ⏱/🗑 */
     const wcacts = w.finished
         ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
           '<button class="barebtn" data-act="tplSaveModal" data-a="' + w.id + '" title="В шаблоны" aria-label="В шаблоны">' + ICONS.save + '</button>'
         : '';
-    h += '<div class="wchead"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
+    const wcact = w.finished ? '' :
+        '<button class="barebtn" data-act="openPicker" data-a="' + w.id + '" title="Добавить упражнение" aria-label="Добавить упражнение">' + ICONS.plus + '</button>' +
+        '<button class="barebtn" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Отменить тренировку" aria-label="Отменить тренировку">' + ICONS.cross + '</button>' +
+        '<button class="barebtn" data-act="finishWorkout" data-a="' + w.id + '" title="Завершить тренировку" aria-label="Завершить тренировку">' + ICONS.check + '</button>';
+    h += '<div class="wchead' + (w.finished ? '' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
         (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') +
         esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' + wcacts +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
+        wcact +
         '</div></div>';
     if (w.started) {
         const sT = String(w.started).slice(11, 16);
@@ -1128,25 +1139,17 @@ function workoutCard(w, showActions) {
         h += '<details><summary>🔥 Ккал по упражнениям</summary>' + kcalBreakdown(w) + '</details>';
     }
     h += '<details><summary>📈 Прогресс</summary>' + progressHtml(w) + '</details>';
-    if (showActions) h += '<div class="btnrow">';
-    if (showActions && !w.finished) {
-        h += '<button class="btn prime wide icbtn" data-act="openPicker" data-a="' + w.id + '">' + ICONS.plus + '<span>Упражнение</span></button>';
-        h += '<div class="split2">' +
-            '<button class="btn danger icbtn" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">' + ICONS.cross + '<span>Отменить</span></button>' +
-            '<button class="btn prime icbtn" data-act="finishWorkout" data-a="' + w.id + '">' + ICONS.check + '<span>Завершить</span></button>' +
-            '</div>';
-    }
+    /* [UX-T17] кнопки активной тренировки переехали в шапку (wcact); у завершённой
+       красная «Удалить тренировку» осталась строкой, как было после [UX-T8] */
     if (showActions && w.finished) {
-        /* [UX-T8]: повторить и сохранить как шаблон — иконки в шапке карточки (см. wcacts); красная «Удалить» осталась строкой */
-        h += '<button class="btn danger wide icbtn" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">' + ICONS.trash + '<span>Удалить тренировку</span></button>';
+        h += '<div class="btnrow"><button class="btn danger wide icbtn" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">' + ICONS.trash + '<span>Удалить тренировку</span></button></div>';
     }
-    if (showActions) h += '</div>';
     h += '</div>';
     return h;
 }
 
 /* ---------- [UX-T14] перетаскивание упражнений (pointer events, без библиотек) ---------- */
-/* long-press 350 мс по плитке (кроме кнопок и записей) или нажатие на «ручку» ⠿ поднимает
+/* long-press 650 мс по плитке (кроме кнопок и записей) или нажатие на «ручку» ⠿ поднимает
    плитку; остальные разъезжаются transform-сдвигом (позиция-призрак); отпускание
    переставляет w.exercises и сохраняет обычным save()-флоу (как deleteExerciseGo).
    Скролл работает, пока drag не начался; во время drag — автоскролл у верхнего/нижнего
@@ -1189,14 +1192,15 @@ document.addEventListener('pointerdown', function (ev) {
         h: 0, cy0: 0, step: 0, gap: 10, shift: 0, centers: []
     };
     pill.classList.add('exhold'); /* на время удержания: без выделения текста и callout */
-    /* «ручка» тащит сразу, вся плитка — после long-press 350 мс */
-    DRAG.timer = setTimeout(dragStart, ev.target.closest('.exgrip') ? 0 : 350);
+    /* «ручка» тащит сразу, вся плитка — после long-press 650 мс [UX-T17]: 350 мс цеплялись
+       при обычном скролле; порог отмены движением тоже увеличен до 14px */
+    DRAG.timer = setTimeout(dragStart, ev.target.closest('.exgrip') ? 0 : 650);
 });
 document.addEventListener('pointermove', function (ev) {
     if (!DRAG || ev.pointerId !== DRAG.id) return;
     if (!DRAG.started) {
         /* движение до подъёма — это скролл/жест: отменяем long-press, скролл не трогаем */
-        if (Math.abs(ev.clientX - DRAG.x0) > 10 || Math.abs(ev.clientY - DRAG.y0) > 10) {
+        if (Math.abs(ev.clientX - DRAG.x0) > 14 || Math.abs(ev.clientY - DRAG.y0) > 14) {
             const d = DRAG; DRAG = null; dragTeardown(d, false);
         }
         return;
@@ -1371,6 +1375,8 @@ function maxWeightSeries(name) {
 /* ---------- техника ---------- */
 function techFiltered() {
     let list = CATALOG.slice();
+    /* [UX-T17] секция «★ Любимые»: только упражнения из gymFavs (раньше чип ничего не фильтровал) */
+    if (TECH.section === 'fav') list = list.filter(c => isFav(c.n));
     if (TECH.cat) list = list.filter(c => c.t.includes(TECH.cat));
     if (TECH.q) list = list.filter(c => c.n.toLowerCase().includes(TECH.q.toLowerCase()));
     return list;
@@ -1382,7 +1388,8 @@ function techChipsHtml() {
         h += '<button class="chip' + (TECH.section === s.id ? ' on' : '') + '" data-act="techSection" data-a="' + s.id + '">' + s.n + '</button>';
     }
     h += '</div>';
-    if (TECH.section !== 'all') {
+    /* ряд категорий только где есть что показывать («★ Любимые»/«Коллекции» без категорий) */
+    if (TECH.section !== 'all' && (CATS[TECH.section] || []).length) {
         h += '<div class="secrow">';
         for (const c of (CATS[TECH.section] || [])) {
             h += '<button class="chip' + (TECH.cat === c.id ? ' on' : '') + '" data-act="techCat" data-a="' + c.id + '">' + ico(c.icon) + ' ' + c.n + '</button>';
@@ -1650,6 +1657,10 @@ function renderProfileTab() {
         '<button class="btn' + (snd ? ' on' : '') + '" data-act="restSound" data-a="on">🔊 Вкл</button>' +
         '<button class="btn' + (snd ? '' : ' on') + '" data-act="restSound" data-a="off">🔇 Выкл</button>' +
         '</span></div></div>';
+    /* [UX-T17] любимые упражнения: «Техника» с активным фильтром «★ Любимые» (gymFavs) */
+    h += '<div class="card"><p class="t1">⭐ Любимые упражнения</p>' +
+        '<p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="openFavs">Открыть в технике</button></div></div>';
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
@@ -2160,7 +2171,8 @@ function openEntryModalIdx(w, exIdx, setIdx) {
     const isNew = setIdx < 0;
     const s = isNew ? { w: '', s: 1, r: '' } : e.sets[setIdx];
     /* [UX-T12] второй и дальше подход того же упражнения в текущей тренировке:
-       вес/повторения предыдущего подхода сразу в поля (только внутри текущей тренировки) */
+       вес предыдущего подхода сразу в поле веса (только внутри текущей тренировки).
+       [UX-T17] повторения и подходы НЕ подставляются — дефолты «1» / «1» */
     const prev = isNew && e.sets.length ? e.sets[e.sets.length - 1] : null;
     modalCtx = { wid: w.id, exIdx, setIdx, name: e.name };
     let h = '<p class="mtitle">' + (isNew ? 'Новая запись' : 'Изменить запись') + '</p>' +
@@ -2195,7 +2207,7 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '</div>' +
         '<div class="fglass">' +
         '<div class="flabel">Повторения (например 12, 8-10)</div>' +
-        '<div class="inwrap"><input id="mReps" type="text" value="' + esc((prev && prev.r) || s.r || '1') + '">' +
+        '<div class="inwrap"><input id="mReps" type="text" value="' + esc(s.r || '1') + '">' +
         '<button class="clr" data-act="rClr">Очистить</button></div>' +
         '<div class="keyrow">' +
         ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
