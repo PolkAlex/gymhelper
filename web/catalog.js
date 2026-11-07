@@ -68,7 +68,9 @@ const ICONS = {
     sun: _s('<circle cx="12" cy="12" r="4"/><path d="M12 3v2.5"/><path d="M12 18.5V21"/><path d="M3 12h2.5"/><path d="M18.5 12H21"/>'),
     moon: _s('<path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/>'),
     /* стрелка назад [UX-T13]: компактная «К упражнениям» на экране техники */
-    back: _s('<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>')
+    back: _s('<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>'),
+    /* ручка перетаскивания [UX-T14]: точки ⠿ (2×3) на плитке упражнения */
+    grip: _s('<circle cx="9" cy="5.5" r="1.4"/><circle cx="15" cy="5.5" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18.5" r="1.4"/><circle cx="15" cy="18.5" r="1.4"/>')
 };
 function ico(key, cls) {
     return '<span class="ico' + (cls ? ' ' + cls : '') + '">' + (ICONS[key] || ICONS.custom) + '</span>';

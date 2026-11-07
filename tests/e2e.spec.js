@@ -140,6 +140,62 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill')).toHaveCount(0, { timeout: 5000 });
     });
 
+    test('[UX-T14] drag упражнений: порядок меняется, сохраняется на сервере, тап по плитке работает', async ({ page, request }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await fillEntry(page, '100', '3', '10');
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .excard', { hasText: 'Подтягивания' }).first().click();
+        await page.locator('#mReps').fill('8');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.expill')).toHaveCount(2);
+        const names = page.locator('.expill .exname');
+        await expect(names.nth(0)).toHaveText(EX);
+        await expect(names.nth(1)).toHaveText('Подтягивания');
+
+        /* программный drag за «ручку» ⠿ первой плитки — вниз на место второй */
+        const grip = await page.locator('.expill .exgrip').first().boundingBox();
+        const target = await page.locator('.expill').nth(1).boundingBox();
+        if (!grip || !target) throw new Error('ручка или плитка не найдены');
+        const cx = grip.x + grip.width / 2, y0 = grip.y + grip.height / 2, y1 = target.y + target.height / 2;
+        await page.mouse.move(cx, y0);
+        await page.mouse.down();
+        await page.waitForTimeout(60); /* long-press/ручка: подъём плитки до первого move */
+        for (let i = 1; i <= 6; i++) {
+            await page.mouse.move(cx, y0 + (y1 - y0) * i / 6);
+            await page.waitForTimeout(40);
+        }
+        await page.mouse.up();
+        await expect(names.nth(0)).toHaveText('Подтягивания', { timeout: 5000 });
+        await expect(names.nth(1)).toHaveText(EX, { timeout: 5000 });
+
+        /* порядок переживает перезагрузку — сохранён на сервере */
+        await page.reload();
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .exname').nth(0)).toHaveText('Подтягивания', { timeout: 10000 });
+        await expect(page.locator('.expill .exname').nth(1)).toHaveText(EX, { timeout: 5000 });
+
+        /* тап по плитке по-прежнему открывает упражнение (переименование) */
+        await page.locator('.expill .exname').nth(1).click();
+        await expect(page.locator('#mName')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').click();
+
+        /* на сервере массив exercises переставлен, записи (sets) не тронуты */
+        const st = await (await request.get('/api/state')).json();
+        const act = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        if (!act || (act.exercises || []).length !== 2) throw new Error('упражнения не сохранились: ' + JSON.stringify(act));
+        if (act.exercises[0].name !== 'Подтягивания' || act.exercises[1].name !== EX) {
+            throw new Error('порядок на сервере неверен: ' + JSON.stringify(act.exercises.map(function (e) { return e.name; })));
+        }
+        const bench = act.exercises[1];
+        if (!bench.sets || bench.sets.length !== 1 || bench.sets[0].w !== '100' || bench.sets[0].s !== 3) {
+            throw new Error('записи упражнения потерялись при перестановке: ' + JSON.stringify(bench));
+        }
+    });
+
     test('переименование упражнения', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
