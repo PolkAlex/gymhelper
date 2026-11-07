@@ -243,17 +243,20 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard')).toHaveCount(0);
     });
 
-    test('[UX-T17] кнопки активной тренировки в шапке: 5 иконок, aria-label, ✕ спрашивает подтверждение', async ({ page }) => {
+    test('[UX-T17/T21] кнопки активной тренировки в шапке: 6 иконок, aria-label, ✕ спрашивает подтверждение', async ({ page }) => {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
-        /* активная карточка: ⏱ Время, 🗑 Удалить, ➕ Упражнение, ✕ Отменить, ✓ Завершить */
-        await expect(page.locator('.wcicons .barebtn')).toHaveCount(5);
+        /* активная карточка: ← Назад, ⏱ Время, 🗑 Удалить, ➕ Упражнение, ✕ Отменить, ✓ Завершить */
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(6);
         for (const label of ['Добавить упражнение', 'Отменить тренировку', 'Завершить тренировку']) {
             const b = page.locator('.wcicons .barebtn[aria-label="' + label + '"]');
             await expect(b).toHaveCount(1);
             await expect(b).toHaveAttribute('title', label);
         }
+        /* [UX-T21] первая иконка — «← Назад», «🚪 Выйти» (door) в шапке больше нет */
+        await expect(page.locator('.wcicons .barebtn').first()).toHaveAttribute('aria-label', 'Назад');
+        await expect(page.locator('.wcicons .barebtn[aria-label="Выйти"]')).toHaveCount(0);
         /* больших кнопок «Упражнение/Отменить/Завершить» в потоке карточки больше нет */
         await expect(page.locator('.card .btnrow .icbtn')).toHaveCount(0);
         /* ✕ «Отменить тренировку» — со своим текстом подтверждения (не путать с 🗑 «Удалить») */
@@ -261,7 +264,13 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).toContainText('Отменить тренировку?', { timeout: 5000 });
         await page.locator('.modal.open [data-act="closeModal"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.wcicons .barebtn')).toHaveCount(5); /* карточка не пострадала */
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(6); /* карточка не пострадала */
+        /* [UX-T21] «← Назад» закрывает карточку БЕЗ отмены/удаления: тренировка жива */
+        await page.locator('.wcicons .barebtn[aria-label="Назад"]').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0); /* без подтверждения */
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(6); /* карточка открывается снова */
     });
 
     test('[UX-T17] «⭐ Любимые упражнения» в Профиле: переход на «Технику» с фильтром «★ Любимые»', async ({ page }) => {
@@ -1626,7 +1635,7 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(page.locator('.pcard')).toHaveCount(0);
     });
 
-    test('[UX-T19] завершённая из истории: без backbar, 5 иконок в шапке в порядке 🔁 💾 ⏱ 🚪 🗑', async ({ page, request }) => {
+    test('[UX-T19/T21] завершённая из истории: без backbar, 5 иконок в шапке в порядке ← 🔁 💾 ⏱ 🗑', async ({ page, request }) => {
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
@@ -1637,21 +1646,25 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
         /* [UX-T19] нижний backbar у завершённой больше не рендерится */
         await expect(page.locator('.backbar')).toHaveCount(0);
-        /* ровно 5 иконок в шапке, порядок: 🔁 💾 ⏱ 🚪 🗑 */
+        /* ровно 5 иконок в шапке, порядок: ← 🔁 💾 ⏱ 🗑 ([UX-T21] «← Назад» первой, «🚪 Выйти» убрана) */
         const acts = await page.locator('.wcicons .barebtn').evaluateAll(function (els) {
             return els.map(function (el) { return el.getAttribute('data-act'); });
         });
-        const expected = ['newRepeatFrom', 'saveWorkout', 'timeModal', 'closeHistory', 'confirmModal'];
+        const expected = ['closeHistory', 'newRepeatFrom', 'saveWorkout', 'timeModal', 'confirmModal'];
         if (JSON.stringify(acts) !== JSON.stringify(expected)) {
             throw new Error('иконки шапки завершённой: ' + JSON.stringify(acts) + ', ожидалось ' + JSON.stringify(expected));
         }
+        /* [UX-T21] первая иконка — aria «Назад», «🚪 Выйти» (door) в шапке больше нет */
+        const firstAria = await page.locator('.wcicons .barebtn').first().getAttribute('aria-label');
+        if (firstAria !== 'Назад') throw new Error('первая иконка шапки завершённой: aria="' + firstAria + '", ожидалось «Назад»');
+        await expect(page.locator('.wcicons .barebtn[aria-label="Выйти"]')).toHaveCount(0);
         /* большой красной «🗑 Удалить тренировку» в потоке карточки нет */
         await expect(page.locator('.card .btnrow .btn.danger')).toHaveCount(0);
         /* 💾 «Сохранить» сохраняет и закрывает карточку */
         await page.locator('.wcicons [data-act="saveWorkout"]').click();
         await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
-        /* 🚪 «Выйти» закрывает карточку без сохранения-модалки */
+        /* ← «Назад» закрывает карточку без сохранения-модалки ([UX-T21], заменяет «🚪 Выйти») */
         await page.locator('.pcard').first().click();
         await expect(page.locator('.wcicons [data-act="closeHistory"]')).toBeVisible({ timeout: 5000 });
         await page.locator('.wcicons [data-act="closeHistory"]').click();
