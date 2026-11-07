@@ -16,7 +16,7 @@ tests/                     — e2e.spec.js (Playwright), GymContractTest.java, c
 docs/                      — спецификации и макеты дизайнера, карта покрытия тестами
 data/                      — данные пользователей (JSON на чат) — НЕ коммитить
 build.gradle, gradlew      — сборка Gradle (код остаётся чистой Java без зависимостей)
-Dockerfile, docker-compose.yml — контейнер для VPS (deploys вручную, systemd ещё жив)
+Dockerfile, docker-compose.yml — контейнер для VPS (прод работает в Docker: образ ghcr.io собирает CI на push в main; systemd-юнит gymbot остановлен 08.11.2026 — порт 8080 занят контейнером)
 ```
 
 ## Команды (PowerShell, из корня проекта)
@@ -40,8 +40,20 @@ node tests/check.js
 npx playwright test                        # все проекты устройств
 npx playwright test --project=desktop      # только десктоп (быстрый прогон)
 npx playwright test --project=iphone13     # iPhone 13, WebKit (~Safari)
+
+# ДЕПЛОЙ на прод (после merge в main; владелец дал добро — выполняет lead):
+# 1) дождаться зелёного CI-рана на main (Docker job публикует ghcr.io/polkalex/gymhelper:latest, ~3-4 мин!)
+# 2) на VPS обновить контейнер:
+ssh root@45.91.169.125 "cd /opt/gym; docker compose pull gymbot && docker compose up -d"
+# 3) проверки: docker ps (healthy, свежий), https://gym-helper.com/health (uptimeSec ~10),
+#    свежая статика на проде (app.js с маркером правки, ?nocache=рандом)
 ```
 
+⚠️ `update.ps1` (scp + javac + systemctl restart) — УСТАРЕЛ и ОПАСЕН: прод в Docker,
+рестарт systemd-юнита падает на занятом порту и мусорит в логах. НЕ использовать
+(оставлен только для экстренного отката на systemd по docs/docker-migration.md).
+⚠️ `docker compose pull` можно делать ТОЛЬКО после завершения Docker job CI на main —
+ранний pull тихо вытянет старый образ («Already exists»).
 ⚠️ `test.bat` — то же самое для человека, но с `pause` в конце: агентам НЕ использовать
 (зависнет в ожидании Enter).
 
@@ -302,6 +314,12 @@ Idea — постоянный контейнер: тикет навсегда о
     datasource читает JSON из secret-gist): после изменения журнала
     `node tools/metrics-to-json.mjs` + `gh gist edit` (инструкции — docs/metrics.md,
     раздел «Дашборд»).
+18. **Тесты до и после каждого релиза** (правило владельца, 08.11.2026 — цель: меньше
+    багов, находимых владельцем): перед деплоем tester прогоняет ПОЛНЫЙ цикл (статика,
+    gradle build + контракт, e2e ВСЕХ устройств) и ДОПОЛНЯЕТ e2e-сценарии под свежие
+    правки релиза (не покрытый сценарий — новый тест); после релиза каждый баг/фидбек
+    владельца фиксируется регресс-тестом в тот же или ближайший батч, чтобы дефект
+    не возвращался. Красные тесты = деплой запрещён.
 
 ## Конвенции
 
