@@ -407,7 +407,7 @@ window.addEventListener('focus', function () {
 /* ============ доставка действий ============ */
 /* кнопки без дедупа: быстрый повторный тап легален (ввод значений, ретрай после ошибки) */
 const NO_DEDUP = {
-    wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1
+    wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1, planTake: 1
 };
 function dispatchFromEl(el, ev) {
     const act0 = el.getAttribute('data-act');
@@ -826,6 +826,7 @@ const ACTIONS = {
     setsSet: function (a) { setsSet(+a); },
     repsSet: function (a) { repsSet(a); },
     repsAdd: function (a) { repsAdd(+a); },
+    planTake: function () { planTake(); },
     saveEntry: async function () { await saveEntry(); },
     deleteEntry: async function () { await deleteEntry(); },
     renameExercise: function (a, b) { renameExercise(+a, +b); },
@@ -1582,18 +1583,47 @@ function tplMeta(t) {
     if (exs.length > 2) m += '…';
     return m;
 }
+/* компактный план: «60×3×10», без веса «3×10», без повторений «60×3» [UX-E5 §4.3]; вес с запятой */
+function tplCompact(e) {
+    const w = e.w ? String(e.w).replace('.', ',') : '';
+    const r = e.r ? String(e.r) : '';
+    if (w && r) return w + '×' + (+e.s || 0) + '×' + r;
+    if (w) return w + '×' + (+e.s || 0);
+    if (r) return (+e.s || 0) + '×' + r;
+    return String(+e.s || 0);
+}
+/* строка плана карточки шаблона [UX-E5 §4.3]: первые 3 упражнения + «+N», имя > 16 симв. клипается;
+   скрыта, если ни у одного упражнения нет осмысленного плана (рукотворный JSON) */
+function tplPlanLine(t) {
+    const exs = t.exercises || [];
+    let line = '';
+    let n = 0;
+    for (const e of exs) {
+        if (n < 3 && (+e.s > 1 || (e.w && String(e.w)) || (e.r && String(e.r)))) {
+            const nm = String(e.name || '');
+            line += (line ? ' · ' : '') + (nm.length > 16 ? nm.slice(0, 15) + '…' : nm) + ' ' + tplCompact(e);
+        }
+        n++;
+    }
+    if (!line) return '';
+    if (exs.length > 3) line += ' · +' + (exs.length - 3);
+    return line;
+}
 function tplPlan(te) {
     return (te.w ? String(te.w).replace('.', ',') + ' кг' : 'свой вес') + ' × ' + te.s + ' × ' + te.r;
 }
-/* старт из шаблона / повтора: незавершённая тренировка со списком упражнений, записи пустые */
-function createFromList(t) {
+/* старт из шаблона / повтора: незавершённая тренировка со списком упражнений, записи пустые;
+   план (w/s/r шаблона) снимком в записи — пилюля «в один тап» [UX-E5]; isRepeat — тост повтора */
+function createFromList(t, isRepeat) {
     const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '',
-        exercises: (t.exercises || []).slice(0, 20).map(e => ({ name: e.name, sets: [], st: nowLocalISO(), en: '' })) };
+        exercises: (t.exercises || []).slice(0, 20).map(e => ({ name: e.name, sets: [], st: nowLocalISO(), en: '',
+            pw: e.w || '', ps: (+e.s || 0) >= 1 ? +e.s : 0, pr: e.r || '' })) };
     if (G.nextId < 1) G.nextId = 1;
     G.workouts.push(w);
     save().then(function (r) {
         if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
-        toast('📋 Шаблон применён: ' + w.exercises.length + ' ' + tplExWord(w.exercises.length));
+        toast((isRepeat ? '🔁 Повтор прошлой тренировки: ' : '📋 Шаблон применён: ')
+            + w.exercises.length + ' ' + tplExWord(w.exercises.length));
         openHistory(w.id);
     });
 }
@@ -1607,12 +1637,12 @@ function newRepeatLast() {
     const last = lastFinished();
     if (!last) return;
     closeModal();
-    createFromList({ exercises: tplFromWorkout(last) });
+    createFromList({ exercises: tplFromWorkout(last) }, true);
 }
 function newRepeatFrom(id) {
     const w = findW(id);
     if (!w || !w.finished) return;
-    createFromList({ exercises: tplFromWorkout(w) });
+    createFromList({ exercises: tplFromWorkout(w) }, true);
 }
 /* модалка «Новая тренировка» [§4.7]: пустой список / повторить прошлую / карточки шаблонов */
 function openStartModal() {
@@ -1628,10 +1658,13 @@ function openStartModal() {
     if (tpls.length) {
         h += '<p class="msub" style="margin-top:14px">📋 Шаблоны · ' + tpls.length + ' из ' + TPL_LIMIT + '</p>';
         for (const t of tpls) {
+            const planLine = tplPlanLine(t);
             h += '<div class="tcard" data-act="tplStart" data-a="' + t.id + '">' +
                 '<div class="tchead"><span class="tico">📋</span>' +
                 '<span style="flex:1;min-width:0"><div class="tname">' + esc(t.name) + '</div>' +
-                '<div class="tmeta">' + esc(tplMeta(t)) + '</div></span>' +
+                '<div class="tmeta">' + esc(tplMeta(t)) + '</div>' +
+                (planLine ? '<div class="tplan">' + esc(planLine) + '</div>' : '') +
+                '</span>' +
                 '<button class="tdel" data-act="tplDelAsk" data-a="' + t.id + '" title="Удалить шаблон">🗑</button>' +
                 '</div></div>';
         }
@@ -1669,7 +1702,7 @@ function tplSaveModal(wid) {
         h += '<div class="trow"><span>•</span><b>' + esc(e.name) + '</b><span class="plan">' + esc(tplPlan(e)) + '</span></div>';
     }
     h += '</div>';
-    h += '<p class="thint">Шаблон запоминает упражнения и последний план — при старте просто появится список, вводить подходы будешь как обычно.</p>';
+    h += '<p class="thint">Шаблон запоминает упражнения и план последнего подхода. При старте из шаблона план подставится в форму ввода одним тапом.</p>';
     h += '<div class="btnrow"><button class="btn prime wide" data-act="tplSave" data-a="' + wid + '">💾 Сохранить шаблон</button></div>';
     h += '<div class="btnrow"><button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
     openModal(h);
@@ -1879,6 +1912,34 @@ function createCustom() {
 }
 
 /* ---------- окно записи ---------- */
+/* пилюля в слоте под полем веса [UX-E5 §4.1]: план (пока sets пусты) или «Предыдущий подход» (UX-I1) */
+function entryPillHtml(e, isNew, prevW) {
+    if (isNew && e.sets.length === 0 && +e.ps >= 1) {
+        const w = e.pw ? String(e.pw).replace('.', ',') + ' кг' : 'свой вес';
+        const label = String(e.pr || '')
+            ? '📋 План: ' + w + ' × ' + e.ps + ' × ' + e.pr + ' — подставить'
+            : '📋 План: ' + w + ' × ' + e.ps + ' — вес и подходы';
+        return '<button class="prevpill" data-act="planTake">' + esc(label) + '</button>';
+    }
+    if (prevW != null) {
+        return '<button class="prevpill" data-act="wSet" data-a="' + escAttr(prevW) + '">↺ Предыдущий подход: ' +
+            esc(String(prevW).replace('.', ',')) + ' кг — подставить</button>';
+    }
+    return '';
+}
+/* [UX-E5] тап по пилюле плана: подставить w/s/r (пилюля остаётся — работает как «вернуть план») */
+function planTake() {
+    const ctx = modalCtx;
+    const w = ctx ? findW(ctx.wid) : null;
+    const e = w ? findEx(w, ctx.name) : null;
+    if (!e) return;
+    const mSets = document.getElementById('mSets');
+    const mWeight = document.getElementById('mWeight');
+    const mReps = document.getElementById('mReps');
+    if (mSets && +e.ps >= 1) mSets.value = e.ps;
+    if (mWeight && e.pw) mWeight.value = e.pw; /* пустой план веса — поле не трогаем (остаётся «0») */
+    if (mReps && e.pr) mReps.value = e.pr;
+}
 function openEntryModal(wid, exIdx, setIdx) {
     const w = findW(wid);
     if (!w || !w.exercises[exIdx]) return;
@@ -1901,8 +1962,9 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '<div class="flabel">Вес, кг (0 — без веса)</div>' +
         '<div class="inwrap"><input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
         '<button class="clr" data-act="wClr">Очистить</button></div>' +
-        (prevW != null ? '<button class="prevpill" data-act="wSet" data-a="' + escAttr(prevW) + '">↺ Предыдущий подход: ' +
-            esc(String(prevW).replace('.', ',')) + ' кг — подставить</button>' : '') +
+        /* [UX-E5] пилюля плана — пока у упражнения нет записей; после первого блока её место
+           занимает пилюля UX-I1 (§3: одновременно не показываются by design) */
+        entryPillHtml(e, isNew, prevW) +
         '<div class="keyrow">' +
         ['0.5', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {
             const label = n === '0.5' ? '+0,5' : '+' + n;

@@ -22,4 +22,6 @@ public final class UserState {
     public long pendingTplId;
     /* «Повторить прошлую» при активной тренировке: id завершённой, ждущей применения */
     public long pendingRepWid;
+    /* [UX-E5] план-подсказка текущего упражнения (снимок из шаблона/повтора); null — плана нет */
+    public TemplateExercise sugPlan;
 }

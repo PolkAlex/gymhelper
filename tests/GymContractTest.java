@@ -6,6 +6,7 @@ import gym.Records;
 import gym.SetEntry;
 import gym.Storage;
 import gym.Template;
+import gym.TemplateExercise;
 import gym.Workout;
 
 import java.util.Map;
@@ -79,6 +80,46 @@ public class GymContractTest {
             && "Спина \"и\" бицепс 💪".equals(dt2.templates.get(0).name)
             && "2026-11-06T18:30:00".equals(dt2.templates.get(0).createdAt), "templates переживают round-trip без потерь");
         check(!Json.write(d2.toJson()).contains("templates"), "toJson без шаблонов не пишет ключ (legacy байт-в-байт)");
+
+        /* план-подсказка в записях [UX-E5]: legacy без pw/ps/pr читается (плана нет); round-trip без плана не пишет ключи */
+        check(d2.workouts.get(0).exercises.get(0).planS == 0, "legacy запись без pw/ps/pr: планS=0");
+        String noPlanOut = Json.write(d2.toJson());
+        check(!noPlanOut.contains("\"pw\"") && !noPlanOut.contains("\"ps\"") && !noPlanOut.contains("\"pr\""),
+            "toJson без плана не пишет ключи pw/ps/pr (legacy байт-в-байт)");
+
+        /* [UX-E5]: тренировка с планом переживает round-trip без потерь; ps < 1 при чтении сбрасывает план целиком */
+        String planJson = "{\"nextId\":2,\"workouts\":[{\"id\":1,\"date\":\"2026-11-07\",\"finished\":false,\"exercises\":[" +
+            "{\"name\":\"Тяга верхнего блока\",\"st\":\"2026-11-07T18:00:00\",\"sets\":[],\"pw\":\"75-175\",\"ps\":3,\"pr\":\"\"}," +
+            "{\"name\":\"Подтягивания\",\"sets\":[{\"w\":\"\",\"s\":4,\"r\":\"8\"}],\"pw\":\"abc\",\"ps\":0,\"pr\":\"10\"}]}]}";
+        GymData dp = GymData.fromJson((Map<String, Object>) Json.parse(planJson));
+        ExerciseEntry pe = dp.findById(1).exercises.get(0);
+        check("75-175".equals(pe.planW) && pe.planS == 3 && "".equals(pe.planR), "план pw/ps/pr читается (диапазон веса, пустой pr)");
+        ExerciseEntry peBad = dp.findById(1).exercises.get(1);
+        check(peBad.planS == 0 && "".equals(peBad.planW) && "".equals(peBad.planR), "ps < 1 при чтении сбрасывает план целиком");
+        String planOut = Json.write(dp.toJson());
+        check(planOut.contains("\"pw\":\"75-175\"") && planOut.contains("\"ps\":3") && planOut.contains("\"pr\":\"\""),
+            "toJson пишет план при planS >= 1");
+        check(!planOut.contains("\"ps\":0"), "toJson при planS=0 не пишет ключи плана");
+        GymData dp2 = GymData.fromJson((Map<String, Object>) Json.parse(planOut));
+        ExerciseEntry pe2 = dp2.findById(1).exercises.get(0);
+        check("75-175".equals(pe2.planW) && pe2.planS == 3 && "".equals(pe2.planR), "план переживает round-trip без потерь");
+        /* мусорный ps (строка вместо числа) → Json.lng даёт 0 → план сбрасывается, без падения */
+        String psGarbage = planJson.replace("\"pw\":\"abc\",\"ps\":0", "\"pw\":\"abc\",\"ps\":\"3\"");
+        ExerciseEntry peGarbage = GymData.fromJson((Map<String, Object>) Json.parse(psGarbage)).findById(1).exercises.get(1);
+        check(peGarbage.planS == 0 && "".equals(peGarbage.planW), "мусорный ps (строка) сбрасывает план без падения");
+
+        /* [UX-E5]: строки плана бота — «60 кг, 3 по 10» / «без веса, 3 по 10» / «60 кг × 3» (без повторений) */
+        TemplateExercise pc0 = new TemplateExercise();
+        check(BotLogic.planCore(pc0).equals("без веса × 1"), "planCore: пустой план — без веса × 1");
+        TemplateExercise pc1 = new TemplateExercise();
+        pc1.w = "60"; pc1.s = 3; pc1.r = "10";
+        check(BotLogic.planCore(pc1).equals("60 кг, 3 по 10"), "planCore: 60 кг, 3 по 10");
+        TemplateExercise pc2 = new TemplateExercise();
+        pc2.w = ""; pc2.s = 3; pc2.r = "10";
+        check(BotLogic.planCore(pc2).equals("без веса, 3 по 10"), "planCore: без веса, 3 по 10");
+        TemplateExercise pc3 = new TemplateExercise();
+        pc3.w = "62,5"; pc3.s = 4; pc3.r = "";
+        check(BotLogic.planCore(pc3).equals("62,5 кг × 4"), "planCore: без повторений — 62,5 кг × 4");
 
         String out = Json.write(d.toJson());
         check(out.contains("\"started\":\"2026-10-29T18:30:00\""), "toJson пишет started");

@@ -440,6 +440,17 @@ public final class BotLogic {
                 if (st.editing) applyEditWeight(chatId, messageId, dataModel, st);
                 else goSets(chatId, messageId);
             }
+            case "w:plan" -> {
+                /* рассинхрон (editing-сессия / план не актуален) — игнор с перерисовкой экрана веса [UX-E5 §5.1] */
+                if (st.editing || st.sugPlan == null || st.sugPlan.r.isEmpty()) {
+                    st.mode = UserState.Mode.EX_WEIGHT;
+                    send(chatId, messageId, weightPromptText(st), weightKb(st, st.editing ? "ef:menu" : "ex:back"));
+                    return;
+                }
+                /* мгновенная запись блока целиком — дальше «✅ Записано…» + таймер отдыха, как обычно */
+                confirmEntry(chatId, messageId, dataModel, st,
+                    new SetEntry(st.sugPlan.w, st.sugPlan.s, st.sugPlan.r));
+            }
             case "w:again" -> pickExercise(chatId, messageId, dataModel, st, st.currentExercise);
             case "hist:back" -> showHistory(chatId, messageId, dataModel, st, st.histPage);
             case "nu:clear" -> {
@@ -713,6 +724,8 @@ public final class BotLogic {
         st.editing = false;
         st.sugWeights = lastWeights(data, name);
         st.sugPop = popularWeight(data, name);
+        /* [UX-E5] план из шаблона/повтора — пока у упражнения в этой тренировке нет записей */
+        st.sugPlan = (e.sets.isEmpty() && e.planS >= 1) ? planOf(e) : null;
         st.pendingWeight = "";
         st.mode = UserState.Mode.EX_WEIGHT;
         storage.save(chatId, data);
@@ -720,8 +733,29 @@ public final class BotLogic {
         send(chatId, mid, head + weightPromptText(st), weightKb(st, "ex:back"));
     }
 
+    /* [UX-E5] план записи → TemplateExercise (переиспользуем класс для подсказки вес-шага) */
+    private static TemplateExercise planOf(ExerciseEntry e) {
+        TemplateExercise te = new TemplateExercise();
+        te.name = e.name;
+        te.w = e.planW;
+        te.s = e.planS;
+        te.r = e.planR;
+        return te;
+    }
+
+    /* ядро подсказки плана [UX-E5 §5.1]: «60 кг, 3 по 10» / «без веса, 3 по 10» / «60 кг × 3» (без повторений) */
+    public static String planCore(TemplateExercise te) {
+        String w = te.w == null || te.w.isEmpty() ? "без веса" : te.w.replace('.', ',') + " кг";
+        if (te.r == null || te.r.isEmpty()) return w + " × " + te.s;
+        return w + ", " + te.s + " по " + te.r;
+    }
+
     private static String weightPromptText(UserState st) {
         StringBuilder b = new StringBuilder("Введи вес (кг) или выбери:");
+        /* [UX-E5] строка плана — первой; в редактировании записи плана нет */
+        if (st.sugPlan != null && !st.editing) {
+            b.append("\n📋 По плану: ").append(esc(planCore(st.sugPlan)));
+        }
         if (!st.sugWeights.isEmpty()) {
             b.append("\nПрошлый раз: ").append(String.join("кг, ", st.sugWeights)).append("кг");
         }
@@ -733,6 +767,11 @@ public final class BotLogic {
 
     private List<List<Map<String, Object>>> weightKb(UserState st, String backData) {
         List<List<Map<String, Object>>> kb = new ArrayList<>();
+        /* [UX-E5] кнопка мгновенной записи блока по плану — первым рядом; блок без повторений
+           невалиден, кнопки для него нет; в редактировании план-ряда не бывает */
+        if (!st.editing && st.sugPlan != null && !st.sugPlan.r.isEmpty()) {
+            kb.add(List.of(TelegramApi.button("📋 " + planCore(st.sugPlan), "w:plan")));
+        }
         List<Map<String, Object>> row = new ArrayList<>();
         for (int i = 0; i < st.sugWeights.size(); i++) {
             row.add(TelegramApi.button(st.sugWeights.get(i) + "кг", "w:l_" + i));
@@ -1510,8 +1549,16 @@ public final class BotLogic {
         }
         List<Template> tpls = new ArrayList<>(data.templates);
         tpls.sort((a, b) -> String.valueOf(b.createdAt).compareTo(String.valueOf(a.createdAt)));
-        StringBuilder b = new StringBuilder("📋 Шаблоны · ").append(tpls.size()).append(" из ").append(TPL_LIMIT)
-            .append("\n\nТапни по названию, чтобы начать тренировку.");
+        /* план под каждым шаблоном [UX-E5 §5.3]: нумерация = порядку кнопок (новые сверху) */
+        StringBuilder b = new StringBuilder("📋 Шаблоны · ").append(tpls.size()).append(" из ").append(TPL_LIMIT).append("\n");
+        int num = 1;
+        for (Template t : tpls) {
+            b.append("\n").append(num++).append(". ").append(esc(t.name)).append(" — ")
+                .append(t.exercises.size()).append(" упр.");
+            String plan = templatePlanLine(t);
+            if (!plan.isEmpty()) b.append("\n   ").append(esc(plan));
+        }
+        b.append("\n\nТапни по названию, чтобы начать тренировку.");
         List<List<Map<String, Object>>> kb = new ArrayList<>();
         for (Template t : tpls) {
             kb.add(List.of(
@@ -1608,7 +1655,8 @@ public final class BotLogic {
         storage.save(chatId, data);
         st.mode = UserState.Mode.MENU;
         send(chatId, mid, "✅ Шаблон «" + esc(t.name) + "» сохранён (" + data.templates.size() + " из " + TPL_LIMIT + ")."
-            + "\n\nНачать из него: /templates или кнопка «📋 Шаблоны».", mainKb());
+            + "\n\nНачать из него: /templates или кнопка «📋 Шаблоны»."
+            + "\nПри старте план последнего подхода подставится одним тапом.", mainKb());
     }
 
     /* авто-имя: своя первая строка названия → первые 2 упражнения через « · » → «Тренировка ДД-ММ» [§4.3] */
@@ -1652,6 +1700,43 @@ public final class BotLogic {
         return t;
     }
 
+    /* строка плана шаблона [UX-E5 §5.3]: первые 3 упражнения + «+N», имя > 16 симв. клипается;
+       пустая, если ни у одного упражнения нет осмысленного плана (рукотворный JSON) */
+    static String templatePlanLine(Template t) {
+        StringBuilder b = new StringBuilder();
+        int n = 0;
+        for (TemplateExercise te : t.exercises) {
+            if (n < 3 && hasPlan(te)) {
+                if (b.length() > 0) b.append(" · ");
+                b.append(shortName(te.name)).append(" ").append(compactPlan(te));
+            }
+            n++;
+        }
+        if (b.length() == 0) return "";
+        if (n > 3) b.append(" · +").append(n - 3);
+        return b.toString();
+    }
+
+    /* план осмысленный: есть вес, повторения или больше одного подхода (голое имя планом не считается) */
+    private static boolean hasPlan(TemplateExercise te) {
+        return (te.w != null && !te.w.isEmpty()) || (te.r != null && !te.r.isEmpty()) || te.s > 1;
+    }
+
+    /* компактный план: «60×3×10», без веса «3×10», без повторений «60×3» [UX-E5 §4.3]; вес с запятой */
+    static String compactPlan(TemplateExercise te) {
+        String w = te.w == null ? "" : te.w.replace('.', ',');
+        String r = te.r == null ? "" : te.r;
+        if (!w.isEmpty() && !r.isEmpty()) return w + "×" + te.s + "×" + r;
+        if (!w.isEmpty()) return w + "×" + te.s;
+        if (!r.isEmpty()) return te.s + "×" + r;
+        return String.valueOf(te.s);
+    }
+
+    static String shortName(String name) {
+        String n = name == null ? "" : name;
+        return n.length() > 16 ? n.substring(0, 15) + "…" : n;
+    }
+
     /* старт из шаблона [§4.6]: при активной тренировке — стандартный диалог, шаблон применится
        после «Удалить и начать новую» */
     private void tplStart(long chatId, Long mid, GymData data, UserState st, long tplId) {
@@ -1668,7 +1753,8 @@ public final class BotLogic {
             return;
         }
         String header = "📋 Шаблон «" + esc(t.name) + "» применён — " + t.exercises.size() + " "
-            + plural(t.exercises.size(), "упражнение", "упражнения", "упражнений") + ". Записывай как обычно.\n\n";
+            + plural(t.exercises.size(), "упражнение", "упражнения", "упражнений")
+            + ". Вес и подходы из плана подскажу по каждому упражнению.\n\n";
         startFromTemplate(chatId, mid, data, st, t, header);
     }
 
@@ -1686,7 +1772,8 @@ public final class BotLogic {
                 + ". Что делаем?", activeConflictKb());
             return;
         }
-        String header = "🔁 Повторяем тренировку от " + firstLineText(src) + "\n\n";
+        String header = "🔁 Повторяем тренировку от " + firstLineText(src)
+            + ". Фактические веса и подходы подскажу по каждому упражнению.\n\n";
         startFromTemplate(chatId, mid, data, st, templateFromWorkout(data, src), header);
     }
 
@@ -1707,6 +1794,11 @@ public final class BotLogic {
         for (TemplateExercise te : t.exercises) {
             ExerciseEntry e = new ExerciseEntry(te.name);
             e.startedAt = w.startedAt;
+            /* [UX-E5] снимок плана в запись: подсказки переживут удаление шаблона и рестарт;
+               «Повторить прошлую» едет через тот же метод — план = фактический последний блок */
+            e.planW = te.w == null ? "" : te.w;
+            e.planS = Math.max(te.s, 0);
+            e.planR = te.r == null ? "" : te.r;
             w.exercises.add(e);
         }
         data.workouts.add(w);
