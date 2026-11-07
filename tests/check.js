@@ -24,8 +24,10 @@ if (!actBlock) {
     }
     for (const k of keys) {
         if (k === 'modalBackdrop') continue;
-        /* nutrModal/autoTitle/deleteSet: кнопки временно скрыты из UI, код оставлен — вернём позже */
-        if (k === 'nutrModal' || k === 'autoTitle' || k === 'deleteSet') continue;
+        /* nutrModal/autoTitle/deleteSet: кнопки временно скрыты из UI, код оставлен — вернём позже.
+           tplSaveModal [UX-T18]: иконка «💾 В шаблоны» из шапки завершённой убрана,
+           ACTION и модалка сохранения остались (фича живёт в боте) */
+        if (k === 'nutrModal' || k === 'autoTitle' || k === 'deleteSet' || k === 'tplSaveModal') continue;
         if (!app.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"') && !app.includes("'" + k + "'")) {
             fails.push('обработчик ACTIONS никогда не используется: ' + k);
         }

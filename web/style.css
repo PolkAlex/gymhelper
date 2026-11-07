@@ -410,6 +410,8 @@ textarea { min-height: 70px; resize: vertical; }
 
 details { margin-top: 12px; }
 summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+/* [UX-T18] приписка «(в разработке)» у свёрнутых секций карточки тренировки */
+summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 
 /* ============ карточки упражнений / каталог ============ */
 .ico {
@@ -470,8 +472,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 .wchead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .wctitles { flex: 1; min-width: 0; cursor: pointer; padding-top: 5.4px; }
 .wctitles .t1 { font-size: 17px; line-height: 1.3; overflow-wrap: break-word; word-break: break-word; }
-.dp-inline { display: inline-flex; align-items: center; font-size: 14px; color: var(--accent); }
-.dp-inline svg { width: 16px; height: 16px; }
+.dp-inline { display: inline-flex; align-items: center; font-size: 14px; color: var(--accent); vertical-align: -3px; }
+.dp-inline svg { width: 16px; height: 16px; display: block; }
 .wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
 /* [UX-T17] активная тренировка: 5 иконок в шапке — паддинги меньше, заголовок одной
    строкой с ellipsis (проверено на 320px) */
@@ -735,7 +737,10 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     max-width: 536px;
     margin: 0 auto;
 }
-.backbar .btn { width: 100%; padding: 10px 12px; font-size: 13.5px; }
+.backbar .btn { width: 100%; padding: 11px 8px; font-size: 13px; }
+/* [UX-T18] «Удалить» в backbar активной тренировки: sec с красным текстом и корзиной */
+.backbar .bb-del { color: var(--danger); gap: 6px; }
+.backbar .bb-del svg { width: 16px; height: 16px; }
 /* backbar висит fixed над скроллящимся контентом карточки (#87): на промежуточных
    позициях скролла под ним проходит красная «Удалить тренировку», и сквозь
    полупрозрачный sec-фон тексты сливаются. Кнопка — непрозрачное стекло дизайн-системы
@@ -845,6 +850,37 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 .sexbtns { display: flex; gap: 8px; margin-top: 6px; }
 .sexbtns .btn { flex: 1; }
 .themetoggle .btn { flex: 1; }
+/* [UX-T18] компактный сегмент-контрол пола: две половины М/Ж высотой ~40px */
+.seg { display: flex; margin-top: 8px; border: 1px solid var(--btn-brd); border-radius: 12px; overflow: hidden; background: var(--field); }
+.seg .seg-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    height: 40px;
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.seg .seg-btn + .seg-btn { border-left: 1px solid var(--btn-brd); }
+.seg .seg-btn.on {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+    font-weight: 700;
+}
+/* [UX-T18] компактный профиль: короче паддинги/гэпы/поля, логика сохранения не тронута */
+.prof .card { padding: 12px; margin-bottom: 8px; }
+.prof label { margin: 8px 0 3px; }
+.prof input { padding: 8px 12px; }
+.prof .btnrow { margin-top: 6px; }
+.prof .btn.wide { padding: 9px 12px; font-size: 13.5px; }
+.prof .split2 { margin-top: 6px; }
+.prof .split2 .btn { padding: 9px 8px; font-size: 13px; }
+.prof .sexbtns .btn { padding: 8px 12px; font-size: 13px; }
 
 /* ============ модалки ============ */
 .modal {
@@ -873,6 +909,9 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     box-sizing: border-box;
 }
 .mtitle { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+/* [UX-T18] заголовок модалки с кнопкой закрытия справа («Добавить упражнение») */
+.mtitle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mtitle-row .mtitle { flex: 1; min-width: 0; margin: 0; }
 .msub { color: var(--accent); font-size: 12.5px; font-weight: 600; margin: 0 0 2px; }
 @keyframes mslide { from { transform: translateY(28px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .modal.open .modal-box { animation: mslide .3s cubic-bezier(.2,.8,.25,1); }
@@ -967,13 +1006,17 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 }
 .rb-time.paused { color: var(--muted); }
 .rb-btns { display: flex; gap: 6px; flex: none; }
+/* [UX-T18] центровка глифа в квадратных кнопках таймера: flex + line-height 1 +
+   text-align center — иначе эмодзи ⏸/▶ и «+30» съезжают с центра */
 .rb-sqbtn {
     width: 34px;
     height: 34px;
     flex: none;
-    display: inline-flex;
+    display: flex;
     align-items: center;
     justify-content: center;
+    text-align: center;
+    line-height: 1;
     border: 1px solid var(--btn-brd);
     border-radius: 10px;
     background: var(--btn);
@@ -985,6 +1028,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     cursor: pointer;
     font-variant-numeric: tabular-nums;
 }
+.rb-sqbtn svg { display: block; width: 16px; height: 16px; }
+.rb-sqbtn.rb-sm { font-size: 11px; letter-spacing: -.3px; }
 .rb-sqbtn:active { background: var(--btn-pressed); }
 /* прогресс — тонкая линия 3px по нижнему краю панели (не добавляет высоты) */
 .rb-line {
@@ -1196,4 +1241,4 @@ html.has-bg body::after {
 /* все интерактивные элементы — курсор-палец */
 .btn, .chip, .entry, .excard, .star, .nav .nbtn, .nav .nfab, summary, .sexbtns .btn,
 .prevpill, .barebtn, .tb-user, .inwrap .clr, .keyrow .k, .expill .exhead,
-.rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel { cursor: pointer; }
+.rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel, .seg .seg-btn { cursor: pointer; }
