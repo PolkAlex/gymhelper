@@ -411,6 +411,8 @@ const NO_DEDUP = {
     wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1, planTake: 1
 };
 function dispatchFromEl(el, ev) {
+    /* [UX-T14] «ручка» ⠿ на плитке упражнения — только для перетаскивания, не тап */
+    if (ev && ev.target && ev.target.closest && ev.target.closest('.exgrip')) return;
     const act0 = el.getAttribute('data-act');
     /* кнопки ввода и сохранения: без дедупа — быстрый повторный тап после ошибки валидации легален
        (двойной вызов предотвращается на уровне touchend preventDefault) */
@@ -429,6 +431,8 @@ function dispatchFromEl(el, ev) {
     }
 }
 window.addEventListener('click', function (ev) {
+    /* [UX-T14] сразу после перетаскивания синтетический клик не должен ничего открыть */
+    if (__dragClickGuard && Date.now() - __dragClickGuard < 450) return;
     const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
     if (el) dispatchFromEl(el, ev);
 }, true);
@@ -459,6 +463,7 @@ document.addEventListener('touchend', function (ev) {
     const el = t && t.closest ? t.closest('[data-fav],[data-act]') : null;
     if (!el) return;
     if (!info || info.moved || Date.now() - info.time > 500) return; /* это был скролл, не тап */
+    if (__dragClickGuard && Date.now() - __dragClickGuard < 450) return; /* [UX-T14] отпускание после drag — не тап */
     if (ev.cancelable) ev.preventDefault();
     dispatchFromEl(el, ev);
 }, false);
@@ -1101,6 +1106,7 @@ function workoutCard(w, showActions) {
         h += '<div class="expill"><div class="exhead" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '">' + (c ? ico(c.i) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
             '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
+            '<span class="exgrip" title="Перетащить">' + ICONS.grip + '</span>' +
             '</div>';
         const prSi = prChipSetIdx(w, e);
         e.sets.forEach((s, si) => {
@@ -1137,6 +1143,151 @@ function workoutCard(w, showActions) {
     if (showActions) h += '</div>';
     h += '</div>';
     return h;
+}
+
+/* ---------- [UX-T14] перетаскивание упражнений (pointer events, без библиотек) ---------- */
+/* long-press 350 мс по плитке (кроме кнопок и записей) или нажатие на «ручку» ⠿ поднимает
+   плитку; остальные разъезжаются transform-сдвигом (позиция-призрак); отпускание
+   переставляет w.exercises и сохраняет обычным save()-флоу (как deleteExerciseGo).
+   Скролл работает, пока drag не начался; во время drag — автоскролл у верхнего/нижнего
+   края. Тап по плитке и кнопкам не затронут: drag стартует только после удержания. */
+let DRAG = null;
+let __dragClickGuard = 0;
+
+function dragHaptic(method, param) {
+    if (tg && tg.HapticFeedback && tg.HapticFeedback[method]) {
+        try { tg.HapticFeedback[method](param); } catch (e) { /* noop */ }
+    }
+}
+function dragTeardown(d, suppressClick) {
+    if (d.timer) { clearTimeout(d.timer); d.timer = null; }
+    if (d.raf) { cancelAnimationFrame(d.raf); d.raf = 0; }
+    if (d.pill) {
+        d.pill.classList.remove('exhold', 'drag-src');
+        d.pill.style.transform = '';
+        for (const p of d.pills) {
+            if (p !== d.pill) { p.classList.remove('drag-shift'); p.style.transform = ''; }
+        }
+    }
+    if (suppressClick) __dragClickGuard = Date.now();
+}
+document.addEventListener('pointerdown', function (ev) {
+    if (DRAG || (ev.button != null && ev.button !== 0)) return;
+    const pill = ev.target && ev.target.closest ? ev.target.closest('.expill') : null;
+    if (!pill) return;
+    /* кнопки, записи и прочие интерактивные элементы плитки — обычные тапы, не drag */
+    if (ev.target.closest('button, .entry, input, textarea, summary, a')) return;
+    const card = pill.closest('.card');
+    const pills = card ? Array.prototype.filter.call(card.children, function (el) { return el.classList.contains('expill'); }) : [];
+    if (pills.length < 2) return; /* единственное упражнение — тащить некуда */
+    DRAG = {
+        pill: pill, pills: pills, id: ev.pointerId,
+        wid: card && card.id ? parseInt(String(card.id).slice(1), 10) || 0 : 0,
+        x0: ev.clientX, y0: ev.clientY, sy: window.pageYOffset,
+        idx: pills.indexOf(pill), dst: -1,
+        started: false, timer: null, raf: 0, lastY: null,
+        h: 0, cy0: 0, step: 0, gap: 10, shift: 0, centers: []
+    };
+    pill.classList.add('exhold'); /* на время удержания: без выделения текста и callout */
+    /* «ручка» тащит сразу, вся плитка — после long-press 350 мс */
+    DRAG.timer = setTimeout(dragStart, ev.target.closest('.exgrip') ? 0 : 350);
+});
+document.addEventListener('pointermove', function (ev) {
+    if (!DRAG || ev.pointerId !== DRAG.id) return;
+    if (!DRAG.started) {
+        /* движение до подъёма — это скролл/жест: отменяем long-press, скролл не трогаем */
+        if (Math.abs(ev.clientX - DRAG.x0) > 10 || Math.abs(ev.clientY - DRAG.y0) > 10) {
+            const d = DRAG; DRAG = null; dragTeardown(d, false);
+        }
+        return;
+    }
+    DRAG.lastY = ev.clientY;
+    dragPlace(ev.clientY);
+});
+document.addEventListener('touchmove', function (ev) {
+    /* [UX-T14] пока плитка поднята — страница не скроллится, drag двигается 1:1 */
+    if (DRAG && DRAG.started && ev.cancelable) ev.preventDefault();
+}, { passive: false });
+document.addEventListener('contextmenu', function (ev) {
+    /* long-press на Android открывает контекстное меню — мешает drag по плитке */
+    if (DRAG && ev.target && ev.target.closest && ev.target.closest('.expill')) ev.preventDefault();
+});
+function onDragFinish(ev) {
+    if (!DRAG || (ev && ev.pointerId !== undefined && ev.pointerId !== DRAG.id)) return;
+    const d = DRAG;
+    DRAG = null;
+    dragTeardown(d, d.started); /* после drag гасим клик, чтобы тап-действия не сработали */
+    if (!d.started || d.dst < 0 || d.dst === d.idx) return; /* вернул на место — сохранения нет */
+    /* перестановка массива: записи (sets) и план pw/ps/pr едут вместе с упражнением */
+    const w = findW(d.wid);
+    if (!w || !w.exercises[d.idx] || !document.contains(d.pill)) { render(); return; } /* плитка пережила рендер — отмена, не сохраняем чужой порядок */
+    const e = w.exercises.splice(d.idx, 1)[0];
+    w.exercises.splice(d.dst, 0, e);
+    save(); /* ошибки показывает doSave (тост); бот-карточка читает порядок из массива */
+    render();
+}
+document.addEventListener('pointerup', onDragFinish);
+document.addEventListener('pointercancel', onDragFinish);
+window.addEventListener('blur', function () {
+    if (DRAG) { const d = DRAG; DRAG = null; dragTeardown(d, d.started); }
+});
+function dragStart() {
+    if (!DRAG || DRAG.started) return;
+    DRAG.started = true;
+    DRAG.timer = null;
+    const rects = DRAG.pills.map(function (p) { return p.getBoundingClientRect(); });
+    DRAG.h = rects[DRAG.idx].height;
+    DRAG.cy0 = rects[DRAG.idx].top + rects[DRAG.idx].height / 2;
+    /* шаг сетки = верх соседа − верх источника; зазор = шаг − высота источника */
+    DRAG.step = rects.length > 1 ? rects[1].top - rects[0].top : DRAG.h + 10;
+    DRAG.gap = Math.max(0, DRAG.step - DRAG.h);
+    DRAG.shift = DRAG.h + DRAG.gap; /* на сколько разъезжаются соседи */
+    DRAG.centers = rects.map(function (b) { return b.top + b.height / 2; });
+    DRAG.pill.classList.remove('exhold');
+    DRAG.pill.classList.add('drag-src');
+    try { DRAG.pill.setPointerCapture(DRAG.id); } catch (e) { /* noop */ }
+    dragHaptic('selectionChanged');
+    DRAG.raf = requestAnimationFrame(dragAutoScroll);
+}
+function dragPlace(clientY) {
+    if (!DRAG || !DRAG.started) return;
+    if (!document.contains(DRAG.pill)) { const d = DRAG; DRAG = null; dragTeardown(d, true); return; }
+    /* прокрутка страницы во время drag входит в смещение */
+    const off = clientY - DRAG.y0 + (window.pageYOffset - DRAG.sy);
+    DRAG.pill.style.transform = 'translateY(' + off + 'px)';
+    /* позиция-призрак: сколько центров других плиток прошёл плавающий центр */
+    const c = DRAG.cy0 + off;
+    let dst = 0;
+    for (let i = 0; i < DRAG.centers.length; i++) {
+        if (i !== DRAG.idx && DRAG.centers[i] < c) dst++;
+    }
+    if (dst !== DRAG.dst) {
+        DRAG.dst = dst;
+        DRAG.pills.forEach(function (p, i) {
+            if (i === DRAG.idx) return;
+            let o = 0;
+            if (DRAG.idx < dst && i > DRAG.idx && i <= dst) o = -DRAG.shift;
+            if (dst < DRAG.idx && i >= dst && i < DRAG.idx) o = DRAG.shift;
+            p.classList.add('drag-shift');
+            p.style.transform = o ? 'translateY(' + o + 'px)' : '';
+        });
+        if (dst !== DRAG.idx) dragHaptic('selectionChanged');
+    }
+}
+function dragAutoScroll() {
+    if (!DRAG || !DRAG.started) return;
+    if (!document.contains(DRAG.pill)) { const d = DRAG; DRAG = null; dragTeardown(d, false); return; } /* плитка ушла (рендер) — не скроллим впустую */
+    const vh = window.innerHeight, topM = 80, botM = 100;
+    let v = 0;
+    if (DRAG.lastY != null) {
+        if (DRAG.lastY < topM) v = -Math.ceil((topM - DRAG.lastY) / 5);
+        else if (DRAG.lastY > vh - botM) v = Math.ceil((DRAG.lastY - (vh - botM)) / 5);
+    }
+    if (v) {
+        window.scrollBy(0, v);
+        dragPlace(DRAG.lastY); /* пересчёт позиции и призрака с учётом прокрутки */
+    }
+    DRAG.raf = requestAnimationFrame(dragAutoScroll);
 }
 function timeLine(w) {
     if (!w.started) return '⏱ время не зафиксировано';

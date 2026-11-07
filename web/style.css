@@ -562,6 +562,33 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 .entry .pen { opacity: .4; }
 .restline { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
+/* [UX-T14] перетаскивание упражнений: ручка ⠿ и состояния drag */
+.exgrip {
+    display: inline-flex;
+    align-items: center;
+    flex: none;
+    color: var(--muted);
+    opacity: .55;
+    padding: 6px 0 6px 4px;
+    cursor: grab;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.exgrip svg { width: 18px; height: 18px; }
+.exgrip:active { opacity: 1; color: var(--accent); }
+.expill.exhold { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.expill.drag-src {
+    position: relative;
+    z-index: 30;
+    background: var(--glass);
+    border-color: var(--accent);
+    box-shadow: 0 14px 34px var(--card-shadow);
+    cursor: grabbing;
+    /* transform не анимируем — поднятая плитка следует за пальцем 1:1 */
+    transition: box-shadow .15s ease, background .15s ease, border-color .15s ease;
+}
+.expill.drag-shift { z-index: 1; } /* соседи разъезжаются плавно: transform в базовой транзишн .expill */
+
 /* ============ превью-карточка истории ============ */
 .pcard {
     display: grid;
