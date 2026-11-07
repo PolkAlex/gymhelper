@@ -902,7 +902,7 @@ function render() {
 }
 function navHtml() {
     const left = [
-        ['history', 'timer', 'История'],
+        ['history', 'history', 'История'],
         ['stats', 'chart', 'Статистика']
     ];
     const right = [
