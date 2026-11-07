@@ -212,6 +212,15 @@ public final class WebServer {
         }
         while (current.deletedIds.size() > 100) current.deletedIds.remove(0);
         if (data.profile != null) current.profile = data.profile;
+        /* restSec и templates Mini App сохраняет целиком со своим G — сервер обязан принять их
+           при round-trip, иначе настройка/шаблон из приложения молча исчезнут (спека §0.2).
+           restSec: null у клиента (ещё не настраивал) серверное значение не затирает;
+           templates: замещаем только если клиент вообще прислал ключ (старый кэш JS — не трогаем) */
+        if (data.restSec != null) current.restSec = data.restSec;
+        if (dataJson.containsKey("templates")) {
+            current.templates.clear();
+            current.templates.addAll(data.templates);
+        }
         data = current;
         /* nextId монотонно растёт: max(серверный, клиентский, max(id)+1) — иначе коллизии id затирают данные */
         data.nextId = Math.max(current.nextId, incomingNextId);

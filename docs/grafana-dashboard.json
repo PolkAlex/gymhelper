@@ -1,0 +1,183 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "refresh": "5m",
+  "schemaVersion": 39,
+  "tags": ["gymhelper", "metrics"],
+  "templating": { "list": [] },
+  "time": { "from": "now-180d", "to": "now" },
+  "timezone": "browser",
+  "title": "GymHelper — метрики качества",
+  "uid": "gymhelper-metrics",
+  "version": 1,
+  "weekStart": "",
+  "__inputs": [
+    {
+      "name": "DS_INFINITY",
+      "label": "Infinity",
+      "description": "Datasource типа Infinity (добавляется в Connections → Data sources)",
+      "type": "datasource",
+      "pluginId": "yesoreyeram-infinity-datasource",
+      "pluginName": "Infinity"
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Velocity — SP эпиков в Done",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 7, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "values": false, "calcs": [ "lastNotNull" ], "fields": "sp" }, "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "velocity"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Throughput — тикетов в Done",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 7, "w": 4, "x": 4, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null } ] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "values": false, "calcs": [ "lastNotNull" ], "fields": "count" }, "textMode": "auto", "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "throughput"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Escaped defects (за период)",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 7, "w": 4, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "values": false, "calcs": [ "lastNotNull" ], "fields": "count" }, "textMode": "auto", "colorMode": "background", "graphMode": "none", "justifyMode": "auto", "orientation": "auto" },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "escaped"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "barchart",
+      "title": "Возвраты по спринтам",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 80, "lineWidth": 1 } },
+        "overrides": []
+      },
+      "options": { "orientation": "auto", "showValue": "auto", "stack": "none", "groupWidth": 0.7, "barWidth": 0.6, "xField": "sprint", "legend": { "show": false }, "tooltip": { "mode": "single", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "returns"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "barchart",
+      "title": "WIP (снимки на конец дня)",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 80, "lineWidth": 1 } },
+        "overrides": []
+      },
+      "options": { "orientation": "auto", "showValue": "auto", "stack": "none", "groupWidth": 0.7, "barWidth": 0.6, "xField": "date", "legend": { "show": true }, "tooltip": { "mode": "single", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "wip"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "barchart",
+      "title": "Cycle Time In Dev → RtD, медиана по категориям SP (S=1–2, M=3, L=5, XL=8+)",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 9, "w": 10, "x": 0, "y": 7 },
+      "fieldConfig": {
+        "defaults": { "unit": "dtdurationm", "custom": { "fillOpacity": 80, "lineWidth": 1 } },
+        "overrides": []
+      },
+      "options": { "orientation": "auto", "showValue": "auto", "stack": "none", "groupWidth": 0.7, "barWidth": 0.6, "xField": "category", "legend": { "show": true }, "tooltip": { "mode": "single", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "ctByCategory"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "table",
+      "title": "Реестр тикетов",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 9, "w": 14, "x": 10, "y": 7 },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false, "reducer": [ "count" ], "fields": "" } },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "tickets"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "Журнал переходов статусов",
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false, "reducer": [ "count" ], "fields": "" } },
+      "targets": [
+        {
+          "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "${DS_INFINITY}" },
+          "refId": "A", "queryType": "json", "type": "json", "source": "url", "format": "table",
+          "url": "https://gist.githubusercontent.com/PolkAlex/4de075a074c4e6fcf1dfce3b43361e5c/raw/metrics.json",
+          "root_selector": "transitions"
+        }
+      ]
+    }
+  ]
+}

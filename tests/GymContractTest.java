@@ -2,8 +2,10 @@ import gym.BotLogic;
 import gym.ExerciseEntry;
 import gym.GymData;
 import gym.Json;
+import gym.Records;
 import gym.SetEntry;
 import gym.Storage;
+import gym.Template;
 import gym.Workout;
 
 import java.util.Map;
@@ -43,6 +45,40 @@ public class GymContractTest {
         Workout w2 = d2.findById(1);
         check("2026-10-26T18:00:00".equals(w2.startedAt), "legacy startedAt читается");
         check("80".equals(w2.exercises.get(0).sets.get(0).weight), "legacy weight/sets/reps читаются");
+        check(d2.restSec == null, "legacy без restSec читается (дефолт 90 берёт читатель)");
+
+        /* restSec [UX-T4/T5]: round-trip поля; старые файлы без поля читаются; вне 30–600 игнорируется */
+        GymData dr = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":2,\"restSec\":180,\"workouts\":[]}"));
+        check(dr.restSec != null && dr.restSec == 180, "restSec читается");
+        check(Json.write(dr.toJson()).contains("\"restSec\":180"), "toJson пишет restSec");
+        String restOut = Json.write(d2.toJson());
+        check(!restOut.contains("restSec"), "toJson без restSec не пишет ключ (legacy байт-в-байт)");
+        GymData badRest = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":2,\"restSec\":700,\"workouts\":[]}"));
+        check(badRest.restSec == null, "restSec вне 30–600 игнорируется при чтении");
+
+        /* templates [UX-T6/T7]: legacy без ключа читается; round-trip без потерь; пустой список — ключа нет */
+        check(d2.templates.isEmpty(), "legacy без templates читается (пустой список)");
+        String tplJson = "{\"nextId\":2,\"templates\":[{" +
+            "\"id\":1,\"name\":\"Спина \\\"и\\\" бицепс 💪\",\"createdAt\":\"2026-11-06T18:30:00\",\"exercises\":[" +
+            "{\"name\":\"Тяга верхнего блока\",\"w\":\"75-175\",\"s\":3,\"r\":\"10\"}," +
+            "{\"name\":\"Подтягивания\",\"s\":4,\"r\":\"8\"}]}],\"workouts\":[]}";
+        GymData dt = GymData.fromJson((Map<String, Object>) Json.parse(tplJson));
+        check(dt.templates.size() == 1, "templates читаются");
+        Template t0 = dt.templates.get(0);
+        check(t0.id == 1 && "Спина \"и\" бицепс 💪".equals(t0.name), "имя шаблона с кавычками/эмодзи");
+        check("2026-11-06T18:30:00".equals(t0.createdAt), "createdAt шаблона");
+        check(t0.exercises.size() == 2, "упражнения шаблона");
+        check("75-175".equals(t0.exercises.get(0).w) && t0.exercises.get(0).s == 3 && "10".equals(t0.exercises.get(0).r),
+            "план w/s/r с диапазоном веса");
+        check("".equals(t0.exercises.get(1).w) && t0.exercises.get(1).s == 4 && "8".equals(t0.exercises.get(1).r),
+            "пропуск w читается как пустая строка, s без деградации");
+        String tplOut = Json.write(dt.toJson());
+        GymData dt2 = GymData.fromJson((Map<String, Object>) Json.parse(tplOut));
+        check(dt2.templates.size() == 1 && dt2.templates.get(0).exercises.size() == 2
+            && "75-175".equals(dt2.templates.get(0).exercises.get(0).w)
+            && "Спина \"и\" бицепс 💪".equals(dt2.templates.get(0).name)
+            && "2026-11-06T18:30:00".equals(dt2.templates.get(0).createdAt), "templates переживают round-trip без потерь");
+        check(!Json.write(d2.toJson()).contains("templates"), "toJson без шаблонов не пишет ключ (legacy байт-в-байт)");
 
         String out = Json.write(d.toJson());
         check(out.contains("\"started\":\"2026-10-29T18:30:00\""), "toJson пишет started");
@@ -93,6 +129,50 @@ public class GymContractTest {
         check(BotLogic.renderLine("Становая", new SetEntry("", 21, "макс")).equals("Становая, 21 подход по макс"), "renderLine: 21 подход по макс");
         check(BotLogic.renderLine("Жим", new SetEntry("100", 3, "8-10")).equals("Жим 100 кг, 3 подхода по 8-10 повторений"), "renderLine: 3 подхода по 8-10 повторений");
         check(BotLogic.renderLine("Жим", new SetEntry("", 11, "2-4")).equals("Жим, 11 подходов по 2-4 повторения"), "renderLine: 11 подходов по 2-4 повторения (диапазон по последнему числу)");
+
+        /* живые рекорды [UX-T2]: repsAvg, e1RM по Эпли, правила поздравления */
+        check(Records.repsAvg("12") == 12, "repsAvg: «12» → 12");
+        check(Records.repsAvg("8-10") == 9, "repsAvg: «8-10» → 9 (середина диапазона)");
+        check(Records.repsAvg("5+1") == 6, "repsAvg: «5+1» → 6 (дроп-сет суммируется)");
+        check(Records.repsAvg("макс") == 10, "repsAvg: «макс» → 10 (нечисловой текст)");
+        check(Math.abs(Records.e1rm(new SetEntry("100", 1, "9")) - 130.0) < 0.001,
+            "e1rm: 100 кг × 9 → 130 (вес × (1 + повторения ÷ 30)); подходы не участвуют");
+
+        /* база рекорда — только ПРОШЛЫЕ тренировки (i < idx): id3 стоит ПОСЛЕ текущей и в базу не входит */
+        GymData prD = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":4,\"workouts\":[" +
+            "{\"id\":1,\"date\":\"2026-11-01\",\"finished\":true,\"exercises\":[" +
+            "{\"name\":\"Жим\",\"sets\":[{\"weight\":\"100\",\"sets\":3,\"reps\":\"8-10\"}]}," +
+            "{\"name\":\"Подтягивания\",\"sets\":[{\"weight\":\"\",\"sets\":4,\"reps\":\"8\"}]}]}," +
+            "{\"id\":2,\"date\":\"2026-11-02\",\"finished\":false,\"exercises\":[]}," +
+            "{\"id\":3,\"date\":\"2026-11-03\",\"finished\":true,\"exercises\":[" +
+            "{\"name\":\"Жим\",\"sets\":[{\"weight\":\"200\",\"sets\":2,\"reps\":\"8\"}]}]}]}"));
+        Workout prCur = prD.findById(2);
+        check(prD.workouts.indexOf(prCur) == 1, "pr: текущая тренировка найдена в списке");
+        check(Records.congratulation(prD, prCur, "Тяга", new SetEntry("80", 3, "8")) == null,
+            "congratulation: первый подход упражнения (база пуста) — не рекорд");
+        check(Records.congratulation(prD, prCur, "Жим", new SetEntry("100", 3, "8-10")) == null,
+            "congratulation: равный результат — не рекорд (строгое >)");
+        String prMsg = Records.congratulation(prD, prCur, "Жим", new SetEntry("105", 3, "8-10"));
+        check(prMsg != null && prMsg.contains("1ПМ"),
+            "congratulation: превышение — рекорд (id3 после текущей не мешает, иначе база была бы 200×8)");
+        check(Records.congratulation(prD, prCur, "Подтягивания", new SetEntry("", 5, "8")).contains("Рекорд объёма"),
+            "congratulation: объёмный рекорд для блока без веса");
+
+        /* CSV-экспорт: RFC 4180-кавычки и защита от инъекции формулами (= + - @ → апостроф) */
+        check(BotLogic.csvField("29.10.2026").equals("29.10.2026"), "csvField: дата/число без изменений");
+        check(BotLogic.csvField("Жим;лежа").equals("\"Жим;лежа\""), "csvField: ; берёт поле в кавычки");
+        check(BotLogic.csvField("Жим \"и\" тяга").equals("\"Жим \"\"и\"\" тяга\""), "csvField: кавычки удваиваются");
+        check(BotLogic.csvField("=HYPERLINK(x)").equals("'=HYPERLINK(x)"), "csvField: = экранируется апострофом");
+        check(BotLogic.csvField("@cmd").equals("'@cmd"), "csvField: @ экранируется апострофом");
+        check(BotLogic.csvField("=cmd;1").equals("\"'=cmd;1\""), "csvField: инъекция и ; вместе");
+
+        /* склонения */
+        check(BotLogic.plural(1, "тренировка", "тренировки", "тренировок").equals("тренировка"), "plural: 1");
+        check(BotLogic.plural(2, "тренировка", "тренировки", "тренировок").equals("тренировки"), "plural: 2");
+        check(BotLogic.plural(5, "тренировка", "тренировки", "тренировок").equals("тренировок"), "plural: 5");
+        check(BotLogic.plural(11, "тренировка", "тренировки", "тренировок").equals("тренировок"), "plural: 11");
+        check(BotLogic.plural(21, "тренировка", "тренировки", "тренировок").equals("тренировка"), "plural: 21");
 
         System.out.println("CONTRACT OK");
         System.exit(0);

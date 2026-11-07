@@ -8,8 +8,10 @@ import java.util.Map;
 public final class GymData {
     public long nextId = 1;
     public long rev;
+    public Integer restSec; /* длительность отдыха, сек (30–600); null = дефолт 90, общий для бота и Mini App */
     public ProfileData profile;
     public final List<Workout> workouts = new ArrayList<>();
+    public final List<Template> templates = new ArrayList<>();
     public final List<Long> deletedIds = new ArrayList<>();
 
     public Workout active() {
@@ -40,6 +42,12 @@ public final class GymData {
         d.nextId = Json.lng(m.get("nextId"));
         if (d.nextId < 1) d.nextId = 1;
         d.rev = Json.lng(m.get("rev"));
+        /* restSec вне диапазона 30–600 игнорируется — читатель возьмёт дефолт 90 [UX-T4/T5] */
+        Object rs = m.get("restSec");
+        if (rs != null) {
+            int n = (int) Json.lng(rs);
+            if (n >= 30 && n <= 600) d.restSec = n;
+        }
         Map<String, Object> pm = Json.map(m.get("profile"));
         if (pm != null) {
             ProfileData p = new ProfileData();
@@ -53,6 +61,38 @@ public final class GymData {
         List<Object> delList = Json.list(m.get("del"));
         if (delList != null) {
             for (Object o : delList) d.deletedIds.add(Json.lng(o));
+        }
+        /* шаблоны [UX-T6/T7]: ключа нет → пустой список (старые файлы ок); толерантно к пропускам */
+        List<Object> tplList = Json.list(m.get("templates"));
+        if (tplList != null) {
+            for (Object o : tplList) {
+                Map<String, Object> t = Json.map(o);
+                if (t == null) continue;
+                String name = Json.str(t, "name");
+                if (name == null) continue;
+                Template tpl = new Template();
+                tpl.id = Json.lng(t.get("id"));
+                tpl.name = name;
+                tpl.createdAt = Json.str(t, "createdAt");
+                List<Object> exList = Json.list(t.get("exercises"));
+                if (exList != null) {
+                    for (Object eo : exList) {
+                        Map<String, Object> e = Json.map(eo);
+                        String ename = e == null ? null : Json.str(e, "name");
+                        if (ename == null) continue;
+                        TemplateExercise te = new TemplateExercise();
+                        te.name = ename;
+                        Object wv = e.get("w");
+                        te.w = wv == null ? "" : String.valueOf(wv);
+                        int sv = (int) Json.lng(e.get("s"));
+                        te.s = sv < 1 ? 1 : sv;
+                        Object rv = e.get("r");
+                        te.r = rv == null ? "" : String.valueOf(rv);
+                        tpl.exercises.add(te);
+                    }
+                }
+                d.templates.add(tpl);
+            }
         }
         for (Object o : Json.list(m.get("workouts"))) {
             Map<String, Object> w = Json.map(o);
@@ -115,6 +155,28 @@ public final class GymData {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("nextId", nextId);
         m.put("rev", rev);
+        if (restSec != null) m.put("restSec", restSec);
+        if (!templates.isEmpty()) {
+            List<Object> ts = new ArrayList<>();
+            for (Template t : templates) {
+                Map<String, Object> tm = new LinkedHashMap<>();
+                tm.put("id", t.id);
+                tm.put("name", t.name);
+                if (t.createdAt != null) tm.put("createdAt", t.createdAt);
+                List<Object> tes = new ArrayList<>();
+                for (TemplateExercise e : t.exercises) {
+                    Map<String, Object> em = new LinkedHashMap<>();
+                    em.put("name", e.name);
+                    em.put("w", e.w);
+                    em.put("s", e.s);
+                    em.put("r", e.r);
+                    tes.add(em);
+                }
+                tm.put("exercises", tes);
+                ts.add(tm);
+            }
+            m.put("templates", ts);
+        }
         if (!deletedIds.isEmpty()) {
             List<Object> del = new ArrayList<>();
             for (Long id : deletedIds) del.add(id);

@@ -50,7 +50,9 @@ const ICONS = {
     check: _s('<path d="M20 6L9 17l-5-5"/>'),
     cross: _s('<path d="M18 6L6 18M6 6l12 12"/>'),
     plus: _s('<path d="M12 5v14M5 12h14"/>'),
-    tag: _s('<path d="M20.6 13.4L12.6 21.4a2 2 0 01-2.8 0L3 14.6V3h11.6l6 6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>')
+    tag: _s('<path d="M20.6 13.4L12.6 21.4a2 2 0 01-2.8 0L3 14.6V3h11.6l6 6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>'),
+    repeat: _s('<path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/>'),
+    save: _s('<path d="M15.2 3a2 2 0 011.4.6l3.8 3.8a2 2 0 01.6 1.4V19a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M17 21v-7a1 1 0 00-1-1H8a1 1 0 00-1 1v7"/><path d="M7 3v4a1 1 0 001 1h7"/>')
 };
 function ico(key, cls) {
     return '<span class="ico' + (cls ? ' ' + cls : '') + '">' + (ICONS[key] || ICONS.custom) + '</span>';
