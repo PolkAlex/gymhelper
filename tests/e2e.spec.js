@@ -157,20 +157,20 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .exname')).toContainText('Жим стоя', { timeout: 5000 });
     });
 
-    test('завершение тренировки: уходит в историю с датой и пилюлей', async ({ page }) => {
+    test('завершение тренировки: сразу список истории, дата и пилюля в превью', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
         await page.locator('#mSets').fill('3');
         await page.locator('#mReps').fill('8-10');
         await page.locator('[data-act="saveEntry"]').click();
-        await expect(page.locator('.modal.open')).not.toBeVisible();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
 
         await openActiveDetail(page);
         await page.locator('[data-act="finishWorkout"]').click();
-        await expect(page.locator('.wcicons [data-act="confirmModal"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('.nav button', { hasText: 'История' }).click();
+        /* [UX-T13] после завершения — сразу список истории, экран карточки закрыт */
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.backbar')).not.toBeVisible({ timeout: 5000 });
         await expect(page.locator('.pc-date')).toContainText('.', { timeout: 5000 });
     });
 
@@ -585,27 +585,25 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
     });
 
-    test('UX-I1: бейдж предыдущего подхода подставляет вес в один тап', async ({ page }) => {
+    test('UX-T12: второй подход — вес/повторения предыдущего сразу в полях, без пилюли-предложения', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
-        /* первый подход: бейджа ещё нет — подходов с весом в упражнении нет */
+        /* первый подход: подстановки нет (в упражнении ещё нет подходов), дефолт повторений — 1 */
         await expect(page.locator('.prevpill')).toHaveCount(0);
+        await expect(page.locator('#mReps')).toHaveValue('1');
         await page.locator('#mWeight').fill('70');
         await page.locator('[data-act="setsSet"][data-a="1"]').click();
         await page.locator('#mReps').fill('10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
 
-        /* второй подход: бейдж показывает последний подход с весом и подставляет его */
+        /* второй подход: вес/повторения предыдущего подставлены СРАЗУ В ПОЛЯ, пилюли нет */
         await openActiveDetail(page);
         await page.locator('.expill .btnrow [data-act="openEntryModal"]').click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
-        const pill = page.locator('.prevpill');
-        await expect(pill).toContainText('↺ Предыдущий подход: 70 кг — подставить', { timeout: 5000 });
-        await page.locator('#mWeight').fill('0');
-        await pill.click();
         await expect(page.locator('#mWeight')).toHaveValue('70');
-        await page.locator('#mReps').fill('10');
+        await expect(page.locator('#mReps')).toHaveValue('10');
+        await expect(page.locator('.prevpill')).toHaveCount(0);
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
@@ -766,7 +764,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="sClr"]').click();
         await expect(page.locator('#mSets')).toHaveValue('1');
         await page.locator('[data-act="rClr"]').click();
-        await expect(page.locator('#mReps')).toHaveValue('');
+        await expect(page.locator('#mReps')).toHaveValue('1'); /* [UX-T12] дефолт повторений — 1 */
         /* после очистки значение вводится заново и сохраняется */
         await page.locator('[data-act="wAdd"][data-a="50"]').click();
         await page.locator('[data-act="setsSet"][data-a="3"]').click();
@@ -1190,6 +1188,27 @@ test.describe('таймер отдыха [UX-T4]', function () {
         await fillEntry(page, '50', '1', '10');
         await expect(page.locator('#rbTime')).toHaveText(/^(3:58|3:59|4:00)$/, { timeout: 5000 });
     });
+
+    test('«Выкл»: чип сохраняет restSec=0 на сервере, после записи подхода отсчёт не запускается', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
+        await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
+        await card.locator('.chip', { hasText: 'Выкл' }).click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: 'Выкл' })).toHaveClass(/on/);
+        await expect(card.locator('.chip', { hasText: '90' })).not.toHaveClass(/on/);
+        /* restSec=0 доехал до сервера (спец-значение «выкл», а не «настройки нет») */
+        const st = await (await request.get('/api/state')).json();
+        if (st.restSec !== 0) throw new Error('сервер не хранит restSec=0: ' + JSON.stringify(st.restSec));
+        /* запись подхода не запускает отсчёт: панель скрыта, ключа gymRest нет */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await startAndPick(page, EX);
+        await fillEntry(page, '60', '1', '10');
+        await expect(page.locator('#restbar')).toHaveClass(/hidden/, { timeout: 5000 });
+        const key = await page.evaluate(function () { return localStorage.getItem('gymRest'); });
+        if (key !== null) throw new Error('таймер запустился при «выкл»: ' + key);
+    });
 });
 
 test.describe('live-PR и оценка 1ПМ [UX-T2]', function () {
@@ -1250,6 +1269,9 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
         await fillEntry(page, '100', '3', '10');
         await page.locator('[data-act="finishWorkout"]').click();
         await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        /* [UX-T13] после завершения мы в списке истории — открываем карточку завершённой */
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.wcicons')).toBeVisible({ timeout: 5000 });
         /* карточка завершённой: модалка сохранения с авто-именем и планом последнего блока */
         await page.locator('[data-act="tplSaveModal"]').click();
         const modal = page.locator('.modal.open');
@@ -1400,9 +1422,11 @@ test.describe('шаблоны с планом [UX-E5]', function () {
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await expect(page.locator('.expill .entry').first()).toContainText('60 кг, 3 подхода по 10 повторений', { timeout: 5000 });
-        /* после первого блока пилюля плана ушла — вместо неё UX-I1 «Предыдущий подход» */
+        /* после первого блока пилюля плана ушла — [UX-T12] поля заполнены предыдущим подходом */
         await page.locator('.expill .btnrow [data-act="openEntryModal"]').first().click();
-        await expect(page.locator('.prevpill')).toContainText('↺ Предыдущий подход: 60 кг — подставить', { timeout: 5000 });
+        await expect(page.locator('#mWeight')).toHaveValue('60', { timeout: 5000 });
+        await expect(page.locator('#mReps')).toHaveValue('10');
+        await expect(page.locator('.prevpill')).toHaveCount(0);
         await page.locator('[data-act="closeModal"]').click();
         /* план доехал до сервера внутри записи (pw/ps/pr) */
         const st = await (await request.get('/api/state')).json();
