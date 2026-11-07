@@ -57,6 +57,12 @@ public class GymContractTest {
         GymData badRest = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":2,\"restSec\":700,\"workouts\":[]}"));
         check(badRest.restSec == null, "restSec вне 30–600 игнорируется при чтении");
 
+        /* restSec=0 — спец-значение «выкл» таймера [UX-T13]: читается и переживает round-trip;
+           legacy без ключа — по-прежнему null (дефолт 90, таймер включён) */
+        GymData offRest = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":2,\"restSec\":0,\"workouts\":[]}"));
+        check(offRest.restSec != null && offRest.restSec == 0, "restSec=0 (выкл) читается как спец-значение, а не игнорируется");
+        check(Json.write(offRest.toJson()).contains("\"restSec\":0"), "toJson пишет restSec=0 (выкл) — round-trip без потерь");
+
         /* templates [UX-T6/T7]: legacy без ключа читается; round-trip без потерь; пустой список — ключа нет */
         check(d2.templates.isEmpty(), "legacy без templates читается (пустой список)");
         String tplJson = "{\"nextId\":2,\"templates\":[{" +

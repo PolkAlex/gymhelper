@@ -459,6 +459,8 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     -webkit-tap-highlight-color: transparent;
 }
 .star.fav { color: var(--accent); }
+.exhead { display: flex; align-items: center; gap: 8px; } /* общий ряд шапки (техника [UX-T13]) */
+.exhead .t1 { flex: 1; min-width: 0; overflow-wrap: break-word; }
 .metbadge { font-size: 11px; color: var(--muted); background: var(--btn); border: 1px solid var(--btn-brd); border-radius: 8px; padding: 2px 7px; margin-left: auto; }
 .techstep { display: flex; gap: 9px; margin-top: 8px; font-size: 14px; }
 .techstep .num { color: var(--accent); font-weight: 700; flex: none; }
@@ -468,7 +470,7 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
 .wchead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .wctitles { flex: 1; min-width: 0; cursor: pointer; padding-top: 5.4px; }
 .wctitles .t1 { font-size: 17px; line-height: 1.3; overflow-wrap: break-word; word-break: break-word; }
-.dp-inline { display: inline-flex; align-items: center; font-size: 14px; }
+.dp-inline { display: inline-flex; align-items: center; font-size: 14px; color: var(--accent); }
 .dp-inline svg { width: 16px; height: 16px; }
 .wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
 .barebtn {

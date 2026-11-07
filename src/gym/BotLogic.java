@@ -174,6 +174,7 @@ public final class BotLogic {
     /* запуск/перезапуск отсчёта: одно сообщение на сессию, перезапуск правит его же (§2.3) */
     private void restStart(long chatId, GymData data, String exercise, SetEntry block) {
         int dur = data.restSec != null ? data.restSec : 90;
+        if (dur <= 0) return; /* «выкл» [UX-T13]: после подхода отсчёт не запускается */
         long now = System.currentTimeMillis();
         RestSession s = rests.get(chatId);
         if (s == null || s.stopped || s.messageId <= 0) {
@@ -713,6 +714,12 @@ public final class BotLogic {
             showMenu(chatId, mid, data, st);
             return;
         }
+        /* [UX-B6] завершённая тренировка — только просмотр: вежливый отказ вместо добавления */
+        if (w.finished) {
+            send(chatId, mid, "Тренировка завершена — доступен просмотр, «Повторить» и «В шаблоны».",
+                List.of(List.of(TelegramApi.button("↩️ К тренировке", "scr_" + w.id))));
+            return;
+        }
         ExerciseEntry e = findExercise(w, name);
         boolean isNew = e == null;
         if (isNew) {
@@ -1053,7 +1060,8 @@ public final class BotLogic {
         for (int i = 0; i < e.sets.size(); i++) {
             rows.add(List.of(TelegramApi.button(renderLine(e.name, e.sets.get(i)), "enq_" + i)));
         }
-        rows.add(List.of(TelegramApi.button("➕ Добавить запись", "en:add")));
+        /* [UX-B6] у завершённой тренировки добавления записей нет — только просмотр и правка */
+        if (!w.finished) rows.add(List.of(TelegramApi.button("➕ Добавить запись", "en:add")));
         rows.add(List.of(TelegramApi.button("↩️ К упражнениям", "exq:back"), TelegramApi.button("✅ Готово", "ed:done")));
         send(chatId, mid, "«" + esc(e.name) + "» — выбери запись:", rows);
     }
@@ -1488,7 +1496,7 @@ public final class BotLogic {
         }
     }
 
-    /* /rest — просмотр и установка длительности отдыха (общее GymData.restSec с Mini App) */
+    /* /rest — просмотр и установка длительности отдыха (общее GymData.restSec с Mini App); 0 = «выкл» [UX-T13] */
     private void showRest(long chatId, Long mid, GymData data, String text) {
         UserState st = states.computeIfAbsent(chatId, k -> new UserState());
         st.mode = UserState.Mode.MENU;
@@ -1496,24 +1504,35 @@ public final class BotLogic {
         String arg = text.length() > 6 ? text.substring(6).trim() : "";
         if (arg.isEmpty()) {
             int cur = data.restSec != null ? data.restSec : 90;
-            send(chatId, mid, "⏱ Длительность отдыха: " + cur + " сек."
-                + "\nИзменить: /rest 180 (от 30 до 600)."
-                + "\nТаймер запускается автоматически после записи подхода.", mainKb());
+            if (cur == 0) {
+                send(chatId, mid, "⏱ Таймер отдыха: выключен."
+                    + "\nВключить: /rest 180 (от 30 до 600)."
+                    + "\nПосле записи подхода отсчёт не запускается.", mainKb());
+            } else {
+                send(chatId, mid, "⏱ Длительность отдыха: " + cur + " сек."
+                    + "\nИзменить: /rest 180 (от 30 до 600). Выключить: /rest 0."
+                    + "\nТаймер запускается автоматически после записи подхода.", mainKb());
+            }
             return;
         }
         int n;
         try {
             n = Integer.parseInt(arg);
         } catch (NumberFormatException e) {
-            send(chatId, mid, "Число от 30 до 600, например: /rest 180", mainKb());
+            send(chatId, mid, "Число 0 (выкл) или от 30 до 600, например: /rest 180", mainKb());
             return;
         }
-        if (n < 30 || n > 600) {
-            send(chatId, mid, "Число от 30 до 600, например: /rest 180", mainKb());
+        if (n != 0 && (n < 30 || n > 600)) {
+            send(chatId, mid, "Число 0 (выкл) или от 30 до 600, например: /rest 180", mainKb());
             return;
         }
         data.restSec = n;
         storage.save(chatId, data);
+        if (n == 0) {
+            restStop(chatId); /* идущий отсчёт останавливаем — таймер выключен [UX-T13] */
+            send(chatId, mid, "⏱ Таймер отдыха выключен. Включить: /rest 180.", mainKb());
+            return;
+        }
         /* если отсчёт идёт — перезапуск на новую длительность одной правкой (§2.7) */
         RestSession s = rests.get(chatId);
         if (s != null && !s.stopped) {

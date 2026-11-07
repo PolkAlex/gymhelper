@@ -255,9 +255,10 @@ function isCustomEx(name) {
 function dayPart(w) {
     if (!w.started) return null;
     const hh = +String(w.started).slice(11, 13);
-    if (hh < 12) return { n: 'утро', i: '🌅' };
-    if (hh < 18) return { n: 'день', i: '☀️' };
-    return { n: 'вечер', i: '🌙' };
+    /* [UX-B8] SVG-иконки вместо эмодзи: 🌅 на Windows рисуется оранжевым квадратом */
+    if (hh < 12) return { n: 'утро', i: ICONS.sunrise };
+    if (hh < 18) return { n: 'день', i: ICONS.sun };
+    return { n: 'вечер', i: ICONS.moon };
 }
 function isWarmupName(name) {
     const c = findCatalog(name);
@@ -512,6 +513,10 @@ function restFmt(s) {
 function restSoundOn() {
     try { return localStorage.getItem('gymRestSound') !== 'off'; } catch (e) { return true; }
 }
+/* фактическая длительность отдыха: настройки нет → дефолт 90; 0 = «выкл» [UX-T13] */
+function restDur() {
+    return G && G.restSec != null ? G.restSec : 90;
+}
 /* запуск/перезапуск: лог нового подхода всегда начинает полный отсчёт (§1.8) */
 function restStart(sec, ex) {
     REST = { end: Date.now() + sec * 1000, dur: sec, paused: false, mini: false, ex: ex || '' };
@@ -695,13 +700,14 @@ function restMore() {
     restWrite();
     renderRestbar();
 }
-/* настройка длительности в Профиле: чипы 60/90/120/180 и «Своё…» (§1.5) */
+/* настройка длительности в Профиле: чипы 60/90/120/180, «Своё…» (§1.5) и «Выкл» = 0 [UX-T13] */
 function restSet(n) {
-    if (!(n >= 30 && n <= 600)) return;
+    if (n !== 0 && !(n >= 30 && n <= 600)) return;
     REST_CUSTOM = false;
     G.restSec = n;
     save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); render(); });
 }
+
 function restCustomSave() {
     const v = parseInt(String((document.getElementById('restCustomSec') || {}).value || ''), 10);
     if (!(v >= 30 && v <= 600)) { toast('Число от 30 до 600', true); return; }
@@ -801,6 +807,8 @@ const ACTIONS = {
     newBlank: function () { closeModal(); startBlank(); },
     newRepeat: function () { newRepeatLast(); },
     newRepeatFrom: function (a) { newRepeatFrom(+a); },
+    conflictKeep: function () { conflictKeep(); },
+    conflictDiscard: function () { conflictDiscard(); },
     tplStart: function (a) { tplStart(+a); },
     tplDelAsk: function (a) { tplDelAsk(+a); },
     tplDelete: function (a) { tplDelete(+a); },
@@ -888,10 +896,7 @@ function render() {
             '</div></div>';
         h += '<div style="height:70px"></div>';
     }
-    if (tab === 'tech' && TECH.open) {
-        h += '<div class="backbar"><button class="btn sec wide" data-act="techBack">↩️ К упражнениям</button></div>';
-        h += '<div style="height:70px"></div>';
-    }
+    /* [UX-T13] «К упражнениям» переехала в шапку экрана техники компактной иконкой — backbar внизу больше не нужен */
     app.innerHTML = h;
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
@@ -1107,7 +1112,10 @@ function workoutCard(w, showActions) {
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
             h += '<div class="restline"> упражнение активно — время идёт</div>';
         }
-        h += '<div class="btnrow"><button class="btn sec" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1">➕ Запись</button></div>';
+        /* [UX-B6] завершённая тренировка — только просмотр: кнопки добавления записи нет */
+        if (!w.finished) {
+            h += '<div class="btnrow"><button class="btn sec" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1">➕ Запись</button></div>';
+        }
         h += '</div>';
     });
     if (G.profile && G.profile.weight > 0 && exs.length) {
@@ -1236,7 +1244,10 @@ function renderTechTab() {
     if (TECH.open) {
         const c = CATALOG.find(x => x.id === TECH.open);
         if (!c) { TECH.open = null; } else {
-            let h = '<div class="card"><div class="exhead">' + ico(c.i) + '<span class="t1">' + esc(c.n) + '</span><span class="metbadge">MET ' + c.met + '</span></div>';
+            /* [UX-T13] «К упражнениям» — компактная иконка вверху экрана; ⭐ — в/из «Любимых» (как в каталоге) */
+            let h = '<div class="card"><div class="exhead">' + ico(c.i) + '<span class="t1">' + esc(c.n) + '</span><span class="metbadge">MET ' + c.met + '</span>' +
+                starHtml(c.n) +
+                '<button class="barebtn" data-act="techBack" title="К упражнениям" aria-label="К упражнениям">' + ICONS.back + '</button></div>';
             h += '<p class="meta">' + c.t.map(t => '#' + t).join(' ') + '</p>';
             h += '<p class="mtitle" style="margin-top:12px">Техника</p>';
             c.how.forEach((s, i) => {
@@ -1464,16 +1475,18 @@ function renderProfileTab() {
     h += '<button class="btn' + (cur === 'dark' ? '' : ' sec') + '" data-act="setTheme" data-a="dark">🌙 Тёмная</button>' +
         '<button class="btn' + (cur === 'light' ? '' : ' sec') + '" data-act="setTheme" data-a="light">☀️ Светлая</button>' +
         '</div></div>';
-    /* таймер отдыха: длительность в общем с ботом GymData.restSec, дефолт 90 (§1.5) */
-    const rs = G.restSec || 90;
+    /* таймер отдыха: длительность в общем с ботом GymData.restSec, дефолт 90; 0 = «выкл» [UX-T13] */
+    const rs = (G.restSec == null ? 90 : G.restSec);
     const presets = [60, 90, 120, 180];
-    const custom = REST_CUSTOM || presets.indexOf(rs) < 0;
+    const off = rs === 0;
+    const custom = !off && (REST_CUSTOM || presets.indexOf(rs) < 0);
     h += '<div class="card"><p class="t1">⏱ Таймер отдыха</p>' +
-        '<p class="meta">Запускается автоматически после записи подхода.</p>' +
+        '<p class="meta">Запускается автоматически после записи подхода; «Выкл» — отсчёт не запускается.</p>' +
         '<div class="chips">' +
         presets.map(function (n) {
-            return '<button class="chip' + (!custom && rs === n ? ' on' : '') + '" data-act="restSet" data-a="' + n + '">' + n + '</button>';
+            return '<button class="chip' + (!custom && !off && rs === n ? ' on' : '') + '" data-act="restSet" data-a="' + n + '">' + n + '</button>';
         }).join('') +
+        '<button class="chip' + (off ? ' on' : '') + '" data-act="restSet" data-a="0">Выкл</button>' +
         '<button class="chip' + (custom ? ' on' : '') + '" data-act="restCustom">Своё…</button>' +
         '</div>';
     if (custom) {
@@ -1521,15 +1534,51 @@ function startWorkout() {
     startBlank();
 }
 function startBlank() {
-    const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '', exercises: [] };
-    if (G.nextId < 1) G.nextId = 1;
-    G.workouts.push(w);
-    save().then(function (r) {
-        if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
-        /* сразу экран редактирования тренировки (карточка + пикер), а не главный экран */
-        openHistory(w.id);
-        openPicker(w.id);
+    /* [UX-B7] при активной тренировке вторая не создаётся — диалог как в боте */
+    activeConflictAsk(function () {
+        const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '', exercises: [] };
+        if (G.nextId < 1) G.nextId = 1;
+        G.workouts.push(w);
+        save().then(function (r) {
+            if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
+            /* сразу экран редактирования тренировки (карточка + пикер), а не главный экран */
+            openHistory(w.id);
+            openPicker(w.id);
+        });
     });
+}
+
+/* ---------- конфликт активной тренировки [UX-B7] ---------- */
+/* как в боте (wk:new): продолжить текущую / удалить и начать новую; вторую незавершённую не создаём */
+let __conflictProceed = null;
+function activeConflictAsk(proceed) {
+    const a = activeW();
+    if (!a) { proceed(); return; }
+    __conflictProceed = proceed;
+    const h = '<p class="mtitle">У тебя есть незавершённая тренировка</p>' +
+        '<p class="msub">от ' + esc(firstLine(a)) + '. Что делаем?</p>' +
+        '<div class="btnrow">' +
+        '<button class="btn prime wide" data-act="conflictKeep">▶️ Продолжить текущую</button>' +
+        '<button class="btn danger wide" data-act="conflictDiscard">🗑 Удалить и начать новую</button>' +
+        '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>';
+    openModal(h);
+}
+function conflictKeep() {
+    closeModal();
+    __conflictProceed = null;
+    const a = activeW();
+    if (a) openHistory(a.id); /* аккуратно ведём к активной */
+}
+function conflictDiscard() {
+    const proceed = __conflictProceed;
+    __conflictProceed = null;
+    closeModal();
+    const a = activeW();
+    if (!a || !proceed) return;
+    if (!G.del) G.del = [];
+    G.del.push(a.id);
+    G.workouts = G.workouts.filter(w => w.id !== a.id);
+    save().then(proceed); /* новая тренировка создаётся после удаления текущей */
 }
 
 /* ============ шаблоны тренировок [UX-T6/T7] (спека §4) ============ */
@@ -1615,16 +1664,19 @@ function tplPlan(te) {
 /* старт из шаблона / повтора: незавершённая тренировка со списком упражнений, записи пустые;
    план (w/s/r шаблона) снимком в записи — пилюля «в один тап» [UX-E5]; isRepeat — тост повтора */
 function createFromList(t, isRepeat) {
-    const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '',
-        exercises: (t.exercises || []).slice(0, 20).map(e => ({ name: e.name, sets: [], st: nowLocalISO(), en: '',
-            pw: e.w || '', ps: (+e.s || 0) >= 1 ? +e.s : 0, pr: e.r || '' })) };
-    if (G.nextId < 1) G.nextId = 1;
-    G.workouts.push(w);
-    save().then(function (r) {
-        if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
-        toast((isRepeat ? '🔁 Повтор прошлой тренировки: ' : '📋 Шаблон применён: ')
-            + w.exercises.length + ' ' + tplExWord(w.exercises.length));
-        openHistory(w.id);
+    /* [UX-B7] при активной тренировке вторая не создаётся — диалог как в боте */
+    activeConflictAsk(function () {
+        const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '',
+            exercises: (t.exercises || []).slice(0, 20).map(e => ({ name: e.name, sets: [], st: nowLocalISO(), en: '',
+                pw: e.w || '', ps: (+e.s || 0) >= 1 ? +e.s : 0, pr: e.r || '' })) };
+        if (G.nextId < 1) G.nextId = 1;
+        G.workouts.push(w);
+        save().then(function (r) {
+            if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
+            toast((isRepeat ? '🔁 Повтор прошлой тренировки: ' : '📋 Шаблон применён: ')
+                + w.exercises.length + ' ' + tplExWord(w.exercises.length));
+            openHistory(w.id);
+        });
     });
 }
 function tplStart(id) {
@@ -1734,7 +1786,8 @@ function finishWorkout(id) {
     if (!w.exercises.length) { toast('Сначала добавь хотя бы одно упражнение 💪', true); return; }
     w.finished = true;
     if (!w.ended) w.ended = nowLocalISO();
-    save().then(function (r) { if (r === 'ok') toast('✅ Тренировка завершена'); render(); });
+    /* [UX-T13] после завершения — сразу список истории, экран карточки закрывается */
+    save().then(function (r) { if (r === 'ok') toast('✅ Тренировка завершена'); viewWid = 0; render(); });
 }
 function deleteWorkout(id) {
     if (!G.del) G.del = [];
@@ -1746,6 +1799,8 @@ function deleteWorkout(id) {
 
 /* ---------- пикер ---------- */
 function openPicker(wid) {
+    const w = findW(wid);
+    if (!w || w.finished) return; /* [UX-B6] у завершённой тренировки добавления нет */
     PICKER = { wid, section: 'all', cat: null, q: '' };
     renderPickerModal();
 }
@@ -1757,7 +1812,9 @@ function toggleFav(n) {
     let f = favsList();
     if (f.includes(n)) f = f.filter(x => x !== n); else f.push(n);
     try { localStorage.setItem('gymFavs', JSON.stringify(f)); } catch (e) { /* noop */ }
-    renderPickerList();
+    /* в пикере список обновляется точечно; вне его (звезда в технике [UX-T13]) — перерисовка экрана */
+    if (document.getElementById('pickerList')) renderPickerList();
+    else render();
 }
 function mostUsed(n) {
     const cnt = {};
@@ -1878,7 +1935,7 @@ function renderPickerModal() {
 }
 function pickCatEx(name) {
     const w = findW(PICKER.wid);
-    if (!w) return closeModal();
+    if (!w || w.finished) return closeModal(); /* [UX-B6] завершённая — только просмотр */
     closeCurrentExercise();
     const e = startExercise(w, name);
     storage_after_pick(w, e);
@@ -1901,6 +1958,7 @@ function customExerciseModal() {
 }
 function createCustom() {
     const w = findW(PICKER.wid);
+    if (w && w.finished) { toast('Тренировка завершена — доступен просмотр', true); return; } /* [UX-B6] симметрия с pickCatEx */
     const name = String((document.getElementById('mCustomName') || {}).value || '').trim();
     if (!name || name.length > 60) { toast('Название от 1 до 60 символов', true); return; }
     addCustomBase(name);
@@ -1912,18 +1970,15 @@ function createCustom() {
 }
 
 /* ---------- окно записи ---------- */
-/* пилюля в слоте под полем веса [UX-E5 §4.1]: план (пока sets пусты) или «Предыдущий подход» (UX-I1) */
-function entryPillHtml(e, isNew, prevW) {
+/* пилюля в слоте под полем веса [UX-E5 §4.1]: план — пока у упражнения нет записей.
+   Подсказка «Предыдущий подход» (UX-I1) заменена автоподстановкой в поля [UX-T12] */
+function entryPillHtml(e, isNew) {
     if (isNew && e.sets.length === 0 && +e.ps >= 1) {
         const w = e.pw ? String(e.pw).replace('.', ',') + ' кг' : 'свой вес';
         const label = String(e.pr || '')
             ? '📋 План: ' + w + ' × ' + e.ps + ' × ' + e.pr + ' — подставить'
             : '📋 План: ' + w + ' × ' + e.ps + ' — вес и подходы';
         return '<button class="prevpill" data-act="planTake">' + esc(label) + '</button>';
-    }
-    if (prevW != null) {
-        return '<button class="prevpill" data-act="wSet" data-a="' + escAttr(prevW) + '">↺ Предыдущий подход: ' +
-            esc(String(prevW).replace('.', ',')) + ' кг — подставить</button>';
     }
     return '';
 }
@@ -1943,28 +1998,28 @@ function planTake() {
 function openEntryModal(wid, exIdx, setIdx) {
     const w = findW(wid);
     if (!w || !w.exercises[exIdx]) return;
+    if (setIdx < 0 && w.finished) { /* [UX-B6] новую запись в завершённую не добавляем */
+        toast('Тренировка завершена — доступен просмотр', true);
+        return;
+    }
     openEntryModalIdx(w, exIdx, setIdx);
 }
 function openEntryModalIdx(w, exIdx, setIdx) {
     const e = w.exercises[exIdx];
     const isNew = setIdx < 0;
     const s = isNew ? { w: '', s: 1, r: '' } : e.sets[setIdx];
+    /* [UX-T12] второй и дальше подход того же упражнения в текущей тренировке:
+       вес/повторения предыдущего подхода сразу в поля (только внутри текущей тренировки) */
+    const prev = isNew && e.sets.length ? e.sets[e.sets.length - 1] : null;
     modalCtx = { wid: w.id, exIdx, setIdx, name: e.name };
-    /* UX-I1: последний подход с весом в текущем упражнении (кроме редактируемого) */
-    let prevW = null;
-    for (let i = e.sets.length - 1; i >= 0; i--) {
-        if (i === setIdx) continue;
-        if (maxNum(e.sets[i].w) > 0) { prevW = e.sets[i].w; break; }
-    }
     let h = '<p class="mtitle">' + (isNew ? 'Новая запись' : 'Изменить запись') + '</p>' +
         '<p class="msub">' + esc(e.name) + '</p>' +
         '<div class="fglass">' +
         '<div class="flabel">Вес, кг (0 — без веса)</div>' +
-        '<div class="inwrap"><input id="mWeight" type="text" inputmode="decimal" value="' + esc(s.w || '0') + '">' +
+        '<div class="inwrap"><input id="mWeight" type="text" inputmode="decimal" value="' + esc((prev && prev.w) || s.w || '0') + '">' +
         '<button class="clr" data-act="wClr">Очистить</button></div>' +
-        /* [UX-E5] пилюля плана — пока у упражнения нет записей; после первого блока её место
-           занимает пилюля UX-I1 (§3: одновременно не показываются by design) */
-        entryPillHtml(e, isNew, prevW) +
+        /* [UX-E5] пилюля плана — пока у упражнения нет записей */
+        entryPillHtml(e, isNew) +
         '<div class="keyrow">' +
         ['0.5', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {
             const label = n === '0.5' ? '+0,5' : '+' + n;
@@ -1989,7 +2044,7 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         '</div>' +
         '<div class="fglass">' +
         '<div class="flabel">Повторения (например 12, 8-10)</div>' +
-        '<div class="inwrap"><input id="mReps" type="text" value="' + esc(s.r) + '">' +
+        '<div class="inwrap"><input id="mReps" type="text" value="' + esc((prev && prev.r) || s.r || '1') + '">' +
         '<button class="clr" data-act="rClr">Очистить</button></div>' +
         '<div class="keyrow">' +
         ['1', '2', '3', '4', '5', '6', '7', '8'].map(function (n) {
@@ -2045,7 +2100,7 @@ function sClr() {
 }
 function rClr() {
     const inp = document.getElementById('mReps');
-    if (inp) inp.value = '';
+    if (inp) inp.value = '1'; /* дефолт повторений — 1 [UX-T12] */
 }
 function wAdd(n) {
     const inp = document.getElementById('mWeight');
@@ -2102,8 +2157,9 @@ async function saveEntry() {
         e.sets[setIdx] = { w: weight, s: sets, r: reps, t: old ? (old.t || nowLocalISO()) : nowLocalISO() };
     }
     await save();
-    /* таймер отдыха: автозапуск только для НОВОГО блока незавершённой тренировки [UX-T4] */
-    if (setIdx < 0 && w && !w.finished) restStart(G.restSec || 90, name);
+    /* таймер отдыха: автозапуск только для НОВОГО блока незавершённой тренировки [UX-T4];
+       «выкл» (restSec=0) отсчёт не запускает [UX-T13] */
+    if (setIdx < 0 && w && !w.finished) { const dur = restDur(); if (dur > 0) restStart(dur, name); }
     if (modalCtx) {
         if (pr) {
             toastPr(pr.type === 'e1rm'

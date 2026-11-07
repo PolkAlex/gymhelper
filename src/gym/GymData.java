@@ -8,7 +8,7 @@ import java.util.Map;
 public final class GymData {
     public long nextId = 1;
     public long rev;
-    public Integer restSec; /* длительность отдыха, сек (30–600); null = дефолт 90, общий для бота и Mini App */
+    public Integer restSec; /* длительность отдыха, сек (30–600); 0 = таймер выключен [UX-T13]; null = дефолт 90, общий для бота и Mini App */
     public ProfileData profile;
     public final List<Workout> workouts = new ArrayList<>();
     public final List<Template> templates = new ArrayList<>();
@@ -42,11 +42,12 @@ public final class GymData {
         d.nextId = Json.lng(m.get("nextId"));
         if (d.nextId < 1) d.nextId = 1;
         d.rev = Json.lng(m.get("rev"));
-        /* restSec вне диапазона 30–600 игнорируется — читатель возьмёт дефолт 90 [UX-T4/T5] */
+        /* restSec: 30–600 — длительность; 0 — спец-значение «выкл» [UX-T13];
+           остальное вне диапазона игнорируется — читатель возьмёт дефолт 90 [UX-T4/T5] */
         Object rs = m.get("restSec");
         if (rs != null) {
             int n = (int) Json.lng(rs);
-            if (n >= 30 && n <= 600) d.restSec = n;
+            if (n == 0 || (n >= 30 && n <= 600)) d.restSec = n;
         }
         Map<String, Object> pm = Json.map(m.get("profile"));
         if (pm != null) {
