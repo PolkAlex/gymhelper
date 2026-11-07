@@ -105,7 +105,13 @@ public final class Storage {
             Pattern f = Pattern.compile("^chat_(\\d+)\\.json$");
             for (Path p : Files.newDirectoryStream(dir, "chat_*.json")) {
                 Matcher m = f.matcher(p.getFileName().toString());
-                if (m.matches()) out.add(Long.parseLong(m.group(1)));
+                if (!m.matches()) continue;
+                /* try на каждом файле: один мусорный id (например, >18 цифр) не валил весь листинг */
+                try {
+                    out.add(Long.parseLong(m.group(1)));
+                } catch (NumberFormatException e) {
+                    System.out.println("[warn] chatIds: skip " + p.getFileName());
+                }
             }
         } catch (Exception e) {
             System.out.println("[warn] chatIds: " + e.getMessage());

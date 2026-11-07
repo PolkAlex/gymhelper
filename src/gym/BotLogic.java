@@ -1901,8 +1901,9 @@ public final class BotLogic {
         boolean dry = "1".equals(dryFlag);
         if (adminChatId <= 0 || chatId != adminChatId) return;
         if (text.isEmpty()) {
-            api.sendMessage(chatId, "Формат: /announce <текст>\n"
-                + "Предпросмотр без отправки: /announce_dry <текст>\n"
+            /* без угловых скобок: sendMessage шлёт в HTML-режиме, «<текст>» даёт 400 can't parse entities */
+            api.sendMessage(chatId, "Формат: /announce текст\n"
+                + "Предпросмотр без отправки: /announce_dry текст\n"
                 + "Рассылка уйдёт во все чаты, где бот уже работал.", null);
             return;
         }

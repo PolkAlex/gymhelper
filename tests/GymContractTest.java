@@ -244,6 +244,8 @@ public class GymContractTest {
             java.nio.file.Files.writeString(tmpChats.resolve("chat_222.json"), "{}");
             java.nio.file.Files.writeString(tmpChats.resolve("chat_notanumber.json"), "{}");
             java.nio.file.Files.writeString(tmpChats.resolve("chat_333.old.json"), "{}");
+            /* >18 цифр: regex проходит, parseLong даёт overflow → файл пропускается, а не валит листинг */
+            java.nio.file.Files.writeString(tmpChats.resolve("chat_99999999999999999999.json"), "{}");
             java.nio.file.Files.createDirectories(tmpChats.resolve("backups"));
             java.nio.file.Files.writeString(tmpChats.resolve("backups").resolve("chat_444.1700000000000.json"), "{}");
             java.util.List<Long> ids = stChats.chatIds();
