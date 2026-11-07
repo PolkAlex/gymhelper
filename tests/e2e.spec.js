@@ -527,20 +527,15 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
     });
 
-    test('экран истории: «🚪 Выйти» непрозрачна, видима целиком и клик закрывает карточку (#87)', async ({ page, request }) => {
-        const now = new Date();
-        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
-            nextId: 2, del: [],
-            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
-            workouts: [doneWorkout(1, isoDate(now), EX, '100', 3)]
-        } } });
+    test('backbar активной: «🚪 Выйти» непрозрачна, видима целиком и клик закрывает карточку (#87)', async ({ page }) => {
+        /* [UX-T19] backbar остался только у активной тренировки — проверка непрозрачности на ней */
         await openApp(page);
-        await page.locator('.pcard').first().click();
-        const exit = page.locator('[data-act="closeHistory"]');
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        const exit = page.locator('.backbar [data-act="closeHistory"]');
         await expect(exit).toBeVisible({ timeout: 5000 });
-        /* корень #87: backbar fixed и при скролле под ним проходит красная «Удалить
-           тренировку»; сквозь полупрозрачный sec-фон тексты сливались («…тренировку Выйти»).
-           Кнопка обязана быть непрозрачной (alpha > 0.5) */
+        /* корень #87: backbar fixed и при скролле под ним проходит контент; сквозь
+           полупрозрачный sec-фон тексты сливаются. Кнопка обязана быть непрозрачной (alpha > 0.5) */
         const bg = await exit.evaluate(function (el) { return getComputedStyle(el).backgroundColor; });
         const parts = String(bg).split(',');
         const alpha = parts.length > 3 ? parseFloat(parts[3]) : 1;
@@ -1622,6 +1617,40 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         /* вечерняя иконка (свежая тренировка — первая в списке) с fill-полусолнцем, ровно одна */
         const fillCount = await page.locator('.pcard .dp-inline svg path[fill="currentColor"]').count();
         if (fillCount !== 1) throw new Error('fill-полусолнце (вечер) не ровно одно: ' + fillCount);
+        /* [UX-T19] границы 5/11/17/23 не изменились; ключи ICONS: sunrise/sun/evening/moon */
+        const dp = await page.evaluate(function () {
+            const g = window.__gym;
+            const at = function (t) { return g.dayPart({ started: '2026-01-01T' + t }).i; };
+            return {
+                m0: at('04:59:00'), m1: at('05:00:00'),
+                d0: at('10:59:00'), d1: at('11:00:00'),
+                e0: at('16:59:00'), e1: at('17:00:00'),
+                n0: at('22:59:00'), n1: at('23:00:00')
+            };
+        });
+        const map = { m0: 'moon', m1: 'sunrise', d0: 'sunrise', d1: 'sun', e0: 'sun', e1: 'evening', n0: 'evening', n1: 'moon' };
+        for (const k in map) {
+            if (dp[k] !== map[k]) throw new Error('dayPart ' + k + ': ' + dp[k] + ', ожидалось ' + map[k]);
+        }
+        /* [UX-T19] отрисовка по референсу: у утренней и вечерней — горизонт + две короткие
+           линии воды; fill только у вечернего полусолнца; все — stroke currentColor */
+        const marks = await page.evaluate(function () {
+            const water = function (svg) { return (svg.match(/M[\d.]+ 23h/g) || []).length; };
+            return {
+                sunriseWater: water(ICONS.sunrise),
+                eveningWater: water(ICONS.evening),
+                horizonSunrise: ICONS.sunrise.includes('M4 21h16'),
+                horizonEvening: ICONS.evening.includes('M4 20.5h16'),
+                eveningFill: ICONS.evening.includes('fill="currentColor"'),
+                sunriseFill: ICONS.sunrise.includes('fill="currentColor"'),
+                stroke: [ICONS.sunrise, ICONS.sun, ICONS.evening, ICONS.moon].every(function (s) { return s.includes('stroke="currentColor"'); })
+            };
+        });
+        if (marks.sunriseWater !== 2 || marks.eveningWater !== 2) throw new Error('линий воды должно быть по 2: ' + JSON.stringify(marks));
+        if (!marks.horizonSunrise || !marks.horizonEvening) throw new Error('нет длинной линии горизонта: ' + JSON.stringify(marks));
+        if (!marks.eveningFill) throw new Error('вечернее полусолнце не fill');
+        if (marks.sunriseFill) throw new Error('утреннее полусолнце должно быть контурным (без fill)');
+        if (!marks.stroke) throw new Error('иконки не stroke currentColor');
     });
 
     test('backbar активной: Сохранить/Удалить/Выйти, «Удалить» спрашивает подтверждение', async ({ page }) => {
@@ -1638,7 +1667,7 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(page.locator('.pcard')).toHaveCount(0);
     });
 
-    test('завершённая из истории: backbar из двух кнопок, большой красной кнопки и «В шаблоны» нет', async ({ page, request }) => {
+    test('[UX-T19] завершённая из истории: без backbar, 5 иконок в шапке в порядке 🔁 💾 ⏱ 🚪 🗑', async ({ page, request }) => {
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
@@ -1646,16 +1675,29 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         } } });
         await openApp(page);
         await page.locator('.pcard').first().click();
-        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
-        /* [UX-T18] у завершённой backbar без «Удалить» (корзина в шапке) */
-        await expect(page.locator('.backbar .btn')).toHaveCount(2);
-        await expect(page.locator('.backbar [data-act="confirmModal"]')).toHaveCount(0);
-        /* большой красной «🗑 Удалить тренировку» в потоке карточки больше нет */
+        await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
+        /* [UX-T19] нижний backbar у завершённой больше не рендерится */
+        await expect(page.locator('.backbar')).toHaveCount(0);
+        /* ровно 5 иконок в шапке, порядок: 🔁 💾 ⏱ 🚪 🗑 */
+        const acts = await page.locator('.wcicons .barebtn').evaluateAll(function (els) {
+            return els.map(function (el) { return el.getAttribute('data-act'); });
+        });
+        const expected = ['newRepeatFrom', 'saveWorkout', 'timeModal', 'closeHistory', 'confirmModal'];
+        if (JSON.stringify(acts) !== JSON.stringify(expected)) {
+            throw new Error('иконки шапки завершённой: ' + JSON.stringify(acts) + ', ожидалось ' + JSON.stringify(expected));
+        }
+        /* большой красной «🗑 Удалить тренировку» в потоке карточки нет */
         await expect(page.locator('.card .btnrow .btn.danger')).toHaveCount(0);
-        /* шапка завершённой: 🔁 ⏱ 🗑 — «💾 В шаблоны» убрана */
-        await expect(page.locator('.wcicons .barebtn')).toHaveCount(3);
-        await expect(page.locator('.wcicons [data-act="tplSaveModal"]')).toHaveCount(0);
-        await expect(page.locator('.wcicons [data-act="newRepeatFrom"]')).toHaveCount(1);
+        /* 💾 «Сохранить» сохраняет и закрывает карточку */
+        await page.locator('.wcicons [data-act="saveWorkout"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        /* 🚪 «Выйти» закрывает карточку без сохранения-модалки */
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.wcicons [data-act="closeHistory"]')).toBeVisible({ timeout: 5000 });
+        await page.locator('.wcicons [data-act="closeHistory"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.backbar')).toHaveCount(0);
     });
 
     test('звезда в списке «Техника»: тоглится, сохраняется в gymFavs и не открывает упражнение', async ({ page }) => {
@@ -1707,5 +1749,127 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
                 throw new Error('кнопка ' + r.act + ' не по центру: dx=' + r.dx.toFixed(1) + 'px, dy=' + r.dy.toFixed(1) + 'px');
             }
         }
+    });
+});
+
+/* ===== [UX-T19] чипы «Техники» с «Все», назад на вкладку-источник, профиль одним рядом ===== */
+test.describe('UX-T19: чипы «Техники», back-навигация, профиль одним рядом', function () {
+
+    test('чипы «Техники» в порядке: Мышцы · Все · ★ Любимые · Вид · Блок · Коллекции; «Все» активен по умолчанию', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        /* порядок чипов секций — ровно как просил владелец */
+        const texts = await page.locator('.card .secrow').first().locator('.chip').allTextContents();
+        const expected = ['Мышцы', 'Все', '★ Любимые', 'Вид', 'Блок', 'Коллекции'];
+        if (JSON.stringify(texts) !== JSON.stringify(expected)) {
+            throw new Error('порядок чипов: ' + JSON.stringify(texts) + ', ожидалось ' + JSON.stringify(expected));
+        }
+        /* «Все» — фильтр по умолчанию: активен, весь каталог на входе, без «Ничего не найдено» */
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
+        const total = await page.locator('#techList .excard').count();
+        if (total < 60) throw new Error('на входе «Техника» показывает ' + total + ' упражнений, ожидался весь каталог');
+        await expect(page.locator('.empty')).toHaveCount(0);
+        /* пустой favourites-набор даёт «Ничего не найдено» только внутри фильтра «★ Любимые» */
+        await page.locator('.card .secrow .chip', { hasText: '★ Любимые' }).click();
+        await expect(page.locator('.empty', { hasText: 'Ничего не найдено' })).toHaveCount(1, { timeout: 5000 });
+        /* возврат к «Все» возвращает каталог */
+        await page.locator('.card .secrow .chip', { hasText: 'Все' }).click();
+        await expect(page.locator('.empty')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#techList .excard').first()).toBeVisible();
+        /* повторный вход через навигацию снова открывает «Все» (фильтр сброшен) */
+        await page.locator('.card .secrow').first().locator('.chip', { hasText: 'Блок' }).click();
+        await expect(page.locator('.card .secrow').first().locator('.chip', { hasText: 'Блок' })).toHaveClass(/on/, { timeout: 5000 });
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
+    });
+
+    test('«Назад» в ряду заголовка «Техники» возвращает на вкладку-источник', async ({ page }) => {
+        await openApp(page);
+        /* источник — История */
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        const back = page.locator('.card .exhead [data-act="techExit"]');
+        await expect(back).toBeVisible({ timeout: 5000 });
+        /* кнопка в том же ряду, что заголовок карточки, и в правом углу */
+        const t1 = await page.locator('.card .exhead .t1').boundingBox();
+        const bb = await back.boundingBox();
+        const cardBox = await page.locator('#app .card').first().boundingBox();
+        if (!t1 || !bb || !cardBox) throw new Error('заголовок «Техники» или кнопка «Назад» не найдены');
+        const dy = Math.abs((t1.y + t1.height / 2) - (bb.y + bb.height / 2));
+        if (dy > 6) throw new Error('«Назад» не в ряду заголовка: dy=' + dy.toFixed(1) + 'px');
+        if (bb.x + bb.width < cardBox.x + cardBox.width - 30) throw new Error('«Назад» не в правом углу карточки');
+        await back.click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · История', { timeout: 5000 });
+        /* источник — Профиль («Открыть в технике») */
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await page.locator('[data-act="openFavs"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
+        await page.locator('.card .exhead [data-act="techExit"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        /* уход с Техники и возврат через nav перезаписывают источник: назад = Статистика */
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await expect(page.locator('.card .exhead [data-act="techExit"]')).toBeVisible({ timeout: 5000 });
+        await page.locator('.card .exhead [data-act="techExit"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+    });
+
+    test('профиль: возраст/рост/вес и «Сохранить» в одном ряду; сохранение доезжает до сервера', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const prow = page.locator('.prow');
+        await expect(prow).toBeVisible({ timeout: 5000 });
+        /* три поля в одну строку, достаточно широкие */
+        const boxes = await prow.evaluate(function (row) {
+            return ['#pfAge', '#pfHeight', '#pfWeight'].map(function (sel) {
+                const r = row.querySelector(sel).getBoundingClientRect();
+                return { sel: sel, cy: Math.round(r.y + r.height / 2), w: Math.round(r.width), h: Math.round(r.height) };
+            });
+        });
+        const cys = boxes.map(function (b) { return b.cy; });
+        if (Math.max.apply(null, cys) - Math.min.apply(null, cys) > 2) {
+            throw new Error('поля профиля не в одной строке: ' + JSON.stringify(boxes));
+        }
+        for (const b of boxes) {
+            if (b.w < 50) throw new Error('поле слишком узкое: ' + JSON.stringify(b));
+            if (b.h < 38 || b.h > 44) throw new Error('высота поля вне ~40px: ' + JSON.stringify(b));
+        }
+        /* заполнение и сохранение — логика прежняя */
+        await page.locator('#pfAge').fill('31');
+        await page.locator('#pfHeight').fill('182');
+        await page.locator('#pfWeight').fill('88.5');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.age !== 31 || st.profile.height !== 182 || st.profile.weight !== 88.5) {
+            throw new Error('профиль не сохранился: ' + JSON.stringify(st.profile));
+        }
+        /* сегмент пола на месте, без изменений */
+        await expect(page.locator('.seg .seg-btn')).toHaveCount(2);
+    });
+
+    test('320px: ряд профиля без горизонтального переполнения, кнопка компактна', async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await expect(page.locator('.prow')).toBeVisible({ timeout: 5000 });
+        const m = await page.evaluate(function () {
+            const row = document.querySelector('.prow');
+            const rr = row.getBoundingClientRect();
+            const btn = document.querySelector('.pfsave').getBoundingClientRect();
+            return {
+                vw: document.documentElement.clientWidth,
+                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                rowRight: Math.round(rr.right),
+                btn: { y: Math.round(btn.y), w: Math.round(btn.width), h: Math.round(btn.height) },
+                ageBottom: Math.round(document.querySelector('#pfAge').getBoundingClientRect().bottom)
+            };
+        });
+        if (m.overflow) throw new Error('горизонтальное переполнение на 320px: ' + JSON.stringify(m));
+        /* кнопка не full-width: не шире половины карточки */
+        if (m.btn.w > m.vw / 2) throw new Error('кнопка «Сохранить» слишком широкая на 320px: ' + JSON.stringify(m));
     });
 });
