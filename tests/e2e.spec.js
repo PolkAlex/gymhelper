@@ -547,7 +547,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
     });
 
-    test('превью-карточки: дата как в шапке (SVG-иконка времени + дд.мм), жирное название, правый угол без дня недели', async ({ page }) => {
+    test('превью-карточки: дата текстом без иконки времени, жирное название, правый угол без дня недели', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
@@ -566,20 +566,8 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
         /* своё название тренировки показывается В СТРОКЕ ДАТЫ, а не отдельной строкой среди упражнений */
         await expect(page.locator('.pc-date', { hasText: 'Вечерняя программа' }).first()).toBeVisible({ timeout: 5000 });
-        /* [UX-T18] время суток — SVG-иконка в .dp-inline (какая именно — зависит от часа запуска теста) */
-        await expect(page.locator('.pc-date .dp-inline svg').first()).toBeVisible({ timeout: 5000 });
-        /* иконка в цвет accent темы (сравнение computed-цветов — работает в обеих темах) */
-        const accent = await page.evaluate(function () { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); });
-        const dpColor = await page.evaluate(function () { return getComputedStyle(document.querySelector('.pc-date .dp-inline')).color; });
-        const accentComputed = await page.evaluate(function (acc) {
-            const d = document.createElement('div');
-            d.style.color = acc;
-            document.body.appendChild(d);
-            const c = getComputedStyle(d).color;
-            d.remove();
-            return c;
-        }, accent);
-        if (dpColor !== accentComputed) throw new Error('.dp-inline не в accent: ' + dpColor + ' vs ' + accentComputed);
+        /* [UX-T20] иконка времени суток из карточек убрана (рендера .dp-inline больше нет) */
+        await expect(page.locator('.pcard .dp-inline')).toHaveCount(0);
         const dateTxt = ((await page.locator('.pc-date').first().textContent()) || '').trim();
         if (!dateTxt.includes('Вечерняя программа')) throw new Error('название тренировки не в строке даты: ' + JSON.stringify(dateTxt));
         const exTexts = await page.locator('.pc-ex').allTextContents();
@@ -1586,7 +1574,7 @@ test.describe('шаблоны с планом [UX-E5]', function () {
 /* ===== [UX-T18] восемь правок по фидбеку владельца ===== */
 test.describe('UX-T18: иконки времени, backbar-удаление, звезда в технике, центровка таймера', function () {
 
-    test('4 SVG-иконки времени суток рендерятся в .dp-inline (accent; вечер — fill-полусолнце)', async ({ page, request }) => {
+    test('[UX-T20] иконки времени в карточках не рендерятся; dayPart (границы 5/11/17/23) жив через __gymExpose', async ({ page, request }) => {
         const today = isoDate(new Date());
         const mk = function (id, time) {
             return { id: id, date: today, started: today + 'T' + time, ended: today + 'T' + time, finished: true, title: '', nutrition: '',
@@ -1600,24 +1588,14 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         } } });
         await openApp(page);
         await expect(page.locator('.pcard')).toHaveCount(4, { timeout: 5000 });
-        /* у каждой превью-карточки — svg-иконка времени суток (не эмодзи) */
-        await expect(page.locator('.pcard .dp-inline svg')).toHaveCount(4, { timeout: 5000 });
-        /* цвет иконки = accent темы (сравнение computed-цветов) */
-        const accent = await page.evaluate(function () { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); });
-        const dpColor = await page.evaluate(function () { return getComputedStyle(document.querySelector('.pcard .dp-inline')).color; });
-        const accentComputed = await page.evaluate(function (acc) {
-            const d = document.createElement('div');
-            d.style.color = acc;
-            document.body.appendChild(d);
-            const c = getComputedStyle(d).color;
-            d.remove();
-            return c;
-        }, accent);
-        if (dpColor !== accentComputed) throw new Error('.dp-inline не в accent: ' + dpColor + ' vs ' + accentComputed);
-        /* вечерняя иконка (свежая тренировка — первая в списке) с fill-полусолнцем, ровно одна */
-        const fillCount = await page.locator('.pcard .dp-inline svg path[fill="currentColor"]').count();
-        if (fillCount !== 1) throw new Error('fill-полусолнце (вечер) не ровно одно: ' + fillCount);
-        /* [UX-T19] границы 5/11/17/23 не изменились; ключи ICONS: sunrise/sun/evening/moon */
+        /* рендера иконки времени больше нет: ни одного .dp-inline в превью и карточках */
+        await expect(page.locator('.dp-inline')).toHaveCount(0);
+        /* код сохранён «до лучших времён»: ключи ICONS sunrise/sun/evening/moon на месте */
+        const icons = await page.evaluate(function () {
+            return ['sunrise', 'sun', 'evening', 'moon'].map(function (k) { return !!ICONS[k]; }).every(Boolean);
+        });
+        if (!icons) throw new Error('ключи ICONS времени суток пропали из catalog.js');
+        /* границы dayPart 5/11/17/23 не изменились (доступ через тестовый крюк, без рендера) */
         const dp = await page.evaluate(function () {
             const g = window.__gym;
             const at = function (t) { return g.dayPart({ started: '2026-01-01T' + t }).i; };
@@ -1632,25 +1610,6 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         for (const k in map) {
             if (dp[k] !== map[k]) throw new Error('dayPart ' + k + ': ' + dp[k] + ', ожидалось ' + map[k]);
         }
-        /* [UX-T19] отрисовка по референсу: у утренней и вечерней — горизонт + две короткие
-           линии воды; fill только у вечернего полусолнца; все — stroke currentColor */
-        const marks = await page.evaluate(function () {
-            const water = function (svg) { return (svg.match(/M[\d.]+ 23h/g) || []).length; };
-            return {
-                sunriseWater: water(ICONS.sunrise),
-                eveningWater: water(ICONS.evening),
-                horizonSunrise: ICONS.sunrise.includes('M4 21h16'),
-                horizonEvening: ICONS.evening.includes('M4 20.5h16'),
-                eveningFill: ICONS.evening.includes('fill="currentColor"'),
-                sunriseFill: ICONS.sunrise.includes('fill="currentColor"'),
-                stroke: [ICONS.sunrise, ICONS.sun, ICONS.evening, ICONS.moon].every(function (s) { return s.includes('stroke="currentColor"'); })
-            };
-        });
-        if (marks.sunriseWater !== 2 || marks.eveningWater !== 2) throw new Error('линий воды должно быть по 2: ' + JSON.stringify(marks));
-        if (!marks.horizonSunrise || !marks.horizonEvening) throw new Error('нет длинной линии горизонта: ' + JSON.stringify(marks));
-        if (!marks.eveningFill) throw new Error('вечернее полусолнце не fill');
-        if (marks.sunriseFill) throw new Error('утреннее полусолнце должно быть контурным (без fill)');
-        if (!marks.stroke) throw new Error('иконки не stroke currentColor');
     });
 
     test('backbar активной: Сохранить/Удалить/Выйти, «Удалить» спрашивает подтверждение', async ({ page }) => {
@@ -1700,12 +1659,22 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(page.locator('.backbar')).toHaveCount(0);
     });
 
-    test('звезда в списке «Техника»: тоглится, сохраняется в gymFavs и не открывает упражнение', async ({ page }) => {
+    test('звезда в списке «Техника»: у правого края строки, тоглится, сохраняется в gymFavs и не открывает упражнение', async ({ page }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
-        const star = page.locator('#techList .excard', { hasText: EX }).first().locator('.star');
+        const card = page.locator('#techList .excard', { hasText: EX }).first();
+        const star = card.locator('.star');
         await expect(star).toBeVisible({ timeout: 5000 });
         await expect(star).toHaveAttribute('aria-label', 'В любимые');
+        /* [UX-T20] звезда прижата к правому краю строки: зазор справа = паддинг карточки (~11px) */
+        const geom = await card.evaluate(function (el) {
+            const c = el.getBoundingClientRect();
+            const s = el.querySelector('.star').getBoundingClientRect();
+            return { cardRight: c.right, starRight: s.right, h: s.height };
+        });
+        const gap = geom.cardRight - geom.starRight;
+        if (gap > 16) throw new Error('звезда не у правого края строки: зазор ' + gap.toFixed(1) + 'px');
+        if (geom.h < 28) throw new Error('тап-зона звезды слишком мала: ' + geom.h.toFixed(1) + 'px');
         await star.click();
         /* тап по звезде НЕ открыл упражнение: остались список и заголовок «Техника» */
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
@@ -1785,36 +1754,78 @@ test.describe('UX-T19: чипы «Техники», back-навигация, п�
         await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
     });
 
-    test('«Назад» в ряду заголовка «Техники» возвращает на вкладку-источник', async ({ page }) => {
+    test('[UX-T20] «Назад» в topbar на всех вкладках: ведёт на предыдущую вкладку, без сам-на-себя', async ({ page }) => {
         await openApp(page);
-        /* источник — История */
-        await page.locator('.nav button', { hasText: 'Техника' }).click();
-        const back = page.locator('.card .exhead [data-act="techExit"]');
+        /* на старте (История, lastTab === текущая) кнопки «Назад» нет */
+        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
+        /* История → Статистика → назад = История */
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const back = page.locator('.topbar [data-act="goBack"]');
         await expect(back).toBeVisible({ timeout: 5000 });
-        /* кнопка в том же ряду, что заголовок карточки, и в правом углу */
-        const t1 = await page.locator('.card .exhead .t1').boundingBox();
+        /* кнопка в том же ряду, что заголовок секции: правее заголовка, слева от кнопки профиля */
+        const title = await page.locator('.topbar .tb-title').boundingBox();
+        const user = await page.locator('.topbar .tb-user').boundingBox();
         const bb = await back.boundingBox();
-        const cardBox = await page.locator('#app .card').first().boundingBox();
-        if (!t1 || !bb || !cardBox) throw new Error('заголовок «Техники» или кнопка «Назад» не найдены');
-        const dy = Math.abs((t1.y + t1.height / 2) - (bb.y + bb.height / 2));
+        const tb = await page.locator('.topbar').boundingBox();
+        if (!title || !user || !bb || !tb) throw new Error('topbar или кнопка «Назад» не найдены');
+        const dy = Math.abs((title.y + title.height / 2) - (bb.y + bb.height / 2));
         if (dy > 6) throw new Error('«Назад» не в ряду заголовка: dy=' + dy.toFixed(1) + 'px');
-        if (bb.x + bb.width < cardBox.x + cardBox.width - 30) throw new Error('«Назад» не в правом углу карточки');
+        if (bb.x < title.x + title.width) throw new Error('«Назад» не правее заголовка секции');
+        if (bb.x + bb.width > user.x + 2) throw new Error('«Назад» наехала на кнопку профиля');
+        if (user.x - (bb.x + bb.width) > 20) throw new Error('«Назад» не рядом с кнопкой профиля (слот справа)');
         await back.click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · История', { timeout: 5000 });
-        /* источник — Профиль («Открыть в технике») */
+        /* вернулись — lastTab === текущая, кнопка снова скрыта (без зацикливания) */
+        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
+        /* Статистика → Профиль → назад = Статистика */
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
-        await page.locator('[data-act="openFavs"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
-        await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
-        await page.locator('.card .exhead [data-act="techExit"]').click();
+        await page.locator('.topbar [data-act="goBack"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+        /* Профиль → Техника (nav) → назад = Профиль */
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await expect(page.locator('.card .exhead [data-act="techExit"]')).toHaveCount(0); /* старой кнопки в карточке больше нет */
+        await page.locator('.topbar [data-act="goBack"]').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
         /* уход с Техники и возврат через nav перезаписывают источник: назад = Статистика */
         await page.locator('.nav button', { hasText: 'Техника' }).click();
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
         await page.locator('.nav button', { hasText: 'Техника' }).click();
-        await expect(page.locator('.card .exhead [data-act="techExit"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('.card .exhead [data-act="techExit"]').click();
+        await page.locator('.topbar [data-act="goBack"]').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+    });
+
+    test('[UX-T20] «Назад» не мешает карточкам: у открытой тренировки и открытого упражнения кнопки нет', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        /* открытое упражнение: topbar «Назад» скрыт, работает внутренняя «К упражнениям» */
+        await page.locator('#techList .excard', { hasText: EX }).first().click();
+        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0, { timeout: 5000 });
+        await page.locator('[data-act="techBack"]').click();
+        await expect(page.locator('#techList')).toBeVisible({ timeout: 5000 });
+        /* topbar «Назад» на списке Техники ведёт на источник (Статистика) */
+        await page.locator('.topbar [data-act="goBack"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+        /* открытая карточка тренировки: topbar «Назад» скрыт, своя навигация карточки не тронута */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
+        /* «⭐ Любимые» из Профиля: источник запомнен единым механизмом — назад = Настройки */
+        await page.locator('.wcicons [data-act="closeHistory"]').click();
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await page.locator('[data-act="openFavs"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
+        await page.locator('.topbar [data-act="goBack"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
     });
 
     test('профиль: возраст/рост/вес и «Сохранить» в одном ряду; сохранение доезжает до сервера', async ({ page, request }) => {
@@ -1849,6 +1860,56 @@ test.describe('UX-T19: чипы «Техники», back-навигация, п�
         }
         /* сегмент пола на месте, без изменений */
         await expect(page.locator('.seg .seg-btn')).toHaveCount(2);
+    });
+
+    test('[UX-T20] «Пол» одной строкой: label слева, сегмент М/Ж справа; выбор сохраняется', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const row = page.locator('.sexrow');
+        await expect(row).toBeVisible({ timeout: 5000 });
+        const g = await row.evaluate(function (el) {
+            const t = el.querySelector('.t1').getBoundingClientRect();
+            const s = el.querySelector('.seg').getBoundingClientRect();
+            return { tCy: t.y + t.height / 2, sCy: s.y + s.height / 2, tRight: t.right, sLeft: s.left, overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth };
+        });
+        /* label и сегмент — по одной оси (вертикальные центры совпадают) */
+        if (Math.abs(g.tCy - g.sCy) > 4) throw new Error('«Пол» не в одну строку: расхождение центров ' + Math.abs(g.tCy - g.sCy).toFixed(1) + 'px');
+        /* label слева, сегмент справа */
+        if (g.sLeft < g.tRight) throw new Error('сегмент пола не правее label');
+        if (g.overflow) throw new Error('строка «Пол» даёт горизонтальное переполнение');
+        /* переключение пола работает, сохранение доезжает до сервера */
+        await row.locator('.seg-btn', { hasText: 'Ж' }).click();
+        await expect(row.locator('.seg-btn', { hasText: 'Ж' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(row.locator('.seg-btn', { hasText: 'М' })).not.toHaveClass(/on/);
+        await page.locator('#pfAge').fill('30');
+        await page.locator('#pfHeight').fill('175');
+        await page.locator('#pfWeight').fill('70');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.sex !== 'ж') throw new Error('пол не сохранился: ' + JSON.stringify(st.profile));
+    });
+
+    test('320px: строка «Пол» без переполнения, сегмент компактный справа', async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await expect(page.locator('.sexrow')).toBeVisible({ timeout: 5000 });
+        const m = await page.evaluate(function () {
+            const el = document.querySelector('.sexrow');
+            const t = el.querySelector('.t1').getBoundingClientRect();
+            const s = el.querySelector('.seg').getBoundingClientRect();
+            return {
+                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                tCy: t.y + t.height / 2, sCy: s.y + s.height / 2,
+                sW: s.width, sRight: s.right, cardRight: el.getBoundingClientRect().right
+            };
+        });
+        if (m.overflow) throw new Error('переполнение строки «Пол» на 320px');
+        if (Math.abs(m.tCy - m.sCy) > 4) throw new Error('на 320px «Пол» не в одну строку: ' + Math.abs(m.tCy - m.sCy).toFixed(1) + 'px');
+        /* max-width 220 + 2px бордера (без глобального border-box) = 222px по boundingBox */
+        if (m.sW > 224) throw new Error('сегмент пола шире ~220px: ' + m.sW.toFixed(1));
+        if (m.cardRight - m.sRight > 16) throw new Error('сегмент не прижат к правому краю карточки на 320px');
     });
 
     test('320px: ряд профиля без горизонтального переполнения, кнопка компактна', async ({ page }) => {

@@ -9,7 +9,8 @@ let modalCtx = null;
 let PENDING = null;
 let CUR = null;
 let PICKER = null;
-let TECH = { section: 'all', cat: null, open: null, fromTab: 'history', q: '' };
+let TECH = { section: 'all', cat: null, open: null, q: '' };
+let lastTab = 'history'; /* [UX-T20] предыдущая вкладка — источник для «Назад» на всех вкладках */
 let profileSex = 'м';
 let editSnap = null;
 let pendingTab = null;
@@ -255,8 +256,9 @@ function isCustomEx(name) {
 function dayPart(w) {
     if (!w.started) return null;
     const hh = +String(w.started).slice(11, 13);
-    /* [UX-T18] SVG-иконки времени суток из ICONS вместо эмодзи; границы:
-       5-11 утро, 11-17 день, 17-23 вечер, иначе ночь */
+    /* границы: 5-11 утро, 11-17 день, 17-23 вечер, иначе ночь.
+       [UX-T20] рендер иконки в карточках убран (не понравилась владельцу) — функция
+       и ключи ICONS остаются в коде «до лучших времён» */
     if (hh >= 5 && hh < 11) return { n: 'утро', i: 'sunrise' };
     if (hh >= 11 && hh < 17) return { n: 'день', i: 'sun' };
     if (hh >= 17 && hh < 23) return { n: 'вечер', i: 'evening' };
@@ -778,14 +780,14 @@ function loadTheme() {
 /* ============ ACTIONS ============ */
 const ACTIONS = {
     switchTab: function (a) {
-        /* [UX-T19] вход на «Технику» через навигацию: запоминаем вкладку-источник (для
-           кнопки «Назад») и сбрасываем фильтр к «Все» — как при первом входе */
+        /* [UX-T20] вход на «Технику» через навигацию: сбрасываем фильтр к «Все» — как при первом входе */
         if (a === 'tech' && tab !== 'tech') {
-            TECH.fromTab = tab;
             TECH.section = 'all';
             TECH.cat = null;
             TECH.q = '';
         }
+        /* [UX-T20] единая back-навигация: запоминаем вкладку-источник для кнопки «Назад» */
+        if (a !== tab) lastTab = tab;
         tab = a; viewWid = 0; render();
     },
     openHistory: function (a) {
@@ -845,16 +847,16 @@ const ACTIONS = {
     techBack: function () { TECH.open = null; render(); },
     techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
-    /* [UX-T19] «Назад» с «Техники»: на вкладку-источник (nav-тап/openFavs запомнили её
-       в TECH.fromTab); по умолчанию — История */
-    techExit: function () {
-        const t = (TECH.fromTab && TECH.fromTab !== 'tech') ? TECH.fromTab : 'history';
-        TECH.fromTab = 'history';
+    /* [UX-T20] «Назад» на всех вкладках: единый механизм — global lastTab помнит
+       предыдущую вкладку (заполняется в switchTab/openFavs); фолбэк — История,
+       сам-на-себя исключён (кнопка не рендерится, если lastTab === текущая) */
+    goBack: function () {
+        const t = (lastTab && lastTab !== tab) ? lastTab : 'history';
         tab = t; viewWid = 0; render();
     },
     /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые»;
-       [UX-T19] источник для «Назад» — вкладка, с которой пришли */
-    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; TECH.q = ''; TECH.fromTab = tab; tab = 'tech'; viewWid = 0; render(); },
+       [UX-T20] источник для «Назад» — общий lastTab (вкладка, с которой пришли) */
+    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; TECH.q = ''; if (tab !== 'tech') lastTab = tab; tab = 'tech'; viewWid = 0; render(); },
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
     wClr: function () { wClr(); },
@@ -959,7 +961,11 @@ function navHtml() {
 }
 function topbarHtml() {
     const names = { history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
+    /* [UX-T20] «Назад» в заголовке секции (topbar) на всех вкладках; не показываем у
+       открытой карточки тренировки и открытого упражнения — там свои кнопки выхода/возврата */
+    const showBack = lastTab !== tab && !viewWid && !(tab === 'tech' && TECH.open);
     return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' +
+        (showBack ? '<button class="barebtn tb-back" data-act="goBack" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' : '') +
         '<button class="tb-user" data-act="switchTab" data-a="profile" title="Настройки">' + ico('user') + '</button></div>';
 }
 
@@ -1008,7 +1014,6 @@ function previewCard(w) {
     const d = parseDateISO(w.date);
     const dateStr = firstLine(w);
     const rightTop = d ? d.getDate() + ' ' + MONTHS_SHORT[d.getMonth()] : '';
-    const dp = dayPart(w);
     const exs = (w.exercises || []).filter(e => e.sets.length && !isWarmupName(e.name));
     const hasTitle = w.title && w.title.trim();
     const show = exs.slice(0, 3); /* название живёт в строке даты — упражнения всегда три */
@@ -1016,8 +1021,9 @@ function previewCard(w) {
     const p = G.profile;
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard' + (w.finished ? '' : ' glow') + '" data-act="openHistory" data-a="' + w.id + '">';
+    /* [UX-T20] иконка времени суток из строки даты убрана — дата осталась текстом */
     h += '<div class="pc-daterow">' +
-        '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + (ICONS[dp.i] || '') + '</span> ' : '') + esc(hasTitle ? String(w.title).split('\n')[0].trim() : dateStr) + '</span>' +
+        '<span class="pc-date">' + esc(hasTitle ? String(w.title).split('\n')[0].trim() : dateStr) + '</span>' +
         (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
     h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-main">';
@@ -1097,11 +1103,11 @@ async function discardExit() {
 function workoutCard(w) {
     const lines = titleLines(w);
     let h = '<div class="card" id="w' + w.id + '">';
-    const dpw = dayPart(w);
     /* [UX-T8]: у завершённых «Повторить» переехала в шапку круглой иконкой;
        [UX-T18]: «💾 В шаблоны» из шапки убрана (сохранение шаблона — только в боте);
        [UX-T19]: у завершённой все действия в шапке в порядке 🔁 💾 ⏱ 🚪 🗑 — нижний
-       backbar больше не рендерится; у активной — «Упражнение/Отменить/Завершить» в шапке */
+       backbar больше не рендерится; у активной — «Упражнение/Отменить/Завершить» в шапке;
+       [UX-T20]: иконка времени суток из заголовка убрана */
     const wcacts = w.finished
         ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
           '<button class="barebtn" data-act="saveWorkout" title="Сохранить" aria-label="Сохранить">' + ICONS.save + '</button>'
@@ -1114,7 +1120,6 @@ function workoutCard(w) {
         ? '<button class="barebtn" data-act="closeHistory" title="Выйти" aria-label="Выйти">' + ICONS.door + '</button>'
         : '';
     h += '<div class="wchead' + (w.finished ? ' fin' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
-        (dpw ? '<span class="dp-inline">' + (ICONS[dpw.i] || '') + '</span> ' : '') +
         esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' + wcacts +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
@@ -1449,16 +1454,17 @@ function renderTechTab() {
             return h;
         }
     }
-    /* [UX-T19] «Назад» на уровне заголовка карточки (правый угол): возврат на вкладку-источник */
-    let h = '<div class="card"><div class="exhead"><p class="t1">📖 Техника упражнений</p>' +
-        '<button class="barebtn" data-act="techExit" title="Назад" aria-label="Назад">' + ICONS.back + '</button></div>' +
+    /* [UX-T20] кнопка «Назад» переехала из заголовка карточки в topbar (единый механизм
+       для всех вкладок, data-act="goBack") */
+    let h = '<div class="card"><div class="exhead"><p class="t1">📖 Техника упражнений</p></div>' +
         '<div class="searchbox"><input id="techQ" type="text" placeholder="Поиск упражнения..." value="' + esc(TECH.q) + '"></div>' +
         techChipsHtml() + '</div>';
     h += '<div class="exgrid" id="techList">';
     for (const c of techFiltered()) {
-        /* [UX-T18] ⭐ в строке — тогл любимых; тап мимо звезды открывает упражнение */
+        /* [UX-T18] ⭐ в строке — тогл любимых; тап мимо звезды открывает упражнение.
+           [UX-T20] span с названием flex:1 — звезда прижата к правому краю строки */
         h += '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + ico(c.i) +
-            '<span><div class="exn">' + esc(c.n) + '</div><div class="extags">' + c.t.map(t => '#' + t).join(' ') + '</div></span>' + starHtml(c.n) + '</div>';
+            '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div><div class="extags">' + c.t.map(t => '#' + t).join(' ') + '</div></span>' + starHtml(c.n) + '</div>';
     }
     h += '</div>';
     if (!techFiltered().length) h += '<p class="empty">Ничего не найдено</p>';
@@ -1649,12 +1655,12 @@ function renderProfileTab() {
         h += '<p class="meta">Нужен для расчёта калорий 🔥</p>';
     }
     h += '</div>';
-    h += '<div class="card"><p class="t1">Пол</p>' +
-        /* [UX-T18] компактный сегмент-контрол вместо большой пилюли */
+    /* [UX-T20] «Пол» одной строкой: label слева, компактный сегмент М/Ж справа */
+    h += '<div class="card"><div class="sexrow"><p class="t1">Пол</p>' +
         '<div class="seg" role="group" aria-label="Пол">' +
         '<button class="seg-btn' + (profileSex === 'м' ? ' on' : '') + '" data-act="setSex" data-a="м" title="Мужской" aria-label="Мужской">М</button>' +
         '<button class="seg-btn' + (profileSex === 'ж' ? ' on' : '') + '" data-act="setSex" data-a="ж" title="Женский" aria-label="Женский">Ж</button>' +
-        '</div></div>';
+        '</div></div></div>';
     /* [UX-T19] возраст/рост/вес + сохранение в одном ряду: компактные поля ~40px с мелкими
        метками, кнопка справа; на 320px кнопка уходит под ряд, оставаясь компактной.
        Логика saveProfile не тронута (те же id полей) */

@@ -156,6 +156,11 @@ button { font-family: inherit; }
     flex: none;
 }
 .tb-user svg { width: 18px; height: 18px; }
+/* [UX-T20] «Назад» в шапке секции (barebtn-стрелка): заголовок растягивается и прижимает
+   «Назад» + профиль к правому краю (иначе space-between оставляет стрелку в центре) */
+.topbar .tb-title { flex: 1 1 auto; min-width: 0; }
+.topbar .barebtn { flex: none; }
+.topbar .barebtn svg { width: 20px; height: 20px; }
 
 /* ============ нижняя навигация: 4 таба + янтарная FAB ============ */
 .nav {
@@ -472,6 +477,7 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .wchead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .wctitles { flex: 1; min-width: 0; cursor: pointer; padding-top: 5.4px; }
 .wctitles .t1 { font-size: 17px; line-height: 1.3; overflow-wrap: break-word; word-break: break-word; }
+/* [UX-T20] до лучших времён: рендер иконок времени суток выпилен (dayPart/ICONS живы), CSS ждёт возврата */
 .dp-inline { display: inline-flex; align-items: center; font-size: 14px; color: var(--accent); vertical-align: -3px; }
 .dp-inline svg { width: 16px; height: 16px; display: block; }
 .wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
@@ -856,6 +862,10 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .themetoggle .btn { flex: 1; }
 /* [UX-T18] компактный сегмент-контрол пола: две половины М/Ж высотой ~40px */
 .seg { display: flex; margin-top: 8px; border: 1px solid var(--btn-brd); border-radius: 12px; overflow: hidden; background: var(--field); }
+/* [UX-T20] «Пол» одной строкой: label слева, сегмент прижат вправо (на 320px тоже влезает) */
+.sexrow { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.sexrow .t1 { margin: 0; }
+.sexrow .seg { flex: 1 1 auto; max-width: 220px; margin-top: 0; margin-left: auto; }
 .seg .seg-btn {
     flex: 1 1 0;
     min-width: 0;
