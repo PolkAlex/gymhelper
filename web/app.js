@@ -255,11 +255,12 @@ function isCustomEx(name) {
 function dayPart(w) {
     if (!w.started) return null;
     const hh = +String(w.started).slice(11, 13);
-    /* [UX-T17] вернули эмодзи (SVG-ключи sunrise/sun/moon остались в ICONS, не используются);
-       утро — 🌞: 🌅 на части платформ рисуется квадратной градиентной плиткой */
-    if (hh < 12) return { n: 'утро', i: '🌞' };
-    if (hh < 18) return { n: 'день', i: '☀️' };
-    return { n: 'вечер', i: '🌙' };
+    /* [UX-T18] SVG-иконки времени суток из ICONS вместо эмодзи; границы:
+       5-11 утро, 11-17 день, 17-23 вечер, иначе ночь */
+    if (hh >= 5 && hh < 11) return { n: 'утро', i: 'sunrise' };
+    if (hh >= 11 && hh < 17) return { n: 'день', i: 'sun' };
+    if (hh >= 17 && hh < 23) return { n: 'вечер', i: 'evening' };
+    return { n: 'ночь', i: 'moon' };
 }
 function isWarmupName(name) {
     const c = findCatalog(name);
@@ -606,7 +607,7 @@ function renderRestbar() {
         '<span class="rb-time' + (REST.paused ? ' paused' : '') + '" id="rbTime">' + restFmt(left) + '</span>' +
         '<span class="rb-btns">' +
         '<button class="rb-sqbtn" data-act="restPause" title="' + (REST.paused ? 'Продолжить' : 'Пауза') + '" aria-label="' + (REST.paused ? 'Продолжить' : 'Пауза') + '">' + (REST.paused ? '▶' : '⏸') + '</button>' +
-        '<button class="rb-sqbtn" data-act="restMore" title="+30 сек" aria-label="Добавить 30 секунд">+30</button>' +
+        '<button class="rb-sqbtn rb-sm" data-act="restMore" title="+30 сек" aria-label="Добавить 30 секунд">+30</button>' +
         '<button class="rb-sqbtn" data-act="restReset" title="Закрыть" aria-label="Закрыть таймер">✕</button>' +
         '<button class="rb-sqbtn" data-act="restFold" title="Свернуть" aria-label="Свернуть панель">⌄</button>' +
         '</span></div>' +
@@ -899,9 +900,14 @@ function render() {
     if (tab === 'coach') h += renderCoachTab();
     if (tab === 'profile') h += renderProfileTab();
     h += navHtml();
-    if (tab === 'history' && viewWid && findW(viewWid)) {
+    /* [UX-T18] backbar: у активной три компактные кнопки — Сохранить / Удалить (confirm) /
+       Выйти; у завершённой из истории backbar без изменений (корзина уже в шапке) */
+    const bw = (tab === 'history' && viewWid) ? findW(viewWid) : null;
+    if (bw) {
         h += '<div class="backbar"><div class="ab-row">' +
             '<button class="btn prime" data-act="saveWorkout">💾 Сохранить</button>' +
+            (bw.finished ? '' :
+                '<button class="btn sec icbtn bb-del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + bw.id + '" title="Удалить" aria-label="Удалить тренировку">' + ICONS.trash + '<span>Удалить</span></button>') +
             '<button class="btn sec" data-act="closeHistory">🚪 Выйти</button>' +
             '</div></div>';
         h += '<div style="height:70px"></div>';
@@ -993,7 +999,7 @@ function previewCard(w) {
     const res = p && p.weight > 0 ? calcWorkoutKcal(p, w) : null;
     let h = '<div class="pcard' + (w.finished ? '' : ' glow') + '" data-act="openHistory" data-a="' + w.id + '">';
     h += '<div class="pc-daterow">' +
-        '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + dp.i + '</span> ' : '') + esc(hasTitle ? String(w.title).split('\n')[0].trim() : dateStr) + '</span>' +
+        '<span class="pc-date">' + (dp ? '<span class="dp-inline">' + (ICONS[dp.i] || '') + '</span> ' : '') + esc(hasTitle ? String(w.title).split('\n')[0].trim() : dateStr) + '</span>' +
         (w.finished ? '' : '<span class="pc-pill">⚫ идёт</span>') + '</div>';
     h += '<div class="pc-dow">' + rightTop + '</div>';
     h += '<div class="pc-main">';
@@ -1017,7 +1023,7 @@ function renderHistoryTab() {
     if (viewWid) {
         const w = findW(viewWid);
         if (!w) { viewWid = 0; } else {
-            return workoutCard(w, true);
+            return workoutCard(w);
         }
     }
     const fin = G.workouts.filter(w => w.finished).slice().reverse();
@@ -1070,23 +1076,22 @@ async function discardExit() {
 }
 
 /* ---------- карточка тренировки ---------- */
-function workoutCard(w, showActions) {
-    showActions = showActions !== false;
+function workoutCard(w) {
     const lines = titleLines(w);
     let h = '<div class="card" id="w' + w.id + '">';
     const dpw = dayPart(w);
-    /* [UX-T8]: у завершённых «Повторить» и «В шаблоны» переехали в шапку круглыми иконками;
-       [UX-T17]: у активной — «Упражнение/Отменить/Завершить» тоже в шапке, справа после ⏱/🗑 */
+    /* [UX-T8]: у завершённых «Повторить» переехала в шапку круглой иконкой;
+       [UX-T18]: «💾 В шаблоны» из шапки убрана (сохранение шаблона — только в боте),
+       остаются 🔁 ⏱ 🗑; [UX-T17]: у активной — «Упражнение/Отменить/Завершить» в шапке */
     const wcacts = w.finished
-        ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
-          '<button class="barebtn" data-act="tplSaveModal" data-a="' + w.id + '" title="В шаблоны" aria-label="В шаблоны">' + ICONS.save + '</button>'
+        ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>'
         : '';
     const wcact = w.finished ? '' :
         '<button class="barebtn" data-act="openPicker" data-a="' + w.id + '" title="Добавить упражнение" aria-label="Добавить упражнение">' + ICONS.plus + '</button>' +
         '<button class="barebtn" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Отменить тренировку" aria-label="Отменить тренировку">' + ICONS.cross + '</button>' +
         '<button class="barebtn" data-act="finishWorkout" data-a="' + w.id + '" title="Завершить тренировку" aria-label="Завершить тренировку">' + ICONS.check + '</button>';
     h += '<div class="wchead' + (w.finished ? '' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
-        (dpw ? '<span class="dp-inline">' + dpw.i + '</span> ' : '') +
+        (dpw ? '<span class="dp-inline">' + (ICONS[dpw.i] || '') + '</span> ' : '') +
         esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' + wcacts +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
@@ -1136,14 +1141,11 @@ function workoutCard(w, showActions) {
         h += '</div>';
     });
     if (G.profile && G.profile.weight > 0 && exs.length) {
-        h += '<details><summary>🔥 Ккал по упражнениям</summary>' + kcalBreakdown(w) + '</details>';
+        h += '<details><summary>🔥 Ккал по упражнениям <span class="wip">(в разработке)</span></summary>' + kcalBreakdown(w) + '</details>';
     }
-    h += '<details><summary>📈 Прогресс</summary>' + progressHtml(w) + '</details>';
-    /* [UX-T17] кнопки активной тренировки переехали в шапку (wcact); у завершённой
-       красная «Удалить тренировку» осталась строкой, как было после [UX-T8] */
-    if (showActions && w.finished) {
-        h += '<div class="btnrow"><button class="btn danger wide icbtn" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '">' + ICONS.trash + '<span>Удалить тренировку</span></button></div>';
-    }
+    h += '<details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary>' + progressHtml(w) + '</details>';
+    /* [UX-T18] красная «Удалить тренировку» из потока карточки убрана: удаление — в backbar
+       (у активной) и в корзине шапки; ACTION и бота не трогали */
     h += '</div>';
     return h;
 }
@@ -1424,8 +1426,9 @@ function renderTechTab() {
         techChipsHtml() + '</div>';
     h += '<div class="exgrid" id="techList">';
     for (const c of techFiltered()) {
+        /* [UX-T18] ⭐ в строке — тогл любимых; тап мимо звезды открывает упражнение */
         h += '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + ico(c.i) +
-            '<span><div class="exn">' + esc(c.n) + '</div><div class="extags">' + c.t.map(t => '#' + t).join(' ') + '</div></span></div>';
+            '<span><div class="exn">' + esc(c.n) + '</div><div class="extags">' + c.t.map(t => '#' + t).join(' ') + '</div></span>' + starHtml(c.n) + '</div>';
     }
     h += '</div>';
     if (!techFiltered().length) h += '<p class="empty">Ничего не найдено</p>';
@@ -1617,9 +1620,10 @@ function renderProfileTab() {
     }
     h += '</div>';
     h += '<div class="card"><p class="t1">Пол</p>' +
-        '<div class="sexbtns">' +
-        '<button class="btn' + (profileSex === 'м' ? '' : ' sec') + '" data-act="setSex" data-a="м">Мужской</button>' +
-        '<button class="btn' + (profileSex === 'ж' ? '' : ' sec') + '" data-act="setSex" data-a="ж">Женский</button>' +
+        /* [UX-T18] компактный сегмент-контрол вместо большой пилюли */
+        '<div class="seg" role="group" aria-label="Пол">' +
+        '<button class="seg-btn' + (profileSex === 'м' ? ' on' : '') + '" data-act="setSex" data-a="м" title="Мужской" aria-label="Мужской">М</button>' +
+        '<button class="seg-btn' + (profileSex === 'ж' ? ' on' : '') + '" data-act="setSex" data-a="ж" title="Женский" aria-label="Женский">Ж</button>' +
         '</div></div>';
     h += '<div class="card">' +
         '<label>Возраст</label><input id="pfAge" type="number" inputmode="numeric" value="' + p.age + '">' +
@@ -1670,7 +1674,8 @@ function renderProfileTab() {
         '<button class="btn sec" data-act="pickBg">📷 Выбрать из галереи</button>' +
         '<button class="btn sec" data-act="clearBg">Убрать фон</button>' +
         '</div></div>';
-    return h;
+    /* [UX-T18] обёртка .prof: компактные карточки/поля (стиль токенов не менялся) */
+    return '<div class="prof">' + h + '</div>';
 }
 function saveProfile() {
     const sex = profileSex || 'м';
@@ -2017,7 +2022,8 @@ function exCardByName(name) {
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(name) + '</div><div class="extags">' + tags + '</div></span>' + starHtml(name) + '</div>';
 }
 function starHtml(name) {
-    return '<span class="star' + (isFav(name) ? ' fav' : '') + '" data-fav="' + esc(name) + '">' + (isFav(name) ? '★' : '☆') + '</span>';
+    const fav = isFav(name);
+    return '<span class="star' + (fav ? ' fav' : '') + '" data-fav="' + escAttr(name) + '" role="button" aria-label="' + (fav ? 'Из любимых' : 'В любимые') + '">' + (fav ? '★' : '☆') + '</span>';
 }
 function pickerChipsHtml() {
     let h = '';
@@ -2081,7 +2087,9 @@ function renderPickerList() {
     box.innerHTML = h;
 }
 function renderPickerModal() {
-    let h = '<p class="mtitle">➕ Добавить упражнение</p>';
+    /* [UX-T18] ✕ в правом верхнем углу заголовка — закрыть пикер без выбора (как по фону) */
+    let h = '<div class="mtitle-row"><p class="mtitle">➕ Добавить упражнение</p>' +
+        '<button class="barebtn" data-act="closeModal" title="Закрыть" aria-label="Закрыть">' + ICONS.cross + '</button></div>';
     h += '<div class="searchbox"><input id="pickerQ" type="text" placeholder="Поиск..." autocomplete="off" autocapitalize="off" spellcheck="false" value="' + esc(PICKER.q) + '"></div>';
     const showCats = PICKER.section !== 'fav' && PICKER.section !== 'all';
     h += '<div class="secrow" id="pickerSections">' + pickerChipsHtml() + '</div>';

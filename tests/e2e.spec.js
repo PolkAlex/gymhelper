@@ -29,7 +29,8 @@ async function startAndPick(page, name) {
 async function startWorkoutUi(page) {
     await page.locator('.nav .nfab').click();
     await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
-    await page.locator('.modal.open [data-act="closeModal"]').click();
+    /* [UX-T18] в пикере две кнопки закрытия (✕ в шапке + «Закрыть» внизу) */
+    await page.locator('.modal.open [data-act="closeModal"]').first().click();
     await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
 }
 async function openActiveDetail(page) {
@@ -56,7 +57,7 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.nav .nfab').click();
         /* после старта — сразу экран редактирования (карточка тренировки), а не Главный */
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
-        await page.locator('.modal.open [data-act="closeModal"]').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await expect(page.locator('.wcpill')).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.backbar', { hasText: 'Сохранить' })).toBeVisible({ timeout: 5000 });
@@ -266,12 +267,12 @@ test.describe('GymHelper e2e', function () {
     test('[UX-T17] «⭐ Любимые упражнения» в Профиле: переход на «Технику» с фильтром «★ Любимые»', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
-        await page.locator('[data-act="closeModal"]').click();
+        await page.locator('[data-act="closeModal"]').first().click();
         /* отмечаем жим ⭐ в пикере */
         await page.locator('[data-act="openPicker"]').click();
         await page.locator('.modal.open .excard', { hasText: EX }).first().locator('.star').click();
         await expect(page.locator('.modal.open .excard', { hasText: EX }).first().locator('.star')).toHaveClass(/fav/, { timeout: 5000 });
-        await page.locator('[data-act="closeModal"]').click();
+        await page.locator('[data-act="closeModal"]').first().click();
         /* Профиль → кнопка любимых */
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
         const card = page.locator('.card', { hasText: '⭐ Любимые упражнения' });
@@ -551,7 +552,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
     });
 
-    test('превью-карточки: дата как в шапке (эмодзи + дд.мм, дн), жирное название, правый угол без дня недели', async ({ page }) => {
+    test('превью-карточки: дата как в шапке (SVG-иконка времени + дд.мм), жирное название, правый угол без дня недели', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
@@ -570,8 +571,20 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
         /* своё название тренировки показывается В СТРОКЕ ДАТЫ, а не отдельной строкой среди упражнений */
         await expect(page.locator('.pc-date', { hasText: 'Вечерняя программа' }).first()).toBeVisible({ timeout: 5000 });
-        /* [UX-T17] время суток вернулось эмодзи (какой именно — зависит от часа запуска теста) */
-        await expect(page.locator('.pc-date').first()).toContainText(/🌞|☀️|🌙/);
+        /* [UX-T18] время суток — SVG-иконка в .dp-inline (какая именно — зависит от часа запуска теста) */
+        await expect(page.locator('.pc-date .dp-inline svg').first()).toBeVisible({ timeout: 5000 });
+        /* иконка в цвет accent темы (сравнение computed-цветов — работает в обеих темах) */
+        const accent = await page.evaluate(function () { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); });
+        const dpColor = await page.evaluate(function () { return getComputedStyle(document.querySelector('.pc-date .dp-inline')).color; });
+        const accentComputed = await page.evaluate(function (acc) {
+            const d = document.createElement('div');
+            d.style.color = acc;
+            document.body.appendChild(d);
+            const c = getComputedStyle(d).color;
+            d.remove();
+            return c;
+        }, accent);
+        if (dpColor !== accentComputed) throw new Error('.dp-inline не в accent: ' + dpColor + ' vs ' + accentComputed);
         const dateTxt = ((await page.locator('.pc-date').first().textContent()) || '').trim();
         if (!dateTxt.includes('Вечерняя программа')) throw new Error('название тренировки не в строке даты: ' + JSON.stringify(dateTxt));
         const exTexts = await page.locator('.pc-ex').allTextContents();
@@ -1055,7 +1068,7 @@ test.describe('GymHelper e2e', function () {
         /* после старта мы на экране карточки — жмём FAB ещё раз: активная тренировка открывается, дубликат не создаётся */
         await page.locator('.nav .nfab').click();
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
-        await page.locator('.modal.open [data-act="closeModal"]').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         const st = await request.get('/api/state');
         const state = await st.json().catch(function () { return null; });
@@ -1366,35 +1379,18 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
         if (unfin.length !== 1) throw new Error('мгновенный старт не создал ровно одну тренировку: ' + unfin.length);
     });
 
-    test('«💾 В шаблоны» сохраняет последний план; FAB начинает открывать модалку; старт из шаблона даёт пустой список упражнений', async ({ page, request }) => {
+    /* [UX-T18] иконка «💾 В шаблоны» из шапки завершённой удалена (сохранение шаблона —
+       только в боте), поэтому сам тап по ней не воспроизводится: шаблон сеется через API,
+       а тест покрывает оставшуюся цепочку — модалка старта, старт из шаблона, план на сервере */
+    test('старт из шаблона: модалка выбора, тост, пустой список упражнений с планом на сервере', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)],
+            templates: [{ id: 1, name: EX, createdAt: today + 'T10:35:00',
+                exercises: [{ name: EX, w: '100', s: 3, r: '10' }] }]
+        } } });
         await openApp(page);
-        await startAndPick(page, EX);
-        await fillEntry(page, '100', '3', '10');
-        await page.locator('[data-act="finishWorkout"]').click();
-        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
-        /* [UX-T13] после завершения мы в списке истории — открываем карточку завершённой */
-        await page.locator('.pcard').first().click();
-        await expect(page.locator('.wcicons')).toBeVisible({ timeout: 5000 });
-        /* карточка завершённой: модалка сохранения с авто-именем и планом последнего блока */
-        await page.locator('[data-act="tplSaveModal"]').click();
-        const modal = page.locator('.modal.open');
-        await expect(modal).toContainText('💾 Сохранить как шаблон', { timeout: 5000 });
-        await expect(page.locator('#mTplName')).toHaveValue(EX);
-        await expect(modal).toContainText('В шаблон войдут (1)');
-        await expect(modal).toContainText('100 кг × 3 × 10');
-        await modal.locator('[data-act="tplSave"]').click();
-        await expect(page.locator('.toast.show')).toHaveText('✓ Шаблон сохранён', { timeout: 5000 });
-        await expect(modal).not.toBeVisible({ timeout: 5000 });
-        /* шаблон доехал до сервера: имя + последний план */
-        const st = await (await request.get('/api/state')).json();
-        const t = (st.templates || [])[0];
-        if (!t || t.name !== EX) throw new Error('шаблон не сохранён: ' + JSON.stringify(st.templates));
-        const te = (t.exercises || [])[0];
-        if (!te || te.name !== EX || te.w !== '100' || te.s !== 3 || te.r !== '10') {
-            throw new Error('план шаблона неверен: ' + JSON.stringify(te));
-        }
-        /* выходим из карточки: теперь FAB открывает модалку «Новая тренировка» */
-        await page.locator('[data-act="saveWorkout"]').click();
         await page.locator('.nav .nfab').click();
         const m2 = page.locator('.modal.open');
         await expect(m2).toContainText('Новая тренировка', { timeout: 5000 });
@@ -1413,6 +1409,10 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
         const fresh = (st2.workouts || []).filter(function (w) { return !w.finished; })[0];
         if (!fresh || !fresh.exercises.length || fresh.exercises[0].name !== EX || fresh.exercises[0].sets.length) {
             throw new Error('старт из шаблона создал не то: ' + JSON.stringify(fresh));
+        }
+        const te = fresh.exercises[0];
+        if (te.pw !== '100' || te.ps !== 3 || te.pr !== '10') {
+            throw new Error('план шаблона не доехал в запись: ' + JSON.stringify(te));
         }
     });
 
@@ -1585,5 +1585,127 @@ test.describe('шаблоны с планом [UX-E5]', function () {
         const e0 = fresh.exercises[0], e1 = fresh.exercises[1];
         if (e0.pw !== '80' || e0.ps !== 3 || e0.pr !== '8-10') throw new Error('план жима: ' + JSON.stringify(e0));
         if (e1.pw !== '' || e1.ps !== 4 || e1.pr !== '8') throw new Error('план подтягиваний: ' + JSON.stringify(e1));
+    });
+});
+
+/* ===== [UX-T18] восемь правок по фидбеку владельца ===== */
+test.describe('UX-T18: иконки времени, backbar-удаление, звезда в технике, центровка таймера', function () {
+
+    test('4 SVG-иконки времени суток рендерятся в .dp-inline (accent; вечер — fill-полусолнце)', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        const mk = function (id, time) {
+            return { id: id, date: today, started: today + 'T' + time, ended: today + 'T' + time, finished: true, title: '', nutrition: '',
+                exercises: [{ name: EX, st: today + 'T' + time, en: today + 'T' + time,
+                    sets: [{ w: '60', s: 2, r: '10', t: today + 'T' + time }] }] };
+        };
+        /* ночь 02:30 → moon, утро 06:30 → sunrise, день 12:30 → sun, вечер 18:30 → evening */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 5, del: [],
+            workouts: [mk(1, '02:30:00'), mk(2, '06:30:00'), mk(3, '12:30:00'), mk(4, '18:30:00')]
+        } } });
+        await openApp(page);
+        await expect(page.locator('.pcard')).toHaveCount(4, { timeout: 5000 });
+        /* у каждой превью-карточки — svg-иконка времени суток (не эмодзи) */
+        await expect(page.locator('.pcard .dp-inline svg')).toHaveCount(4, { timeout: 5000 });
+        /* цвет иконки = accent темы (сравнение computed-цветов) */
+        const accent = await page.evaluate(function () { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); });
+        const dpColor = await page.evaluate(function () { return getComputedStyle(document.querySelector('.pcard .dp-inline')).color; });
+        const accentComputed = await page.evaluate(function (acc) {
+            const d = document.createElement('div');
+            d.style.color = acc;
+            document.body.appendChild(d);
+            const c = getComputedStyle(d).color;
+            d.remove();
+            return c;
+        }, accent);
+        if (dpColor !== accentComputed) throw new Error('.dp-inline не в accent: ' + dpColor + ' vs ' + accentComputed);
+        /* вечерняя иконка (свежая тренировка — первая в списке) с fill-полусолнцем, ровно одна */
+        const fillCount = await page.locator('.pcard .dp-inline svg path[fill="currentColor"]').count();
+        if (fillCount !== 1) throw new Error('fill-полусолнце (вечер) не ровно одно: ' + fillCount);
+    });
+
+    test('backbar активной: Сохранить/Удалить/Выйти, «Удалить» спрашивает подтверждение', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await expect(page.locator('.backbar .btn')).toHaveCount(3, { timeout: 5000 });
+        const del = page.locator('.backbar [data-act="confirmModal"]');
+        await expect(del).toHaveCount(1);
+        await expect(del).toContainText('Удалить');
+        await del.click();
+        await expect(page.locator('.modal.open')).toContainText('Удалить тренировку?', { timeout: 5000 });
+        await page.locator('.modal.open [data-act="confirmYes"]').click();
+        await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pcard')).toHaveCount(0);
+    });
+
+    test('завершённая из истории: backbar из двух кнопок, большой красной кнопки и «В шаблоны» нет', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
+        /* [UX-T18] у завершённой backbar без «Удалить» (корзина в шапке) */
+        await expect(page.locator('.backbar .btn')).toHaveCount(2);
+        await expect(page.locator('.backbar [data-act="confirmModal"]')).toHaveCount(0);
+        /* большой красной «🗑 Удалить тренировку» в потоке карточки больше нет */
+        await expect(page.locator('.card .btnrow .btn.danger')).toHaveCount(0);
+        /* шапка завершённой: 🔁 ⏱ 🗑 — «💾 В шаблоны» убрана */
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(3);
+        await expect(page.locator('.wcicons [data-act="tplSaveModal"]')).toHaveCount(0);
+        await expect(page.locator('.wcicons [data-act="newRepeatFrom"]')).toHaveCount(1);
+    });
+
+    test('звезда в списке «Техника»: тоглится, сохраняется в gymFavs и не открывает упражнение', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        const star = page.locator('#techList .excard', { hasText: EX }).first().locator('.star');
+        await expect(star).toBeVisible({ timeout: 5000 });
+        await expect(star).toHaveAttribute('aria-label', 'В любимые');
+        await star.click();
+        /* тап по звезде НЕ открыл упражнение: остались список и заголовок «Техника» */
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('#techList')).toBeVisible();
+        const star2 = page.locator('#techList .excard', { hasText: EX }).first().locator('.star');
+        await expect(star2).toHaveClass(/fav/, { timeout: 5000 });
+        await expect(star2).toHaveAttribute('aria-label', 'Из любимых');
+        /* сохранено в localStorage gymFavs */
+        const favs = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymFavs') || '[]'); });
+        if (!favs.includes(EX)) throw new Error('gymFavs не сохранил: ' + JSON.stringify(favs));
+        /* переживает перезагрузку (после reload приложение открывается на «Истории») */
+        await page.reload();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await expect(page.locator('#techList .excard', { hasText: EX }).first().locator('.star')).toHaveClass(/fav/, { timeout: 10000 });
+    });
+
+    test('центровка глифов в 4 кнопках панели таймера: центр кнопки = центр глифа ±2px', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await fillEntry(page, '60', '1', '10');
+        const bar = page.locator('#restbar');
+        await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
+        const res = await page.evaluate(function () {
+            function glyphCenter(btn) {
+                const r = document.createRange();
+                r.selectNodeContents(btn);
+                const b = r.getBoundingClientRect();
+                return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+            }
+            const out = [];
+            document.querySelectorAll('.rb-sqbtn').forEach(function (b) {
+                const bb = b.getBoundingClientRect();
+                const g = glyphCenter(b);
+                out.push({ act: b.getAttribute('data-act'), dx: Math.abs((bb.x + bb.width / 2) - g.x), dy: Math.abs((bb.y + bb.height / 2) - g.y) });
+            });
+            return out;
+        });
+        if (res.length !== 4) throw new Error('кнопок таймера: ' + res.length + ', ожидалось 4');
+        for (const r of res) {
+            if (r.dx > 2 || r.dy > 2) {
+                throw new Error('кнопка ' + r.act + ' не по центру: dx=' + r.dx.toFixed(1) + 'px, dy=' + r.dy.toFixed(1) + 'px');
+            }
+        }
     });
 });
