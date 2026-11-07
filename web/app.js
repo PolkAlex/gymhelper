@@ -1108,6 +1108,9 @@ function workoutCard(w) {
        [UX-T19]: у завершённой все действия в шапке в порядке 🔁 💾 ⏱ 🚪 🗑 — нижний
        backbar больше не рендерится; у активной — «Упражнение/Отменить/Завершить» в шапке;
        [UX-T20]: иконка времени суток из заголовка убрана */
+    /* [UX-T21] «Назад» в шапке карточки — выход к списку Истории, как tb-back на вкладках;
+       прежняя «🚪 Выйти» (wcexit) убрана — дублировала closeHistory */
+    const wcback = '<button class="barebtn wc-back" data-act="closeHistory" title="Назад" aria-label="Назад">' + ICONS.back + '</button>';
     const wcacts = w.finished
         ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
           '<button class="barebtn" data-act="saveWorkout" title="Сохранить" aria-label="Сохранить">' + ICONS.save + '</button>'
@@ -1116,14 +1119,10 @@ function workoutCard(w) {
         '<button class="barebtn" data-act="openPicker" data-a="' + w.id + '" title="Добавить упражнение" aria-label="Добавить упражнение">' + ICONS.plus + '</button>' +
         '<button class="barebtn" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Отменить тренировку" aria-label="Отменить тренировку">' + ICONS.cross + '</button>' +
         '<button class="barebtn" data-act="finishWorkout" data-a="' + w.id + '" title="Завершить тренировку" aria-label="Завершить тренировку">' + ICONS.check + '</button>';
-    const wcexit = w.finished
-        ? '<button class="barebtn" data-act="closeHistory" title="Выйти" aria-label="Выйти">' + ICONS.door + '</button>'
-        : '';
     h += '<div class="wchead' + (w.finished ? ' fin' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
         esc(lines[0]) + '</p></div>' +
-        '<div class="wcicons">' + wcacts +
+        '<div class="wcicons">' + wcback + wcacts +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
-        wcexit +
         '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
         wcact +
         '</div></div>';
