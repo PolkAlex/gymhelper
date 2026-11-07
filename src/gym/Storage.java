@@ -96,4 +96,20 @@ public final class Storage {
         }
         return mine;
     }
+
+    /* [UX-T16] рассылка владельцем: все активные чаты — id из имён chat_<id>.json в data/ */
+    public synchronized List<Long> chatIds() {
+        List<Long> out = new ArrayList<>();
+        try {
+            if (!Files.exists(dir)) return out;
+            Pattern f = Pattern.compile("^chat_(\\d+)\\.json$");
+            for (Path p : Files.newDirectoryStream(dir, "chat_*.json")) {
+                Matcher m = f.matcher(p.getFileName().toString());
+                if (m.matches()) out.add(Long.parseLong(m.group(1)));
+            }
+        } catch (Exception e) {
+            System.out.println("[warn] chatIds: " + e.getMessage());
+        }
+        return out;
+    }
 }

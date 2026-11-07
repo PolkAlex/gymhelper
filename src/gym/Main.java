@@ -37,7 +37,10 @@ public final class Main {
             appLink = "https://t.me/" + botUsername + "?startapp=app";
         }
 
-        BotLogic logic = new BotLogic(api, storage, webAppUrl, appLink);
+        /* [UX-T16] рассылка владельцем: chat id владельца из env; не задан — admin-команды недоступны */
+        long adminChatId = readLng(System.getenv("GYM_ADMIN_CHAT_ID"), 0);
+
+        BotLogic logic = new BotLogic(api, storage, webAppUrl, appLink, adminChatId);
 
         int port = readInt(System.getenv("GYM_PORT"), 8080);
         Path webDir = Path.of("web");
@@ -83,6 +86,14 @@ public final class Main {
     private static int readInt(String s, int def) {
         try {
             if (s != null && !s.isBlank()) return Integer.parseInt(s.trim());
+        } catch (NumberFormatException ignored) {
+        }
+        return def;
+    }
+
+    private static long readLng(String s, long def) {
+        try {
+            if (s != null && !s.isBlank()) return Long.parseLong(s.trim());
         } catch (NumberFormatException ignored) {
         }
         return def;

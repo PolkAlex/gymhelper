@@ -43,15 +43,18 @@ public final class BotLogic {
     private final Storage storage;
     private final String webAppUrl;
     private final String appLink;
+    /* [UX-T16] рассылка владельцем: chat id владельца; 0 — admin-команды недоступны */
+    private final long adminChatId;
     private final Map<Long, UserState> states = new ConcurrentHashMap<>();
     private final Map<Long, RestSession> rests = new ConcurrentHashMap<>();
     private final ScheduledExecutorService restScheduler;
 
-    public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink) {
+    public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId) {
         this.api = api;
         this.storage = storage;
         this.webAppUrl = webAppUrl;
         this.appLink = appLink;
+        this.adminChatId = adminChatId;
         /* daemon-поток: фоновые правки не должны мешать long polling и не держат JVM */
         this.restScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "rest-timer");
@@ -315,6 +318,12 @@ public final class BotLogic {
         /* строго, как /rest: /helpx не матчится (§2.7) */
         if (low.equals("/help") || low.startsWith("/help ")) {
             showHelp(chatId, null, data, st);
+            return;
+        }
+        /* рассылка владельцем [UX-T16]: строго, /announcex и /announce_dryx не матчатся */
+        String[] ann = parseAnnounce(text);
+        if (ann != null) {
+            handleAnnounce(chatId, ann[1], ann[0]);
             return;
         }
         if (low.startsWith("/app")) {
@@ -1868,6 +1877,71 @@ public final class BotLogic {
         }
         b.append("\nВсё то же самое доступно кнопками меню 💪");
         send(chatId, mid, b.toString(), mainKb());
+    }
+
+    /* ===== рассылка владельцем [UX-T16] ===== */
+
+    /* разбор команды рассылки: {"1", текст} для /announce_dry, {"0", текст} для /announce;
+       null — не команда рассылки. Строго: /announcex и /announce_dryx не матчатся.
+       static — для контрактного теста без конструктора (он поднимает планировщик таймеров). */
+    public static String[] parseAnnounce(String text) {
+        if (text == null) return null;
+        String low = text.toLowerCase();
+        boolean dry = low.startsWith("/announce_dry");
+        String cmd = dry ? "/announce_dry" : "/announce";
+        if (!low.equals(cmd) && !low.startsWith(cmd + " ")) return null;
+        return new String[]{dry ? "1" : "0", text.substring(cmd.length()).trim()};
+    }
+
+    /* /announce <текст> — рассылка всем чатам из data/, /announce_dry <текст> — только отчёт владельцу.
+       Доступ: только chat id владельца из env GYM_ADMIN_CHAT_ID (0/чужой id — тихо игнорируем,
+       чтобы команду нельзя было прощупать). Ошибка отправки в один чат рассылку не прерывает.
+       Пауза 50 мс между отправками — запас к глобальному лимиту Telegram (~25-30 msg/сек). */
+    private void handleAnnounce(long chatId, String text, String dryFlag) {
+        boolean dry = "1".equals(dryFlag);
+        if (adminChatId <= 0 || chatId != adminChatId) return;
+        if (text.isEmpty()) {
+            api.sendMessage(chatId, "Формат: /announce <текст>\n"
+                + "Предпросмотр без отправки: /announce_dry <текст>\n"
+                + "Рассылка уйдёт во все чаты, где бот уже работал.", null);
+            return;
+        }
+        List<Long> chats = storage.chatIds();
+        /* HTML-режим sendMessage: текст владельца экранируется, иначе < и > ломают разбор у Telegram */
+        String body = esc(text);
+        if (dry) {
+            api.sendMessage(chatId, "🔍 Dry-run — ничего не отправлено.\n"
+                + "Ушло бы сообщений: " + chats.size() + " (" + plural(chats.size(), "чат", "чата", "чатов") + ")"
+                + "\n\nТекст рассылки:\n" + body, null);
+            return;
+        }
+        int sent = 0, failed = 0;
+        List<String> errs = new ArrayList<>();
+        for (int i = 0; i < chats.size(); i++) {
+            if (i > 0) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+            String err = api.sendMessageResult(chats.get(i), body);
+            if (err == null) sent++;
+            else {
+                failed++;
+                if (errs.size() < 5) errs.add(err);
+            }
+        }
+        StringBuilder rep = new StringBuilder("📣 Рассылка завершена\n\n")
+            .append("Отправлено: ").append(sent)
+            .append("\nОшибок: ").append(failed);
+        if (!errs.isEmpty()) {
+            rep.append("\n\nПервые ошибки:");
+            for (String e : errs) rep.append("\n• ").append(esc(e));
+        }
+        api.sendMessage(chatId, rep.toString(), null);
+        System.out.println("[announce] sent=" + sent + " failed=" + failed);
     }
 
     private void showKcal(long chatId, Long mid, GymData data, long id) {

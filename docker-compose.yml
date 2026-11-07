@@ -15,6 +15,8 @@ services:
       - GYM_BIND_ADDR=0.0.0.0
       # URL кнопки Mini App: перенесите содержимое webapp.txt в .env на VPS (GYM_WEBAPP_URL=...)
       - GYM_WEBAPP_URL=${GYM_WEBAPP_URL:-}
+      # chat id владельца для admin-команды /announce [UX-T16]: перенесите в .env на VPS (GYM_ADMIN_CHAT_ID=...)
+      - GYM_ADMIN_CHAT_ID=${GYM_ADMIN_CHAT_ID:-}
     volumes:
       - ./data:/app/data
     healthcheck:

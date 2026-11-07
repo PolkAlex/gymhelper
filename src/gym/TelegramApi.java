@@ -150,6 +150,22 @@ public final class TelegramApi {
         postSilent("sendMessage", req);
     }
 
+    /* [UX-T16] рассылка владельцем: null при успехе, иначе описание ошибки Telegram —
+       ошибка одного чата не должна прерывать рассылку, поэтому исключения не бросаются */
+    public String sendMessageResult(long chatId, String text) {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("chat_id", chatId);
+        req.put("text", text);
+        req.put("parse_mode", "HTML");
+        try {
+            Map<String, Object> m = Json.map(post("sendMessage", Json.write(req)));
+            if (!Boolean.TRUE.equals(m.get("ok"))) return Json.str(m, "description");
+            return null;
+        } catch (Exception e) {
+            return e.getMessage();
+        }
+    }
+
     /* отправка с возвратом message_id — нужно сообщению-отсчёту таймера, которое потом правится */
     public long sendMessageGetId(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
         Map<String, Object> req = new LinkedHashMap<>();
