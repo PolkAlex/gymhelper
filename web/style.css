@@ -1086,6 +1086,16 @@ summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* [UX-E5] строка плана карточки шаблона: «Тяга блока 60×3×10 · Подтягивания 4×8 · … · +1» */
+.tplan {
+    font-size: 11.5px;
+    color: var(--muted);
+    margin-top: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
 .tdel {
     width: 30px;
     height: 30px;

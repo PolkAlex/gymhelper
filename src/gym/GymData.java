@@ -109,6 +109,16 @@ public final class GymData {
                 ExerciseEntry entry = new ExerciseEntry(Json.str(e, "name"));
                 entry.startedAt = firstStr(e, "st", "startedAt");
                 entry.endedAt = firstStr(e, "en", "endedAt");
+                /* [UX-E5] план-подсказка: ключей нет → дефолты (плана нет, старые файлы ок);
+                   ps < 1 → план сбрасывается целиком (§2.2) */
+                int ps = (int) Json.lng(e.get("ps"));
+                if (ps >= 1) {
+                    Object pw = e.get("pw");
+                    Object pr = e.get("pr");
+                    entry.planW = pw == null ? "" : String.valueOf(pw);
+                    entry.planS = ps;
+                    entry.planR = pr == null ? "" : String.valueOf(pr);
+                }
                 for (Object so : Json.list(e.get("sets"))) {
                     entry.sets.add(setFromJson(Json.map(so)));
                 }
@@ -216,6 +226,12 @@ public final class GymData {
                     ss.add(sm);
                 }
                 em.put("sets", ss);
+                /* [UX-E5] план пишется только при planS >= 1 — файлы тренировок без плана остаются прежними */
+                if (e.planS >= 1) {
+                    em.put("pw", e.planW);
+                    em.put("ps", e.planS);
+                    em.put("pr", e.planR);
+                }
                 es.add(em);
             }
             wm.put("exercises", es);

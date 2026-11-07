@@ -1312,7 +1312,7 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
         await expect(rep).toContainText(pad2(now.getDate()) + '.' + pad2(now.getMonth() + 1));
         await expect(rep).toContainText('1 упражнение');
         await rep.click();
-        await expect(page.locator('.toast.show')).toHaveText('📋 Шаблон применён: 1 упражнение', { timeout: 5000 });
+        await expect(page.locator('.toast.show')).toHaveText('🔁 Повтор прошлой тренировки: 1 упражнение', { timeout: 5000 });
         await expect(page.locator('.expill .exname')).toHaveText(EX);
         await expect(page.locator('.expill .entry')).toHaveCount(0);
         /* удаляем созданную тренировку, чтобы снова попасть в модалку старта */
@@ -1359,5 +1359,104 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await fillEntry(page, '70', '1', '10');
         await expect(page.locator('#rbTime')).toHaveText(/^(1:28|1:29|1:30)$/, { timeout: 5000 });
+    });
+});
+
+/* ===== [UX-E5] шаблоны с весами и подходами: пилюля плана, тост повтора, строка плана карточки ===== */
+test.describe('шаблоны с планом [UX-E5]', function () {
+
+    test('старт из шаблона: строка плана в карточке → пилюля плана → тап заполняет w/s/r → лог → пилюля ушла', async ({ page, request }) => {
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [],
+            templates: [{ id: 1, name: 'Спина и бицепс', createdAt: '2026-11-07T18:30:00',
+                exercises: [{ name: EX, w: '60', s: 3, r: '10' }, { name: 'Подтягивания', w: '', s: 4, r: '8' }] }]
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        const m = page.locator('.modal.open');
+        await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
+        /* карточка шаблона показывает компактный план (§4.3) */
+        const tcard = m.locator('.tcard');
+        await expect(tcard).toContainText('2 упр.');
+        await expect(tcard.locator('.tplan')).toContainText(EX + ' 60×3×10', { timeout: 5000 });
+        await expect(tcard.locator('.tplan')).toContainText('Подтягивания 4×8');
+        await tcard.click();
+        await expect(page.locator('.toast.show')).toHaveText('📋 Шаблон применён: 2 упражнения', { timeout: 5000 });
+        /* пилюля плана в модалке записи (у записи ещё нет подходов) */
+        await page.locator('.expill .btnrow [data-act="openEntryModal"]').first().click();
+        const pill = page.locator('.prevpill');
+        await expect(pill).toContainText('📋 План: 60 кг × 3 × 10 — подставить', { timeout: 5000 });
+        /* тап заполняет вес/подходы/повторы */
+        await pill.click();
+        await expect(page.locator('#mWeight')).toHaveValue('60');
+        await expect(page.locator('#mSets')).toHaveValue('3');
+        await expect(page.locator('#mReps')).toHaveValue('10');
+        /* пилюля остаётся — работает как «вернуть план» (§4.2) */
+        await expect(pill).toBeVisible();
+        await page.locator('#mWeight').fill('65');
+        await pill.click();
+        await expect(page.locator('#mWeight')).toHaveValue('60');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('60 кг, 3 подхода по 10 повторений', { timeout: 5000 });
+        /* после первого блока пилюля плана ушла — вместо неё UX-I1 «Предыдущий подход» */
+        await page.locator('.expill .btnrow [data-act="openEntryModal"]').first().click();
+        await expect(page.locator('.prevpill')).toContainText('↺ Предыдущий подход: 60 кг — подставить', { timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').click();
+        /* план доехал до сервера внутри записи (pw/ps/pr) */
+        const st = await (await request.get('/api/state')).json();
+        const fresh = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        const e0 = fresh && fresh.exercises && fresh.exercises[0];
+        if (!e0 || e0.pw !== '60' || e0.ps !== 3 || e0.pr !== '10') {
+            throw new Error('план не доехал до сервера: ' + JSON.stringify(e0));
+        }
+    });
+
+    test('«Повторить прошлую»: пилюля с фактическим весом последнего блока; без веса — «свой вес»', async ({ page, request }) => {
+        const now = new Date();
+        const today = isoDate(now);
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [{ id: 1, date: today, started: today + 'T09:30:00', ended: today + 'T10:30:00',
+                finished: true, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: today + 'T09:31:00', en: today + 'T10:00:00',
+                        sets: [{ w: '70', s: 1, r: '10', t: today + 'T09:32:00' },
+                               { w: '80', s: 3, r: '8-10', t: today + 'T09:40:00' }] },
+                    { name: 'Подтягивания', st: today + 'T09:31:00', en: today + 'T10:00:00',
+                        sets: [{ w: '', s: 4, r: '8', t: today + 'T09:35:00' }] }
+                ] }]
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        const m = page.locator('.modal.open');
+        await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
+        await m.locator('[data-act="newRepeat"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('🔁 Повтор прошлой тренировки: 2 упражнения', { timeout: 5000 });
+        /* первое упражнение: пилюля показывает ФАКТИЧЕСКИЙ последний блок (80, а не 70) */
+        await page.locator('.expill .btnrow [data-act="openEntryModal"]').first().click();
+        const pill = page.locator('.prevpill');
+        await expect(pill).toContainText('📋 План: 80 кг × 3 × 8-10 — подставить', { timeout: 5000 });
+        await pill.click();
+        await expect(page.locator('#mWeight')).toHaveValue('80');
+        await expect(page.locator('#mSets')).toHaveValue('3');
+        await expect(page.locator('#mReps')).toHaveValue('8-10');
+        await page.locator('[data-act="closeModal"]').click();
+        /* второе упражнение без веса: пилюля «свой вес × 4 × 8» */
+        await page.locator('.expill .btnrow [data-act="openEntryModal"]').nth(1).click();
+        const pill2 = page.locator('.prevpill');
+        await expect(pill2).toContainText('📋 План: свой вес × 4 × 8 — подставить', { timeout: 5000 });
+        await pill2.click();
+        await expect(page.locator('#mWeight')).toHaveValue('0'); /* вес не тронут — остался «0» */
+        await expect(page.locator('#mSets')).toHaveValue('4');
+        await expect(page.locator('#mReps')).toHaveValue('8');
+        await page.locator('[data-act="closeModal"]').click();
+        const st = await (await request.get('/api/state')).json();
+        const fresh = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        if (!fresh || fresh.exercises.length !== 2) throw new Error('повтор создал не то: ' + JSON.stringify(fresh));
+        const e0 = fresh.exercises[0], e1 = fresh.exercises[1];
+        if (e0.pw !== '80' || e0.ps !== 3 || e0.pr !== '8-10') throw new Error('план жима: ' + JSON.stringify(e0));
+        if (e1.pw !== '' || e1.ps !== 4 || e1.pr !== '8') throw new Error('план подтягиваний: ' + JSON.stringify(e1));
     });
 });
