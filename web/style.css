@@ -203,12 +203,13 @@ button { font-family: inherit; }
 .nav .nbtn.on .nico { color: var(--accent); }
 .nav .nico { display: inline-flex; line-height: 1; }
 .nav .nico svg { width: 20px; height: 20px; color: inherit; stroke: currentColor; }
+/* [UX-T22] FAB выровнен по нижней границе ряда кнопок (translateY-подъём убран);
+   круг крупнее кнопок — допустимо, низ совпадает */
 .nav .nfab {
     flex: none;
     width: 52px;
     height: 52px;
     margin: 0 6px;
-    transform: translateY(-12px);
     border-radius: 50%;
     border: none;
     cursor: pointer;
@@ -220,7 +221,7 @@ button { font-family: inherit; }
     box-shadow: 0 8px 24px var(--fab-shadow);
 }
 .nav .nfab svg { width: 24px; height: 24px; stroke-width: 2.2; }
-.nav .nfab:active { transform: translateY(-12px) scale(.96); }
+.nav .nfab:active { transform: scale(.96); }
 
 /* ============ стеклянные карточки ============ */
 .card {
@@ -580,20 +581,8 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .entry .pen { opacity: .4; }
 .restline { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
-/* [UX-T14] перетаскивание упражнений: ручка ⠿ и состояния drag */
-.exgrip {
-    display: inline-flex;
-    align-items: center;
-    flex: none;
-    color: var(--muted);
-    opacity: .55;
-    padding: 6px 0 6px 4px;
-    cursor: grab;
-    touch-action: none;
-    -webkit-tap-highlight-color: transparent;
-}
-.exgrip svg { width: 18px; height: 18px; }
-.exgrip:active { opacity: 1; color: var(--accent); }
+/* [UX-T22] «+ Запись» — тонкий серый плюсик в шапке упражнения (ручка ⠿ [UX-T14] убрана) */
+.ex-add { padding: 6px 2px 6px 4px; }
 .expill.exhold { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .expill.drag-src {
     position: relative;
@@ -751,6 +740,9 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 /* [UX-T18] «Удалить» в backbar активной тренировки: sec с красным текстом и корзиной */
 .backbar .bb-del { color: var(--danger); gap: 6px; }
 .backbar .bb-del svg { width: 16px; height: 16px; }
+/* [UX-T22] «← Назад» в backbar: иконка + текст */
+.backbar .bb-back { gap: 6px; }
+.backbar .bb-back svg { width: 16px; height: 16px; }
 /* backbar висит fixed над скроллящимся контентом карточки (#87): на промежуточных
    позициях скролла под ним проходит красная «Удалить тренировку», и сквозь
    полупрозрачный sec-фон тексты сливаются. Кнопка — непрозрачное стекло дизайн-системы

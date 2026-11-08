@@ -415,8 +415,6 @@ const NO_DEDUP = {
     wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1, planTake: 1
 };
 function dispatchFromEl(el, ev) {
-    /* [UX-T14] «ручка» ⠿ на плитке упражнения — только для перетаскивания, не тап */
-    if (ev && ev.target && ev.target.closest && ev.target.closest('.exgrip')) return;
     const act0 = el.getAttribute('data-act');
     /* кнопки ввода и сохранения: без дедупа — быстрый повторный тап после ошибки валидации легален
        (двойной вызов предотвращается на уровне touchend preventDefault) */
@@ -788,6 +786,9 @@ const ACTIONS = {
         }
         /* [UX-T20] единая back-навигация: запоминаем вкладку-источник для кнопки «Назад» */
         if (a !== tab) lastTab = tab;
+        /* [UX-T22] уход с открытой карточки через нижнее меню — автосейв в фоне
+           (без await: смену вкладки сеть не задерживает; ошибку показывает doSave) */
+        if (tab === 'history' && viewWid && isDirty()) save();
         tab = a; viewWid = 0; render();
     },
     openHistory: function (a) {
@@ -797,21 +798,11 @@ const ACTIONS = {
         render();
     },
     openEntryModal: function (a, b, c) { openEntryModal(+a, +b, +c); },
-    closeHistory: function () {
-        editSnap = null;
-        viewWid = 0;
-        render();
-    },
-    saveAndExit: async function () {
-        closeModal();
-        await save();
-        editSnap = null;
-        viewWid = 0;
-        render();
-    },
-    discardExit: async function () {
-        closeModal();
-        await reloadSilently(true);
+    /* [UX-T22] выход из карточки — всегда с тихим автосохранением: модалки
+       «выйти без сохранения?» больше нет; успех — без тоста, ошибку показывает doSave;
+       при сбое автосейва карточка НЕ закрывается — правки остаются для повтора выхода */
+    closeHistory: async function () {
+        if (isDirty()) { const r = await save(); if (r !== 'ok') return; } /* тост уже показан doSave'ом */
         editSnap = null;
         viewWid = 0;
         render();
@@ -920,15 +911,17 @@ function render() {
     if (tab === 'coach') h += renderCoachTab();
     if (tab === 'profile') h += renderProfileTab();
     h += navHtml();
-    /* [UX-T18] backbar: только у АКТИВНОЙ тренировки — три компактные кнопки
-       (Сохранить / Удалить c confirm / Выйти); [UX-T19] у завершённой из истории backbar
-       больше не рендерится — все действия переехали в шапку карточки (🔁 💾 ⏱ 🚪 🗑) */
+    /* [UX-T18] backbar: только у АКТИВНОЙ тренировки — три компактные кнопки;
+       [UX-T22] «💾 Сохранить» убрана (выход всегда автосохраняет), порядок:
+       🗑 Удалить c confirm / ✓ Завершить (жёлтая prime) / ← Назад (автосейв-выход);
+       [UX-T19] у завершённой из истории backbar больше не рендерится — все действия
+       переехали в шапку карточки (🔁 💾 ⏱ 🗑) */
     const bw = (tab === 'history' && viewWid) ? findW(viewWid) : null;
     if (bw && !bw.finished) {
         h += '<div class="backbar"><div class="ab-row">' +
-            '<button class="btn prime" data-act="saveWorkout">💾 Сохранить</button>' +
             '<button class="btn sec icbtn bb-del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + bw.id + '" title="Удалить" aria-label="Удалить тренировку">' + ICONS.trash + '<span>Удалить</span></button>' +
-            '<button class="btn sec" data-act="closeHistory">🚪 Выйти</button>' +
+            '<button class="btn prime" data-act="finishWorkout" data-a="' + bw.id + '">✓ Завершить</button>' +
+            '<button class="btn sec icbtn bb-back" data-act="closeHistory" title="Назад" aria-label="Назад">' + ICONS.back + '<span>Назад</span></button>' +
             '</div></div>';
         h += '<div style="height:70px"></div>';
     }
@@ -1070,34 +1063,9 @@ function openHistory(id) {
     tab = 'history';
     render();
 }
-function closeHistory() {
-    if (isDirty()) { exitDirtyModal(); return; }
-    editSnap = null;
-    viewWid = 0;
-    render();
-}
-function isDirty() { return false; }
-function exitDirtyModal() {
-    const h = '<p class="mtitle">Есть несохранённые изменения</p>' +
-        '<div class="btnrow"><button class="btn prime wide" data-act="saveAndExit">💾 Сохранить и выйти</button>' +
-        '<button class="btn sec wide" data-act="discardExit">🚪 Выйти без сохранения</button>' +
-        '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>';
-    openModal(h);
-}
-async function saveAndExit() {
-    closeModal();
-    await save();
-    editSnap = null;
-    viewWid = 0;
-    render();
-}
-async function discardExit() {
-    closeModal();
-    await reloadSilently(true);
-    editSnap = null;
-    viewWid = 0;
-    render();
-}
+/* [UX-T22] «есть несохранённые изменения» = снапшот G на входе в карточку (openHistory)
+   разошёлся с текущим состоянием; выход (closeHistory) такой сдвиг тихо сохраняет */
+function isDirty() { return editSnap !== null && editSnap !== JSON.stringify(G); }
 
 /* ---------- карточка тренировки ---------- */
 function workoutCard(w) {
@@ -1105,26 +1073,24 @@ function workoutCard(w) {
     let h = '<div class="card" id="w' + w.id + '">';
     /* [UX-T8]: у завершённых «Повторить» переехала в шапку круглой иконкой;
        [UX-T18]: «💾 В шаблоны» из шапки убрана (сохранение шаблона — только в боте);
-       [UX-T19]: у завершённой все действия в шапке в порядке 🔁 💾 ⏱ 🚪 🗑 — нижний
-       backbar больше не рендерится; у активной — «Упражнение/Отменить/Завершить» в шапке;
-       [UX-T20]: иконка времени суток из заголовка убрана */
-    /* [UX-T21] «Назад» в шапке карточки — выход к списку Истории, как tb-back на вкладках;
-       прежняя «🚪 Выйти» (wcexit) убрана — дублировала closeHistory */
+       [UX-T19]: у завершённой все действия в шапке в порядке 🔁 💾 ⏱ 🗑 — нижний
+       backbar больше не рендерится;
+       [UX-T20]: иконка времени суток из заголовка убрана;
+       [UX-T21]: «Назад» в шапке карточки — выход к списку Истории, как tb-back на вкладках;
+       [UX-T22]: у активной шапка — только «← Назад» и «⏱ Время»: ➕ переехала в кнопку
+       под упражнениями, ✕ дублировала 🗑, ✓ и 🗑 переехали в нижний backbar */
     const wcback = '<button class="barebtn wc-back" data-act="closeHistory" title="Назад" aria-label="Назад">' + ICONS.back + '</button>';
     const wcacts = w.finished
         ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
           '<button class="barebtn" data-act="saveWorkout" title="Сохранить" aria-label="Сохранить">' + ICONS.save + '</button>'
         : '';
-    const wcact = w.finished ? '' :
-        '<button class="barebtn" data-act="openPicker" data-a="' + w.id + '" title="Добавить упражнение" aria-label="Добавить упражнение">' + ICONS.plus + '</button>' +
-        '<button class="barebtn" data-act="confirmModal" data-a="Отменить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Отменить тренировку" aria-label="Отменить тренировку">' + ICONS.cross + '</button>' +
-        '<button class="barebtn" data-act="finishWorkout" data-a="' + w.id + '" title="Завершить тренировку" aria-label="Завершить тренировку">' + ICONS.check + '</button>';
+    const wctrash = w.finished ?
+        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' : '';
     h += '<div class="wchead' + (w.finished ? ' fin' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
         esc(lines[0]) + '</p></div>' +
         '<div class="wcicons">' + wcback + wcacts +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
-        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' +
-        wcact +
+        wctrash +
         '</div></div>';
     if (w.started) {
         const sT = String(w.started).slice(11, 16);
@@ -1146,11 +1112,13 @@ function workoutCard(w) {
     exs.forEach((e, ei) => {
         const c = findCatalog(e.name);
         /* тап по названию упражнения — переименование; корзина — удаление упражнения;
-           тап по записи — редактирование (удаление — из окна редактирования) */
+           тап по записи — редактирование (удаление — из окна редактирования);
+           [UX-T22] «➕ Запись» — тонкий плюсик справа в exhead (ручка ⠿ и btnrow под
+           сетами убраны); у завершённой плюсика нет — только просмотр [UX-B6] */
         h += '<div class="expill"><div class="exhead" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '">' + (c ? ico(c.i) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
             '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
-            '<span class="exgrip" title="Перетащить">' + ICONS.grip + '</span>' +
+            (!w.finished ? '<button class="barebtn ex-add" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1" title="Добавить запись" aria-label="Добавить запись">' + ICONS.plusThin + '</button>' : '') +
             '</div>';
         const prSi = prChipSetIdx(w, e);
         e.sets.forEach((s, si) => {
@@ -1162,25 +1130,26 @@ function workoutCard(w) {
         if (w.id === (CUR && CUR.wid) && e.name === (CUR && CUR.name)) {
             h += '<div class="restline"> упражнение активно — время идёт</div>';
         }
-        /* [UX-B6] завершённая тренировка — только просмотр: кнопки добавления записи нет */
-        if (!w.finished) {
-            h += '<div class="btnrow"><button class="btn sec" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1">➕ Запись</button></div>';
-        }
         h += '</div>';
     });
+    /* [UX-T22] «Добавить упражнение» — кнопка на всю ширину под упражнениями
+       (➕ из шапки убрана); только у активной */
+    if (!w.finished) {
+        h += '<div class="btnrow"><button class="btn sec wide" data-act="openPicker" data-a="' + w.id + '">➕ Добавить упражнение</button></div>';
+    }
     if (G.profile && G.profile.weight > 0 && exs.length) {
         h += '<details><summary>🔥 Ккал по упражнениям <span class="wip">(в разработке)</span></summary>' + kcalBreakdown(w) + '</details>';
     }
     h += '<details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary>' + progressHtml(w) + '</details>';
     /* [UX-T18] красная «Удалить тренировку» из потока карточки убрана: удаление — в backbar
-       (у активной) и в корзине шапки; ACTION и бота не трогали */
+       (у активной) и в корзине шапки (у завершённой); ACTION и бота не трогали */
     h += '</div>';
     return h;
 }
 
 /* ---------- [UX-T14] перетаскивание упражнений (pointer events, без библиотек) ---------- */
-/* long-press 650 мс по плитке (кроме кнопок и записей) или нажатие на «ручку» ⠿ поднимает
-   плитку; остальные разъезжаются transform-сдвигом (позиция-призрак); отпускание
+/* long-press 650 мс по плитке (кроме кнопок и записей) поднимает её; остальные
+   разъезжаются transform-сдвигом (позиция-призрак); отпускание
    переставляет w.exercises и сохраняет обычным save()-флоу (как deleteExerciseGo).
    Скролл работает, пока drag не начался; во время drag — автоскролл у верхнего/нижнего
    края. Тап по плитке и кнопкам не затронут: drag стартует только после удержания. */
@@ -1222,9 +1191,9 @@ document.addEventListener('pointerdown', function (ev) {
         h: 0, cy0: 0, step: 0, gap: 10, shift: 0, centers: []
     };
     pill.classList.add('exhold'); /* на время удержания: без выделения текста и callout */
-    /* «ручка» тащит сразу, вся плитка — после long-press 650 мс [UX-T17]: 350 мс цеплялись
-       при обычном скролле; порог отмены движением тоже увеличен до 14px */
-    DRAG.timer = setTimeout(dragStart, ev.target.closest('.exgrip') ? 0 : 650);
+    /* [UX-T22] ручки ⠿ больше нет: плитка поднимается long-press 650 мс [UX-T17]
+       (350 мс цеплялись при обычном скролле; порог отмены движением — 14px) */
+    DRAG.timer = setTimeout(dragStart, 650);
 });
 document.addEventListener('pointermove', function (ev) {
     if (!DRAG || ev.pointerId !== DRAG.id) return;
