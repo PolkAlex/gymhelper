@@ -799,6 +799,21 @@ function fullscreenToggle() {
     }
 }
 
+/* [UX-B10] fullscreen safe-area: класс fs на body + переменная --fs-inset-top на :root.
+   Вход/выход fullscreen и изменение safe-area приходят событиями (fullscreenChanged,
+   safeAreaChanged); на старте isFullscreen вендор восстанавливает из sessionStorage
+   синхронно. safeAreaInset.top — число px (вендор дублирует в --tg-safe-area-inset-*,
+   свойство держим своё — не зависим от наличия API: нет его — 0px, в CSS fallback 28px) */
+function applyFsChrome() {
+    let on = false, top = 0;
+    try { on = !!(tg && tg.isFullscreen); } catch (e1) { /* noop */ }
+    try {
+        if (tg && tg.safeAreaInset && typeof tg.safeAreaInset.top === 'number') top = tg.safeAreaInset.top;
+    } catch (e2) { /* noop */ }
+    document.body.classList.toggle('fs', on);
+    try { document.documentElement.style.setProperty('--fs-inset-top', top + 'px'); } catch (e3) { /* noop */ }
+}
+
 /* ============ ACTIONS ============ */
 const ACTIONS = {
     switchTab: function (a) {
@@ -2221,8 +2236,9 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         /* [UX-E5] пилюля плана — пока у упражнения нет записей */
         entryPillHtml(e, isNew) +
         '<div class="keyrow">' +
-        ['0.5', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {
-            const label = n === '0.5' ? '+0,5' : '+' + n;
+        /* [UX-T26] мелкий инкремент веса 0,25 кг (был 0,5) — точность под шаг 1,25 кг */
+        ['0.25', '1', '2', '5', '10', '15', '20', '50'].map(function (n) {
+            const label = n === '0.25' ? '+0,25' : '+' + n;
             return '<button class="k plus" data-act="wAdd" data-a="' + n + '">' + label + '</button>';
         }).join('') +
         '</div>' +
@@ -2681,6 +2697,13 @@ async function init() {
         if (fsSaved === '1' && tg.requestFullscreen && !tg.isFullscreen) {
             try { tg.requestFullscreen(); } catch (e10) { /* noop */ }
         }
+        /* [UX-B10] шапка в fullscreen: класс fs + верхний safe-area — стартовое
+           состояние сразу, далее по событиям входа/выхода и изменения safe-area */
+        try {
+            tg.onEvent('fullscreenChanged', applyFsChrome);
+            tg.onEvent('safeAreaChanged', applyFsChrome);
+            applyFsChrome();
+        } catch (e11) { /* noop */ }
         INIT = tg.initData || '';
     }
     let usedFallback = false;

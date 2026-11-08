@@ -863,10 +863,10 @@ test.describe('GymHelper e2e', function () {
         /* подписи по гибриду */
         await expect(page.locator('.modal.open .flabel', { hasText: 'Вес, кг (0 — без веса)' })).toHaveCount(1);
         await expect(page.locator('.modal.open .flabel', { hasText: 'Повторения (например 12, 8-10)' })).toHaveCount(1);
-        /* инкременты веса +0,5…+50 и ряд 10…200 */
+        /* инкременты веса +0,25…+50 и ряд 10…200 */
         await expect(page.locator('.modal.open [data-act="wAdd"]')).toHaveCount(8);
         await expect(page.locator('.modal.open [data-act="wSet"]')).toHaveCount(8);
-        await expect(page.locator('.modal.open .modal-box', { hasText: '+0,5' })).toBeVisible();
+        await expect(page.locator('.modal.open .modal-box', { hasText: '+0,25' })).toBeVisible();
         /* подходы 1-8; повторения — два ряда: 1-8 и 10/12 (пресеты) + +1/+2/+5/+10, третьего ряда нет */
         await expect(page.locator('.modal.open [data-act="setsSet"]')).toHaveCount(8);
         await expect(page.locator('.modal.open [data-act="repsSet"]')).toHaveCount(10);
@@ -1000,18 +1000,18 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toContainText('110 кг', { timeout: 5000 });
     });
 
-    test('вес: +0,5 и +50, запятая в записи', async ({ page }) => {
+    test('вес: +0,25 и +50, запятая в записи', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
-        await page.locator('[data-act="wAdd"][data-a="0.5"]').click();
+        await page.locator('[data-act="wAdd"][data-a="0.25"]').click();
         await page.locator('[data-act="wAdd"][data-a="50"]').click();
-        await expect(page.locator('#mWeight')).toHaveValue('50.5');
+        await expect(page.locator('#mWeight')).toHaveValue('50.25');
         await page.locator('[data-act="setsSet"][data-a="1"]').click();
         await page.locator('#mReps').fill('12');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await openActiveDetail(page);
-        await expect(page.locator('.expill .entry').first()).toContainText('50,5 кг, 1 подход по 12 повторений', { timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('50,25 кг, 1 подход по 12 повторений', { timeout: 5000 });
     });
 
     test('вес: быстрые значения 10-200', async ({ page }) => {
