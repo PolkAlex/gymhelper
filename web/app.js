@@ -2373,11 +2373,13 @@ async function saveEntry() {
         const old = e.sets[setIdx];
         e.sets[setIdx] = { w: weight, s: sets, r: reps, t: old ? (old.t || nowLocalISO()) : nowLocalISO() };
     }
-    await save();
+    const r = await save();
     /* таймер отдыха: автозапуск только для НОВОГО блока незавершённой тренировки [UX-T4];
        «выкл» (restSec=0) отсчёт не запускает [UX-T13] */
     if (setIdx < 0 && w && !w.finished) { const dur = restDur(); if (dur > 0) restStart(dur, name); }
-    if (modalCtx) {
+    /* [UX-B9] тосты успеха (включая рекорд) — только при реальном сохранении:
+       при сбое сети ошибку уже показал doSave, «✓ Сохранено» поверх неё противоречив */
+    if (modalCtx && r === 'ok') {
         if (pr) {
             toastPr(pr.type === 'e1rm'
                 ? '🏆 Новый рекорд! 1ПМ ≈ ' + Math.round(pr.val) + ' кг'
@@ -2611,8 +2613,9 @@ async function saveTime(wid) {
     w2.date = sdt;
     if (endVal) w2.ended = endVal;
     else if (!w2.finished) w2.ended = '';
-    await save();
-    if (!errEl || !errEl.textContent) toast('✓ Сохранено');
+    const r = await save();
+    /* [UX-B9] успех — только при реальном сохранении (ошибку сети уже показал doSave) */
+    if (r === 'ok' && (!errEl || !errEl.textContent)) toast('✓ Сохранено');
     closeModal();
     render();
 }
