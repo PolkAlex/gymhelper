@@ -2287,12 +2287,86 @@ test.describe('UX-T25: тогл полноэкранного режима в П�
     });
 
     test('init с сохранённым gymFullscreen=1: тихая попытка без тоста, приложение грузится', async ({ page }) => {
+        /* синхронная заглушка API 8.0+: патчим WebApp в момент его присвоения (до eval app.js),
+           иначе init() уже отработает с настоящим v6.0-методом */
         await page.addInitScript(function () {
             try { localStorage.setItem('gymFullscreen', '1'); } catch (e) { /* noop */ }
+            var t;
+            Object.defineProperty(window, 'Telegram', {
+                configurable: true,
+                get: function () { return t; },
+                set: function (v) {
+                    t = v;
+                    try {
+                        Object.defineProperty(v, 'WebApp', {
+                            configurable: true,
+                            get: function () { return this.__wa; },
+                            set: function (wa) {
+                                this.__wa = wa;
+                                if (wa) {
+                                    try { wa.requestFullscreen = function () { window.__fsCalled = (window.__fsCalled || 0) + 1; }; } catch (e) { /* noop */ }
+                                }
+                            }
+                        });
+                    } catch (e) { /* noop */ }
+                }
+            });
         });
         await openApp(page);
         await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
         /* восстановление «тихое»: никаких тостов на старте */
         await expect(page.locator('.toast.show')).toHaveCount(0);
+        const called = await page.evaluate(function () { return window.__fsCalled || 0; });
+        if (called !== 1) throw new Error('init не восстановил fullscreen: вызовов requestFullscreen ' + called);
+    });
+
+    /* на реальных клиентах 8.0+ isFullscreen обновляется асинхронно (fullscreenChanged):
+       успешный вызов ставит флаг сразу, без синхронной проверки isFullscreen */
+    test('[UX-T25] API есть и не бросает: флаг gymFullscreen=1 и тост «включён» сразу; выключение — exitFullscreen + «Обычный режим»', async ({ page }) => {
+        /* синхронная заглушка API 8.0+: requestFullscreen/exitFullscreen без ошибки (до eval app.js) */
+        await page.addInitScript(function () {
+            var t;
+            Object.defineProperty(window, 'Telegram', {
+                configurable: true,
+                get: function () { return t; },
+                set: function (v) {
+                    t = v;
+                    try {
+                        Object.defineProperty(v, 'WebApp', {
+                            configurable: true,
+                            get: function () { return this.__wa; },
+                            set: function (wa) {
+                                this.__wa = wa;
+                                if (wa) {
+                                    try { wa.requestFullscreen = function () { window.__fsCalled = (window.__fsCalled || 0) + 1; }; } catch (e) { /* noop */ }
+                                    try { wa.exitFullscreen = function () { window.__fsExited = (window.__fsExited || 0) + 1; }; } catch (e) { /* noop */ }
+                                }
+                            }
+                        });
+                    } catch (e) { /* noop */ }
+                }
+            });
+        });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const btn = page.locator('[data-act="fullscreenToggle"]');
+        /* включение: вызов принят -> флаг '1' + тост «включён», isFullscreen не проверяется */
+        await btn.click();
+        await expect(page.locator('.toast.show')).toHaveText('Полноэкранный режим включён', { timeout: 5000 });
+        const on = await page.evaluate(function () {
+            return { called: window.__fsCalled || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
+        });
+        if (on.called !== 1) throw new Error('requestFullscreen не вызван (вызовов: ' + on.called + ')');
+        if (on.flag !== '1') throw new Error('флаг gymFullscreen: ' + on.flag + ', ожидался "1"');
+        /* дедап-окно dispatchFromEl 400 мс — реальный пользователь тапает повторно позже */
+        await page.waitForTimeout(500);
+        /* выключение: exitFullscreen + флаг '0' + тост «Обычный режим» */
+        await btn.click();
+        await expect(page.locator('.toast.show')).toHaveText('Обычный режим', { timeout: 5000 });
+        const off = await page.evaluate(function () {
+            return { exited: window.__fsExited || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
+        });
+        if (off.exited !== 1) throw new Error('exitFullscreen не вызван');
+        if (off.flag !== '0') throw new Error('флаг gymFullscreen: ' + off.flag + ', ожидался "0"');
     });
 });

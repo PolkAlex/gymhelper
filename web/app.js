@@ -775,8 +775,10 @@ function loadTheme() {
 }
 
 /* [UX-T25] полноэкранный режим Mini App: состояние в localStorage gymFullscreen ('1'/'0'),
-   по умолчанию выключен; нужен Telegram 8.0+ — без API включение не подтверждается,
-   показываем только тост и флаг не ставим */
+   по умолчанию выключен; нужен Telegram 8.0+ — на старом клиенте requestFullscreen
+   бросает исключение: показываем только тост и флаг не ставим.
+   isFullscreen НЕ проверяем синхронно: клиент подтверждает вход асинхронно
+   (событие fullscreenChanged) — синхронная проверка ложно ругалась бы на 8.0+ */
 function fullscreenOn() {
     let v = '0';
     try { v = localStorage.getItem('gymFullscreen') || '0'; } catch (e) { /* noop */ }
@@ -786,7 +788,8 @@ function fullscreenToggle() {
     if (!tg || !tg.requestFullscreen) { toast('Не поддерживается этим Telegram'); return; }
     if (!fullscreenOn()) {
         try { tg.requestFullscreen(); } catch (e1) { toast('Не поддерживается этим Telegram'); return; }
-        if (!tg.isFullscreen) { toast('Не поддерживается этим Telegram'); return; } /* [UX-T25] клиент не подтвердил вход */
+        /* вызов принят: вход подтвердится событием fullscreenChanged; при неудаче
+           флаг просто повторно применится при следующем старте (см. init) */
         try { localStorage.setItem('gymFullscreen', '1'); } catch (e2) { /* noop */ }
         toast('Полноэкранный режим включён');
     } else {
