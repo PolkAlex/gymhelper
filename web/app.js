@@ -786,6 +786,9 @@ const ACTIONS = {
         }
         /* [UX-T20] единая back-навигация: запоминаем вкладку-источник для кнопки «Назад» */
         if (a !== tab) lastTab = tab;
+        /* [UX-T22] уход с открытой карточки через нижнее меню — автосейв в фоне
+           (без await: смену вкладки сеть не задерживает; ошибку показывает doSave) */
+        if (tab === 'history' && viewWid && isDirty()) save();
         tab = a; viewWid = 0; render();
     },
     openHistory: function (a) {
@@ -796,9 +799,10 @@ const ACTIONS = {
     },
     openEntryModal: function (a, b, c) { openEntryModal(+a, +b, +c); },
     /* [UX-T22] выход из карточки — всегда с тихим автосохранением: модалки
-       «выйти без сохранения?» больше нет; успех — без тоста, ошибку показывает doSave */
+       «выйти без сохранения?» больше нет; успех — без тоста, ошибку показывает doSave;
+       при сбое автосейва карточка НЕ закрывается — правки остаются для повтора выхода */
     closeHistory: async function () {
-        if (isDirty()) await save();
+        if (isDirty()) { const r = await save(); if (r !== 'ok') return; } /* тост уже показан doSave'ом */
         editSnap = null;
         viewWid = 0;
         render();

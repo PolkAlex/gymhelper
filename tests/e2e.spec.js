@@ -607,6 +607,67 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
     });
 
+    test('[UX-T22] сбой сети при выходе: карточка остаётся, правка не теряется, повторный выход сохраняет', async ({ page, request }) => {
+        let failSave = true;
+        await page.route('**/api/save', function (route) {
+            if (failSave) route.abort();
+            else route.fallback();
+        });
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('100');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('8-10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+
+        /* выход при сбое сети: автосейв падает (тост ошибки от doSave),
+           карточка НЕ закрывается — запись на месте, правка не затёрта */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        const errToast = page.locator('.toast.show.err');
+        await expect(errToast).toBeVisible({ timeout: 5000 });
+        await expect(errToast).toContainText('Ошибка сохранения');
+        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
+
+        /* сеть восстановилась: повторный выход сохраняет и закрывает карточку */
+        failSave = false;
+        await page.waitForTimeout(500); /* дедуп клика 400 мс — ждем окно */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        await expect(page.locator('.backbar')).not.toBeVisible({ timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        const act = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        if (!act || !(act.exercises || []).length || !(act.exercises[0].sets || []).length) {
+            throw new Error('повторный выход не сохранил запись: ' + JSON.stringify(act));
+        }
+    });
+
+    test('[UX-T22] уход с открытой карточки через нижнее меню автосохраняет', async ({ page, request }) => {
+        let failSave = true;
+        await page.route('**/api/save', function (route) {
+            if (failSave) route.abort();
+            else route.fallback();
+        });
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('90');
+        await page.locator('#mSets').fill('2');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* прямой saveEntry упал (failSave) — запись пока только локально;
+           переключаем вкладку нижним меню, не выходя через «Назад» */
+        failSave = false;
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+        /* фоновый автосейв switchTab доезжает до сервера */
+        await expect.poll(async function () {
+            const st = await (await request.get('/api/state')).json();
+            const act = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+            return act && act.exercises && act.exercises[0] && act.exercises[0].sets.length ? 'saved' : 'pending';
+        }, { timeout: 5000 }).toBe('saved');
+    });
+
     test('backbar активной: «← Назад» непрозрачна, видима целиком и клик закрывает карточку (#87)', async ({ page }) => {
         /* [UX-T19] backbar остался только у активной тренировки — проверка непрозрачности на ней;
            [UX-T22] прежняя «🚪 Выйти» стала «← Назад» (иконка + текст) */
