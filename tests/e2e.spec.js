@@ -382,18 +382,18 @@ test.describe('GymHelper e2e', function () {
         console.log('PICKER LOGS:\n' + logs.join('\n'));
     });
 
-    test('навигация по вкладкам, тренер и профиль', async ({ page }) => {
+    test('навигация по вкладкам, тренер и настройки', async ({ page }) => {
         await openApp(page);
         for (const label of ['Статистика', 'Техника']) {
             await page.locator('.nav button', { hasText: label }).click();
             await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
         }
-        await page.locator('.topbar .tb-user').click();
+        /* [UX-T27] шестерёнка открывает Настройки */
+        await page.locator('[aria-label="Настройки"]').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
-        /* переключатель темы: ровно одна активная из двух */
-        await expect(page.locator('.themetoggle')).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.themetoggle .btn:not(.sec)')).toHaveCount(1);
-        /* раздел «Тренер» доступен из профиля */
+        /* [UX-S4] тогл темы: ровно один role=switch «Тёмная тема» */
+        await expect(page.locator('[role="switch"][aria-label="Тёмная тема"]')).toHaveCount(1);
+        /* раздел «Тренер» доступен из настроек: switchTab закрывает Настройки [UX-S4 §12.9] */
         await page.locator('#app button', { hasText: 'Открыть раздел' }).click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Тренер', { timeout: 5000 });
     });
@@ -1208,14 +1208,21 @@ test.describe('GymHelper e2e', function () {
         await openApp(page);
         /* telegram-web-app.js вне Telegram отдаёт светлую тему клиента — подсказка = light */
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'light', { timeout: 5000 });
-        await page.locator('.topbar .tb-user').click();
-        await page.locator('.themetoggle [data-act="setTheme"][data-a="dark"]').click();
+        await page.locator('[aria-label="Настройки"]').click();
+        /* [UX-T27] тогл «Тёмная тема»: светлая фактическая → OFF; клик мгновенно темнит [UX-S4 §12.3] */
+        const sw = page.locator('[role="switch"][aria-label="Тёмная тема"]');
+        await expect(sw).toHaveAttribute('aria-checked', 'false', { timeout: 5000 });
+        await sw.click();
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark', { timeout: 5000 });
+        await expect(sw).toHaveAttribute('aria-checked', 'true');
+        await expect(sw).toHaveClass(/on/);
+        const saved = await page.evaluate(function () { try { return localStorage.getItem('gymTheme'); } catch (e) { return null; } });
+        if (saved !== 'dark') throw new Error('gymTheme не сохранён: ' + saved);
         await page.reload();
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark', { timeout: 5000 });
         /* возврат на светлую тоже сохраняется */
-        await page.locator('.topbar .tb-user').click();
-        await page.locator('.themetoggle [data-act="setTheme"][data-a="light"]').click();
+        await page.locator('[aria-label="Настройки"]').click();
+        await page.locator('[role="switch"][aria-label="Тёмная тема"]').click();
         await page.reload();
         await expect(page.locator('html')).toHaveAttribute('data-theme', 'light', { timeout: 5000 });
     });
@@ -1469,7 +1476,8 @@ test.describe('таймер отдыха [UX-T4]', function () {
 
     test('профиль: чип 180 меняет дефолт (сервер хранит restSec), «Своё…» 700 отклоняется / 240 сохраняется, таймер стартует на выбранное', async ({ page, request }) => {
         await openApp(page);
-        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        /* [UX-T27] таймер отдыха переехал из Профиля в Настройки */
+        await page.locator('[aria-label="Настройки"]').click();
         const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
         /* дефолт 90 активен из коробки */
         await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
@@ -1502,7 +1510,8 @@ test.describe('таймер отдыха [UX-T4]', function () {
 
     test('«Выкл»: чип сохраняет restSec=0 на сервере, после записи подхода отсчёт не запускается', async ({ page, request }) => {
         await openApp(page);
-        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        /* [UX-T27] таймер отдыха переехал из Профиля в Настройки */
+        await page.locator('[aria-label="Настройки"]').click();
         const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
         await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
         await card.locator('.chip', { hasText: 'Выкл' }).click();
@@ -1661,8 +1670,8 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
             /* намеренно нет ни restSec, ни templates — как в старом data/*.json */
         } } });
         await openApp(page);
-        /* профиль: активен дефолтный чип 90 */
-        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        /* [UX-T27] таймер отдыха переехал из Профиля в Настройки (дефолтный чип 90 — в G.restSec) */
+        await page.locator('[aria-label="Настройки"]').click();
         const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
         await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
         await expect(card.locator('.chip', { hasText: '180' })).not.toHaveClass(/on/);
@@ -2113,25 +2122,26 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
         await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
     });
 
-    test('[UX-T23] topbar без стрелки «←» на всех вкладках: только заголовок «GymHelper · <вкладка>» и профиль', async ({ page }) => {
+    test('[UX-T23] topbar без стрелки «←» на всех вкладках: заголовок «GymHelper · <вкладка>» и шестерёнка настроек [UX-T27]', async ({ page }) => {
         await openApp(page);
-        /* кнопки «Назад» (tb-back/goBack) нет ни на одной вкладке */
+        /* кнопки «Назад» (tb-back/goBack) нет ни на одной вкладке; вкладка profile снова «Профиль» */
         for (const label of ['История', 'Статистика', 'Техника', 'Профиль']) {
             await page.locator('.nav button', { hasText: label }).click();
-            await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + (label === 'Профиль' ? 'Настройки' : label), { timeout: 5000 });
+            await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
             await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
             await expect(page.locator('.topbar .tb-back')).toHaveCount(0);
         }
-        /* топбар — ровно два элемента: заголовок секции и кнопка профиля */
+        /* топбар — ровно два элемента: заголовок секции и кнопка настроек */
         const parts = await page.locator('.topbar').evaluate(function (bar) {
             return Array.prototype.slice.call(bar.children).map(function (el) {
                 return (el.classList.contains('tb-title') ? 'title' : '') + (el.classList.contains('tb-user') ? 'user' : '');
             }).join(',');
         });
         if (parts !== 'title,user') throw new Error('состав topbar: ' + parts + ', ожидалось title,user');
-        /* кнопка профиля жива: ведёт в Настройки */
+        /* [UX-T27] кнопка шестерёнки жива: ведёт в Настройки с любой вкладки */
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        await page.locator('.topbar .tb-user').click();
+        await expect(page.locator('.topbar [aria-label="Настройки"]')).toHaveCount(1);
+        await page.locator('[aria-label="Настройки"]').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
     });
 
@@ -2273,18 +2283,61 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
     });
 });
 
-/* ===== [UX-T25] полноэкранный режим: тогл в Профиле ===== */
-test.describe('UX-T25: тогл полноэкранного режима в Профиле', function () {
+/* ===== [UX-T25] полноэкранный режим: тогл в Настройках [UX-T27] ===== */
+test.describe('UX-T25: тогл полноэкранного режима в Настройках', function () {
 
-    test('тогл «Полноэкранный режим» рендерится; в тестовой среде (Telegram 6.0) клик — тост «Не поддерживается», флаг не ставится', async ({ page }) => {
+    test('тогл «Полноэкранный режим»: клиент без API (мок без tg.requestFullscreen) — locked + подпись «Недоступно», тап не ставит флаг', async ({ page }) => {
+        /* [UX-S4 §12.5] клиент вообще без requestFullscreen (метода нет): locked-тогл.
+           Условие disabled — !(tg && tg.requestFullscreen), считается при каждом рендере */
+        await page.addInitScript(function () {
+            var t;
+            Object.defineProperty(window, 'Telegram', {
+                configurable: true,
+                get: function () { return t; },
+                set: function (v) {
+                    t = v;
+                    try {
+                        Object.defineProperty(v, 'WebApp', {
+                            configurable: true,
+                            get: function () { return this.__wa; },
+                            set: function (wa) {
+                                this.__wa = wa;
+                                if (wa) {
+                                    try { delete wa.requestFullscreen; } catch (e) { /* noop */ }
+                                }
+                            }
+                        });
+                    } catch (e) { /* noop */ }
+                }
+            });
+        });
         await openApp(page);
-        await page.locator('.nav button', { hasText: 'Профиль' }).click();
-        const btn = page.locator('[data-act="fullscreenToggle"]');
+        await page.locator('[aria-label="Настройки"]').click();
+        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
         await expect(btn).toBeVisible({ timeout: 5000 });
-        /* фикс-текст кнопки (состояние видно по тосту) */
-        await expect(btn).toHaveText('🖥 Полноэкранный режим');
-        /* вне Telegram telegram-web-app.js отдаёт версию 6.0: requestFullscreen бросает
-           WebAppMethodUnsupported — поведение «клиент без API»: только тост, gymFullscreen не выставляется */
+        /* locked: aria-disabled, meta-текст объясняет причину — тост и флаг не появляются */
+        await expect(btn).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('.card', { hasText: 'Полноэкранный режим' })).toContainText('Недоступно: обнови Telegram до 8.0+');
+        /* pointer-events:none на locked: тап уходит в hit-test мимо кнопки — ни тоста, ни флага;
+            повторный тап (двойной тап пользователя) после дедуп-окна — результат тот же */
+        await btn.click({ force: true });
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+        await page.waitForTimeout(450); /* дедуп-окно dispatchFromEl */
+        await btn.click({ force: true });
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+        const flag = await page.evaluate(function () {
+            try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; }
+        });
+        if (flag !== null) throw new Error('gymFullscreen выставлен без поддержки API: ' + flag);
+    });
+
+    /* клиент с vendor-скриптом v6.0 (метод есть, но бросает WebAppMethodUnsupported):
+       тогл активен, страховка [UX-T25] — тост «Не поддерживается этим Telegram» */
+    test('тогл «Полноэкранный режим»: клиент v6.0 (метод бросает) — тап даёт тост «Не поддерживается», флаг не ставится', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
+        await expect(btn).toBeVisible({ timeout: 5000 });
         await btn.click();
         await expect(page.locator('.toast.show')).toHaveText('Не поддерживается этим Telegram', { timeout: 5000 });
         const flag = await page.evaluate(function () {
@@ -2355,11 +2408,13 @@ test.describe('UX-T25: тогл полноэкранного режима в П�
             });
         });
         await openApp(page);
-        await page.locator('.nav button', { hasText: 'Профиль' }).click();
-        const btn = page.locator('[data-act="fullscreenToggle"]');
-        /* включение: вызов принят -> флаг '1' + тост «включён», isFullscreen не проверяется */
+        /* [UX-T27] тогл переехал из Профиля в Настройки */
+        await page.locator('[aria-label="Настройки"]').click();
+        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
+        /* включение: вызов принят -> флаг '1' + тост «включён», тогл ON */
         await btn.click();
         await expect(page.locator('.toast.show')).toHaveText('Полноэкранный режим включён', { timeout: 5000 });
+        await expect(btn).toHaveAttribute('aria-checked', 'true');
         const on = await page.evaluate(function () {
             return { called: window.__fsCalled || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
         });
@@ -2367,9 +2422,10 @@ test.describe('UX-T25: тогл полноэкранного режима в П�
         if (on.flag !== '1') throw new Error('флаг gymFullscreen: ' + on.flag + ', ожидался "1"');
         /* дедап-окно dispatchFromEl 400 мс — реальный пользователь тапает повторно позже */
         await page.waitForTimeout(500);
-        /* выключение: exitFullscreen + флаг '0' + тост «Обычный режим» */
-        await btn.click();
+        /* выключение: exitFullscreen + флаг '0' + тост «Обычный режим», тогл OFF */
+        await page.locator('[role="switch"][aria-label="Полноэкранный режим"]').click();
         await expect(page.locator('.toast.show')).toHaveText('Обычный режим', { timeout: 5000 });
+        await expect(page.locator('[role="switch"][aria-label="Полноэкранный режим"]')).toHaveAttribute('aria-checked', 'false');
         const off = await page.evaluate(function () {
             return { exited: window.__fsExited || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
         });
@@ -2432,5 +2488,173 @@ test.describe('UX-B10: fullscreen safe-area шапки', function () {
         await openApp(page);
         await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
         await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+    });
+});
+
+/* ===== [UX-T27] экран «Настройки» (Story [UX-S4], спека §12) ===== */
+test.describe('UX-T27: экран «Настройки»', function () {
+
+    /* §12.1 + §12.2 + §12.10: шестерёнка одна на всех вкладках; состав Настроек;
+       «Политика конфиденциальности» не рендерится до ONB-T2; «←» возвращает на вкладку-источник */
+    test('шестерёнка на всех вкладках: состав Настроек (Оформление/Таймер/Тренер), «Политики» нет, «Назад» возвращает на вкладку', async ({ page }) => {
+        await openApp(page);
+        for (const label of ['История', 'Статистика', 'Техника', 'Профиль']) {
+            await page.locator('.nav button', { hasText: label }).click();
+            await page.locator('[aria-label="Настройки"]').click();
+            await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+            await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
+            await expect(page.locator('.card', { hasText: '⏱ Таймер отдыха' })).toBeVisible();
+            await expect(page.locator('.card', { hasText: '🧑‍🏫 Персональный тренер' })).toBeVisible();
+            await expect(page.locator('#app')).not.toContainText('Политика конфиденциальности');
+            await page.locator('.topbar [aria-label="Назад"]').click();
+            await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
+        }
+    });
+
+    /* §12.7: «Убрать фон» снимает класс has-bg, ключ gymBg и показывает тост */
+    test('фон: «Убрать фон» снимает has-bg с тостом', async ({ page }) => {
+        await openApp(page);
+        /* ставим фон как loadBg делает на старте (класс + ключ), затем убираем из Настроек */
+        await page.evaluate(function () {
+            try { localStorage.setItem('gymBg', 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=='); } catch (e) { /* noop */ }
+            document.documentElement.classList.add('has-bg');
+        });
+        await page.locator('[aria-label="Настройки"]').click();
+        await page.locator('[data-act="clearBg"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Фон убран', { timeout: 5000 });
+        const state = await page.evaluate(function () {
+            return {
+                cls: document.documentElement.classList.contains('has-bg'),
+                key: (function () { try { return localStorage.getItem('gymBg'); } catch (e) { return null; } })()
+            };
+        });
+        if (state.cls) throw new Error('класс has-bg не снят');
+        if (state.key !== null) throw new Error('ключ gymBg не удалён: ' + state.key);
+    });
+
+    /* §12.6 (звук): тогл «Звук по окончании» пишет gymRestSound on/off */
+    test('звук таймера: тогл «Звук по окончании» переключает gymRestSound', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const sw = page.locator('[role="switch"][aria-label="Звук по окончании"]');
+        /* дефолт: звук включён */
+        await expect(sw).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'false', { timeout: 5000 });
+        let v = await page.evaluate(function () { try { return localStorage.getItem('gymRestSound'); } catch (e) { return null; } });
+        if (v !== 'off') throw new Error('gymRestSound: ' + v + ', ожидался "off"');
+        await page.waitForTimeout(450); /* dedup-окно dispatchFromEl */
+        await page.locator('[role="switch"][aria-label="Звук по окончании"]').click();
+        await expect(page.locator('[role="switch"][aria-label="Звук по окончании"]')).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        v = await page.evaluate(function () { try { return localStorage.getItem('gymRestSound'); } catch (e) { return null; } });
+        if (v !== 'on') throw new Error('gymRestSound: ' + v + ', ожидался "on"');
+    });
+
+    /* §12.8: Профиль — только данные пользователя; сохранение профиля не сломано */
+    test('Профиль переработан: настроек больше нет, карточки данных работают', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const app = page.locator('#app');
+        for (const dead of ['Тема оформления', 'Таймер отдыха', 'Фон приложения', 'Полноэкранный режим', 'Персональный тренер']) {
+            const cnt = await app.getByText(dead).count();
+            if (cnt > 0) throw new Error('в Профиле остался блок «' + dead + '» (экземпляров: ' + cnt + ')');
+        }
+        /* 4 карточки данных на месте [UX-S4 §7: состав — ровно 4 карточки] */
+        await expect(page.locator('.prof .card')).toHaveCount(4);
+        await expect(page.locator('.card', { hasText: '⭐ Любимые упражнения' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.sexrow')).toBeVisible();
+        await expect(page.locator('#pfAge')).toBeVisible();
+        /* «⭐ Любимые упражнения» → «Открыть в технике» жива */
+        await page.locator('[data-act="openFavs"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
+        /* сохранение перс. данных не сломано */
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await page.locator('#pfAge').fill('34');
+        await page.locator('#pfHeight').fill('178');
+        await page.locator('#pfWeight').fill('78.5');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+    });
+
+    /* имя из Telegram в шапке Профиля: tgWebAppData в URL — vendor сам парсит user в initDataUnsafe
+       (свойство только для чтения, патчить WebApp нельзя); тестовый сервер initData не валидирует */
+    test('Профиль: имя из Telegram (tgWebAppData) в заголовке карточки', async ({ page }) => {
+        const tgData = 'user=' + encodeURIComponent(JSON.stringify({ first_name: 'Артём', last_name: 'Тестов', username: 'artem_t' }));
+        await page.goto('/#' + 'tgWebAppData=' + encodeURIComponent(tgData));
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await expect(page.locator('.card .t1', { hasText: 'Профиль' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.prof .card').first()).toContainText('Артём Тестов', { timeout: 5000 });
+    });
+
+    /* §12.11: Настройки поверх открытой карточки тренировки: viewWid сохранён, «←» возвращает */
+    test('карточка тренировки: шестерёнка доступна, Настройки поверх без backbar, «Назад» возвращает в карточку', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('60');
+        await page.locator('#mSets').fill('1');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
+        /* шестерёнка доступна и в карточке тренировки */
+        await expect(page.locator('[aria-label="Настройки"]')).toBeVisible();
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        /* backbar карточки на экране Настроек не рендерится */
+        await expect(page.locator('.backbar')).toHaveCount(0);
+        await page.locator('.topbar [aria-label="Назад"]').click();
+        /* карточка восстановлена вместе с записью */
+        await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('60 кг', { timeout: 5000 });
+    });
+
+    /* §8.4: нижняя навигация закрывает Настройки поверх карточки, dirty-автосейв [UX-T22] жив */
+    test('Настройки поверх карточки с несохранённой правкой: тап по табу автосохраняет и закрывает Настройки', async ({ page, request }) => {
+        let failSave = true;
+        await page.route('**/api/save', function (route) {
+            if (failSave) route.abort();
+            else route.fallback();
+        });
+        await openApp(page);
+        await startAndPick(page, EX);
+        /* прямое сохранение падает (failSave): запись только локально, состояние dirty */
+        await page.locator('#mWeight').fill('60');
+        await page.locator('#mSets').fill('1');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* шестерёнка поверх карточки: Настройки открылись, backbar скрыт */
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.backbar')).toHaveCount(0);
+        /* сеть восстановилась: тап по табу нижней навигации закрывает Настройки
+           и запускает dirty-автосейв карточки [UX-S4 §8.4] */
+        failSave = false;
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+        await expect.poll(async function () {
+            const st = await (await request.get('/api/state')).json();
+            const act = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+            return act && act.exercises && act.exercises[0] && act.exercises[0].sets.length ? 'saved' : 'pending';
+        }, { timeout: 5000 }).toBe('saved');
+    });
+
+    /* чек-лист §8.5/§10: узкие экраны — строки с тоглами и чипы без переполнения */
+    test('320px: Настройки без горизонтального переполнения, тогл прижат вправо строки', async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
+        const m = await page.evaluate(function () {
+            return {
+                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                swRight: document.querySelector('.switch').getBoundingClientRect().right,
+                rowRight: document.querySelector('.setrow').getBoundingClientRect().right
+            };
+        });
+        if (m.overflow) throw new Error('горизонтальное переполнение Настроек на 320px');
+        if (m.rowRight - m.swRight > 2) throw new Error('тогл не прижат к правому краю строки: ' + (m.rowRight - m.swRight).toFixed(1) + 'px');
     });
 });

@@ -52,6 +52,12 @@
     --c-shoulders: rgba(70,210,200,.15);
     --c-arms: rgba(186,140,255,.15);
     --c-glutes: rgba(255,110,170,.15);
+    /* тогл-компонент [UX-S4]: тёмные значения */
+    --sw-track-off: rgba(0,0,0,.35);
+    --sw-track-brd: rgba(255,255,255,.10);
+    --sw-knob: rgba(255,255,255,.92);
+    --sw-knob-brd: rgba(255,255,255,.25);
+    --sw-knob-ico: #565b64;   /* иконка на белой ручке в OFF */
 }
 [data-theme="light"] {
     color-scheme: light;
@@ -88,6 +94,12 @@
     --chrome-b: rgba(246,246,244,.96);
     --nav-a: rgba(246,246,244,.2);
     --nav-b: rgba(246,246,244,.94);
+    /* тогл-компонент [UX-S4]: светлые значения */
+    --sw-track-off: rgba(22,24,27,.14);
+    --sw-track-brd: rgba(22,24,27,.10);
+    --sw-knob: #ffffff;
+    --sw-knob-brd: rgba(22,24,27,.12);
+    --sw-knob-ico: #8a9099;
 }
 
 /* ============ база ============ */
@@ -850,9 +862,6 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 }
 
 /* ============ профиль ============ */
-.sexbtns { display: flex; gap: 8px; margin-top: 6px; }
-.sexbtns .btn { flex: 1; }
-.themetoggle .btn { flex: 1; }
 /* [UX-T18] компактный сегмент-контрол пола: две половины М/Ж высотой ~40px */
 .seg { display: flex; margin-top: 8px; border: 1px solid var(--btn-brd); border-radius: 12px; overflow: hidden; background: var(--field); }
 /* [UX-T20] «Пол» одной строкой: label слева, сегмент прижат вправо (на 320px тоже влезает) */
@@ -887,7 +896,6 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .prof .btn.wide { padding: 9px 12px; font-size: 13.5px; }
 .prof .split2 { margin-top: 6px; }
 .prof .split2 .btn { padding: 9px 8px; font-size: 13px; }
-.prof .sexbtns .btn { padding: 8px 12px; font-size: 13px; }
 /* [UX-T19] профиль: возраст/рост/вес + «Сохранить» одним рядом (компактные поля ~40px,
    мелкие метки над полями; на 320px кнопка уходит под ряд и остаётся компактной) */
 .prow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
@@ -1130,14 +1138,48 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .setrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .setrow .lbl { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
 .setrow input { width: 90px; flex: none; }
-.toggle2 { display: flex; gap: 6px; }
-.toggle2 .btn { padding: 8px 12px; font-size: 12.5px; }
-.toggle2 .btn.on {
+/* разделитель секций карточки («Фон приложения» под тоглами [UX-S4 §6]) */
+.hr { border-top: 1px solid var(--nested-brd); margin: 13px 0 12px; }
+
+/* [UX-S4] тогл-компонент: тема / полноэкранный / звук */
+.switch {
+    width: 66px; height: 44px; padding: 0; border: none; background: none;
+    display: inline-flex; align-items: center; justify-content: flex-end;
+    cursor: pointer; flex: none; font-family: inherit;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.sw-track {
+    position: relative; width: 56px; height: 32px; border-radius: 999px;
+    box-sizing: border-box;
+    background: var(--sw-track-off); border: 1px solid var(--sw-track-brd);
+    transition: background .2s ease, border-color .2s ease;
+}
+.switch.on .sw-track {
     background: linear-gradient(135deg, var(--accent-deep), var(--accent));
     border-color: transparent;
-    color: var(--on-accent);
-    font-weight: 700;
 }
+.sw-knob {
+    position: absolute; top: 2px; left: 2px; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--sw-knob);
+    border: 1px solid var(--sw-knob-brd);
+    box-shadow: 0 2px 8px var(--card-shadow), inset 0 1px 0 var(--blik);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--sw-knob-ico);
+    transition: transform .22s cubic-bezier(.2,.8,.25,1), background .2s ease;
+}
+.switch.on .sw-knob {
+    transform: translateX(24px);
+    background: #fff; /* одинаковый в обеих темах: читается на янтарном треке */
+    border-color: transparent;
+    color: var(--accent-deep);
+}
+.sw-knob svg { width: 15px; height: 15px; pointer-events: none; }
+.sw-ico { position: absolute; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); opacity: .55; pointer-events: none; }
+.sw-ico.l { left: 6px; } .sw-ico.r { right: 6px; }
+.sw-ico svg { width: 14px; height: 14px; display: block; }
+.switch.on .sw-ico { color: rgba(20,18,10,.45); opacity: 1; } /* призрак на янтарном */
+.switch.locked { opacity: .45; pointer-events: none; }        /* disabled */
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
 
 /* ============ шаблоны тренировок [UX-T6/T7] ============ */
 /* карточка шаблона в модалке старта: тап = немедленный старт, 🗑 — удалить */
@@ -1260,6 +1302,6 @@ html.has-bg body::after {
 }
 
 /* все интерактивные элементы — курсор-палец */
-.btn, .chip, .entry, .excard, .star, .nav .nbtn, .nav .nfab, summary, .sexbtns .btn,
+.btn, .chip, .entry, .excard, .star, .nav .nbtn, .nav .nfab, summary, .switch,
 .prevpill, .barebtn, .tb-user, .inwrap .clr, .keyrow .k, .expill .exhead,
 .rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel, .seg .seg-btn { cursor: pointer; }

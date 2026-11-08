@@ -16,6 +16,10 @@ let pendingTab = null;
 let __delExerciseCtx = null;
 let __delSetCtx = null;
 let railOpen = false;
+/* [UX-T27] экран «Настройки» [UX-S4]: подэкран-оверлей поверх вкладки. Вкладка-источник
+   сохраняется сама (tab не сбрасывается при открытии, viewWid карточки не трогается) —
+   «←» (closeSettings) возвращает на неё, тап по табу закрывает Настройки */
+let settingsOpen = false;
 /* таймер отдыха [UX-T4]: состояние в localStorage gymRest по абсолютной метке end */
 let REST = null;          /* {end, dur, paused, left, mini, ex} — см. спеку §1.7 */
 let REST_CUSTOM = false;  /* поле «Своё…» в Профиле открыто */
@@ -828,7 +832,20 @@ const ACTIONS = {
         /* [UX-T22] уход с открытой карточки через нижнее меню — автосейв в фоне
            (без await: смену вкладки сеть не задерживает; ошибку показывает doSave) */
         if (tab === 'history' && viewWid && isDirty()) save();
+        /* [UX-T27] тап по любому табу закрывает Настройки и переходит на вкладку [UX-S4 §3] */
+        settingsOpen = false;
         tab = a; viewWid = 0; render();
+    },
+    /* [UX-T27] шестерёнка в topbar: экран «Настройки» поверх текущей вкладки [UX-S4 §3] */
+    openSettings: function () {
+        settingsOpen = true;
+        window.scrollTo(0, 0);
+        render();
+    },
+    closeSettings: function () {
+        settingsOpen = false;
+        window.scrollTo(0, 0);
+        render();
     },
     openHistory: function (a) {
         editSnap = JSON.stringify(G);
@@ -925,26 +942,32 @@ const ACTIONS = {
         document.documentElement.classList.remove('has-bg');
         toast('Фон убран');
     },
-    /* [UX-T25] тогл полноэкранного режима в Профиле */
-    fullscreenToggle: function () { fullscreenToggle(); }
+    /* [UX-T25] тогл полноэкранного режима в Настройках; render — тогл показывает
+       актуальное состояние (подтверждение клиента приходит асинхронно) [UX-T27/UX-S4 §8.2] */
+    fullscreenToggle: function () { fullscreenToggle(); render(); }
 };
 
 /* ============ каркас ============ */
 function render() {
     const app = document.getElementById('app');
     let h = topbarHtml();
-    if (tab === 'history') h += renderHistoryTab();
-    if (tab === 'tech') h += renderTechTab();
-    if (tab === 'stats') h += renderStatsTab();
-    if (tab === 'coach') h += renderCoachTab();
-    if (tab === 'profile') h += renderProfileTab();
+    /* [UX-T27] Настройки — подэкран поверх вкладки: контент вкладки и backbar карточки
+       тренировки не рендерим, нижняя навигация остаётся [UX-S4 §3] */
+    if (settingsOpen) h += renderSettings();
+    else {
+        if (tab === 'history') h += renderHistoryTab();
+        if (tab === 'tech') h += renderTechTab();
+        if (tab === 'stats') h += renderStatsTab();
+        if (tab === 'coach') h += renderCoachTab();
+        if (tab === 'profile') h += renderProfileTab();
+    }
     h += navHtml();
     /* [UX-T18] backbar у активной тренировки — три компактные кнопки;
-       [UX-T22] «💾 Сохранить» убрана (выход всегда автосохраняет), порядок:
-       🗑 Удалить c confirm / ✓ Завершить (жёлтая prime) / ← Назад (автосейв-выход);
-       [UX-T23] у завершённой из истории — свой backbar: 🗑 Удалить c confirm /
-       ↻ Повторить (newRepeatFrom, НЕ prime) / ← Назад (автосейв-выход) */
-    const bw = (tab === 'history' && viewWid) ? findW(viewWid) : null;
+        [UX-T22] «💾 Сохранить» убрана (выход всегда автосохраняет), порядок:
+        🗑 Удалить c confirm / ✓ Завершить (жёлтая prime) / ← Назад (автосейв-выход);
+        [UX-T23] у завершённой из истории — свой backbar: 🗑 Удалить c confirm /
+        ↻ Повторить (newRepeatFrom, НЕ prime) / ← Назад (автосейв-выход) */
+    const bw = (!settingsOpen && tab === 'history' && viewWid) ? findW(viewWid) : null;
     if (bw && !bw.finished) {
         h += '<div class="backbar"><div class="ab-row">' +
             '<button class="btn sec icbtn bb-del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + bw.id + '" title="Удалить" aria-label="Удалить тренировку">' + ICONS.trash + '<span>Удалить</span></button>' +
@@ -989,10 +1012,17 @@ function navHtml() {
         right.map(btn).join('') + '</div>';
 }
 function topbarHtml() {
-    const names = { history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
-    /* [UX-T23] стрелка «←» (tb-back/goBack) убрана: топбар — «GymHelper · <вкладка>» + профиль */
+    /* [UX-T27] вкладка profile снова подписывается «Профиль» (артефакт «Настройки» убран);
+       точка входа в настройки — шестерёнка на всех вкладках [UX-S4 §3] */
+    const names = { history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Профиль' };
+    /* [UX-T27] экран Настроек: «←» слева (возврат на вкладку-источник), справа пусто [UX-S4 §3] */
+    if (settingsOpen) {
+        return '<div class="topbar"><button class="tb-user" data-act="closeSettings" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
+            '<span class="tb-title">GymHelper · Настройки</span></div>';
+    }
+    /* [UX-T23] стрелка «←» (tb-back/goBack) убрана: топбар — «GymHelper · <вкладка>» + настройки */
     return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' +
-        '<button class="tb-user" data-act="switchTab" data-a="profile" title="Настройки">' + ico('user') + '</button></div>';
+        '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
 }
 
 /* ---------- карточка рекорда недели ---------- */
@@ -1635,43 +1665,44 @@ function renderCoachTab() {
         '<p class="meta">Следи за обновлениями 💪</p></div>';
 }
 
-/* ---------- профиль ---------- */
-function renderProfileTab() {
-    if (!profileSex && G.profile) profileSex = G.profile.sex;
-    const p = G.profile || { sex: profileSex, age: '', height: '', weight: '' };
-    let h = '<div class="card"><p class="t1">⚙️ Профиль</p>';
-    if (G.profile) {
-        h += '<p class="meta">' + esc(G.profile.sex.toUpperCase()) + ' · ' + G.profile.age + ' лет · ' +
-            G.profile.height + ' см · ' + fmtW(G.profile.weight) + ' кг</p>' +
-            '<p class="meta">BMR ≈ ' + Math.round(bmr(G.profile)) + ' ккал/сут (Mifflin-St Jeor)</p>';
-    } else {
-        h += '<p class="meta">Нужен для расчёта калорий 🔥</p>';
-    }
-    h += '</div>';
-    /* [UX-T20] «Пол» одной строкой: label слева, компактный сегмент М/Ж справа */
-    h += '<div class="card"><div class="sexrow"><p class="t1">Пол</p>' +
-        '<div class="seg" role="group" aria-label="Пол">' +
-        '<button class="seg-btn' + (profileSex === 'м' ? ' on' : '') + '" data-act="setSex" data-a="м" title="Мужской" aria-label="Мужской">М</button>' +
-        '<button class="seg-btn' + (profileSex === 'ж' ? ' on' : '') + '" data-act="setSex" data-a="ж" title="Женский" aria-label="Женский">Ж</button>' +
-        '</div></div></div>';
-    /* [UX-T19] возраст/рост/вес + сохранение в одном ряду: компактные поля ~40px с мелкими
-       метками, кнопка справа; на 320px кнопка уходит под ряд, оставаясь компактной.
-       Логика saveProfile не тронута (те же id полей) */
-    h += '<div class="card">' +
-        '<div class="prow">' +
-        '<div class="pf"><label for="pfAge">Возраст</label><input id="pfAge" type="number" inputmode="numeric" value="' + p.age + '"></div>' +
-        '<div class="pf"><label for="pfHeight">Рост, см</label><input id="pfHeight" type="number" inputmode="numeric" value="' + p.height + '"></div>' +
-        '<div class="pf"><label for="pfWeight">Вес, кг</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '"></div>' +
-        '<button class="btn pfsave" data-act="saveProfile">💾 Сохранить</button>' +
+/* ---------- [UX-T27] экран «Настройки» (Story [UX-S4], спека §6) ---------- */
+/* тогл-компонент .switch [UX-S4 §4]: role=switch/aria-checked; у темы ручка несёт иконку
+   активной темы, на свободном конце — «призрак» пассивной; fullscreen и звук — без иконок */
+function swToggleHtml(on, act, arg, label, knobIco, ghostIco, ghostSide) {
+    let inner = '<span class="sw-track">';
+    if (ghostIco) inner += '<span class="sw-ico ' + ghostSide + '">' + ghostIco + '</span>';
+    inner += '<span class="sw-knob">' + (knobIco || '') + '</span></span>';
+    return '<button class="switch' + (on ? ' on' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') +
+        '" aria-label="' + escAttr(label) + '" data-act="' + act + '"' + (arg != null ? ' data-a="' + escAttr(arg) + '"' : '') + '>' + inner + '</button>';
+}
+function renderSettings() {
+    /* 🎨 Оформление: тогл темы (ON = тёмная) + тогл fullscreen + фон [UX-S4 §6] */
+    const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
+    /* [UX-S4 §8.2] клиент без requestFullscreen (Telegram < 8.0): locked-тогл,
+       наличие API считается при каждом рендере (клиент мог обновиться) */
+    const fsAvail = !!(tg && tg.requestFullscreen);
+    let h = '<div class="card"><p class="t1">🎨 Оформление</p>';
+    /* тогл темы показывает фактическую тему; тап фиксирует выбор в gymTheme [UX-S4 §8.1] */
+    h += '<div class="setrow"><span class="lbl">Тёмная тема</span>' +
+        swToggleHtml(dark, 'setTheme', dark ? 'light' : 'dark', 'Тёмная тема',
+            dark ? ICONS.moon : ICONS.sun, dark ? ICONS.sun : ICONS.moon, dark ? 'l' : 'r') + '</div>' +
+        '<p class="meta">Без выбора — тема как в клиенте Telegram</p>';
+    h += '<div class="setrow"><span class="lbl">Полноэкранный режим</span>' +
+        (fsAvail
+            ? swToggleHtml(fullscreenOn(), 'fullscreenToggle', null, 'Полноэкранный режим')
+            : '<button class="switch locked" role="switch" aria-checked="' + (fullscreenOn() ? 'true' : 'false') +
+              '" aria-disabled="true" aria-label="Полноэкранный режим"><span class="sw-track"><span class="sw-knob"></span></span></button>') +
+        '</div>' +
+        '<p class="meta">' + (fsAvail ? 'Автоматически разворачивает приложение на весь экран' : 'Недоступно: обнови Telegram до 8.0+') + '</p>';
+    /* фон приложения — перенос из Профиля как есть (pickBg/clearBg не тронуты) [UX-S4 §2] */
+    h += '<div class="hr"></div>' +
+        '<div class="flabel">Фон приложения</div>' +
+        '<p class="meta">Картинка хранится только на этом устройстве</p>' +
+        '<div class="split2">' +
+        '<button class="btn sec" data-act="pickBg">📷 Из галереи</button>' +
+        '<button class="btn sec" data-act="clearBg">Убрать фон</button>' +
         '</div></div>';
-    h += '<div class="card"><p class="t1">🎨 Тема оформления</p>' +
-        '<p class="meta">Без выбора используется тема клиента Telegram</p>' +
-        '<div class="sexbtns themetoggle">';
-    const cur = document.documentElement.getAttribute('data-theme') || 'dark';
-    h += '<button class="btn' + (cur === 'dark' ? '' : ' sec') + '" data-act="setTheme" data-a="dark">🌙 Тёмная</button>' +
-        '<button class="btn' + (cur === 'light' ? '' : ' sec') + '" data-act="setTheme" data-a="light">☀️ Светлая</button>' +
-        '</div></div>';
-    /* таймер отдыха: длительность в общем с ботом GymData.restSec, дефолт 90; 0 = «выкл» [UX-T13] */
+    /* ⏱ Таймер отдыха — перенос из Профиля: чипы/«Своё…» [UX-T13] + тогл звука [UX-S4 §6] */
     const rs = (G.restSec == null ? 90 : G.restSec);
     const presets = [60, 90, 120, 180];
     const off = rs === 0;
@@ -1691,25 +1722,62 @@ function renderProfileTab() {
             '<button class="btn" data-act="restCustomSave">ОК</button></div>';
     }
     const snd = restSoundOn();
-    h += '<div class="setrow"><span class="lbl">Звук по окончании</span><span class="toggle2">' +
-        '<button class="btn' + (snd ? ' on' : '') + '" data-act="restSound" data-a="on">🔊 Вкл</button>' +
-        '<button class="btn' + (snd ? '' : ' on') + '" data-act="restSound" data-a="off">🔇 Выкл</button>' +
-        '</span></div></div>';
+    h += '<div class="setrow"><span class="lbl">Звук по окончании</span>' +
+        swToggleHtml(snd, 'restSound', snd ? 'off' : 'on', 'Звук по окончании') + '</div></div>';
+    /* 🧑‍🏫 Персональный тренер — перенос как есть; switchTab закрывает Настройки [UX-S4 §6] */
+    h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
+        '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
+    /* [ONB-T2] «ℹ️ О приложении» — резерв места (спека §6/§9): в прод не рендерим до появления
+       политики конфиденциальности. Разметка на будущее:
+    h += '<div class="card"><p class="t1">ℹ️ О приложении</p>' +
+        '<div class="setrow"><span class="lbl">Политика конфиденциальности</span><span class="meta">Скоро</span></div></div>';
+    */
+    return h;
+}
+
+/* ---------- профиль ---------- */
+function renderProfileTab() {
+    if (!profileSex && G.profile) profileSex = G.profile.sex;
+    const p = G.profile || { sex: profileSex, age: '', height: '', weight: '' };
+    /* [UX-T27] имя из Telegram в шапке профиля: GymData имени не хранит — только показ [UX-S4 §11] */
+    const u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+    let name = '';
+    if (u) {
+        name = String([u.first_name, u.last_name].filter(Boolean).join(' ') || u.username || '').trim();
+    }
+    /* [UX-S4 §7] заголовок саммари «Профиль» — без ⚙️ (шестерёнка теперь означает Настройки) */
+    let h = '<div class="card"><p class="t1">Профиль</p>' +
+        (name ? '<p class="meta">' + esc(name) + '</p>' : '');
+    if (G.profile) {
+        h += '<p class="meta">' + esc(G.profile.sex.toUpperCase()) + ' · ' + G.profile.age + ' лет · ' +
+            G.profile.height + ' см · ' + fmtW(G.profile.weight) + ' кг</p>' +
+            '<p class="meta">BMR ≈ ' + Math.round(bmr(G.profile)) + ' ккал/сут (Mifflin-St Jeor)</p>';
+    } else {
+        h += '<p class="meta">Нужен для расчёта калорий 🔥</p>';
+    }
+    h += '</div>';
+    /* [UX-T20] «Пол» одной строкой: label слева, компактный сегмент М/Ж справа */
+    h += '<div class="card"><div class="sexrow"><p class="t1">Пол</p>' +
+        '<div class="seg" role="group" aria-label="Пол">' +
+        '<button class="seg-btn' + (profileSex === 'м' ? ' on' : '') + '" data-act="setSex" data-a="м" title="Мужской" aria-label="Мужской">М</button>' +
+        '<button class="seg-btn' + (profileSex === 'ж' ? ' on' : '') + '" data-act="setSex" data-a="ж" title="Женский" aria-label="Женский">Ж</button>' +
+        '</div></div></div>';
+    /* [UX-T19] возраст/рост/вес + сохранение в одном ряду: компактные поля ~40px с мелкими
+        метками, кнопка справа; на 320px кнопка уходит под ряд, оставаясь компактной.
+        Логика saveProfile не тронута (те же id полей) */
+    h += '<div class="card">' +
+        '<div class="prow">' +
+        '<div class="pf"><label for="pfAge">Возраст</label><input id="pfAge" type="number" inputmode="numeric" value="' + p.age + '"></div>' +
+        '<div class="pf"><label for="pfHeight">Рост, см</label><input id="pfHeight" type="number" inputmode="numeric" value="' + p.height + '"></div>' +
+        '<div class="pf"><label for="pfWeight">Вес, кг</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '"></div>' +
+        '<button class="btn pfsave" data-act="saveProfile">💾 Сохранить</button>' +
+        '</div></div>';
     /* [UX-T17] любимые упражнения: «Техника» с активным фильтром «★ Любимые» (gymFavs) */
     h += '<div class="card"><p class="t1">⭐ Любимые упражнения</p>' +
         '<p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="openFavs">Открыть в технике</button></div></div>';
-    /* [UX-T25] полноэкранный режим: фикс-текст кнопки, состояние видно по тосту; подпись не нужна */
-    h += '<div class="card"><div class="btnrow"><button class="btn sec wide" data-act="fullscreenToggle">🖥 Полноэкранный режим</button></div></div>';
-    h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
-        '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
-        '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
-    h += '<div class="card"><p class="t1">🖼 Фон приложения</p>' +
-        '<p class="meta">Картинка хранится только на этом устройстве</p>' +
-        '<div class="split2">' +
-        '<button class="btn sec" data-act="pickBg">📷 Выбрать из галереи</button>' +
-        '<button class="btn sec" data-act="clearBg">Убрать фон</button>' +
-        '</div></div>';
+    /* [UX-T27] настройки (тема/fullscreen/фон/таймер/тренер) переехали в экран «Настройки» [UX-S4 §7] */
     /* [UX-T18] обёртка .prof: компактные карточки/поля (стиль токенов не менялся) */
     return '<div class="prof">' + h + '</div>';
 }
@@ -2703,9 +2771,13 @@ async function init() {
             try { tg.requestFullscreen(); } catch (e10) { /* noop */ }
         }
         /* [UX-B10] шапка в fullscreen: класс fs + верхний safe-area — стартовое
-           состояние сразу, далее по событиям входа/выхода и изменения safe-area */
+           состояние сразу, далее по событиям входа/выхода и изменения safe-area.
+           [UX-T27] после подтверждения входа/выхода тогл в Настройках перерисовывается [UX-S4 §8.2] */
         try {
-            tg.onEvent('fullscreenChanged', applyFsChrome);
+            tg.onEvent('fullscreenChanged', function () {
+                applyFsChrome();
+                if (settingsOpen) render();
+            });
             tg.onEvent('safeAreaChanged', applyFsChrome);
             applyFsChrome();
         } catch (e11) { /* noop */ }
