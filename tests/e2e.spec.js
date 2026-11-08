@@ -1950,6 +1950,67 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         if (!s0 || s0.w !== '120') throw new Error('автосейв завершённой не спас правку: ' + JSON.stringify(s0));
     });
 
+    test('[UX-T23] ⏱ в шапке завершённой открывает модалку времени: правка начала/окончания сохраняется', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        /* единственное действие в шапке завершённой живое: ⏱ открывает модалку времени */
+        await page.locator('.wcicons [data-act="timeModal"]').click();
+        await expect(page.locator('.modal.open #mStartTime')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.modal.open #mStartTime')).toHaveValue('09:30');
+        await page.locator('#mStartTime').fill('0700');
+        await page.locator('#mEndTime').fill('0800');
+        await page.locator('[data-act="saveTime"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* saveTime сохраняет сам: правка на сервере ещё при открытой карточке */
+        const st = await (await request.get('/api/state')).json();
+        const fin = (st.workouts || []).filter(function (w) { return w.finished; })[0];
+        if (!fin || String(fin.started).slice(11, 16) !== '07:00' || String(fin.ended).slice(11, 16) !== '08:00') {
+            throw new Error('время завершённой не сохранилось: ' + JSON.stringify(fin));
+        }
+        /* пилюля времени в карточке перерисовалась */
+        await expect(page.locator('.wpill', { hasText: '07:00–08:00' })).toBeVisible({ timeout: 5000 });
+    });
+
+    test('[UX-T23] таймер отдыха поднимается над backbar завершённой карточки (restRaised)', async ({ page, request }) => {
+        /* остаток таймера кладём напрямую в localStorage (тест-сетап, §1.7) */
+        await page.addInitScript(function () {
+            try {
+                localStorage.setItem('gymRest', JSON.stringify({ end: Date.now() + 60000, dur: 90, paused: false, mini: false, ex: 'Жим штанги лёжа' }));
+            } catch (e) { /* noop */ }
+        });
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        const bar = page.locator('#restbar');
+        await expect(bar.locator('#rbTime')).toBeVisible({ timeout: 5000 });
+        /* на списке истории backbar нет — панель у нижней навигации, без raised */
+        const listRaised = await bar.evaluate(function (el) { return el.classList.contains('raised'); });
+        if (listRaised) throw new Error('на списке истории restbar получил класс raised');
+        /* открытая завершённая карточка имеет свой backbar — панель обязана подняться выше [UX-T23] */
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.backbar [data-act="closeHistory"]')).toBeVisible({ timeout: 5000 });
+        await expect(bar).toHaveClass(/raised/, { timeout: 5000 });
+        /* геометрия: низ панели не ниже верха backbar — кнопки Удалить/Повторить/Назад не перекрыты */
+        const g = await bar.evaluate(function (el) {
+            const bb = document.querySelector('.backbar');
+            const b = el.getBoundingClientRect(), t = bb.getBoundingClientRect();
+            return { barBottom: Math.round(b.bottom), backTop: Math.round(t.top) };
+        });
+        if (g.barBottom > g.backTop + 1) throw new Error('restbar перекрывает backbar завершённой: ' + JSON.stringify(g));
+        /* закрыли карточку — панель вернулась к навигации */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expect(bar).not.toHaveClass(/raised/);
+    });
+
     test('звезда в списке «Техника»: у правого края строки, тоглится, сохраняется в gymFavs и не открывает упражнение', async ({ page }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
