@@ -774,6 +774,31 @@ function loadTheme() {
     }
 }
 
+/* [UX-T25] полноэкранный режим Mini App: состояние в localStorage gymFullscreen ('1'/'0'),
+   по умолчанию выключен; нужен Telegram 8.0+ — на старом клиенте requestFullscreen
+   бросает исключение: показываем только тост и флаг не ставим.
+   isFullscreen НЕ проверяем синхронно: клиент подтверждает вход асинхронно
+   (событие fullscreenChanged) — синхронная проверка ложно ругалась бы на 8.0+ */
+function fullscreenOn() {
+    let v = '0';
+    try { v = localStorage.getItem('gymFullscreen') || '0'; } catch (e) { /* noop */ }
+    return v === '1';
+}
+function fullscreenToggle() {
+    if (!tg || !tg.requestFullscreen) { toast('Не поддерживается этим Telegram'); return; }
+    if (!fullscreenOn()) {
+        try { tg.requestFullscreen(); } catch (e1) { toast('Не поддерживается этим Telegram'); return; }
+        /* вызов принят: вход подтвердится событием fullscreenChanged; при неудаче
+           флаг просто повторно применится при следующем старте (см. init) */
+        try { localStorage.setItem('gymFullscreen', '1'); } catch (e2) { /* noop */ }
+        toast('Полноэкранный режим включён');
+    } else {
+        try { tg.exitFullscreen(); } catch (e3) { /* noop */ }
+        try { localStorage.setItem('gymFullscreen', '0'); } catch (e4) { /* noop */ }
+        toast('Обычный режим');
+    }
+}
+
 /* ============ ACTIONS ============ */
 const ACTIONS = {
     switchTab: function (a) {
@@ -882,7 +907,9 @@ const ACTIONS = {
         try { localStorage.removeItem('gymBg'); } catch (e) { /* noop */ }
         document.documentElement.classList.remove('has-bg');
         toast('Фон убран');
-    }
+    },
+    /* [UX-T25] тогл полноэкранного режима в Профиле */
+    fullscreenToggle: function () { fullscreenToggle(); }
 };
 
 /* ============ каркас ============ */
@@ -1361,9 +1388,9 @@ function techFiltered() {
     if (TECH.q) list = list.filter(c => c.n.toLowerCase().includes(TECH.q.toLowerCase()));
     return list;
 }
-/* [UX-T19] порядок чипов секций «Техники» — как просил владелец: «Мышцы · Все ·
-   ★ Любимые · Вид · Блок · Коллекции»; «Все» — фильтр по умолчанию (весь каталог) */
-const TECH_CHIPS = ['muscle', 'all', 'fav', 'type', 'block', 'coll'];
+/* [UX-T24] порядок чипов секций «Техники» — как просил владелец: «★ Любимые · Все ·
+   Вид · Блок · Мышцы · Коллекции»; «Все» — фильтр по умолчанию (весь каталог) */
+const TECH_CHIPS = ['fav', 'all', 'type', 'block', 'muscle', 'coll'];
 function techChipsHtml() {
     let h = '<div class="secrow">';
     for (const id of TECH_CHIPS) {
@@ -1655,6 +1682,8 @@ function renderProfileTab() {
     h += '<div class="card"><p class="t1">⭐ Любимые упражнения</p>' +
         '<p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="openFavs">Открыть в технике</button></div></div>';
+    /* [UX-T25] полноэкранный режим: фикс-текст кнопки, состояние видно по тосту; подпись не нужна */
+    h += '<div class="card"><div class="btnrow"><button class="btn sec wide" data-act="fullscreenToggle">🖥 Полноэкранный режим</button></div></div>';
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
@@ -2646,6 +2675,12 @@ async function init() {
     restInitState(); /* таймер независим от сети: восстанавливается до /api/init */
     if (tg) {
         try { tg.ready(); tg.expand(); } catch (e) { /* noop */ }
+        /* [UX-T25] тихое восстановление полноэкранного режима, только если клиент умеет (8.0+) */
+        let fsSaved = '0';
+        try { fsSaved = localStorage.getItem('gymFullscreen') || '0'; } catch (e9) { /* noop */ }
+        if (fsSaved === '1' && tg.requestFullscreen && !tg.isFullscreen) {
+            try { tg.requestFullscreen(); } catch (e10) { /* noop */ }
+        }
         INIT = tg.initData || '';
     }
     let usedFallback = false;
