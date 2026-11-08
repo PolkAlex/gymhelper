@@ -8,6 +8,7 @@ import gym.Storage;
 import gym.Template;
 import gym.TemplateExercise;
 import gym.Workout;
+import gym.web.WebServer;
 
 import java.util.Map;
 
@@ -236,6 +237,17 @@ public class GymContractTest {
         check(BotLogic.parseAnnounce("привет") == null, "parseAnnounce: не команда — null");
         check(BotLogic.parseAnnounce(null) == null, "parseAnnounce: null — null");
 
+        /* удаление данных по запросу [ONB-T2]: разбор /delete_my_data и /delete_my_data_confirm, строгий матчинг */
+        check("ask".equals(BotLogic.parseDeleteData("/delete_my_data")), "parseDeleteData: /delete_my_data — ask");
+        check("ask".equals(BotLogic.parseDeleteData("/DELETE_MY_DATA")), "parseDeleteData: регистр команды не важен");
+        check("confirm".equals(BotLogic.parseDeleteData("/delete_my_data_confirm")), "parseDeleteData: /delete_my_data_confirm — confirm");
+        check("confirm".equals(BotLogic.parseDeleteData("/Delete_My_Data_Confirm")), "parseDeleteData: confirm — регистр не важен");
+        check(BotLogic.parseDeleteData("/delete_my_datax") == null, "parseDeleteData: /delete_my_datax не матчится");
+        check(BotLogic.parseDeleteData("/delete_my_data_confirmx") == null, "parseDeleteData: /delete_my_data_confirmx не матчится");
+        check(BotLogic.parseDeleteData("/delete_my_data 2") == null, "parseDeleteData: с аргументом не матчится");
+        check(BotLogic.parseDeleteData("привет") == null, "parseDeleteData: не команда — null");
+        check(BotLogic.parseDeleteData(null) == null, "parseDeleteData: null — null");
+
         /* Storage.chatIds [UX-T16]: id из имён chat_<id>.json, чужие/мусорные файлы и бэкапы не попадают */
         try {
             java.nio.file.Path tmpChats = java.nio.file.Files.createTempDirectory("gymchats");
@@ -255,7 +267,102 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: chatIds " + chatsErr);
         }
 
+        /* [ONB-T2] Storage.deleteChat: файл удаляется безвозвратно, несуществующий id — тихо */
+        try {
+            java.nio.file.Path tmpDel = java.nio.file.Files.createTempDirectory("gymdel");
+            Storage stDel = new Storage(tmpDel);
+            GymData seedDel = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":1,\"workouts\":[]}"));
+            stDel.save(555, seedDel);
+            check(java.nio.file.Files.exists(tmpDel.resolve("chat_555.json")), "deleteChat: файл перед удалением существует");
+            stDel.deleteChat(555);
+            check(!java.nio.file.Files.exists(tmpDel.resolve("chat_555.json")), "deleteChat: chat_<id>.json удалён");
+            stDel.deleteChat(999); /* несуществующий — без падения и без исключения */
+            stDel.deleteChat(555); /* повторное удаление — тоже тихо */
+        } catch (Exception delErr) {
+            throw new AssertionError("CONTRACT FAIL: deleteChat " + delErr);
+        }
+
+        /* [ONB-T2] регресс «воскрешения» удалённых данных: открытая вкладка с rev>0 бьёт
+           save'ом в пустой сервер после /delete_my_data → 409, chat_<id>.json НЕ пересоздаётся;
+           легитимные save'ы (первый с rev=0 и пустой от свежей вкладки) работают как раньше.
+           Реальный WebServer на эфемерном порту + Storage во временном каталоге. */
+        try {
+            java.nio.file.Path tmpRes = java.nio.file.Files.createTempDirectory("gymres");
+            Storage stRes = new Storage(tmpRes);
+            WebServer ws = new WebServer("contract-test-token", stRes, tmpRes);
+            java.net.ServerSocket probe = new java.net.ServerSocket(0);
+            int port = probe.getLocalPort();
+            probe.close();
+            ws.start(port);
+            String id = tgInitData("contract-test-token", 424242);
+            String w1 = "{\"id\":1,\"date\":\"2026-11-08\",\"finished\":true,\"exercises\":[]}";
+            java.nio.file.Path chatFile = tmpRes.resolve("chat_424242.json");
+
+            java.net.http.HttpResponse<String> r1 = postSave(port, id, 0,
+                "{\"rev\":0,\"nextId\":2,\"workouts\":[" + w1 + "]}");
+            check(r1.statusCode() == 200, "resurrect: легитимный первый save (rev=0) — 200, а не " + r1.statusCode());
+            java.util.Map<String, Object> m1 = Json.map(Json.parse(r1.body()));
+            check(Boolean.TRUE.equals(m1.get("ok")) && Json.lng(m1.get("rev")) == 1, "resurrect: первый save ok, rev=1");
+            check(java.nio.file.Files.exists(chatFile), "resurrect: файл после первого save создан");
+
+            stRes.deleteChat(424242);
+            check(!java.nio.file.Files.exists(chatFile), "resurrect: файл удалён (аналог /delete_my_data)");
+
+            /* save из открытой вкладки: старый G (rev=5, с тренировками) на пустой сервер */
+            java.net.http.HttpResponse<String> r2 = postSave(port, id, 5,
+                "{\"rev\":5,\"nextId\":2,\"workouts\":[" + w1 + "]}");
+            check(r2.statusCode() == 409, "resurrect: stale save отклонён 409, а не " + r2.statusCode());
+            java.util.Map<String, Object> m2 = Json.map(Json.parse(r2.body()));
+            check(Boolean.FALSE.equals(m2.get("ok")) && Json.lng(m2.get("rev")) == 0, "resurrect: тело 409 {ok:false, rev:0}");
+            check(!java.nio.file.Files.exists(chatFile), "resurrect: файл не воскрес после stale save");
+            check(stRes.load(424242).workouts.isEmpty(), "resurrect: серверное состояние осталось пустым");
+
+            /* свежая вкладка (rev=0, пустой G) — легитимный save проходит */
+            java.net.http.HttpResponse<String> r3 = postSave(port, id, 0,
+                "{\"rev\":0,\"nextId\":1,\"workouts\":[]}");
+            check(r3.statusCode() == 200, "resurrect: пустой save от свежей вкладки — 200, а не " + r3.statusCode());
+            check(java.nio.file.Files.exists(chatFile), "resurrect: файл после пустого save создан заново (уже пустой)");
+        } catch (Exception resErr) {
+            throw new AssertionError("CONTRACT FAIL: resurrect " + resErr);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
+    }
+
+    /* [ONB-T2] initData, подписанный по правилам Telegram: checkString строится по
+       декодированным значениям, отсортированным по ключу (так читает их WebServer.validateInitData);
+       secret = HMAC-SHA256(token, "WebAppData"), hash = HMAC-SHA256(secret, checkString) */
+    static String tgInitData(String token, long userId) throws Exception {
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec("WebAppData".getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+        byte[] secret = mac.doFinal(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        String userJson = "{\"id\":" + userId + ",\"first_name\":\"Test\"}";
+        java.util.TreeMap<String, String> p = new java.util.TreeMap<>();
+        p.put("auth_date", "1700000000");
+        p.put("user", userJson);
+        StringBuilder check = new StringBuilder();
+        for (java.util.Map.Entry<String, String> en : p.entrySet()) {
+            if (check.length() > 0) check.append('\n');
+            check.append(en.getKey()).append('=').append(en.getValue());
+        }
+        mac.init(new javax.crypto.spec.SecretKeySpec(secret, "HmacSHA256"));
+        byte[] h = mac.doFinal(check.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        StringBuilder hex = new StringBuilder();
+        for (byte b : h) hex.append(String.format("%02x", b));
+        return "auth_date=1700000000&hash=" + hex + "&user="
+            + java.net.URLEncoder.encode(userJson, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /* POST /api/save в тестовый WebServer: rev — верхнеуровневый rev клиента (как у doSave) */
+    static java.net.http.HttpResponse<String> postSave(int port, String initData, long rev, String dataJson) throws Exception {
+        String payload = "{\"initData\":\"" + initData + "\",\"rev\":" + rev + ",\"data\":" + dataJson + "}";
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(
+                java.net.URI.create("http://127.0.0.1:" + port + "/api/save"))
+            .header("Content-Type", "application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload, java.nio.charset.StandardCharsets.UTF_8))
+            .build();
+        return java.net.http.HttpClient.newHttpClient()
+            .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
     }
 }

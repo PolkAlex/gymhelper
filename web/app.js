@@ -361,6 +361,16 @@ async function doSave() {
         let j = {};
         try { j = await r.json(); } catch (e2) { /* noop */ }
         if (j.ok && typeof j.rev === 'number') { G.rev = j.rev; return 'ok'; }
+        if (r.status === 409) {
+            /* [ONB-T2] сервер пуст (rev 0): данные были удалены /delete_my_data, а вкладка
+               прислала старый G. Сохранение не выполняется; перечитываем /api/init начисто
+               (без слияния локальных тренировок — они уже удалены безвозвратно),
+               вкладка опустевает сама. */
+            console.error('save rejected 409: server data was deleted');
+            toast('Данные были удалены — приложение обновлено', true);
+            await reloadSilently(true, true);
+            return 'err';
+        }
         console.error('save failed', r.status);
         toast('Ошибка сохранения: сервер ответил ' + r.status, true);
         return 'err';
@@ -372,7 +382,7 @@ async function doSave() {
         __saveBusy = false;
     }
 }
-async function reloadSilently(force) {
+async function reloadSilently(force, adoptServer) {
     if (!force && __saveBusy) return;
     if (!force && tab === 'history' && viewWid) return;
     try {
@@ -382,11 +392,17 @@ async function reloadSilently(force) {
         });
         const j = await r.json();
         if (j.ok && j.data) {
-            /* не теряем локальные тренировки, которых сервер ещё не видел (сбой сохранения) */
-            const serverIds = new Set((j.data.workouts || []).map(w => w.id));
-            const serverDel = new Set(j.data.del || []);
-            const localOnly = G ? G.workouts.filter(w => !serverIds.has(w.id) && !serverDel.has(w.id)) : [];
-            const localNextId = G ? G.nextId : 0;
+            /* не теряем локальные тренировки, которых сервер ещё не видел (сбой сохранения);
+               [ONB-T2] adoptServer (409 после удаления) — наоборот: серверное состояние
+               применяем как есть, «удалённое» с сервера локально не восстанавливаем */
+            let localOnly = [];
+            let localNextId = 0;
+            if (!adoptServer) {
+                const serverIds = new Set((j.data.workouts || []).map(w => w.id));
+                const serverDel = new Set(j.data.del || []);
+                localOnly = G ? G.workouts.filter(w => !serverIds.has(w.id) && !serverDel.has(w.id)) : [];
+                localNextId = G ? G.nextId : 0;
+            }
             G = j.data;
             for (const w of localOnly) {
                 G.workouts.push(w);
@@ -936,6 +952,12 @@ const ACTIONS = {
     },
     closeModal: function () { closeModal(); },
     modalBackdrop: function () { closeModal(); },
+    /* [ONB-T2] политика конфиденциальности: openLink внутри Telegram, иначе обычная вкладка */
+    openPrivacy: function () {
+        const url = 'https://gym-helper.com/privacy.html';
+        if (tg && tg.openLink) tg.openLink(url);
+        else window.open(url, '_blank');
+    },
     pickBg: function () { const el = document.getElementById('bgFile'); if (el) el.click(); },
     clearBg: function () {
         try { localStorage.removeItem('gymBg'); } catch (e) { /* noop */ }
@@ -1728,11 +1750,10 @@ function renderSettings() {
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
-    /* [ONB-T2] «ℹ️ О приложении» — резерв места (спека §6/§9): в прод не рендерим до появления
-       политики конфиденциальности. Разметка на будущее:
+    /* [ONB-T2] «ℹ️ О приложении»: политика конфиденциальности — открывается в браузере
+       (вне Telegram при отсутствии клиента) */
     h += '<div class="card"><p class="t1">ℹ️ О приложении</p>' +
-        '<div class="setrow"><span class="lbl">Политика конфиденциальности</span><span class="meta">Скоро</span></div></div>';
-    */
+        '<div class="btnrow"><button class="btn sec wide" data-act="openPrivacy">ℹ️ Политика конфиденциальности</button></div></div>';
     return h;
 }
 

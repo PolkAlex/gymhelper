@@ -182,6 +182,18 @@ public final class WebServer {
         }
         GymData current = storage.load(userId);
         GymData data = GymData.fromJson(dataJson);
+        /* [ONB-T2] защита от «воскрешения» удалённых данных: после /delete_my_data сервер пуст
+           (rev=0), но открытая вкладка Mini App держит старый G (rev>0) — первый же её save()
+           без этой проверки смёржил бы старые тренировки в пустой current и пересоздал
+           chat_<id>.json, хотя политика обещает удаление «безвозвратно». Такой save отклоняем
+           до merge и записи файла: клиент по 409 перечитывает /api/init, получает пустой
+           G rev=0 — открытая вкладка опустевает сама. */
+        long clientRev = Math.max(data.rev, Json.lng(body.get("rev")));
+        if (current.rev == 0 && clientRev > 0 && !data.workouts.isEmpty()) {
+            System.out.println("[save] user " + userId + " rejected 409: сервер пуст (rev 0), клиент прислал rev " + clientRev);
+            sendJson(ex, 409, Map.of("ok", false, "rev", 0));
+            return;
+        }
         if (data.nextId < 1) data.nextId = 1;
         long incomingNextId = data.nextId;
         for (Workout iw : data.workouts) {

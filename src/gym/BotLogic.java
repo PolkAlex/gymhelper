@@ -38,6 +38,9 @@ public final class BotLogic {
     private static final long REST_EDIT_MS = 5000;
     private static final long REST_EDIT_FINAL_MS = 1000;
     private static final long REST_FREEZE_MS = 5 * 60 * 1000; /* юзер молчит 5 мин — правки замирают */
+    /* [ONB-T2] удаление данных: окно подтверждения /delete_my_data_confirm — 5 минут */
+    private static final long DELETE_CONFIRM_MS = 5 * 60 * 1000L;
+    private static final String PRIVACY_URL = "https://gym-helper.com/privacy.html";
 
     private final TelegramApi api;
     private final Storage storage;
@@ -47,6 +50,9 @@ public final class BotLogic {
     private final long adminChatId;
     private final Map<Long, UserState> states = new ConcurrentHashMap<>();
     private final Map<Long, RestSession> rests = new ConcurrentHashMap<>();
+    /* [ONB-T2] ожидающие подтверждения удаления: chatId → время запроса, только память процесса
+       (после рестарта бота подтверждение просто «истекло» — юзер начинает заново) */
+    private final Map<Long, Long> pendingDeletes = new ConcurrentHashMap<>();
     private final ScheduledExecutorService restScheduler;
 
     public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId) {
@@ -324,6 +330,12 @@ public final class BotLogic {
         String[] ann = parseAnnounce(text);
         if (ann != null) {
             handleAnnounce(chatId, ann[1], ann[0]);
+            return;
+        }
+        /* удаление своих данных по запросу [ONB-T2]: строго, /delete_my_datax не матчится */
+        String delCmd = parseDeleteData(text);
+        if (delCmd != null) {
+            handleDeleteData(chatId, "confirm".equals(delCmd));
             return;
         }
         if (low.startsWith("/app")) {
@@ -604,6 +616,8 @@ public final class BotLogic {
         if (webAppUrl != null) {
             b.append("\n\n📱 Все возможности — в приложении: кнопка «🏋️ Открыть приложение» внизу или ☰ у поля ввода");
         }
+        /* [ONB-T2] ссылка на политику данных в приветствии */
+        b.append("\n\n📜 Политика данных: ").append(PRIVACY_URL);
         b.append("\n\nВыбери действие 👇");
         if (mid == null && webAppUrl != null) {
             api.sendMessageWithKeyboard(chatId, b.toString(), TelegramApi.appKeyboard(webAppUrl));
@@ -1872,6 +1886,7 @@ public final class BotLogic {
         b.append("/rest — таймер отдыха: /rest 180\n");
         b.append("/export — выгрузить дневник CSV-файлом\n");
         b.append("/profile — профиль: пол, возраст, рост, вес\n");
+        b.append("/delete_my_data — удалить все свои данные\n");
         if (webAppUrl != null) {
             b.append("/app — открыть приложение\n");
         }
@@ -1943,6 +1958,48 @@ public final class BotLogic {
         }
         api.sendMessage(chatId, rep.toString(), null);
         System.out.println("[announce] sent=" + sent + " failed=" + failed);
+    }
+
+    /* ===== удаление данных по запросу [ONB-T2] ===== */
+
+    /* разбор команды удаления: "confirm" — /delete_my_data_confirm, "ask" — /delete_my_data;
+       null — не команда удаления. Строго: /delete_my_datax и /delete_my_data_confirmx не матчатся.
+       static — для контрактного теста без конструктора (он поднимает планировщик таймеров). */
+    public static String parseDeleteData(String text) {
+        if (text == null) return null;
+        String low = text.toLowerCase();
+        if (low.equals("/delete_my_data_confirm")) return "confirm";
+        if (low.equals("/delete_my_data")) return "ask";
+        return null;
+    }
+
+    /* двухшаговое подтверждение: /delete_my_data запоминает запрос на DELETE_CONFIRM_MS,
+       повторная /delete_my_data_confirm в этом окне стирает chat_<id>.json безвозвратно.
+       Пользователь удаляет только СВОИ данные: chatId берётся из входящего сообщения,
+       чужой файл из чата удалить невозможно — это by design. */
+    private void handleDeleteData(long chatId, boolean confirm) {
+        long now = System.currentTimeMillis();
+        if (!confirm) {
+            /* протухшие записи (окно подтверждения вышло) подчищаем, чтобы карта не росла */
+            pendingDeletes.entrySet().removeIf(e -> now - e.getValue() > DELETE_CONFIRM_MS);
+            pendingDeletes.put(chatId, now);
+            api.sendMessage(chatId, "⚠️ Будут безвозвратно удалены все твои тренировки и профиль."
+                + "\nДля подтверждения в течение 5 минут отправь /delete_my_data_confirm", null);
+            return;
+        }
+        Long asked = pendingDeletes.remove(chatId);
+        if (asked == null) {
+            /* confirm без предшествующего /delete_my_data — не «истекло», а просто не запрашивали */
+            api.sendMessage(chatId, "Сначала отправь /delete_my_data", null);
+            return;
+        }
+        if (now - asked > DELETE_CONFIRM_MS) {
+            api.sendMessage(chatId, "Время подтверждения истекло, начни заново: /delete_my_data", null);
+            return;
+        }
+        storage.deleteChat(chatId);
+        api.sendMessage(chatId, "🗑 Все твои данные удалены."
+            + "\nВернуться — просто напиши боту или открой Mini App", null);
     }
 
     private void showKcal(long chatId, Long mid, GymData data, long id) {
