@@ -2318,6 +2318,11 @@ test.describe('UX-T25: тогл полноэкранного режима в Н�
         /* locked: aria-disabled, meta-текст объясняет причину — тост и флаг не появляются */
         await expect(btn).toHaveAttribute('aria-disabled', 'true');
         await expect(page.locator('.card', { hasText: 'Полноэкранный режим' })).toContainText('Недоступно: обнови Telegram до 8.0+');
+        /* pointer-events:none на locked: тап уходит в hit-test мимо кнопки — ни тоста, ни флага;
+            повторный тап (двойной тап пользователя) после дедуп-окна — результат тот же */
+        await btn.click({ force: true });
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+        await page.waitForTimeout(450); /* дедуп-окно dispatchFromEl */
         await btn.click({ force: true });
         await expect(page.locator('.toast.show')).toHaveCount(0);
         const flag = await page.evaluate(function () {
@@ -2554,7 +2559,8 @@ test.describe('UX-T27: экран «Настройки»', function () {
             const cnt = await app.getByText(dead).count();
             if (cnt > 0) throw new Error('в Профиле остался блок «' + dead + '» (экземпляров: ' + cnt + ')');
         }
-        /* 4 карточки данных на месте */
+        /* 4 карточки данных на месте [UX-S4 §7: состав — ровно 4 карточки] */
+        await expect(page.locator('.prof .card')).toHaveCount(4);
         await expect(page.locator('.card', { hasText: '⭐ Любимые упражнения' })).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.sexrow')).toBeVisible();
         await expect(page.locator('#pfAge')).toBeVisible();
@@ -2602,6 +2608,37 @@ test.describe('UX-T27: экран «Настройки»', function () {
         /* карточка восстановлена вместе с записью */
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.expill .entry').first()).toContainText('60 кг', { timeout: 5000 });
+    });
+
+    /* §8.4: нижняя навигация закрывает Настройки поверх карточки, dirty-автосейв [UX-T22] жив */
+    test('Настройки поверх карточки с несохранённой правкой: тап по табу автосохраняет и закрывает Настройки', async ({ page, request }) => {
+        let failSave = true;
+        await page.route('**/api/save', function (route) {
+            if (failSave) route.abort();
+            else route.fallback();
+        });
+        await openApp(page);
+        await startAndPick(page, EX);
+        /* прямое сохранение падает (failSave): запись только локально, состояние dirty */
+        await page.locator('#mWeight').fill('60');
+        await page.locator('#mSets').fill('1');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* шестерёнка поверх карточки: Настройки открылись, backbar скрыт */
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.backbar')).toHaveCount(0);
+        /* сеть восстановилась: тап по табу нижней навигации закрывает Настройки
+           и запускает dirty-автосейв карточки [UX-S4 §8.4] */
+        failSave = false;
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+        await expect.poll(async function () {
+            const st = await (await request.get('/api/state')).json();
+            const act = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+            return act && act.exercises && act.exercises[0] && act.exercises[0].sets.length ? 'saved' : 'pending';
+        }, { timeout: 5000 }).toBe('saved');
     });
 
     /* чек-лист §8.5/§10: узкие экраны — строки с тоглами и чипы без переполнения */
