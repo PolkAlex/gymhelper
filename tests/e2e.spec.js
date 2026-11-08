@@ -2370,3 +2370,60 @@ test.describe('UX-T25: тогл полноэкранного режима в П�
         if (off.flag !== '0') throw new Error('флаг gymFullscreen: ' + off.flag + ', ожидался "0"');
     });
 });
+
+/* ===== [UX-B10] fullscreen safe-area: шапка не зажата статус-баром ===== */
+test.describe('UX-B10: fullscreen safe-area шапки', function () {
+
+    /* клиент 8.0+ эмулируется через НАСТОЯЩУЮ вендорскую точку входа событий
+       TelegramGameProxy_receiveEvent (сестринский к UX-T25 приём: без подмены WebApp,
+       сквозь реальный пайплайн fullscreen_changed/safe_area_changed -> подписка tg.onEvent) */
+    test('вне fs: padding-top 10px и fs нет; вход + safe-area 44px: fs есть и --fs-inset-top=44px; выход: fs снят', async ({ page }) => {
+        await openApp(page);
+        /* обычный режим: класс fs не ставится, геометрия шапки прежняя (padding 10px 12px) */
+        const normal = await page.evaluate(function () {
+            return {
+                fs: document.body.classList.contains('fs'),
+                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop
+            };
+        });
+        if (normal.fs) throw new Error('класс fs на body в обычном режиме');
+        if (normal.pad !== '10px') throw new Error('padding-top .topbar вне fullscreen: ' + normal.pad + ', ожидался 10px');
+        /* клиент сообщает safe-area ещё до входа fullscreen: переменная обновляется событием safeAreaChanged */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 44, bottom: 24, left: 0, right: 0 });
+        });
+        const inset = await page.evaluate(function () {
+            return document.documentElement.style.getPropertyValue('--fs-inset-top');
+        });
+        if (inset !== '44px') throw new Error('--fs-inset-top: "' + inset + '", ожидалась 44px');
+        /* вход fullscreen (fullscreenChanged -> applyFsChrome): класс fs, бар отступает на inset */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: true });
+        });
+        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+        const padFs = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padFs !== '44px') throw new Error('padding-top .topbar в fullscreen: ' + padFs + ', ожидался 44px');
+        /* выход из fullscreen тем же событием (is_fullscreen=false): класс снят, геометрия прежняя */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: false });
+        });
+        await expect(page.locator('body.fs')).toHaveCount(0);
+        const padOut = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padOut !== '10px') throw new Error('padding-top .topbar после выхода из fullscreen: ' + padOut + ', ожидался 10px');
+    });
+
+    test('старт при восстановленном из сессии fullscreen: класс fs на body сразу, без событий клиента', async ({ page }) => {
+        /* вендор синхронно восстанавливает isFullscreen из sessionStorage (до eval app.js):
+           applyFsChrome() на init уже ставит fs — топбар не «прыгает» после загрузки */
+        await page.addInitScript(function () {
+            try { window.sessionStorage.setItem('__telegram__isFullscreen', '"yes"'); } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
+        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+    });
+});
