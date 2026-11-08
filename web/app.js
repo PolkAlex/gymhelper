@@ -361,6 +361,16 @@ async function doSave() {
         let j = {};
         try { j = await r.json(); } catch (e2) { /* noop */ }
         if (j.ok && typeof j.rev === 'number') { G.rev = j.rev; return 'ok'; }
+        if (r.status === 409) {
+            /* [ONB-T2] сервер пуст (rev 0): данные были удалены /delete_my_data, а вкладка
+               прислала старый G. Сохранение не выполняется; перечитываем /api/init начисто
+               (без слияния локальных тренировок — они уже удалены безвозвратно),
+               вкладка опустевает сама. */
+            console.error('save rejected 409: server data was deleted');
+            toast('Данные были удалены — приложение обновлено', true);
+            await reloadSilently(true, true);
+            return 'err';
+        }
         console.error('save failed', r.status);
         toast('Ошибка сохранения: сервер ответил ' + r.status, true);
         return 'err';
@@ -372,7 +382,7 @@ async function doSave() {
         __saveBusy = false;
     }
 }
-async function reloadSilently(force) {
+async function reloadSilently(force, adoptServer) {
     if (!force && __saveBusy) return;
     if (!force && tab === 'history' && viewWid) return;
     try {
@@ -382,11 +392,17 @@ async function reloadSilently(force) {
         });
         const j = await r.json();
         if (j.ok && j.data) {
-            /* не теряем локальные тренировки, которых сервер ещё не видел (сбой сохранения) */
-            const serverIds = new Set((j.data.workouts || []).map(w => w.id));
-            const serverDel = new Set(j.data.del || []);
-            const localOnly = G ? G.workouts.filter(w => !serverIds.has(w.id) && !serverDel.has(w.id)) : [];
-            const localNextId = G ? G.nextId : 0;
+            /* не теряем локальные тренировки, которых сервер ещё не видел (сбой сохранения);
+               [ONB-T2] adoptServer (409 после удаления) — наоборот: серверное состояние
+               применяем как есть, «удалённое» с сервера локально не восстанавливаем */
+            let localOnly = [];
+            let localNextId = 0;
+            if (!adoptServer) {
+                const serverIds = new Set((j.data.workouts || []).map(w => w.id));
+                const serverDel = new Set(j.data.del || []);
+                localOnly = G ? G.workouts.filter(w => !serverIds.has(w.id) && !serverDel.has(w.id)) : [];
+                localNextId = G ? G.nextId : 0;
+            }
             G = j.data;
             for (const w of localOnly) {
                 G.workouts.push(w);

@@ -1886,6 +1886,7 @@ public final class BotLogic {
         b.append("/rest — таймер отдыха: /rest 180\n");
         b.append("/export — выгрузить дневник CSV-файлом\n");
         b.append("/profile — профиль: пол, возраст, рост, вес\n");
+        b.append("/delete_my_data — удалить все свои данные\n");
         if (webAppUrl != null) {
             b.append("/app — открыть приложение\n");
         }
@@ -1979,13 +1980,20 @@ public final class BotLogic {
     private void handleDeleteData(long chatId, boolean confirm) {
         long now = System.currentTimeMillis();
         if (!confirm) {
+            /* протухшие записи (окно подтверждения вышло) подчищаем, чтобы карта не росла */
+            pendingDeletes.entrySet().removeIf(e -> now - e.getValue() > DELETE_CONFIRM_MS);
             pendingDeletes.put(chatId, now);
             api.sendMessage(chatId, "⚠️ Будут безвозвратно удалены все твои тренировки и профиль."
                 + "\nДля подтверждения в течение 5 минут отправь /delete_my_data_confirm", null);
             return;
         }
         Long asked = pendingDeletes.remove(chatId);
-        if (asked == null || now - asked > DELETE_CONFIRM_MS) {
+        if (asked == null) {
+            /* confirm без предшествующего /delete_my_data — не «истекло», а просто не запрашивали */
+            api.sendMessage(chatId, "Сначала отправь /delete_my_data", null);
+            return;
+        }
+        if (now - asked > DELETE_CONFIRM_MS) {
             api.sendMessage(chatId, "Время подтверждения истекло, начни заново: /delete_my_data", null);
             return;
         }
