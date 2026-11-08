@@ -98,6 +98,8 @@ test.describe('GymHelper e2e', function () {
         await page.locator('#mReps').fill('8-10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible();
+        /* [UX-B9] позитивный путь: успешное сохранение записи подтверждается тостом */
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
 
         await openActiveDetail(page);
         await page.locator('.expill .entry').first().click();
@@ -595,6 +597,11 @@ test.describe('GymHelper e2e', function () {
         await page.locator('#mReps').fill('8-10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* [UX-B9] при сбое сети тоста «✓ Сохранено» нет — только тост ошибки от doSave */
+        const errToast = page.locator('.toast.show.err');
+        await expect(errToast).toBeVisible({ timeout: 5000 });
+        await expect(errToast).toContainText('Ошибка сохранения');
+        await expect(page.locator('.toast.show')).not.toHaveText('✓ Сохранено');
         await openActiveDetail(page);
         await expect(page.locator('.expill .entry').first()).toBeVisible({ timeout: 5000 });
 
