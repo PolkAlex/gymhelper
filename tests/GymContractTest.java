@@ -236,6 +236,17 @@ public class GymContractTest {
         check(BotLogic.parseAnnounce("привет") == null, "parseAnnounce: не команда — null");
         check(BotLogic.parseAnnounce(null) == null, "parseAnnounce: null — null");
 
+        /* удаление данных по запросу [ONB-T2]: разбор /delete_my_data и /delete_my_data_confirm, строгий матчинг */
+        check("ask".equals(BotLogic.parseDeleteData("/delete_my_data")), "parseDeleteData: /delete_my_data — ask");
+        check("ask".equals(BotLogic.parseDeleteData("/DELETE_MY_DATA")), "parseDeleteData: регистр команды не важен");
+        check("confirm".equals(BotLogic.parseDeleteData("/delete_my_data_confirm")), "parseDeleteData: /delete_my_data_confirm — confirm");
+        check("confirm".equals(BotLogic.parseDeleteData("/Delete_My_Data_Confirm")), "parseDeleteData: confirm — регистр не важен");
+        check(BotLogic.parseDeleteData("/delete_my_datax") == null, "parseDeleteData: /delete_my_datax не матчится");
+        check(BotLogic.parseDeleteData("/delete_my_data_confirmx") == null, "parseDeleteData: /delete_my_data_confirmx не матчится");
+        check(BotLogic.parseDeleteData("/delete_my_data 2") == null, "parseDeleteData: с аргументом не матчится");
+        check(BotLogic.parseDeleteData("привет") == null, "parseDeleteData: не команда — null");
+        check(BotLogic.parseDeleteData(null) == null, "parseDeleteData: null — null");
+
         /* Storage.chatIds [UX-T16]: id из имён chat_<id>.json, чужие/мусорные файлы и бэкапы не попадают */
         try {
             java.nio.file.Path tmpChats = java.nio.file.Files.createTempDirectory("gymchats");
@@ -253,6 +264,21 @@ public class GymContractTest {
                 "chatIds: только chat_<id>.json, мусор и backups не попадают");
         } catch (Exception chatsErr) {
             throw new AssertionError("CONTRACT FAIL: chatIds " + chatsErr);
+        }
+
+        /* [ONB-T2] Storage.deleteChat: файл удаляется безвозвратно, несуществующий id — тихо */
+        try {
+            java.nio.file.Path tmpDel = java.nio.file.Files.createTempDirectory("gymdel");
+            Storage stDel = new Storage(tmpDel);
+            GymData seedDel = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":1,\"workouts\":[]}"));
+            stDel.save(555, seedDel);
+            check(java.nio.file.Files.exists(tmpDel.resolve("chat_555.json")), "deleteChat: файл перед удалением существует");
+            stDel.deleteChat(555);
+            check(!java.nio.file.Files.exists(tmpDel.resolve("chat_555.json")), "deleteChat: chat_<id>.json удалён");
+            stDel.deleteChat(999); /* несуществующий — без падения и без исключения */
+            stDel.deleteChat(555); /* повторное удаление — тоже тихо */
+        } catch (Exception delErr) {
+            throw new AssertionError("CONTRACT FAIL: deleteChat " + delErr);
         }
 
         System.out.println("CONTRACT OK");

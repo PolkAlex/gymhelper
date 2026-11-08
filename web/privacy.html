@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Политика конфиденциальности — GymHelper</title>
+<style>
+    /* Самодостаточная страница (не связана со style.css Mini App).
+       Темизация Amber Glass: тёмный фон + янтарный акцент [ONB-T2]. */
+    :root {
+        --bg: #101114;
+        --text: #f2f3f5;
+        --muted: #9aa0aa;
+        --accent: #ffc220;
+        --card: rgba(255,255,255,.055);
+        --brd: rgba(255,255,255,.10);
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 16px/1.65 -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+        -webkit-text-size-adjust: 100%;
+    }
+    .doc { max-width: 680px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 {
+        font-size: 26px;
+        line-height: 1.25;
+        margin: 0 0 4px;
+    }
+    .acc { color: var(--accent); }
+    .updated { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+    h2 {
+        font-size: 18px;
+        margin: 32px 0 10px;
+        padding-top: 20px;
+        border-top: 1px solid var(--brd);
+    }
+    p, li { margin: 8px 0; }
+    ul { margin: 8px 0; padding-left: 22px; }
+    code {
+        background: var(--card);
+        border: 1px solid var(--brd);
+        border-radius: 6px;
+        padding: 1px 7px;
+        font-size: 14px;
+        color: var(--accent);
+        white-space: nowrap;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .muted { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main class="doc">
+    <h1>Политика <span class="acc">конфиденциальности</span></h1>
+    <p class="updated">Дата последнего обновления: 08.11.2026</p>
+
+    <h2>Оператор данных</h2>
+    <p>Оператор персональных данных — владелец бота GymHelper (@GymPolkhovichBot). Используя бота и мини-приложение, ты соглашаешься с этой политикой.</p>
+
+    <h2>Какие данные собираются</h2>
+    <ul>
+        <li>данные профиля: возраст, рост, вес, пол;</li>
+        <li>имя из Telegram (для отображения в интерфейсе);</li>
+        <li>история тренировок: упражнения, веса, подходы, повторения и время занятий.</li>
+    </ul>
+
+    <h2>Где хранятся данные</h2>
+    <p>Данные хранятся на сервере оператора (VPS) в виде отдельного файла для каждого пользователя. Создаются резервные копии: до 20 последних версий на сервере и копии на устройстве оператора в течение 14 дней.</p>
+
+    <h2>Как долго хранятся</h2>
+    <p>Пока пользователь активен. Если ты не пользуешься ботом, данные остаются сохранёнными, чтобы при возвращении дневник был на месте.</p>
+
+    <h2>Удаление данных</h2>
+    <p>Удалить свои данные можно в любой момент командой <code>/delete_my_data</code> в боте. Для защиты от случайного нажатия бот просит подтвердить действие повторной командой <code>/delete_my_data_confirm</code> в течение 5 минут. После подтверждения файл с твоими данными удаляется безвозвратно; копии в резервных хранилищах удаляются автоматически по истечении срока их хранения.</p>
+
+    <h2>Кто имеет доступ</h2>
+    <p>Только оператор. Данные не передаются третьим лицам и не используются для рекламы.</p>
+
+    <h2>Контакты</h2>
+    <p>Вопросы по обработке данных — просто <a href="https://t.me/GymPolkhovichBot">напиши боту</a>.</p>
+</main>
+</body>
+</html>

@@ -97,6 +97,19 @@ public final class Storage {
         return mine;
     }
 
+    /* [ONB-T2] удаление данных пользователя по запросу: chat_<id>.json стирается безвозвратно.
+       Бэкапы в data/backups остаются до истечения ретеншна (20 версий; внешние копии — 14 дней) —
+       это прозрачно указано в политике (web/privacy.html). */
+    public synchronized void deleteChat(long chatId) {
+        try {
+            if (Files.deleteIfExists(dir.resolve("chat_" + chatId + ".json"))) {
+                System.out.println("[info] deleted chat_" + chatId + ".json (по запросу пользователя)");
+            }
+        } catch (Exception e) {
+            System.out.println("[warn] deleteChat: " + e.getMessage());
+        }
+    }
+
     /* [UX-T16] рассылка владельцем: все активные чаты — id из имён chat_<id>.json в data/ */
     public synchronized List<Long> chatIds() {
         List<Long> out = new ArrayList<>();

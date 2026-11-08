@@ -936,6 +936,12 @@ const ACTIONS = {
     },
     closeModal: function () { closeModal(); },
     modalBackdrop: function () { closeModal(); },
+    /* [ONB-T2] политика конфиденциальности: openLink внутри Telegram, иначе обычная вкладка */
+    openPrivacy: function () {
+        const url = 'https://gym-helper.com/privacy.html';
+        if (tg && tg.openLink) tg.openLink(url);
+        else window.open(url, '_blank');
+    },
     pickBg: function () { const el = document.getElementById('bgFile'); if (el) el.click(); },
     clearBg: function () {
         try { localStorage.removeItem('gymBg'); } catch (e) { /* noop */ }
@@ -1728,11 +1734,10 @@ function renderSettings() {
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
-    /* [ONB-T2] «ℹ️ О приложении» — резерв места (спека §6/§9): в прод не рендерим до появления
-       политики конфиденциальности. Разметка на будущее:
+    /* [ONB-T2] «ℹ️ О приложении»: политика конфиденциальности — открывается в браузере
+       (вне Telegram при отсутствии клиента) */
     h += '<div class="card"><p class="t1">ℹ️ О приложении</p>' +
-        '<div class="setrow"><span class="lbl">Политика конфиденциальности</span><span class="meta">Скоро</span></div></div>';
-    */
+        '<div class="btnrow"><button class="btn sec wide" data-act="openPrivacy">ℹ️ Политика конфиденциальности</button></div></div>';
     return h;
 }
 

@@ -398,6 +398,19 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Тренер', { timeout: 5000 });
     });
 
+    test('[ONB-T2] Настройки: пункт «Политика конфиденциальности», /privacy.html отдаётся со статусом 200', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        /* резервный блок [UX-S4] расскомментирован: кнопка политики видима в Настройках */
+        await expect(page.locator('#app button', { hasText: 'Политика конфиденциальности' })).toBeVisible({ timeout: 5000 });
+        /* статичная страница политики отдаётся тестовым сервером */
+        const resp = await page.request.get('/privacy.html');
+        if (resp.status() !== 200) throw new Error('privacy.html: HTTP ' + resp.status());
+        const body = await resp.text();
+        if (!body.includes('Политика конфиденциальности')) throw new Error('privacy.html без заголовка политики');
+    });
+
     test('время и дата тренировки: маски ввода', async ({ page }) => {
         await openApp(page);
         await startWorkoutUi(page);
@@ -2495,8 +2508,8 @@ test.describe('UX-B10: fullscreen safe-area шапки', function () {
 test.describe('UX-T27: экран «Настройки»', function () {
 
     /* §12.1 + §12.2 + §12.10: шестерёнка одна на всех вкладках; состав Настроек;
-       «Политика конфиденциальности» не рендерится до ONB-T2; «←» возвращает на вкладку-источник */
-    test('шестерёнка на всех вкладках: состав Настроек (Оформление/Таймер/Тренер), «Политики» нет, «Назад» возвращает на вкладку', async ({ page }) => {
+       с [ONB-T2] в составе есть «Политика конфиденциальности»; «←» возвращает на вкладку-источник */
+    test('шестерёнка на всех вкладках: состав Настроек (Оформление/Таймер/Тренер/Политика), «Назад» возвращает на вкладку', async ({ page }) => {
         await openApp(page);
         for (const label of ['История', 'Статистика', 'Техника', 'Профиль']) {
             await page.locator('.nav button', { hasText: label }).click();
@@ -2505,7 +2518,8 @@ test.describe('UX-T27: экран «Настройки»', function () {
             await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
             await expect(page.locator('.card', { hasText: '⏱ Таймер отдыха' })).toBeVisible();
             await expect(page.locator('.card', { hasText: '🧑‍🏫 Персональный тренер' })).toBeVisible();
-            await expect(page.locator('#app')).not.toContainText('Политика конфиденциальности');
+            /* [ONB-T2] политика реализована: пункт есть в Настройках на любой вкладке */
+            await expect(page.locator('#app button', { hasText: 'Политика конфиденциальности' })).toBeVisible({ timeout: 5000 });
             await page.locator('.topbar [aria-label="Назад"]').click();
             await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
         }
