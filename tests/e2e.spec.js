@@ -1670,7 +1670,7 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
             /* намеренно нет ни restSec, ни templates — как в старом data/*.json */
         } } });
         await openApp(page);
-        /* [UX-T27] таймер отдыха переехал из Профиля в Настройки; профиль: активен дефолтный чип 90 */
+        /* [UX-T27] таймер отдыха переехал из Профиля в Настройки (дефолтный чип 90 — в G.restSec) */
         await page.locator('[aria-label="Настройки"]').click();
         const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
         await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
