@@ -10,7 +10,6 @@ let PENDING = null;
 let CUR = null;
 let PICKER = null;
 let TECH = { section: 'all', cat: null, open: null, q: '' };
-let lastTab = 'history'; /* [UX-T20] предыдущая вкладка — источник для «Назад» на всех вкладках */
 let profileSex = 'м';
 let editSnap = null;
 let pendingTab = null;
@@ -573,11 +572,11 @@ function restLeftSec() {
     if (!REST) return 0;
     return REST.paused ? (REST.left || 0) : Math.max(0, Math.ceil((REST.end - Date.now()) / 1000));
 }
-/* панель над навигацией; на экране с backbar — стопкой выше (§1.3). [UX-T19] backbar
-   остался только у АКТИВНОЙ карточки — у завершённой панель не поднимается */
+/* панель над навигацией; на экране с backbar — стопкой выше (§1.3). [UX-T23] backbar
+   теперь у обеих карточек (активной и завершённой) — панель поднимается на обеих */
 function restRaised() {
     const w = (tab === 'history' && viewWid) ? findW(viewWid) : null;
-    return (!!w && !w.finished) || (tab === 'tech' && !!TECH.open);
+    return !!w || (tab === 'tech' && !!TECH.open);
 }
 function renderRestbar() {
     const el = document.getElementById('restbar');
@@ -784,8 +783,6 @@ const ACTIONS = {
             TECH.cat = null;
             TECH.q = '';
         }
-        /* [UX-T20] единая back-навигация: запоминаем вкладку-источник для кнопки «Назад» */
-        if (a !== tab) lastTab = tab;
         /* [UX-T22] уход с открытой карточки через нижнее меню — автосейв в фоне
            (без await: смену вкладки сеть не задерживает; ошибку показывает doSave) */
         if (tab === 'history' && viewWid && isDirty()) save();
@@ -807,14 +804,8 @@ const ACTIONS = {
         viewWid = 0;
         render();
     },
-    saveWorkout: async function () {
-        const r = await save();
-        if (r === 'ok') toast('✓ Сохранено');
-        /* сохраняем и выходим из карточки на предыдущий экран */
-        editSnap = null;
-        viewWid = 0;
-        render();
-    },
+    /* [UX-T23] ACTION saveWorkout удалён вместе с иконкой 💾 из шапки завершённой:
+       сохранение — автосейв при выходе (closeHistory) */
     startWorkout: function () { startWorkout(); },
     newBlank: function () { closeModal(); startBlank(); },
     newRepeat: function () { newRepeatLast(); },
@@ -838,16 +829,9 @@ const ACTIONS = {
     techBack: function () { TECH.open = null; render(); },
     techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
-    /* [UX-T20] «Назад» на всех вкладках: единый механизм — global lastTab помнит
-       предыдущую вкладку (заполняется в switchTab/openFavs); фолбэк — История,
-       сам-на-себя исключён (кнопка не рендерится, если lastTab === текущая) */
-    goBack: function () {
-        const t = (lastTab && lastTab !== tab) ? lastTab : 'history';
-        tab = t; viewWid = 0; render();
-    },
-    /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые»;
-       [UX-T20] источник для «Назад» — общий lastTab (вкладка, с которой пришли) */
-    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; TECH.q = ''; if (tab !== 'tech') lastTab = tab; tab = 'tech'; viewWid = 0; render(); },
+    /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые».
+       [UX-T23] lastTab-механика «Назад» убрана вместе с кнопкой tb-back */
+    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; TECH.q = ''; tab = 'tech'; viewWid = 0; render(); },
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
     wClr: function () { wClr(); },
@@ -911,16 +895,24 @@ function render() {
     if (tab === 'coach') h += renderCoachTab();
     if (tab === 'profile') h += renderProfileTab();
     h += navHtml();
-    /* [UX-T18] backbar: только у АКТИВНОЙ тренировки — три компактные кнопки;
+    /* [UX-T18] backbar у активной тренировки — три компактные кнопки;
        [UX-T22] «💾 Сохранить» убрана (выход всегда автосохраняет), порядок:
        🗑 Удалить c confirm / ✓ Завершить (жёлтая prime) / ← Назад (автосейв-выход);
-       [UX-T19] у завершённой из истории backbar больше не рендерится — все действия
-       переехали в шапку карточки (🔁 💾 ⏱ 🗑) */
+       [UX-T23] у завершённой из истории — свой backbar: 🗑 Удалить c confirm /
+       ↻ Повторить (newRepeatFrom, НЕ prime) / ← Назад (автосейв-выход) */
     const bw = (tab === 'history' && viewWid) ? findW(viewWid) : null;
     if (bw && !bw.finished) {
         h += '<div class="backbar"><div class="ab-row">' +
             '<button class="btn sec icbtn bb-del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + bw.id + '" title="Удалить" aria-label="Удалить тренировку">' + ICONS.trash + '<span>Удалить</span></button>' +
             '<button class="btn prime" data-act="finishWorkout" data-a="' + bw.id + '">✓ Завершить</button>' +
+            '<button class="btn sec icbtn bb-back" data-act="closeHistory" title="Назад" aria-label="Назад">' + ICONS.back + '<span>Назад</span></button>' +
+            '</div></div>';
+        h += '<div style="height:70px"></div>';
+    }
+    if (bw && bw.finished) {
+        h += '<div class="backbar"><div class="ab-row">' +
+            '<button class="btn sec icbtn bb-del" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + bw.id + '" title="Удалить" aria-label="Удалить тренировку">' + ICONS.trash + '<span>Удалить</span></button>' +
+            '<button class="btn sec icbtn" data-act="newRepeatFrom" data-a="' + bw.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '<span>Повторить</span></button>' +
             '<button class="btn sec icbtn bb-back" data-act="closeHistory" title="Назад" aria-label="Назад">' + ICONS.back + '<span>Назад</span></button>' +
             '</div></div>';
         h += '<div style="height:70px"></div>';
@@ -954,11 +946,8 @@ function navHtml() {
 }
 function topbarHtml() {
     const names = { history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Настройки' };
-    /* [UX-T20] «Назад» в заголовке секции (topbar) на всех вкладках; не показываем у
-       открытой карточки тренировки и открытого упражнения — там свои кнопки выхода/возврата */
-    const showBack = lastTab !== tab && !viewWid && !(tab === 'tech' && TECH.open);
+    /* [UX-T23] стрелка «←» (tb-back/goBack) убрана: топбар — «GymHelper · <вкладка>» + профиль */
     return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' +
-        (showBack ? '<button class="barebtn tb-back" data-act="goBack" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' : '') +
         '<button class="tb-user" data-act="switchTab" data-a="profile" title="Настройки">' + ico('user') + '</button></div>';
 }
 
@@ -1073,24 +1062,16 @@ function workoutCard(w) {
     let h = '<div class="card" id="w' + w.id + '">';
     /* [UX-T8]: у завершённых «Повторить» переехала в шапку круглой иконкой;
        [UX-T18]: «💾 В шаблоны» из шапки убрана (сохранение шаблона — только в боте);
-       [UX-T19]: у завершённой все действия в шапке в порядке 🔁 💾 ⏱ 🗑 — нижний
-       backbar больше не рендерится;
        [UX-T20]: иконка времени суток из заголовка убрана;
-       [UX-T21]: «Назад» в шапке карточки — выход к списку Истории, как tb-back на вкладках;
-       [UX-T22]: у активной шапка — только «← Назад» и «⏱ Время»: ➕ переехала в кнопку
-       под упражнениями, ✕ дублировала 🗑, ✓ и 🗑 переехали в нижний backbar */
-    const wcback = '<button class="barebtn wc-back" data-act="closeHistory" title="Назад" aria-label="Назад">' + ICONS.back + '</button>';
-    const wcacts = w.finished
-        ? '<button class="barebtn" data-act="newRepeatFrom" data-a="' + w.id + '" title="Повторить" aria-label="Повторить">' + ICONS.repeat + '</button>' +
-          '<button class="barebtn" data-act="saveWorkout" title="Сохранить" aria-label="Сохранить">' + ICONS.save + '</button>'
-        : '';
-    const wctrash = w.finished ?
-        '<button class="barebtn trash-bare" data-act="confirmModal" data-a="Удалить тренировку?" data-b="deleteWorkout" data-c="' + w.id + '" title="Удалить">' + ICONS.trash + '</button>' : '';
+       [UX-T22]: у активной шапка без ➕/✕/✓/🗑: плюс переехал в кнопку под упражнениями,
+       ✓ и 🗑 — в нижний backbar;
+       [UX-T23]: шапка любой карточки — ТОЛЬКО «⏱ Время»: ←/🔁/💾/🗑 убраны, у завершённой
+       действия переехали в нижний backbar (Удалить/Повторить/Назад), у активной выход —
+       нижняя «← Назад» */
     h += '<div class="wchead' + (w.finished ? ' fin' : ' act') + '"><div class="wctitles" data-act="titleModal" data-a="' + w.id + '" title="Переименовать тренировку"><p class="t1">' +
         esc(lines[0]) + '</p></div>' +
-        '<div class="wcicons">' + wcback + wcacts +
+        '<div class="wcicons">' +
         '<button class="barebtn" data-act="timeModal" data-a="' + w.id + '" title="Время">' + ICONS.timer + '</button>' +
-        wctrash +
         '</div></div>';
     if (w.started) {
         const sT = String(w.started).slice(11, 16);
@@ -1141,8 +1122,8 @@ function workoutCard(w) {
         h += '<details><summary>🔥 Ккал по упражнениям <span class="wip">(в разработке)</span></summary>' + kcalBreakdown(w) + '</details>';
     }
     h += '<details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary>' + progressHtml(w) + '</details>';
-    /* [UX-T18] красная «Удалить тренировку» из потока карточки убрана: удаление — в backbar
-       (у активной) и в корзине шапки (у завершённой); ACTION и бота не трогали */
+    /* [UX-T18] красная «Удалить тренировку» из потока карточки убрана: удаление —
+       в backbar (у активной и у завершённой [UX-T23]); ACTION и бота не трогали */
     h += '</div>';
     return h;
 }
@@ -1422,8 +1403,8 @@ function renderTechTab() {
             return h;
         }
     }
-    /* [UX-T20] кнопка «Назад» переехала из заголовка карточки в topbar (единый механизм
-       для всех вкладок, data-act="goBack") */
+    /* [UX-T20] кнопка «Назад» переехала из заголовка карточки в topbar;
+       [UX-T23] topbar-стрелка убрана — возврат к списку только через «К упражнениям» */
     let h = '<div class="card"><div class="exhead"><p class="t1">📖 Техника упражнений</p></div>' +
         '<div class="searchbox"><input id="techQ" type="text" placeholder="Поиск упражнения..." value="' + esc(TECH.q) + '"></div>' +
         techChipsHtml() + '</div>';
@@ -2192,7 +2173,17 @@ function openEntryModalIdx(w, exIdx, setIdx) {
        [UX-T17] повторения и подходы НЕ подставляются — дефолты «1» / «1» */
     const prev = isNew && e.sets.length ? e.sets[e.sets.length - 1] : null;
     modalCtx = { wid: w.id, exIdx, setIdx, name: e.name };
-    let h = '<p class="mtitle">' + (isNew ? 'Новая запись' : 'Изменить запись') + '</p>' +
+    /* [UX-T23] правый угол заголовка — паттерн пикера [UX-T18]: у «Изменить записи» —
+       🗑 (deleteEntry, удаление сразу, как раньше с нижней красной кнопки) и ✕ (closeModal);
+       у «Новой записи» — «← Назад» (closeModal, бывшая «Закрыть»); нижний ряд — только
+       жёлтая prime-кнопка (💾 Сохранить / ➕ Добавить), нижние дубли убраны */
+    const mHead = isNew
+        ? '<div class="mtitle-row"><p class="mtitle">Новая запись</p>' +
+          '<button class="barebtn" data-act="closeModal" title="Назад" aria-label="Назад">' + ICONS.back + '</button></div>'
+        : '<div class="mtitle-row"><p class="mtitle">Изменить запись</p>' +
+          '<button class="barebtn trash-bare" data-act="deleteEntry" title="Удалить запись" aria-label="Удалить запись">' + ICONS.trash + '</button>' +
+          '<button class="barebtn" data-act="closeModal" title="Закрыть" aria-label="Закрыть">' + ICONS.cross + '</button></div>';
+    let h = mHead +
         '<p class="msub">' + esc(e.name) + '</p>' +
         '<div class="fglass">' +
         '<div class="flabel">Вес, кг (0 — без веса)</div>' +
@@ -2242,9 +2233,8 @@ function openEntryModalIdx(w, exIdx, setIdx) {
         }).join('') +
         '</div>' +
         '</div>';
-    h += '<div class="btnrow"><button class="btn prime wide" data-act="saveEntry">' + (isNew ? '➕ Добавить' : '💾 Сохранить') + '</button>';
-    if (!isNew) h += '<button class="btn danger wide" data-act="deleteEntry">🗑 Удалить запись</button>';
-    h += '<button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
+    /* [UX-T23] внизу — только prime: удаление/выход переехали в шапку модалки */
+    h += '<div class="btnrow"><button class="btn prime wide" data-act="saveEntry">' + (isNew ? '➕ Добавить' : '💾 Сохранить') + '</button></div>';
     openModal(h);
     /* при фокусе поле выделяется целиком — ввод с клавиатуры заменяет значение, а не дописывает.
        WebKit (iOS Safari) ставит каретку ПОСЛЕ клика и затирает выделение из focus,
