@@ -134,6 +134,10 @@ button { font-family: inherit; }
     max-width: 536px;
     margin: 4px auto 12px;
 }
+/* [UX-B10] fullscreen: бар подползает под статус-бар — верхний отступ из
+   tg.safeAreaInset.top (--fs-inset-top ставит app.js на :root); 28px — запас
+   для клиентов без API; вне fullscreen класс fs снят и геометрия прежняя */
+body.fs .topbar { padding-top: max(10px, var(--fs-inset-top, 28px)); }
 .tb-title {
     font-weight: 700;
     font-size: 17px;
@@ -381,12 +385,12 @@ textarea { min-height: 70px; resize: vertical; }
     transition: transform .12s ease, background .15s ease;
 }
 .keyrow .k:active { transform: scale(.95); background: var(--btn-pressed); }
+/* [UX-T26] плюс-кнопки малых инкрементов: заливка как у обычных кнопок-чисел,
+   отличие — тонкий жёлтый контур; текст акцентный — как .star.fav (читаемо на тёмном) */
 .keyrow .k.plus {
-    border-color: transparent;
-    background: var(--accent);
-    color: var(--on-accent);
+    border-color: var(--accent);
+    color: var(--accent);
 }
-.keyrow .k.plus:active { background: var(--accent-deep); }
 
 /* UX-I1: бейдж предыдущего подхода */
 .prevpill {
