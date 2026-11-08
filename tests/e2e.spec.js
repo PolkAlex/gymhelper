@@ -2076,13 +2076,13 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
 /* ===== [UX-T19] чипы «Техники» с «Все», назад на вкладку-источник, профиль одним рядом ===== */
 test.describe('UX-T19/T23: чипы «Техники», топбар, профиль одним рядом', function () {
 
-    test('чипы «Техники» в порядке: Мышцы · Все · ★ Любимые · Вид · Блок · Коллекции; «Все» активен по умолчанию', async ({ page }) => {
+    test('чипы «Техники» в порядке: ★ Любимые · Все · Вид · Блок · Мышцы · Коллекции; «Все» активен по умолчанию', async ({ page }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
-        /* порядок чипов секций — ровно как просил владелец */
+        /* порядок чипов секций — ровно как просил владелец [UX-T24] */
         const texts = await page.locator('.card .secrow').first().locator('.chip').allTextContents();
-        const expected = ['Мышцы', 'Все', '★ Любимые', 'Вид', 'Блок', 'Коллекции'];
+        const expected = ['★ Любимые', 'Все', 'Вид', 'Блок', 'Мышцы', 'Коллекции'];
         if (JSON.stringify(texts) !== JSON.stringify(expected)) {
             throw new Error('порядок чипов: ' + JSON.stringify(texts) + ', ожидалось ' + JSON.stringify(expected));
         }
@@ -2263,5 +2263,36 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
         if (m.overflow) throw new Error('горизонтальное переполнение на 320px: ' + JSON.stringify(m));
         /* кнопка не full-width: не шире половины карточки */
         if (m.btn.w > m.vw / 2) throw new Error('кнопка «Сохранить» слишком широкая на 320px: ' + JSON.stringify(m));
+    });
+});
+
+/* ===== [UX-T25] полноэкранный режим: тогл в Профиле ===== */
+test.describe('UX-T25: тогл полноэкранного режима в Профиле', function () {
+
+    test('тогл «Полноэкранный режим» рендерится; в тестовой среде (Telegram 6.0) клик — тост «Не поддерживается», флаг не ставится', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const btn = page.locator('[data-act="fullscreenToggle"]');
+        await expect(btn).toBeVisible({ timeout: 5000 });
+        /* фикс-текст кнопки (состояние видно по тосту) */
+        await expect(btn).toHaveText('🖥 Полноэкранный режим');
+        /* вне Telegram telegram-web-app.js отдаёт версию 6.0: requestFullscreen бросает
+           WebAppMethodUnsupported — поведение «клиент без API»: только тост, gymFullscreen не выставляется */
+        await btn.click();
+        await expect(page.locator('.toast.show')).toHaveText('Не поддерживается этим Telegram', { timeout: 5000 });
+        const flag = await page.evaluate(function () {
+            try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; }
+        });
+        if (flag !== null) throw new Error('gymFullscreen выставлен без поддержки API: ' + flag);
+    });
+
+    test('init с сохранённым gymFullscreen=1: тихая попытка без тоста, приложение грузится', async ({ page }) => {
+        await page.addInitScript(function () {
+            try { localStorage.setItem('gymFullscreen', '1'); } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
+        /* восстановление «тихое»: никаких тостов на старте */
+        await expect(page.locator('.toast.show')).toHaveCount(0);
     });
 });
