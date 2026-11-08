@@ -411,6 +411,49 @@ test.describe('GymHelper e2e', function () {
         if (!body.includes('Политика конфиденциальности')) throw new Error('privacy.html без заголовка политики');
     });
 
+    /* [ONB-T2] регресс блокер-фикса 488c110: вкладка открыта в момент /delete_my_data из бота —
+       её save получает 409 {ok:false, rev:0} (сервер пуст). Клиент НЕ сохраняет старые данные
+       поверх удаления: тост «Данные были удалены — приложение обновлено» + тихий ре-init с
+       сервера (adoptServer, локальные «удалённые» тренировки не восстанавливаются) —
+       вкладка опустевает сама, серверное состояние остаётся пустым */
+    test('[ONB-T2] 409 на save из открытой вкладки после /delete_my_data: тост и опустевший UI (488c110)', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: today, started: today + 'T18:00:00', ended: '', finished: false, title: '', nutrition: '',
+                exercises: [{ name: EX, st: today + 'T18:01:00', en: '', sets: [{ w: '100', s: 3, r: '8-10', t: today + 'T18:02:00' }] }] }]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
+        /* запись на месте до «удаления» */
+        await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
+        /* сервер удалил данные (аналог /delete_my_data: хранилище пусто, rev=0) */
+        await request.post('/api/reset');
+        /* каждый save от вкладки теперь отклоняется как после удаления: 409 {ok:false, rev:0} */
+        await page.route('**/api/save', function (route) {
+            route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, rev: 0 }) });
+        });
+        /* пользователь сохраняет запись — save уходит в 409 */
+        await page.locator('.expill .entry').first().click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('110');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* тост про удаление (не «Ошибка сохранения» и не «✓ Сохранено») */
+        await expect(page.locator('.toast.show')).toHaveText('Данные были удалены — приложение обновлено', { timeout: 5000 });
+        /* UI опустел сам: открытая карточка с исчезнувшей тренировкой вывалилась в пустую историю */
+        await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pcard')).toHaveCount(0);
+        await expect(page.locator('.expill')).toHaveCount(0);
+        /* счётчик/превью не содержат старой тренировки */
+        await expect(page.locator('#app')).not.toContainText('100 кг');
+        /* stale save не воскресил данные на сервере */
+        const st = await (await request.get('/api/state')).json();
+        if ((st.workouts || []).length) throw new Error('stale save воскресил данные на сервере: ' + JSON.stringify(st.workouts));
+    });
+
     test('время и дата тренировки: маски ввода', async ({ page }) => {
         await openApp(page);
         await startWorkoutUi(page);
@@ -580,19 +623,28 @@ test.describe('GymHelper e2e', function () {
         const yesterday = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
         const DOWS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
         const dow = function (iso) { const p = iso.split('-'); return DOWS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; };
+        /* weekMuscleGroups считает только текущую неделю (Пн–Вс): в понедельник «вчера» —
+           прошлая неделя, и «Подтягивания» выпадали из групп (упало 09.11.2026, пн, на всех 4
+           устройствах). Фикс теста, не кода (по спеке группы — «эта неделя»): подтягивания
+           сидируем всегда в текущей неделе (в Пн — сегодня), день серии добирает тренировка
+           с именем вне каталога (findCatalog → null, группы не трогает). */
+        const isMonday = (now.getDay() + 6) % 7 === 0;
+        const pullDay = isMonday ? today : yesterday;
+        const FILLER = 'Разминка и растяжка';
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
-            nextId: 3, del: [],
+            nextId: 4, del: [],
             profile: { sex: 'м', age: 30, height: 180, weight: 90 },
-            workouts: [doneWorkout(1, yesterday, 'Подтягивания', '0', 4), doneWorkout(2, today, EX, '80', 4)]
+            workouts: [doneWorkout(1, yesterday, FILLER, '0', 1), doneWorkout(2, pullDay, 'Подтягивания', '0', 4), doneWorkout(3, today, EX, '80', 4)]
         } } });
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
         const st = page.locator('.strow');
         await expect(st).toBeVisible({ timeout: 5000 });
-        await expect(st.locator('b')).toContainText('Серия: 2 тренировки подряд');
+        /* серия по-прежнему из 2 дней; тренировок в ней 3 (filler + подтягивания + жим) в любой день недели */
+        await expect(st.locator('b')).toContainText('Серия: 3 тренировки подряд');
         /* дни недели серии в хронологическом порядке + «самая длинная за месяц» */
         await expect(st).toContainText(dow(yesterday) + ' · ' + dow(today) + ' — самая длинная за месяц');
-        /* группы: жим = грудь, подтягивания = спина, по 4 подхода */
+        /* группы: жим = грудь, подтягивания = спина (в текущей неделе), по 4 подхода */
         await expect(page.locator('.mg', { hasText: 'Грудь' })).toContainText('4 подх.', { timeout: 5000 });
         await expect(page.locator('.mg', { hasText: 'Спина' })).toContainText('4 подх.');
     });
