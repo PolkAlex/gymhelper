@@ -803,9 +803,11 @@ function fullscreenToggle() {
    Вход/выход fullscreen и изменение safe-area приходят событиями (fullscreenChanged,
    safeAreaChanged); на старте isFullscreen вендор восстанавливает из sessionStorage
    синхронно. safeAreaInset.top — число px (вендор дублирует в --tg-safe-area-inset-*,
-   свойство держим своё — не зависим от наличия API: нет его — 0px, в CSS fallback 28px) */
+   свойство держим своё — не зависим от наличия API). Переменная ставится ВСЕГДА, поэтому
+   CSS-фолбэк var(--fs-inset-top, 28px) не срабатывает: нет корректного числа от API —
+   пишем сразу 28px (запас для клиентов без safe-area API), есть — фактический inset */
 function applyFsChrome() {
-    let on = false, top = 0;
+    let on = false, top = 28;
     try { on = !!(tg && tg.isFullscreen); } catch (e1) { /* noop */ }
     try {
         if (tg && tg.safeAreaInset && typeof tg.safeAreaInset.top === 'number') top = tg.safeAreaInset.top;
