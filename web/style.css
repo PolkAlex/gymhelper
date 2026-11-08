@@ -156,11 +156,8 @@ button { font-family: inherit; }
     flex: none;
 }
 .tb-user svg { width: 18px; height: 18px; }
-/* [UX-T20] «Назад» в шапке секции (barebtn-стрелка): заголовок растягивается и прижимает
-   «Назад» + профиль к правому краю (иначе space-between оставляет стрелку в центре) */
+/* [UX-T23] стрелка «←» (tb-back) из шапки секции убрана — топбар: заголовок + профиль */
 .topbar .tb-title { flex: 1 1 auto; min-width: 0; }
-.topbar .barebtn { flex: none; }
-.topbar .barebtn svg { width: 20px; height: 20px; }
 
 /* ============ нижняя навигация: 4 таба + янтарная FAB ============ */
 .nav {

@@ -111,7 +111,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .entry').first()).toContainText('110 кг, 5 подходов по 8-10 повторений', { timeout: 5000 });
     });
 
-    test('удаление записи', async ({ page }) => {
+    test('удаление записи: 🗑-иконка в шапке модалки', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
@@ -122,7 +122,10 @@ test.describe('GymHelper e2e', function () {
 
         await openActiveDetail(page);
         await page.locator('.expill .entry').click();
-        await page.locator('.modal.open [data-act="deleteEntry"]').click();
+        /* [UX-T23] «🗑 Удалить» — иконка в правом углу заголовка (mtitle-row) */
+        const del = page.locator('.modal.open .mtitle-row [data-act="deleteEntry"]');
+        await expect(del).toHaveCount(1);
+        await del.click();
         await expect(page.locator('.expill .entry')).toHaveCount(0, { timeout: 5000 });
     });
 
@@ -247,19 +250,18 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard')).toHaveCount(0);
     });
 
-    test('[UX-T22] активная карточка: шапка 2 иконки, backbar Удалить/Завершить/Назад, плюсики и автосейв-выход', async ({ page, request }) => {
+    test('[UX-T22/T23] активная карточка: шапка 1 иконка (⏱), backbar Удалить/Завершить/Назад, плюсики и автосейв-выход', async ({ page, request }) => {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
-        /* шапка активной — ровно 2 иконки в порядке ← Назад, ⏱ Время (🗑/➕/✕/✓ убраны) */
+        /* [UX-T23] шапка активной — ровно 1 иконка ⏱ Время (←/➕/✕/✓/🗑 убраны) */
         const headActs = await page.locator('.wcicons .barebtn').evaluateAll(function (els) {
             return els.map(function (el) { return el.getAttribute('data-act'); });
         });
-        if (JSON.stringify(headActs) !== JSON.stringify(['closeHistory', 'timeModal'])) {
-            throw new Error('иконки шапки активной: ' + JSON.stringify(headActs) + ', ожидалось [closeHistory, timeModal]');
+        if (JSON.stringify(headActs) !== JSON.stringify(['timeModal'])) {
+            throw new Error('иконки шапки активной: ' + JSON.stringify(headActs) + ', ожидалось [timeModal]');
         }
-        await expect(page.locator('.wcicons .barebtn').first()).toHaveAttribute('aria-label', 'Назад');
-        for (const label of ['Добавить упражнение', 'Отменить тренировку', 'Завершить тренировку', 'Удалить']) {
+        for (const label of ['Назад', 'Добавить упражнение', 'Отменить тренировку', 'Завершить тренировку', 'Удалить']) {
             await expect(page.locator('.wcicons .barebtn[aria-label="' + label + '"]')).toHaveCount(0);
         }
         /* нижний ряд: 🗑 Удалить (confirm) → ✓ Завершить (жёлтая prime) → ← Назад (автосейв) */
@@ -291,8 +293,8 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .exhead [data-act="openEntryModal"]')).toHaveCount(1);
         await expect(page.locator('.expill .exhead [aria-label="Добавить запись"]')).toHaveCount(1);
         await expect(page.locator('.expill .btnrow')).toHaveCount(0);
-        /* [UX-T22] dirty-модалки нет: выход с несохранёнными изменениями тихо автосохраняет */
-        await page.locator('.wcicons .barebtn[aria-label="Назад"]').click();
+        /* [UX-T22] dirty-модалки нет: выход через нижний «← Назад» тихо автосохраняет */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
         await expect(page.locator('.modal.open')).toHaveCount(0); /* без «выйти без сохранения?» */
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
         /* автосейв доехал до сервера */
@@ -301,9 +303,9 @@ test.describe('GymHelper e2e', function () {
         if (!act || !(act.exercises || []).length || !(act.exercises[0].sets || []).length) {
             throw new Error('автосохранение при выходе не дошло до сервера: ' + JSON.stringify(act));
         }
-        /* карточка снова открывается, шапка всё ещё 2 иконки */
+        /* карточка снова открывается, шапка всё ещё 1 иконка */
         await openActiveDetail(page);
-        await expect(page.locator('.wcicons .barebtn')).toHaveCount(2);
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(1);
     });
 
     test('[UX-T22] «Добавить упражнение» стоит перед «Ккал по упражнениям»; у завершённой плюсиков нет', async ({ page, request }) => {
@@ -334,7 +336,7 @@ test.describe('GymHelper e2e', function () {
             throw new Error('«Добавить упражнение» не перед «Ккал»: ' + JSON.stringify(order));
         }
         /* завершённая карточка: плюса «+ Запись» в exhead и широкой кнопки добавления нет [UX-B6] */
-        await page.locator('.wcicons .barebtn[aria-label="Назад"]').click();
+        await page.locator('.backbar [data-act="closeHistory"]').click();
         await expect(page.locator('.pcard').nth(1)).toBeVisible({ timeout: 5000 });
         await page.locator('.pcard').nth(1).click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
@@ -871,6 +873,67 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.modal.open [data-act="repsAdd"]')).toHaveCount(4);
         await page.locator('[data-act="closeModal"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible();
+    });
+
+    test('[UX-T23] модалка «Новая запись»: «← Назад» в mtitle-row закрывает без сохранения, внизу один prime', async ({ page, request }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        /* шапка: mtitle-row с заголовком и одной кнопкой «← Назад» (aria «Назад», closeModal) */
+        const row = page.locator('.modal.open .mtitle-row');
+        await expect(row.locator('.mtitle')).toHaveText('Новая запись');
+        const back = row.locator('[data-act="closeModal"]');
+        await expect(back).toHaveCount(1);
+        await expect(back).toHaveAttribute('aria-label', 'Назад');
+        await expect(row.locator('.barebtn')).toHaveCount(1);
+        /* низ: единственная кнопка — жёлтая prime «➕ Добавить»; «Закрыть»/«Удалить» внизу нет */
+        const bottom = page.locator('.modal.open .btnrow .btn');
+        await expect(bottom).toHaveCount(1);
+        await expect(bottom).toHaveClass(/prime/);
+        await expect(bottom).toHaveClass(/wide/);
+        await expect(bottom).toContainText('Добавить');
+        await expect(page.locator('.modal.open [data-act="deleteEntry"]')).toHaveCount(0);
+        /* «← Назад» закрывает модалку без сохранения */
+        await back.click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* правок нет — на сервере упражнение появиться не должно (выход без сохранения) */
+        const st = await (await request.get('/api/state')).json();
+        const act = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        const sets = act && act.exercises && act.exercises[0] && act.exercises[0].sets || [];
+        if (sets.length) throw new Error('закрытие «Назад» сохранило запись: ' + JSON.stringify(sets));
+    });
+
+    test('[UX-T23] модалка «Изменить запись»: 🗑 и ✕ в mtitle-row, внизу один prime «Сохранить»', async ({ page, request }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('100');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('8-10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await page.locator('.expill .entry').first().click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        /* шапка: mtitle-row с 🗑 (deleteEntry, красная trash-bare) и ✕ (closeModal) */
+        const row = page.locator('.modal.open .mtitle-row');
+        await expect(row.locator('.mtitle')).toHaveText('Изменить запись');
+        await expect(row.locator('[data-act="deleteEntry"]')).toHaveCount(1);
+        await expect(row.locator('[data-act="deleteEntry"]')).toHaveClass(/trash-bare/);
+        await expect(row.locator('[data-act="closeModal"]')).toHaveCount(1);
+        await expect(row.locator('.barebtn')).toHaveCount(2);
+        /* низ: единственная жёлтая prime «💾 Сохранить»; красной «🗑 Удалить запись» и «Закрыть» внизу нет */
+        const bottom = page.locator('.modal.open .btnrow .btn');
+        await expect(bottom).toHaveCount(1);
+        await expect(bottom).toHaveClass(/prime/);
+        await expect(bottom).toContainText('Сохранить');
+        await expect(page.locator('.modal.open .btnrow .btn.danger')).toHaveCount(0);
+        await expect(page.locator('.modal.open .btnrow .btn.sec')).toHaveCount(0);
+        /* ✕ закрывает модалку без сохранения */
+        await row.locator('[data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* запись не изменилась */
+        await openActiveDetail(page);
+        await expect(page.locator('.expill .entry').first()).toContainText('100 кг, 3 подхода по 8-10 повторений', { timeout: 5000 });
     });
 
     test('вес: кнопки +N прибавляют к значению, дефолт 0', async ({ page }) => {
@@ -1760,7 +1823,7 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(page.locator('.backbar .btn')).toHaveCount(3, { timeout: 5000 });
         /* «💾 Сохранить» убрана (автосейв при выходе), ✕/✓ из шапки переехали вниз */
         await expect(page.locator('.backbar', { hasText: 'Сохранить' })).toHaveCount(0);
-        await expect(page.locator('.wcicons .barebtn')).toHaveCount(2); /* ← Назад, ⏱ Время */
+        await expect(page.locator('.wcicons .barebtn')).toHaveCount(1); /* [UX-T23] только ⏱ Время */
         const del = page.locator('.backbar [data-act="confirmModal"]');
         await expect(del).toHaveCount(1);
         await expect(del).toContainText('Удалить');
@@ -1771,7 +1834,7 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(page.locator('.pcard')).toHaveCount(0);
     });
 
-    test('[UX-T19/T21] завершённая из истории: без backbar, 5 иконок в шапке в порядке ← 🔁 💾 ⏱ 🗑', async ({ page, request }) => {
+    test('[UX-T23] завершённая из истории: шапка 1 иконка (⏱), backbar Удалить/Повторить/Назад', async ({ page, request }) => {
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
@@ -1780,32 +1843,111 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await openApp(page);
         await page.locator('.pcard').first().click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
-        /* [UX-T19] нижний backbar у завершённой больше не рендерится */
-        await expect(page.locator('.backbar')).toHaveCount(0);
-        /* ровно 5 иконок в шапке, порядок: ← 🔁 💾 ⏱ 🗑 ([UX-T21] «← Назад» первой, «🚪 Выйти» убрана) */
+        /* [UX-T23] шапка завершённой — ровно 1 иконка ⏱ Время (← 🔁 💾 🗑 убраны) */
         const acts = await page.locator('.wcicons .barebtn').evaluateAll(function (els) {
             return els.map(function (el) { return el.getAttribute('data-act'); });
         });
-        const expected = ['closeHistory', 'newRepeatFrom', 'saveWorkout', 'timeModal', 'confirmModal'];
-        if (JSON.stringify(acts) !== JSON.stringify(expected)) {
-            throw new Error('иконки шапки завершённой: ' + JSON.stringify(acts) + ', ожидалось ' + JSON.stringify(expected));
+        if (JSON.stringify(acts) !== JSON.stringify(['timeModal'])) {
+            throw new Error('иконки шапки завершённой: ' + JSON.stringify(acts) + ', ожидалось [timeModal]');
         }
-        /* [UX-T21] первая иконка — aria «Назад», «🚪 Выйти» (door) в шапке больше нет */
-        const firstAria = await page.locator('.wcicons .barebtn').first().getAttribute('aria-label');
-        if (firstAria !== 'Назад') throw new Error('первая иконка шапки завершённой: aria="' + firstAria + '", ожидалось «Назад»');
-        await expect(page.locator('.wcicons .barebtn[aria-label="Выйти"]')).toHaveCount(0);
+        for (const label of ['Назад', 'Повторить', 'Сохранить', 'Удалить']) {
+            await expect(page.locator('.wcicons .barebtn[aria-label="' + label + '"]')).toHaveCount(0);
+        }
+        /* [UX-T23] нижний backbar: 🗑 Удалить c confirm · ↻ Повторить (НЕ prime) · ← Назад */
+        const bbActs = await page.locator('.backbar .btn').evaluateAll(function (els) {
+            return els.map(function (el) { return el.getAttribute('data-act'); });
+        });
+        if (JSON.stringify(bbActs) !== JSON.stringify(['confirmModal', 'newRepeatFrom', 'closeHistory'])) {
+            throw new Error('кнопки backbar завершённой: ' + JSON.stringify(bbActs) + ', ожидалось [confirmModal, newRepeatFrom, closeHistory]');
+        }
+        const rep = page.locator('.backbar [data-act="newRepeatFrom"]');
+        await expect(rep).not.toHaveClass(/prime/); /* Повторить НЕ жёлтая */
+        await expect(rep).toHaveClass(/sec/);
+        await expect(rep).toContainText('Повторить');
+        await expect(page.locator('.backbar [data-act="confirmModal"]')).toContainText('Удалить');
+        await expect(page.locator('.backbar [data-act="closeHistory"]')).toContainText('Назад');
+        /* 💾 «Сохранить» исчезла — сохранение только автосейвом при выходе */
+        await expect(page.locator('.backbar', { hasText: 'Сохранить' })).toHaveCount(0);
         /* большой красной «🗑 Удалить тренировку» в потоке карточки нет */
         await expect(page.locator('.card .btnrow .btn.danger')).toHaveCount(0);
-        /* 💾 «Сохранить» сохраняет и закрывает карточку */
-        await page.locator('.wcicons [data-act="saveWorkout"]').click();
-        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
-        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
-        /* ← «Назад» закрывает карточку без сохранения-модалки ([UX-T21], заменяет «🚪 Выйти») */
-        await page.locator('.pcard').first().click();
-        await expect(page.locator('.wcicons [data-act="closeHistory"]')).toBeVisible({ timeout: 5000 });
-        await page.locator('.wcicons [data-act="closeHistory"]').click();
+        /* ← «Назад» закрывает карточку без модалки и без backbar */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.backbar')).toHaveCount(0);
+        /* 🗑 «Удалить» с подтверждением «Удалить тренировку?» реально удаляет */
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.backbar [data-act="confirmModal"]')).toBeVisible({ timeout: 5000 });
+        await page.locator('.backbar [data-act="confirmModal"]').click();
+        await expect(page.locator('.modal.open')).toContainText('Удалить тренировку?', { timeout: 5000 });
+        await page.locator('.modal.open [data-act="confirmYes"]').click();
+        await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pcard')).toHaveCount(0);
+    });
+
+    test('[UX-T23] «Повторить» внизу завершённой создаёт копию: незавершённая с упражнениями и планом', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.backbar [data-act="newRepeatFrom"]')).toBeVisible({ timeout: 5000 });
+        await page.locator('.backbar [data-act="newRepeatFrom"]').click();
+        /* тост повтора + сразу открытая карточка новой тренировки с backbar активной */
+        await expect(page.locator('.toast.show')).toHaveText('🔁 Повтор прошлой тренировки: 1 упражнение', { timeout: 5000 });
+        await expect(page.locator('.backbar', { hasText: 'Завершить' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .exname')).toHaveText(EX);
+        await expect(page.locator('.expill .entry')).toHaveCount(0); /* записи пустые — копия плана, не лога */
+        /* копия реально на сервере: новая незавершённая тренировка с тем же упражнением и планом */
+        const st = await (await request.get('/api/state')).json();
+        const list = (st.workouts || []).filter(function (w) { return !w.finished; });
+        if (list.length !== 1) throw new Error('повтор создал не одну активную тренировку: ' + JSON.stringify(st.workouts));
+        const fresh = list[0];
+        if (fresh.id === 1) throw new Error('повтор не создал новую тренировку, а открыл старую');
+        const e0 = (fresh.exercises || [])[0];
+        if (!e0 || e0.name !== EX || e0.pw !== '100' || e0.ps !== 3) {
+            throw new Error('копия упражнения с планом не создалась: ' + JSON.stringify(e0));
+        }
+        /* исходная завершённая на месте */
+        const fin = (st.workouts || []).filter(function (w) { return w.finished; });
+        if (fin.length !== 1 || fin[0].id !== 1) throw new Error('исходная тренировка пропала: ' + JSON.stringify(fin));
+    });
+
+    test('[UX-T23] автосейв при выходе завершённой: правка не теряется при сбое сети и доезжает после восстановления', async ({ page, request }) => {
+        let failSave = true;
+        await page.route('**/api/save', function (route) {
+            if (failSave) route.abort();
+            else route.fallback();
+        });
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.backbar [data-act="closeHistory"]')).toBeVisible({ timeout: 5000 });
+        /* правка существующей записи завершённой: save падает — блок заменён только локально */
+        await page.locator('.expill .entry').first().click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('120');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.expill .entry').first()).toContainText('120 кг', { timeout: 5000 });
+        /* выход через нижний «← Назад»: dirty-автосейв тоже падает — карточка НЕ закрывается */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        await expect(page.locator('.toast.show.err')).toContainText('Ошибка сохранения', { timeout: 5000 });
+        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
+        /* сеть восстановилась: повторный выход сохраняет правку и закрывает карточку */
+        failSave = false;
+        await page.waitForTimeout(500); /* дедуп клика 400 мс — ждем окно */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        await expect(page.locator('.backbar')).not.toBeVisible({ timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        const fin = (st.workouts || []).filter(function (w) { return w.finished; })[0];
+        const s0 = fin && fin.exercises && fin.exercises[0] && fin.exercises[0].sets[0];
+        if (!s0 || s0.w !== '120') throw new Error('автосейв завершённой не спас правку: ' + JSON.stringify(s0));
     });
 
     test('звезда в списке «Техника»: у правого края строки, тоглится, сохраняется в gymFavs и не открывает упражнение', async ({ page }) => {
@@ -1871,7 +2013,7 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
 });
 
 /* ===== [UX-T19] чипы «Техники» с «Все», назад на вкладку-источник, профиль одним рядом ===== */
-test.describe('UX-T19: чипы «Техники», back-навигация, профиль одним рядом', function () {
+test.describe('UX-T19/T23: чипы «Техники», топбар, профиль одним рядом', function () {
 
     test('чипы «Техники» в порядке: Мышцы · Все · ★ Любимые · Вид · Блок · Коллекции; «Все» активен по умолчанию', async ({ page }) => {
         await openApp(page);
@@ -1903,78 +2045,57 @@ test.describe('UX-T19: чипы «Техники», back-навигация, п�
         await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
     });
 
-    test('[UX-T20] «Назад» в topbar на всех вкладках: ведёт на предыдущую вкладку, без сам-на-себя', async ({ page }) => {
+    test('[UX-T23] topbar без стрелки «←» на всех вкладках: только заголовок «GymHelper · <вкладка>» и профиль', async ({ page }) => {
         await openApp(page);
-        /* на старте (История, lastTab === текущая) кнопки «Назад» нет */
-        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
-        /* История → Статистика → назад = История */
+        /* кнопки «Назад» (tb-back/goBack) нет ни на одной вкладке */
+        for (const label of ['История', 'Статистика', 'Техника', 'Профиль']) {
+            await page.locator('.nav button', { hasText: label }).click();
+            await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + (label === 'Профиль' ? 'Настройки' : label), { timeout: 5000 });
+            await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
+            await expect(page.locator('.topbar .tb-back')).toHaveCount(0);
+        }
+        /* топбар — ровно два элемента: заголовок секции и кнопка профиля */
+        const parts = await page.locator('.topbar').evaluate(function (bar) {
+            return Array.prototype.slice.call(bar.children).map(function (el) {
+                return (el.classList.contains('tb-title') ? 'title' : '') + (el.classList.contains('tb-user') ? 'user' : '');
+            }).join(',');
+        });
+        if (parts !== 'title,user') throw new Error('состав topbar: ' + parts + ', ожидалось title,user');
+        /* кнопка профиля жива: ведёт в Настройки */
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        const back = page.locator('.topbar [data-act="goBack"]');
-        await expect(back).toBeVisible({ timeout: 5000 });
-        /* кнопка в том же ряду, что заголовок секции: правее заголовка, слева от кнопки профиля */
-        const title = await page.locator('.topbar .tb-title').boundingBox();
-        const user = await page.locator('.topbar .tb-user').boundingBox();
-        const bb = await back.boundingBox();
-        const tb = await page.locator('.topbar').boundingBox();
-        if (!title || !user || !bb || !tb) throw new Error('topbar или кнопка «Назад» не найдены');
-        const dy = Math.abs((title.y + title.height / 2) - (bb.y + bb.height / 2));
-        if (dy > 6) throw new Error('«Назад» не в ряду заголовка: dy=' + dy.toFixed(1) + 'px');
-        if (bb.x < title.x + title.width) throw new Error('«Назад» не правее заголовка секции');
-        if (bb.x + bb.width > user.x + 2) throw new Error('«Назад» наехала на кнопку профиля');
-        if (user.x - (bb.x + bb.width) > 20) throw new Error('«Назад» не рядом с кнопкой профиля (слот справа)');
-        await back.click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · История', { timeout: 5000 });
-        /* вернулись — lastTab === текущая, кнопка снова скрыта (без зацикливания) */
-        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
-        /* Статистика → Профиль → назад = Статистика */
-        await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        await page.locator('.nav button', { hasText: 'Профиль' }).click();
-        await page.locator('.topbar [data-act="goBack"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
-        /* Профиль → Техника (nav) → назад = Профиль */
-        await page.locator('.nav button', { hasText: 'Профиль' }).click();
-        await page.locator('.nav button', { hasText: 'Техника' }).click();
-        await expect(page.locator('.card .exhead [data-act="techExit"]')).toHaveCount(0); /* старой кнопки в карточке больше нет */
-        await page.locator('.topbar [data-act="goBack"]').click();
+        await page.locator('.topbar .tb-user').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
-        /* уход с Техники и возврат через nav перезаписывают источник: назад = Статистика */
-        await page.locator('.nav button', { hasText: 'Техника' }).click();
-        await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        await page.locator('.nav button', { hasText: 'Техника' }).click();
-        await page.locator('.topbar [data-act="goBack"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
     });
 
-    test('[UX-T20] «Назад» не мешает карточкам: у открытой тренировки и открытого упражнения кнопки нет', async ({ page, request }) => {
+    test('[UX-T23] возвраты без topbar-стрелки: «К упражнениям» в карточке техники и «⭐ Любимые» из Профиля работают', async ({ page, request }) => {
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
             workouts: [doneWorkout(1, today, EX, '100', 3)]
         } } });
         await openApp(page);
-        await page.locator('.nav button', { hasText: 'Статистика' }).click();
         await page.locator('.nav button', { hasText: 'Техника' }).click();
-        /* открытое упражнение: topbar «Назад» скрыт, работает внутренняя «К упражнениям» */
+        /* отмечаем жим ⭐ в списке техники — фильтр «★ Любимые» будет непустым */
+        const starRow = page.locator('#techList .excard', { hasText: EX }).first().locator('.star');
+        await starRow.click();
+        await expect(starRow).toHaveClass(/fav/, { timeout: 5000 });
+        /* открытое упражнение: возврат — только внутренняя «К упражнениям» (techBack не тронут) */
         await page.locator('#techList .excard', { hasText: EX }).first().click();
         await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0, { timeout: 5000 });
         await page.locator('[data-act="techBack"]').click();
         await expect(page.locator('#techList')).toBeVisible({ timeout: 5000 });
-        /* topbar «Назад» на списке Техники ведёт на источник (Статистика) */
-        await page.locator('.topbar [data-act="goBack"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
-        /* открытая карточка тренировки: topbar «Назад» скрыт, своя навигация карточки не тронута */
+        /* открытая карточка тренировки: topbar без «Назад», своя навигация карточки не тронута */
         await page.locator('.nav button', { hasText: 'История' }).click();
         await page.locator('.pcard').first().click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
-        /* «⭐ Любимые» из Профиля: источник запомнен единым механизмом — назад = Настройки */
-        await page.locator('.wcicons [data-act="closeHistory"]').click();
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        /* «⭐ Любимые» из Профиля: переход на «Технику» с фильтром работает без lastTab-логики */
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
         await page.locator('[data-act="openFavs"]').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
         await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
-        await page.locator('.topbar [data-act="goBack"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: EX })).toHaveCount(1);
     });
 
     test('профиль: возраст/рост/вес и «Сохранить» в одном ряду; сохранение доезжает до сервера', async ({ page, request }) => {
