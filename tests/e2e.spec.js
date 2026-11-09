@@ -1600,6 +1600,39 @@ test.describe('таймер отдыха [UX-T4]', function () {
         const key = await page.evaluate(function () { return localStorage.getItem('gymRest'); });
         if (key !== null) throw new Error('таймер запустился при «выкл»: ' + key);
     });
+
+    /* [UX-B12] «Своё…» был мёртв после «Выкл»: custom = !off && … глушил REST_CUSTOM —
+       тап молча не открывал инлайн-поле (выглядело как некликабельность). Клики обычные,
+       без force: Playwright проверяет реальный hit до клика */
+    test('«Своё…»: поле открывается и после «Выкл» (UX-B12), 45 сохраняется на сервере', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '⏱ Таймер отдыха' });
+        await expect(card.locator('.chip', { hasText: '90' })).toHaveClass(/on/, { timeout: 5000 });
+        /* обычный путь: тап «Своё…» → инлайн-поле появилось */
+        await card.locator('.chip', { hasText: 'Своё…' }).click();
+        await expect(page.locator('#restCustomSec')).toBeVisible({ timeout: 5000 });
+        await page.locator('#restCustomSec').fill('45');
+        await page.locator('[data-act="restCustomSave"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: 'Своё…' })).toHaveClass(/on/);
+        let st = await (await request.get('/api/state')).json();
+        if (st.restSec !== 45) throw new Error('сервер не хранит restSec=45: ' + JSON.stringify(st.restSec));
+        /* баг-путь UX-B12: «Выкл» → «Своё…» — поле обязано открыться (раньше тап молчал);
+           подсветка честная: при off горит «Выкл», пока своё значение не сохранено */
+        await card.locator('.chip', { hasText: 'Выкл' }).click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: 'Выкл' })).toHaveClass(/on/);
+        await card.locator('.chip', { hasText: 'Своё…' }).click();
+        await expect(page.locator('#restCustomSec')).toBeVisible({ timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: 'Своё…' })).not.toHaveClass(/on/);
+        await page.locator('#restCustomSec').fill('45');
+        await page.locator('[data-act="restCustomSave"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect(card.locator('.chip', { hasText: 'Своё…' })).toHaveClass(/on/);
+        st = await (await request.get('/api/state')).json();
+        if (st.restSec !== 45) throw new Error('после «Выкл» сервер не хранит restSec=45: ' + JSON.stringify(st.restSec));
+    });
 });
 
 test.describe('live-PR и оценка 1ПМ [UX-T2]', function () {
@@ -2527,17 +2560,19 @@ test.describe('UX-B10: fullscreen safe-area шапки', function () {
     /* клиент 8.0+ эмулируется через НАСТОЯЩУЮ вендорскую точку входа событий
        TelegramGameProxy_receiveEvent (сестринский к UX-T25 приём: без подмены WebApp,
        сквозь реальный пайплайн fullscreen_changed/safe_area_changed -> подписка tg.onEvent) */
-    test('вне fs: padding-top 10px и fs нет; вход + safe-area 44px: fs есть и --fs-inset-top=44px; выход: fs снят', async ({ page }) => {
+    test('вне fs: 10px и fs нет; вход + safe-area 44px: fs есть, паддинг 56px ([UX-B11] минимум под шапку Telegram), inset 64px побеждает; выход: fs снят', async ({ page }) => {
         await openApp(page);
         /* обычный режим: класс fs не ставится, геометрия шапки прежняя (padding 10px 12px) */
         const normal = await page.evaluate(function () {
             return {
                 fs: document.body.classList.contains('fs'),
-                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop
+                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop,
+                padBottom: getComputedStyle(document.querySelector('.topbar')).paddingBottom
             };
         });
         if (normal.fs) throw new Error('класс fs на body в обычном режиме');
         if (normal.pad !== '10px') throw new Error('padding-top .topbar вне fullscreen: ' + normal.pad + ', ожидался 10px');
+        if (normal.padBottom !== '10px') throw new Error('padding-bottom .topbar вне fullscreen: ' + normal.padBottom + ', ожидался 10px');
         /* клиент сообщает safe-area ещё до входа fullscreen: переменная обновляется событием safeAreaChanged */
         await page.evaluate(function () {
             window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 44, bottom: 24, left: 0, right: 0 });
@@ -2546,7 +2581,9 @@ test.describe('UX-B10: fullscreen safe-area шапки', function () {
             return document.documentElement.style.getPropertyValue('--fs-inset-top');
         });
         if (inset !== '44px') throw new Error('--fs-inset-top: "' + inset + '", ожидалась 44px');
-        /* вход fullscreen (fullscreenChanged -> applyFsChrome): класс fs, бар отступает на inset */
+        /* вход fullscreen (fullscreenChanged -> applyFsChrome): класс fs.
+           [UX-B11] системная шапка Telegram («✕ Закрыть», «⌄ ⋮») висит над контентом —
+           отступ минимум 56px (эмпирика, проверить на телефоне); inset 44 < 56 → 56px */
         await page.evaluate(function () {
             window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: true });
         });
@@ -2554,7 +2591,20 @@ test.describe('UX-B10: fullscreen safe-area шапки', function () {
         const padFs = await page.evaluate(function () {
             return getComputedStyle(document.querySelector('.topbar')).paddingTop;
         });
-        if (padFs !== '44px') throw new Error('padding-top .topbar в fullscreen: ' + padFs + ', ожидался 44px');
+        if (padFs !== '56px') throw new Error('padding-top .topbar в fullscreen: ' + padFs + ', ожидался 56px ([UX-B11])');
+        /* [UX-B11] компакт по вертикали: нижний паддинг в fs 6px — пилюля ниже и уже */
+        const padBottomFs = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingBottom;
+        });
+        if (padBottomFs !== '6px') throw new Error('padding-bottom .topbar в fullscreen: ' + padBottomFs + ', ожидался 6px');
+        /* safe-area больше фиксированного минимума: фактический inset побеждает (max()) */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 64, bottom: 24, left: 0, right: 0 });
+        });
+        const padFs64 = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padFs64 !== '64px') throw new Error('padding-top .topbar в fullscreen (inset 64px): ' + padFs64 + ', ожидался 64px');
         /* выход из fullscreen тем же событием (is_fullscreen=false): класс снят, геометрия прежняя */
         await page.evaluate(function () {
             window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: false });
@@ -2564,6 +2614,10 @@ test.describe('UX-B10: fullscreen safe-area шапки', function () {
             return getComputedStyle(document.querySelector('.topbar')).paddingTop;
         });
         if (padOut !== '10px') throw new Error('padding-top .topbar после выхода из fullscreen: ' + padOut + ', ожидался 10px');
+        const padBottomOut = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingBottom;
+        });
+        if (padBottomOut !== '10px') throw new Error('padding-bottom .topbar после выхода из fullscreen: ' + padBottomOut + ', ожидался 10px');
     });
 
     test('старт при восстановленном из сессии fullscreen: класс fs на body сразу, без событий клиента', async ({ page }) => {

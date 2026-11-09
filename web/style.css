@@ -146,10 +146,13 @@ button { font-family: inherit; }
     max-width: 536px;
     margin: 4px auto 12px;
 }
-/* [UX-B10] fullscreen: бар подползает под статус-бар — верхний отступ из
-   tg.safeAreaInset.top (--fs-inset-top ставит app.js на :root); 28px — запас
-   для клиентов без API; вне fullscreen класс fs снят и геометрия прежняя */
-body.fs .topbar { padding-top: max(10px, var(--fs-inset-top, 28px)); }
+/* [UX-B10][UX-B11] fullscreen: системная шапка Telegram («✕ Закрыть» слева,
+   «⌄ ⋮» справа) висит НАД контентом и перекрывала топбар (заголовок не читался,
+   шестерёнка не нажималась). Отступ сверху — фиксированные ~56px (эмпирика:
+   высота плашки «Закрыть» + запас; ПРОВЕРИТЬ НА ТЕЛЕФОНЕ), safe-area перекрывает,
+   если фактический inset больше. Вертикальные паддинги в fs компактнее —
+   пилюля ниже и уже. Вне fullscreen класс fs снят, геометрия прежняя (10px 12px) */
+body.fs .topbar { padding-top: max(56px, var(--fs-inset-top, 56px)); padding-bottom: 6px; }
 .tb-title {
     font-weight: 700;
     font-size: 17px;
