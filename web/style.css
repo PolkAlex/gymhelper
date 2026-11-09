@@ -495,16 +495,14 @@ summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 .dp-inline { display: inline-flex; align-items: center; font-size: 14px; color: var(--accent); vertical-align: -3px; }
 .dp-inline svg { width: 16px; height: 16px; display: block; }
 .wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
-/* [UX-T17] активная тренировка: 5 иконок в шапке — паддинги меньше, заголовок одной
-   строкой с ellipsis (проверено на 320px) */
+/* [UX-T17] активная тренировка: паддинги меньше, заголовок одной строкой с ellipsis
+   (проверено на 320px); [UX-T23] иконка в шапке одна — ⏱ */
 .wchead.act .wcicons .barebtn { padding: 5px; }
-.wchead.act .wcicons .trash-bare svg { width: 18px; height: 18px; }
 .wchead.act .wctitles { padding-top: 6px; }
 .wchead.act .wctitles .t1 { font-size: 15.5px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* [UX-T19] завершённая тренировка: 5 иконок в шапке (🔁 💾 ⏱ 🚪 🗑) — компактные тапы
-   как у активной; backbar внизу больше не рендерится */
+/* [UX-T19] завершённая тренировка: компактные тапы, как у активной;
+   [UX-T23] действия — в нижнем backbar (Удалить/Повторить/Назад) */
 .wchead.fin .wcicons .barebtn { padding: 5px; }
-.wchead.fin .wcicons .trash-bare svg { width: 18px; height: 18px; }
 .barebtn {
     background: none;
     border: none;

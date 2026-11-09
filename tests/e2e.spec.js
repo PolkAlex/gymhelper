@@ -449,6 +449,12 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill')).toHaveCount(0);
         /* счётчик/превью не содержат старой тренировки */
         await expect(page.locator('#app')).not.toContainText('100 кг');
+        /* [UX-T28] старт новой тренировки при 409: тост «Нет связи: тренировка сохранится...»
+           НЕ показывается поверх тоста удаления — при conflict свой тост подавлен,
+           «Данные были удалены...» уже показан doSave'ом */
+        await page.locator('.nav .nfab').click();
+        await expect(page.locator('.toast.show')).toHaveText('Данные были удалены — приложение обновлено', { timeout: 5000 });
+        await expect(page.locator('.toast.show', { hasText: 'Нет связи' })).toHaveCount(0);
         /* stale save не воскресил данные на сервере */
         const st = await (await request.get('/api/state')).json();
         if ((st.workouts || []).length) throw new Error('stale save воскресил данные на сервере: ' + JSON.stringify(st.workouts));
@@ -2032,6 +2038,11 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
     });
 
     test('[UX-T23] ⏱ в шапке завершённой открывает модалку времени: правка начала/окончания сохраняется', async ({ page, request }) => {
+        let failSave = false;
+        await page.route('**/api/save', function (route) {
+            if (failSave) route.abort();
+            else route.fallback();
+        });
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
@@ -2045,6 +2056,17 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(page.locator('.modal.open #mStartTime')).toHaveValue('09:30');
         await page.locator('#mStartTime').fill('0700');
         await page.locator('#mEndTime').fill('0800');
+        /* [UX-T28] сбой сети при saveTime: модалка НЕ закрывается, введённые значения
+           остаются в полях для повтора (тост ошибки — от doSave) */
+        failSave = true;
+        await page.locator('[data-act="saveTime"]').click();
+        await expect(page.locator('.toast.show.err')).toContainText('Ошибка сохранения', { timeout: 5000 });
+        await expect(page.locator('.modal.open #mStartTime')).toBeVisible();
+        await expect(page.locator('.modal.open #mStartTime')).toHaveValue('07:00');
+        await expect(page.locator('.modal.open #mEndTime')).toHaveValue('08:00');
+        /* сеть восстановилась: повторное сохранение закрывает модалку, время на сервере */
+        failSave = false;
+        await page.waitForTimeout(500); /* дедуп клика 400 мс — ждем окно */
         await page.locator('[data-act="saveTime"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         /* saveTime сохраняет сам: правка на сервере ещё при открытой карточке */
