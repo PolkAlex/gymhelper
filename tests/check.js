@@ -59,6 +59,49 @@ if (ctx.CATALOG) {
     }
 }
 
+/* [UX-T29] юниты чистых функций даты рождения: извлекаются из app.js без DOM/Telegram.
+   Возраст наступает 1-го числа месяца рождения; без валидной пары — статический age */
+function grabFn(src, name) {
+    const start = src.indexOf('function ' + name + '(');
+    if (start < 0) { fails.push('app.js: нет функции ' + name); return ''; }
+    const end = src.indexOf('\n}', start);
+    if (end < 0) { fails.push('app.js: не найден конец функции ' + name); return ''; }
+    return src.slice(start, end + 2);
+}
+try {
+    const birthApi = new Function(
+        grabFn(app, 'ageOf') + '\n' + grabFn(app, 'ageWord') + '\n' + grabFn(app, 'isBirthMonth') +
+        '\nreturn { ageOf: ageOf, ageWord: ageWord, isBirthMonth: isBirthMonth };')();
+    const AW = birthApi.ageWord;
+    for (const [n, w] of [[1, 'год'], [2, 'года'], [4, 'года'], [5, 'лет'], [11, 'лет'],
+        [21, 'год'], [22, 'года'], [24, 'года'], [31, 'год'], [100, 'лет']]) {
+        if (AW(n) !== w) fails.push('ageWord(' + n + ') = ' + AW(n) + ', ожидалось ' + w);
+    }
+    const AO = birthApi.ageOf;
+    const p1990 = { birthYear: 1990, birthMonth: 11 };
+    if (AO(p1990, new Date(2026, 10, 9)) !== 36) fails.push('ageOf: 1990-11 в ноябре 2026 → ' + AO(p1990, new Date(2026, 10, 9)) + ', ожидалось 36');
+    if (AO(p1990, new Date(2026, 9, 31)) !== 35) fails.push('ageOf: до 1-го числа месяца рождения — 35');
+    if (AO(p1990, new Date(2026, 10, 1)) !== 36) fails.push('ageOf: возраст наступает 1-го числа месяца рождения');
+    if (AO(p1990, new Date(2026, 11, 31)) !== 36) fails.push('ageOf: после месяца рождения в том же году — 36');
+    if (AO(p1990, new Date(2027, 0, 5)) !== 36) fails.push('ageOf: январь следующего года — ещё 36');
+    if (AO(p1990, new Date(2027, 10, 1)) !== 37) fails.push('ageOf: ноябрь следующего года — 37');
+    /* граница минимума [I8-update 09.11]: год текущий−5 в текущем месяце → ровно 5 лет */
+    const real = new Date();
+    const pMin = { birthYear: real.getFullYear() - 5, birthMonth: real.getMonth() + 1 };
+    if (AO(pMin, real) !== 5) fails.push('ageOf: год текущий−5 в текущем месяце → ' + AO(pMin, real) + ', ожидалось 5');
+    /* legacy age-only и мусорная дата → статический age; null → 0 */
+    if (AO({ age: 31 }, new Date(2026, 10, 9)) !== 31) fails.push('ageOf: legacy age-only → 31');
+    if (AO({ age: 30, birthYear: 1800, birthMonth: 13 }, new Date(2026, 10, 9)) !== 30) fails.push('ageOf: мусорная дата → статический age');
+    if (AO(null, new Date(2026, 10, 9)) !== 0) fails.push('ageOf: null → 0');
+    const IBM = birthApi.isBirthMonth;
+    if (!IBM(p1990, new Date(2026, 10, 9))) fails.push('isBirthMonth: ноябрь при birthMonth=11 → true');
+    if (IBM(p1990, new Date(2026, 11, 9))) fails.push('isBirthMonth: декабрь при birthMonth=11 → false');
+    if (IBM({ age: 30 }, new Date(2026, 10, 9))) fails.push('isBirthMonth: без даты → false');
+    if (IBM(null, new Date(2026, 10, 9))) fails.push('isBirthMonth: null → false');
+} catch (e) {
+    fails.push('юниты даты рождения не выполняются: ' + e.message);
+}
+
 if (fails.length) {
     console.error('ПРОВАЛ (' + fails.length + '):\n - ' + fails.join('\n - '));
     process.exit(1);

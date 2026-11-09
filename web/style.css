@@ -912,6 +912,69 @@ summary .wip, .setrow .wip { font-size: 11.5px; font-weight: 400; color: var(--m
     font-size: 13px;
     font-weight: 700;
 }
+/* [UX-T29] «Дата рождения»: два нативных select в ряд в стиле полей prow
+   (лейбл 11px над полем, фон --field, рамка --field-brd, радиус 12px, высота 40px,
+   appearance:none + шеврон справа; тап открывает системный пикер) */
+.brow { display: flex; align-items: flex-start; gap: 6px; margin-top: 2px; }
+.brow .bf { flex: 1 1 0; min-width: 0; }
+.bf label { display: block; margin: 6px 0 3px; font-size: 11px; white-space: nowrap; color: var(--muted); font-weight: 600; }
+.bf select {
+    width: 100%;
+    box-sizing: border-box;
+    height: 40px;
+    padding: 8px 24px 8px 10px;
+    font-size: 15px;
+    font-family: inherit;
+    border-radius: 12px;
+    border: 1px solid var(--field-brd);
+    background-color: var(--field);
+    color: var(--text);
+    cursor: pointer;
+    text-align: center;
+    text-align-last: center;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa0aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+    transition: border-color .15s ease;
+}
+.bf select:focus { border-color: var(--accent); }
+/* плейсхолдерное состояние («—» / «Выбрать…») — текст приглушённый */
+.bf select.ph { color: var(--muted); }
+/* подсветка частичного ввода (год без месяца) */
+.bf select.err { border-color: var(--danger); box-shadow: 0 0 0 1px rgba(255,107,94,.35); }
+/* живая строка возраста под select-ами */
+.bage { font-size: 12.5px; color: var(--accent); font-weight: 600; margin: 8px 0 0; }
+/* [UX-T29] плашка-подсказка миграции (legacy age-only) */
+.hint {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    background: var(--glow);
+    border: 1px solid var(--glow-brd);
+    border-radius: 12px;
+    padding: 9px 11px;
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--text);
+    line-height: 1.4;
+}
+.hint .hico { flex: none; font-size: 14px; line-height: 1.2; }
+/* [UX-T29] бейдж месяца рождения в саммари (мягкий, без пушей) */
+.bdg {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255,194,32,.12);
+    border: 1px solid var(--glow-brd);
+    border-radius: 999px;
+    padding: 4px 11px;
+    margin-top: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--accent);
+}
 
 /* ============ модалки ============ */
 .modal {

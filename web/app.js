@@ -222,8 +222,29 @@ function setsWord(n) {
     if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'подхода';
     return 'подходов';
 }
+/* [UX-T29] дата рождения: возраст вычисляется, склонения, бейдж месяца рождения */
+const MONTHS_FULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+function ageOf(p, now) {
+    if (!p) return 0;
+    if (!(p.birthYear >= 1900 && p.birthYear <= 2100) || !(p.birthMonth >= 1 && p.birthMonth <= 12)) return p.age || 0;
+    now = now || new Date();
+    return now.getFullYear() - p.birthYear - ((now.getMonth() + 1) < p.birthMonth ? 1 : 0);
+}
+function ageWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'год';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'года';
+    return 'лет';
+}
+function isBirthMonth(p, now) {
+    if (!p) return false;
+    now = now || new Date();
+    return p.birthMonth >= 1 && p.birthMonth <= 12 && (now.getMonth() + 1) === p.birthMonth;
+}
 function bmr(p) {
-    const base = 10 * p.weight + 6.25 * p.height - 5 * p.age;
+    /* [UX-T29] возраст из ageOf: при валидной дате — вычисленный, а не age-зеркало */
+    const base = 10 * p.weight + 6.25 * p.height - 5 * ageOf(p);
     return p.sex === 'ж' ? base - 161 : base + 5;
 }
 function activeW() { return G.workouts.find(w => !w.finished) || null; }
@@ -431,9 +452,11 @@ window.addEventListener('focus', function () {
 });
 
 /* ============ доставка действий ============ */
-/* кнопки без дедупа: быстрый повторный тап легален (ввод значений, ретрай после ошибки) */
+/* кнопки без дедупа: быстрый повторный тап легален (ввод значений, ретрай после ошибки);
+   [UX-T29] saveProfile — тоже: поправил дату после тоста-ошибки и сразу жмёшь «Сохранить» */
 const NO_DEDUP = {
-    wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1, planTake: 1
+    wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1, planTake: 1,
+    saveProfile: 1
 };
 function dispatchFromEl(el, ev) {
     const act0 = el.getAttribute('data-act');
@@ -1014,6 +1037,8 @@ function render() {
         const q = document.getElementById('techQ');
         if (q) q.addEventListener('input', function () { TECH.q = this.value; const list = document.getElementById('techList'); if (list) list.innerHTML = techListHtml(); });
     }
+    /* [UX-T29] живая строка возраста: change на select-ах даты рождения */
+    if (tab === 'profile') pfBirthBind();
     renderRestbar(); /* панель/пилюля таймера переживает навигацию: класс raised и содержимое актуальны */
     dbgMsg('rev ' + (G ? G.rev : '-'));
 }
@@ -1767,7 +1792,7 @@ function renderSettings() {
 /* ---------- профиль ---------- */
 function renderProfileTab() {
     if (!profileSex && G.profile) profileSex = G.profile.sex;
-    const p = G.profile || { sex: profileSex, age: '', height: '', weight: '' };
+    const p = G.profile || { sex: profileSex, height: '', weight: '' };
     /* [UX-T27] имя из Telegram в шапке профиля: GymData имени не хранит — только показ [UX-S4 §11] */
     const u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
     let name = '';
@@ -1778,9 +1803,12 @@ function renderProfileTab() {
     let h = '<div class="card"><p class="t1">Профиль</p>' +
         (name ? '<p class="meta">' + esc(name) + '</p>' : '');
     if (G.profile) {
-        h += '<p class="meta">' + esc(G.profile.sex.toUpperCase()) + ' · ' + G.profile.age + ' лет · ' +
+        /* [UX-T29] возраст вычисленный + склонения; бейдж — только в месяце рождения */
+        const age = ageOf(G.profile);
+        h += '<p class="meta">' + esc(G.profile.sex.toUpperCase()) + ' · ' + age + ' ' + ageWord(age) + ' · ' +
             G.profile.height + ' см · ' + fmtW(G.profile.weight) + ' кг</p>' +
-            '<p class="meta">BMR ≈ ' + Math.round(bmr(G.profile)) + ' ккал/сут (Mifflin-St Jeor)</p>';
+            '<p class="meta">BMR ≈ ' + Math.round(bmr(G.profile)) + ' ккал/сут (Mifflin-St Jeor)</p>' +
+            (isBirthMonth(G.profile) ? '<div class="bdg">🎂 Твой день рождения в этом месяце</div>' : '');
     } else {
         h += '<p class="meta">Нужен для расчёта калорий 🔥</p>';
     }
@@ -1791,12 +1819,44 @@ function renderProfileTab() {
         '<button class="seg-btn' + (profileSex === 'м' ? ' on' : '') + '" data-act="setSex" data-a="м" title="Мужской" aria-label="Мужской">М</button>' +
         '<button class="seg-btn' + (profileSex === 'ж' ? ' on' : '') + '" data-act="setSex" data-a="ж" title="Женский" aria-label="Женский">Ж</button>' +
         '</div></div></div>';
-    /* [UX-T19] возраст/рост/вес + сохранение в одном ряду: компактные поля ~40px с мелкими
-        метками, кнопка справа; на 320px кнопка уходит под ряд, оставаясь компактной.
-        Логика saveProfile не тронута (те же id полей) */
+    /* [UX-T29] карточка «Дата рождения»: два нативных select в ряд (.brow, стиль полей
+        Рост/Вес), живая строка возраста, meta ×2, плашка миграции для legacy age-only;
+        ниже — prow рост/вес/сохранить. Поле «Возраст» удалено: два редактируемых
+        источника возраста = конфликт; возраст теперь вычисляется из даты.
+        Годы — динамически: верх = текущий−5 (ровно 5 лет), низ = max(1930, текущий−100) */
+    const now = new Date();
+    const yTop = now.getFullYear() - 5;
+    const yLow = Math.max(1930, now.getFullYear() - 100);
+    const hasBirth = G.profile && G.profile.birthYear >= 1900 && G.profile.birthYear <= 2100 &&
+        G.profile.birthMonth >= 1 && G.profile.birthMonth <= 12;
+    const py = hasBirth ? G.profile.birthYear : 0;
+    const pm = hasBirth ? G.profile.birthMonth : 0;
+    /* legacy-плашка: у профиля есть только статический age — просим дату, не молча */
+    const legacyHint = G.profile && !hasBirth && +G.profile.age > 0;
+    let yearOpts = '<option value=""' + (py ? '' : ' selected') + '>—</option>';
+    for (let y = yTop; y >= yLow; y--) {
+        yearOpts += '<option value="' + y + '"' + (py === y ? ' selected' : '') + '>' + y + '</option>';
+    }
+    let monthOpts = '<option value=""' + (pm ? '' : ' selected') + '>Выбрать…</option>';
+    for (let i = 0; i < 12; i++) {
+        monthOpts += '<option value="' + (i + 1) + '"' + (pm === i + 1 ? ' selected' : '') + '>' + MONTHS_FULL[i] + '</option>';
+    }
+    let liveAge = '';
+    if (hasBirth) liveAge = 'Возраст: ' + ageOf(G.profile) + ' ' + ageWord(ageOf(G.profile));
     h += '<div class="card">' +
+        '<div class="flabel" style="margin-top:0;">Дата рождения</div>' +
+        '<div class="brow">' +
+        '<div class="bf"><label for="pfBirthYear">Год рождения</label>' +
+        '<select id="pfBirthYear" class="' + (py ? '' : 'ph') + '">' + yearOpts + '</select></div>' +
+        '<div class="bf"><label for="pfBirthMonth">Месяц рождения</label>' +
+        '<select id="pfBirthMonth" class="' + (pm ? '' : 'ph') + '">' + monthOpts + '</select></div>' +
+        '</div>' +
+        '<p class="bage" id="pfBirthAge"' + (liveAge ? '' : ' style="display:none;"') + '>' + liveAge + '</p>' +
+        (legacyHint ? '<div class="hint"><span class="hico">🎂</span><span>Укажи год и месяц рождения — возраст станет обновляться сам</span></div>' : '') +
+        '<p class="meta">Возраст пересчитается сам · день не нужен</p>' +
+        '<p class="meta">Хранится вместе с дневником · политика — в ⚙️ Настройках</p>' +
+        '<div class="hr"></div>' +
         '<div class="prow">' +
-        '<div class="pf"><label for="pfAge">Возраст</label><input id="pfAge" type="number" inputmode="numeric" value="' + p.age + '"></div>' +
         '<div class="pf"><label for="pfHeight">Рост, см</label><input id="pfHeight" type="number" inputmode="numeric" value="' + p.height + '"></div>' +
         '<div class="pf"><label for="pfWeight">Вес, кг</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '"></div>' +
         '<button class="btn pfsave" data-act="saveProfile">💾 Сохранить</button>' +
@@ -1809,16 +1869,80 @@ function renderProfileTab() {
     /* [UX-T18] обёртка .prof: компактные карточки/поля (стиль токенов не менялся) */
     return '<div class="prof">' + h + '</div>';
 }
+/* [UX-T29] живая строка возраста на change select-ов — без полного render
+   (иначе сброс состояния открытого системного пикера/фокуса) */
+function pfBirthSync() {
+    const ys = document.getElementById('pfBirthYear');
+    const ms = document.getElementById('pfBirthMonth');
+    const line = document.getElementById('pfBirthAge');
+    if (!ys || !ms) return;
+    ys.classList.toggle('ph', ys.value === '');
+    ms.classList.toggle('ph', ms.value === '');
+    if (!line) return;
+    if (ys.value !== '' && ms.value !== '') {
+        const a = ageOf({ birthYear: +ys.value, birthMonth: +ms.value });
+        line.textContent = 'Возраст: ' + a + ' ' + ageWord(a);
+        line.style.display = '';
+    } else {
+        line.style.display = 'none';
+    }
+}
+function pfBirthBind() {
+    const ys = document.getElementById('pfBirthYear');
+    const ms = document.getElementById('pfBirthMonth');
+    if (ys) ys.addEventListener('change', pfBirthSync);
+    if (ms) ms.addEventListener('change', pfBirthSync);
+}
 function saveProfile() {
     const sex = profileSex || 'м';
-    const age = parseInt(document.getElementById('pfAge').value, 10);
     const height = parseInt(document.getElementById('pfHeight').value, 10);
     const weight = parseFloat(String(document.getElementById('pfWeight').value).replace(',', '.'));
-    if (!(age >= 10 && age <= 100) || !(height >= 100 && height <= 250) || !(weight >= 30 && weight <= 300)) {
-        toast('Проверь значения: возраст 10–100, рост 100–250, вес 30–300', true);
+    const yEl = document.getElementById('pfBirthYear');
+    const mEl = document.getElementById('pfBirthMonth');
+    const yv = yEl && yEl.value ? +yEl.value : 0;
+    const mv = mEl && mEl.value ? +mEl.value : 0;
+    const hasOldBirth = G.profile && G.profile.birthYear >= 1900 && G.profile.birthYear <= 2100 &&
+        G.profile.birthMonth >= 1 && G.profile.birthMonth <= 12;
+    /* [UX-T29] порядок проверок §4.5: дата → рост/вес */
+    if (yEl) yEl.classList.remove('err');
+    if (mEl) mEl.classList.remove('err');
+    if (yv > 0 !== (mv > 0)) {
+        /* частичный ввод — ошибка формы, а не легитимное «не указано» */
+        if (yEl) yEl.classList.add('err');
+        if (mEl) mEl.classList.add('err');
+        toast('Укажи и год, и месяц — или выбери „—“ в обоих полях', true);
         return;
     }
-    G.profile = { sex, age, height, weight };
+    /* [UX-T29] рост/вес §4.5 п.3 — как раньше (слово про возраст убрано: возраст теперь
+       вычисляется из даты, диапазона «возраст 10–100» больше нет) */
+    if (!(height >= 100 && height <= 250) || !(weight >= 30 && weight <= 300)) {
+        toast('Проверь значения: рост 100–250, вес 30–300', true);
+        return;
+    }
+    if (yv === 0 && mv === 0) {
+        /* «не указано»: для нового профиля дата обязательна (BMR невозможен);
+           legacy-сохранение разрешено — birth-поля не пишутся, сервер перенесёт существующие */
+        if (!G.profile || (!(+G.profile.age > 0) && !hasOldBirth)) {
+            toast('Укажи год и месяц рождения — они нужны для расчёта калорий', true);
+            return;
+        }
+        const age = hasOldBirth ? ageOf(G.profile) : (+G.profile.age || 0);
+        G.profile = { sex: sex, age: age, height: height, weight: weight };
+        save().then(function (r) { if (r === 'ok') toast('✓ Профиль сохранён'); render(); });
+        return;
+    }
+    /* защитная проверка диапазона — из select недостижима, остаётся для сервера/мусора */
+    const now = new Date();
+    const yLow = Math.max(1930, now.getFullYear() - 100);
+    const yTop = now.getFullYear() - 5;
+    if (!(yv >= yLow && yv <= yTop)) {
+        toast('Проверь год рождения: ' + yLow + '–' + yTop, true);
+        return;
+    }
+    /* birth-пара + age-зеркало (вычисленный) для старых читателей */
+    const np = { sex: sex, height: height, weight: weight, birthYear: yv, birthMonth: mv };
+    np.age = ageOf(np);
+    G.profile = np;
     save().then(function (r) { if (r === 'ok') toast('✓ Профиль сохранён'); render(); });
 }
 
@@ -2888,6 +3012,9 @@ if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
         dayPart: dayPart,
         calcWorkoutKcal: calcWorkoutKcal,
         workoutVolume: workoutVolume,
+        ageOf: ageOf,
+        ageWord: ageWord,
+        isBirthMonth: isBirthMonth,
         modalCtx: function () { return modalCtx; }
     });
 }

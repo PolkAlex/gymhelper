@@ -223,7 +223,16 @@ public final class WebServer {
             current.workouts.removeIf(w -> w.id == id);
         }
         while (current.deletedIds.size() > 100) current.deletedIds.remove(0);
-        if (data.profile != null) current.profile = data.profile;
+        /* [UX-T29] клиент без birth-ключей (старый кэш JS или legacy-сохранение Mini App)
+           не теряет дату рождения текущего профиля — переносим её до замены (аналог
+           «старый кэш JS — не трогаем» для templates); сервер зеркало age не пересчитывает */
+        if (data.profile != null) {
+            if (data.profile.birthYear == 0 && current.profile != null && current.profile.birthYear > 0) {
+                data.profile.birthYear = current.profile.birthYear;
+                data.profile.birthMonth = current.profile.birthMonth;
+            }
+            current.profile = data.profile;
+        }
         /* restSec и templates Mini App сохраняет целиком со своим G — сервер обязан принять их
            при round-trip, иначе настройка/шаблон из приложения молча исчезнут (спека §0.2).
            restSec: null у клиента (ещё не настраивал) серверное значение не затирает;

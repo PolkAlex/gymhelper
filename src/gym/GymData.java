@@ -57,6 +57,14 @@ public final class GymData {
             p.age = (int) Json.lng(pm.get("age"));
             p.height = (int) Json.lng(pm.get("height"));
             p.weight = Json.dbl(pm.get("weight"));
+            /* [UX-T29] дата рождения: мусор → «не указано»; границы чтения толерантнее границ
+               ввода; ключи только парой — встретив одно без другого, считаем дату не указанной.
+               Старый файл без ключей → 0/0 → читается как сейчас */
+            p.birthYear = (int) Json.lng(pm.get("birthYear"));
+            p.birthMonth = (int) Json.lng(pm.get("birthMonth"));
+            if (p.birthYear < 1900 || p.birthYear > 2100) p.birthYear = 0;
+            if (p.birthMonth < 1 || p.birthMonth > 12) p.birthMonth = 0;
+            if (p.birthYear == 0 || p.birthMonth == 0) { p.birthYear = 0; p.birthMonth = 0; }
             d.profile = p;
         }
         List<Object> delList = Json.list(m.get("del"));
@@ -199,6 +207,12 @@ public final class GymData {
             pm.put("age", profile.age);
             pm.put("height", profile.height);
             pm.put("weight", profile.weight);
+            /* [UX-T29] birth-ключи в конце карты и только при валидной паре —
+               старые файлы без даты остаются байт-в-байт прежними */
+            if (profile.birthYear > 0 && profile.birthMonth >= 1 && profile.birthMonth <= 12) {
+                pm.put("birthYear", profile.birthYear);
+                pm.put("birthMonth", profile.birthMonth);
+            }
             m.put("profile", pm);
         }
         List<Object> ws = new ArrayList<>();

@@ -2316,34 +2316,45 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
         await expect(page.locator('#techList .excard', { hasText: EX })).toHaveCount(1);
     });
 
-    test('профиль: возраст/рост/вес и «Сохранить» в одном ряду; сохранение доезжает до сервера', async ({ page, request }) => {
+    test('[UX-T29] профиль: select год+месяц в одном ряду, сохранение — birth-пара и age-зеркало доезжают до сервера', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
-        const prow = page.locator('.prow');
-        await expect(prow).toBeVisible({ timeout: 5000 });
-        /* три поля в одну строку, достаточно широкие */
-        const boxes = await prow.evaluate(function (row) {
-            return ['#pfAge', '#pfHeight', '#pfWeight'].map(function (sel) {
+        const brow = page.locator('.brow');
+        await expect(brow).toBeVisible({ timeout: 5000 });
+        /* два select в одну строку, достаточно широкие и высотой ~40px (как поля prow) */
+        const boxes = await brow.evaluate(function (row) {
+            return ['#pfBirthYear', '#pfBirthMonth'].map(function (sel) {
                 const r = row.querySelector(sel).getBoundingClientRect();
                 return { sel: sel, cy: Math.round(r.y + r.height / 2), w: Math.round(r.width), h: Math.round(r.height) };
             });
         });
         const cys = boxes.map(function (b) { return b.cy; });
         if (Math.max.apply(null, cys) - Math.min.apply(null, cys) > 2) {
-            throw new Error('поля профиля не в одной строке: ' + JSON.stringify(boxes));
+            throw new Error('select-ы даты не в одной строке: ' + JSON.stringify(boxes));
         }
         for (const b of boxes) {
-            if (b.w < 50) throw new Error('поле слишком узкое: ' + JSON.stringify(b));
-            if (b.h < 38 || b.h > 44) throw new Error('высота поля вне ~40px: ' + JSON.stringify(b));
+            if (b.w < 50) throw new Error('select слишком узкий: ' + JSON.stringify(b));
+            if (b.h < 38 || b.h > 44) throw new Error('высота select вне ~40px: ' + JSON.stringify(b));
         }
-        /* заполнение и сохранение — логика прежняя */
-        await page.locator('#pfAge').fill('31');
+        /* поле «Возраст» удалено; рост/вес в одну строку */
+        await expect(page.locator('#pfAge')).toHaveCount(0);
+        const hc = await page.locator('.prow').evaluate(function (row) {
+            const h = row.querySelector('#pfHeight').getBoundingClientRect();
+            const w = row.querySelector('#pfWeight').getBoundingClientRect();
+            return Math.abs((h.y + h.height / 2) - (w.y + w.height / 2));
+        });
+        if (hc > 2) throw new Error('рост/вес не в одной строке');
+        /* выбор даты и сохранение: месяц = текущий → age-зеркало ровно 36 */
+        const now = new Date();
+        await page.locator('#pfBirthYear').selectOption(String(now.getFullYear() - 36));
+        await page.locator('#pfBirthMonth').selectOption(String(now.getMonth() + 1));
         await page.locator('#pfHeight').fill('182');
         await page.locator('#pfWeight').fill('88.5');
         await page.locator('[data-act="saveProfile"]').click();
         await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
         const st = await (await request.get('/api/state')).json();
-        if (!st.profile || st.profile.age !== 31 || st.profile.height !== 182 || st.profile.weight !== 88.5) {
+        if (!st.profile || st.profile.birthYear !== now.getFullYear() - 36 || st.profile.birthMonth !== now.getMonth() + 1
+            || st.profile.age !== 36 || st.profile.height !== 182 || st.profile.weight !== 88.5) {
             throw new Error('профиль не сохранился: ' + JSON.stringify(st.profile));
         }
         /* сегмент пола на месте, без изменений */
@@ -2369,7 +2380,9 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
         await row.locator('.seg-btn', { hasText: 'Ж' }).click();
         await expect(row.locator('.seg-btn', { hasText: 'Ж' })).toHaveClass(/on/, { timeout: 5000 });
         await expect(row.locator('.seg-btn', { hasText: 'М' })).not.toHaveClass(/on/);
-        await page.locator('#pfAge').fill('30');
+        /* [UX-T29] вместо поля «Возраст» — дата рождения */
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await page.locator('#pfBirthMonth').selectOption('11');
         await page.locator('#pfHeight').fill('175');
         await page.locator('#pfWeight').fill('70');
         await page.locator('[data-act="saveProfile"]').click();
@@ -2400,24 +2413,30 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
         if (m.cardRight - m.sRight > 16) throw new Error('сегмент не прижат к правому краю карточки на 320px');
     });
 
-    test('320px: ряд профиля без горизонтального переполнения, кнопка компактна', async ({ page }) => {
+    test('[UX-T29] 320px: дата рождения и ряд профиля без горизонтального переполнения, кнопка компактна', async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 640 });
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
         await expect(page.locator('.prow')).toBeVisible({ timeout: 5000 });
         const m = await page.evaluate(function () {
             const row = document.querySelector('.prow');
-            const rr = row.getBoundingClientRect();
+            const ys = document.querySelector('#pfBirthYear').getBoundingClientRect();
+            const ms = document.querySelector('#pfBirthMonth').getBoundingClientRect();
             const btn = document.querySelector('.pfsave').getBoundingClientRect();
             return {
                 vw: document.documentElement.clientWidth,
                 overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-                rowRight: Math.round(rr.right),
                 btn: { y: Math.round(btn.y), w: Math.round(btn.width), h: Math.round(btn.height) },
-                ageBottom: Math.round(document.querySelector('#pfAge').getBoundingClientRect().bottom)
+                browOneLine: Math.abs((ys.y + ys.height / 2) - (ms.y + ms.height / 2)) <= 2,
+                browW: [Math.round(ys.width), Math.round(ms.width)]
             };
         });
         if (m.overflow) throw new Error('горизонтальное переполнение на 320px: ' + JSON.stringify(m));
+        /* два select в ряд сжимаются flex:1 — без перевода на вторую строку */
+        if (!m.browOneLine) throw new Error('select-ы даты не в одной строке на 320px');
+        for (const w of m.browW) {
+            if (w < 100) throw new Error('select даты слишком узкий на 320px: ' + JSON.stringify(m.browW));
+        }
         /* кнопка не full-width: не шире половины карточки */
         if (m.btn.w > m.vw / 2) throw new Error('кнопка «Сохранить» слишком широкая на 320px: ' + JSON.stringify(m));
     });
@@ -2761,18 +2780,21 @@ test.describe('UX-T27: экран «Настройки»', function () {
             const cnt = await app.getByText(dead).count();
             if (cnt > 0) throw new Error('в Профиле остался блок «' + dead + '» (экземпляров: ' + cnt + ')');
         }
-        /* 4 карточки данных на месте [UX-S4 §7: состав — ровно 4 карточки] */
+        /* 4 карточки данных на месте [UX-S4 §7: состав — ровно 4 карточки; дата рождения
+            и рост/вес — одна карточка с разделителем, как в макете ux-i8 ред.2] */
         await expect(page.locator('.prof .card')).toHaveCount(4);
         await expect(page.locator('.card', { hasText: '⭐ Любимые упражнения' })).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.sexrow')).toBeVisible();
-        await expect(page.locator('#pfAge')).toBeVisible();
+        await expect(page.locator('#pfBirthYear')).toBeVisible();
+        await expect(page.locator('#pfBirthMonth')).toBeVisible();
         /* «⭐ Любимые упражнения» → «Открыть в технике» жива */
         await page.locator('[data-act="openFavs"]').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
         await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
-        /* сохранение перс. данных не сломано */
+        /* сохранение перс. данных не сломано [UX-T29]: дата вместо поля «Возраст» */
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
-        await page.locator('#pfAge').fill('34');
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await page.locator('#pfBirthMonth').selectOption('11');
         await page.locator('#pfHeight').fill('178');
         await page.locator('#pfWeight').fill('78.5');
         await page.locator('[data-act="saveProfile"]').click();
@@ -2859,4 +2881,272 @@ test.describe('UX-T27: экран «Настройки»', function () {
         if (m.overflow) throw new Error('горизонтальное переполнение Настроек на 320px');
         if (m.rowRight - m.swRight > 2) throw new Error('тогл не прижат к правому краю строки: ' + (m.rowRight - m.swRight).toFixed(1) + 'px');
     });
+});
+
+/* ===== [UX-T29] дата рождения: select год+месяц вместо поля «Возраст» (спека §11) ===== */
+/* склонение возраста — та же логика, что ageWord в app.js */
+function ageWordOf(n) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'год';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'года';
+    return 'лет';
+}
+
+test.describe('UX-T29: дата рождения в Профиле', function () {
+
+    /* §11.1: новый профиль — сохранение без даты отклонено; с датой — сохраняется,
+       саммари показывает вычисленный возраст со склонением */
+    test('новый профиль: без даты тост-ошибка и профиль не записан; с датой — ✓ и возраст в саммари', async ({ page, request }) => {
+        await request.post('/api/reset?noprofile=1'); /* сценарий новичка (дефолтный store — legacy age-only) */
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await expect(page.locator('#pfBirthYear')).toBeVisible({ timeout: 5000 });
+        await page.locator('#pfHeight').fill('180');
+        await page.locator('#pfWeight').fill('80');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Укажи год и месяц рождения — они нужны для расчёта калорий', { timeout: 5000 });
+        const st0 = await (await request.get('/api/state')).json();
+        if (st0.profile) throw new Error('профиль записался без даты: ' + JSON.stringify(st0.profile));
+        const now = new Date();
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await page.locator('#pfBirthMonth').selectOption(String(now.getMonth() + 1));
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.birthYear !== 1990 || st.profile.birthMonth !== now.getMonth() + 1) {
+            throw new Error('birth-пара не сохранилась: ' + JSON.stringify(st.profile));
+        }
+        /* месяц = текущий → возраст ровно 36, склонение «лет» */
+        await expect(page.locator('.prof .card .meta').first()).toContainText('М · 36 лет · 180 см · 80 кг');
+    });
+
+    /* §11.2: списки select — годы по убыванию (первая опция «—», верх = текущий−5, низ = 1930),
+       месяц — ровно 13 опций: «Выбрать…» + Январь…Декабрь */
+    test('списки select: годы текущий−5…1930 по убыванию, месяцы «Выбрать…»+Январь…Декабрь', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const opts = await page.evaluate(function () {
+            const y = document.querySelector('#pfBirthYear');
+            const m = document.querySelector('#pfBirthMonth');
+            return {
+                years: Array.prototype.map.call(y.options, function (o) { return o.value; }),
+                months: Array.prototype.map.call(m.options, function (o) { return o.textContent; })
+            };
+        });
+        const now = new Date();
+        const top = String(now.getFullYear() - 5);
+        const low = String(Math.max(1930, now.getFullYear() - 100));
+        if (opts.years[0] !== '' || opts.years[1] !== top) {
+            throw new Error('начало списка годов не «—»/текущий−5: ' + opts.years.slice(0, 2).join(','));
+        }
+        if (opts.years[opts.years.length - 1] !== low) {
+            throw new Error('последняя опция года не ' + low + ': ' + opts.years[opts.years.length - 1]);
+        }
+        for (let i = 2; i < opts.years.length; i++) {
+            if (+opts.years[i] !== +opts.years[i - 1] - 1) {
+                throw new Error('годы не по убыванию: ' + opts.years.slice(i - 1, i + 1).join(','));
+            }
+        }
+        if (opts.months.length !== 13 || opts.months[0] !== 'Выбрать…') {
+            throw new Error('опции месяца: ' + opts.months.join(','));
+        }
+        if (opts.months[1] !== 'Январь' || opts.months[12] !== 'Декабрь') {
+            throw new Error('имена месяцев: ' + opts.months.join(','));
+        }
+    });
+
+    /* §11.3: живой возраст — строка скрыта при неполной паре, появляется до сохранения,
+       смена года обновляет строку сразу */
+    test('живой возраст: неполная пара — строка скрыта; пара выбрана — «Возраст: N слово» до сохранения', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const line = page.locator('#pfBirthAge');
+        await expect(line).toBeHidden({ timeout: 5000 });
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await expect(line).toBeHidden(); /* месяц ещё «Выбрать…» */
+        const now = new Date();
+        const exp = now.getFullYear() - 1990 - ((now.getMonth() + 1) < 11 ? 1 : 0);
+        await page.locator('#pfBirthMonth').selectOption('11');
+        await expect(line).toBeVisible();
+        await expect(line).toHaveText('Возраст: ' + exp + ' ' + ageWordOf(exp));
+        /* смена года обновляет строку сразу (1985 — на 5 лет раньше 1990-го) */
+        await page.locator('#pfBirthYear').selectOption('1985');
+        await expect(line).toHaveText('Возраст: ' + (exp + 5) + ' ' + ageWordOf(exp + 5));
+    });
+
+    /* §11.4: частичный ввод — тост + .err на обоих select; сброс обоих на «—» —
+       легитимное legacy-сохранение (age прежний, birth-ключей нет) */
+    test('частичный ввод: тост «Укажи и год, и месяц…», .err; сброс на «—» — legacy-сохранение', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 31, height: 190, weight: 95 },
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await page.locator('#pfBirthYear').selectOption('1985');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Укажи и год, и месяц — или выбери „—“ в обоих полях', { timeout: 5000 });
+        await expect(page.locator('#pfBirthYear')).toHaveClass(/err/);
+        await expect(page.locator('#pfBirthMonth')).toHaveClass(/err/);
+        /* сброс года на «—» → сохранение в legacy-режиме проходит */
+        await page.locator('#pfBirthYear').selectOption('');
+        await page.locator('#pfWeight').fill('93');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.age !== 31 || st.profile.weight !== 93
+            || st.profile.birthYear !== undefined || st.profile.birthMonth !== undefined) {
+            throw new Error('legacy-сохранение сломано: ' + JSON.stringify(st.profile));
+        }
+    });
+
+    /* [UX-T29] §4.5 п.3: валидация рост/вес — вес 500 отклоняется тостом, профиль не записан */
+    test('рост/вес: вес 500 — тост «Проверь значения…», профиль на сервере не изменён', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await expect(page.locator('#pfBirthYear')).toBeVisible({ timeout: 5000 });
+        /* дата валидна — ошибка именно по росту/весу (порядок проверок §4.5: дата → рост/вес) */
+        const now = new Date();
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await page.locator('#pfBirthMonth').selectOption(String(now.getMonth() + 1));
+        await page.locator('#pfHeight').fill('180');
+        await page.locator('#pfWeight').fill('500');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Проверь значения: рост 100–250, вес 30–300', { timeout: 5000 });
+        /* профиль на сервере не записан: остался дефолтный legacy (age 30, weight 90), birth-ключей нет */
+        const st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.weight !== 90 || st.profile.age !== 30
+            || st.profile.birthYear !== undefined || st.profile.birthMonth !== undefined) {
+            throw new Error('профиль записался с невалидным весом: ' + JSON.stringify(st.profile));
+        }
+    });
+
+    /* §11.5: границы возраста [I8-update 09.11: минимум 5 лет вместо 10] —
+       год текущий−5 (5 лет) и 1930 сохраняются без ошибок */
+    test('границы возраста: год текущий−5 → ровно 5 лет; год 1930 сохраняется', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const now = new Date();
+        await page.locator('#pfBirthYear').selectOption(String(now.getFullYear() - 5));
+        await page.locator('#pfBirthMonth').selectOption(String(now.getMonth() + 1));
+        await page.locator('#pfHeight').fill('178');
+        await page.locator('#pfWeight').fill('78.5');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        let st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.age !== 5) throw new Error('возраст 5 не сохранился: ' + JSON.stringify(st.profile));
+        /* 1930 — последняя опция списка */
+        await page.locator('#pfBirthYear').selectOption('1930');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.birthYear !== 1930 || st.profile.age !== now.getFullYear() - 1930) {
+            throw new Error('год 1930 не сохранился: ' + JSON.stringify(st.profile));
+        }
+    });
+
+    /* §11.6: legacy age-only — саммари с прежним возрастом, плашка-подсказка; обновление
+       веса не трогает дату/age; после указания даты возраст пересчитался */
+    test('legacy age-only: плашка миграции, сохранение веса без даты, затем пересчёт от даты', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 31, height: 190, weight: 95 },
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        /* саммари с прежним возрастом и склонением (31 год) */
+        await expect(page.locator('.prof .card .meta').first()).toContainText('М · 31 год · 190 см · 95 кг', { timeout: 5000 });
+        /* плашка-подсказка видна, оба select в плейсхолдерном состоянии */
+        await expect(page.locator('.prof .hint')).toContainText('Укажи год и месяц рождения — возраст станет обновляться сам');
+        await expect(page.locator('#pfBirthYear')).toHaveClass(/ph/);
+        await expect(page.locator('#pfBirthMonth')).toHaveClass(/ph/);
+        /* обновление веса без даты разрешено: age не изменился, birth-ключей нет */
+        await page.locator('#pfWeight').fill('94');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        let st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.age !== 31 || st.profile.weight !== 94
+            || st.profile.birthYear !== undefined || st.profile.birthMonth !== undefined) {
+            throw new Error('legacy-сохранение: ' + JSON.stringify(st.profile));
+        }
+        /* указание даты — возраст пересчитался (месяц = текущий → ровно 36) */
+        const now = new Date();
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await page.locator('#pfBirthMonth').selectOption(String(now.getMonth() + 1));
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.age !== 36 || st.profile.birthYear !== 1990) {
+            throw new Error('дата не применилась: ' + JSON.stringify(st.profile));
+        }
+        /* плашка пропала после заполнения */
+        await expect(page.locator('.prof .hint')).toHaveCount(0);
+    });
+
+    /* §11.7: BMR живой — смена года на 5 лет меняет BMR саммари на ~25 ккал (5 × 5) */
+    test('BMR живой: год на 5 лет раньше → BMR саммари меньше на 25 ккал', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        const now = new Date();
+        const by = 1990;
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 36, height: 178, weight: 78.5, birthYear: by, birthMonth: now.getMonth() + 1 },
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        /* месяц рождения = текущий → вычисленный возраст = год-разница ровно */
+        const bmrOf = function (age) { return Math.round(10 * 78.5 + 6.25 * 178 - 5 * age + 5); };
+        const age0 = now.getFullYear() - by;
+        await expect(page.locator('.prof .card', { hasText: 'BMR' })).toContainText('BMR ≈ ' + bmrOf(age0) + ' ккал/сут', { timeout: 5000 });
+        await page.locator('#pfBirthYear').selectOption(String(by - 5));
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        await expect(page.locator('.prof .card', { hasText: 'BMR' })).toContainText('BMR ≈ ' + bmrOf(age0 + 5) + ' ккал/сут', { timeout: 5000 });
+    });
+
+    /* §11.8: бейдж «🎂 Твой день рождения в этом месяце» — только в месяце рождения */
+    test('бейдж дня рождения: виден в месяце рождения, пропадает вне месяца', async ({ page, request }) => {
+        const now = new Date();
+        const curMonth = now.getMonth() + 1;
+        const otherMonth = curMonth === 12 ? 1 : curMonth + 1;
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 36, height: 178, weight: 78.5, birthYear: 1990, birthMonth: curMonth },
+            workouts: []
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await expect(page.locator('.prof .bdg')).toHaveText('🎂 Твой день рождения в этом месяце', { timeout: 5000 });
+        /* смена месяца рождения — бейджа больше нет */
+        await page.locator('#pfBirthMonth').selectOption(String(otherMonth));
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        await expect(page.locator('.prof .bdg')).toHaveCount(0);
+    });
+
+    /* §11.9: серверные данные — birthYear/birthMonth и age-зеркало = вычисленному */
+    test('/api/state после сохранения: birthYear/birthMonth и age-зеркало = вычисленному', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const now = new Date();
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await page.locator('#pfBirthMonth').selectOption(String(now.getMonth() + 1));
+        await page.locator('#pfHeight').fill('178');
+        await page.locator('#pfWeight').fill('78.5');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Профиль сохранён', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        const exp = now.getFullYear() - 1990; /* месяц = текущий → ровно */
+        if (!st.profile || st.profile.birthYear !== 1990 || st.profile.birthMonth !== now.getMonth() + 1
+            || st.profile.age !== exp) {
+            throw new Error('серверные данные: ' + JSON.stringify(st.profile));
+        }
+    });
+    /* §11.10 (регресс 320px: два select в ряд + prow без переполнения) —
+       покрыт тестом «[UX-T29] 320px: дата рождения и ряд профиля…» выше */
 });

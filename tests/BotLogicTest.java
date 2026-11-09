@@ -117,6 +117,33 @@ public class BotLogicTest {
         pf.sex = "ж"; pf.age = 30; pf.height = 180; pf.weight = 82;
         check(Math.round(BotLogic.bmr(pf)) == 1634, "bmr: «ж» → 1795−161 = 1634");
 
+        /* [UX-T29] bmr/ageOf: валидная дата рождения → вычисленный возраст (зеркало age
+           игнорируется). Месяц = текущий → возраст ровно год-разница — детерминировано
+           в любой день; возраст наступает 1-го числа месяца рождения */
+        java.time.LocalDate todayBD = java.time.LocalDate.now();
+        ProfileData pb = new ProfileData();
+        pb.sex = "м"; pb.height = 180; pb.weight = 80;
+        pb.birthYear = todayBD.getYear() - 30;
+        pb.birthMonth = todayBD.getMonthValue();
+        check(pb.ageOf() == 30, "ageOf: год текущий−30, месяц текущий → 30 (зеркало age=0 игнорируется)");
+        check(Math.round(BotLogic.bmr(pb)) == 1780, "bmr: возраст из даты рождения → 1780, как при age=30");
+        ProfileData pbNext = new ProfileData();
+        pbNext.sex = "м"; pbNext.height = 180; pbNext.weight = 80;
+        pbNext.birthYear = todayBD.getYear() - 30;
+        pbNext.birthMonth = (todayBD.getMonthValue() % 12) + 1; /* следующий месяц (с заворотом декабря) */
+        /* ожидание считается по правилу ageOf (год−birthYear − (текущийМесяц < birthMonth ? 1 : 0)):
+           месяц больше текущего → 29; в декабре «следующий» = январь, он в текущем году уже
+           прошёл → 30 — без этого ожидания тест падал бы каждый декабрь */
+        int expNext = 30 - (pbNext.birthMonth > todayBD.getMonthValue() ? 1 : 0);
+        check(pbNext.ageOf() == expNext, "ageOf: месяц рождения ещё не наступил → " + expNext);
+        ProfileData pLegacyBD = new ProfileData();
+        pLegacyBD.sex = "м"; pLegacyBD.age = 44; pLegacyBD.height = 180; pLegacyBD.weight = 80;
+        check(pLegacyBD.ageOf() == 44, "ageOf: без даты — статический age");
+        ProfileData pHalfBD = new ProfileData();
+        pHalfBD.sex = "м"; pHalfBD.age = 44; pHalfBD.height = 180; pHalfBD.weight = 80;
+        pHalfBD.birthYear = todayBD.getYear() - 30; /* год без месяца — полупара не считается датой */
+        check(pHalfBD.ageOf() == 44, "ageOf: полупара (год без месяца) — дата не считается");
+
         /* === 4. e1RM по Эпли и живые рекорды (Records) === */
         check(Math.abs(Records.e1rm(new SetEntry("100", 5, "5")) - 116.6667) < 0.001,
             "e1rm: 100 кг × 5 → ≈116.7 (вес × (1 + повторения ÷ 30)); подходы не участвуют");
