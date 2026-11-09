@@ -22,6 +22,8 @@ async function startAndPick(page, name) {
     await page.locator('.nav .nfab').click();
     const modal = page.locator('.modal.open');
     await modal.waitFor({ state: 'visible', timeout: 5000 });
+    /* [UX-T30] дефолт пикера — «★ Любимые»; для выбора из каталога переключаемся на «Все» */
+    await modal.locator('.secrow .chip', { hasText: 'Все' }).first().click();
     await modal.locator('.excard', { hasText: name }).first().click();
     await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
 }
@@ -64,6 +66,8 @@ test.describe('GymHelper e2e', function () {
 
         await openActiveDetail(page);
         await page.locator('[data-act="openPicker"]').click();
+        /* [UX-T30] дефолт — «★ Любимые»; выбираем из каталога через «Все» */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
         await page.locator('#pickerList .excard', { hasText: EX }).first().click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await page.locator('#mWeight').fill('100');
@@ -152,6 +156,8 @@ test.describe('GymHelper e2e', function () {
         await fillEntry(page, '100', '3', '10');
         await openActiveDetail(page);
         await page.locator('[data-act="openPicker"]').click();
+        /* [UX-T30] дефолт — «★ Любимые»; для каталога — «Все» */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
         await page.locator('.modal.open .excard', { hasText: 'Подтягивания' }).first().click();
         await page.locator('#mReps').fill('8');
         await page.locator('[data-act="saveEntry"]').click();
@@ -285,6 +291,7 @@ test.describe('GymHelper e2e', function () {
         await expect(addBtn).toHaveClass(/wide/);
         /* плюсик «+ Запись» появляется в exhead вместе с упражнением; кнопки под сетами нет */
         await addBtn.click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click(); /* [UX-T30] дефолт «★ Любимые» */
         await page.locator('.modal.open .excard', { hasText: EX }).first().click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await page.locator('#mWeight').fill('100');
@@ -350,8 +357,9 @@ test.describe('GymHelper e2e', function () {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('[data-act="closeModal"]').first().click();
-        /* отмечаем жим ⭐ в пикере */
+        /* отмечаем жим ⭐ в пикере (дефолт «★ Любимые» [UX-T30] → для каталога «Все») */
         await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
         await page.locator('.modal.open .excard', { hasText: EX }).first().locator('.star').click();
         await expect(page.locator('.modal.open .excard', { hasText: EX }).first().locator('.star')).toHaveClass(/fav/, { timeout: 5000 });
         await page.locator('[data-act="closeModal"]').first().click();
@@ -850,11 +858,13 @@ test.describe('GymHelper e2e', function () {
         await startWorkoutUi(page);
         await openActiveDetail(page);
         await page.locator('[data-act="openPicker"]').click();
-        await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
+        /* [UX-T30] дефолт пикера — «★ Любимые»: пустые избранные видны сразу, чип подсвечен, «Все» — нет */
+        await expect(page.locator('.modal.open #pickerSections .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.modal.open #pickerSections .chip', { hasText: 'Все' })).toHaveClass('chip');
         await expect(page.locator('#pickerList')).toContainText('Избранных пока нет', { timeout: 5000 });
         await expect(page.locator('#pickerList .excard')).toHaveCount(0);
 
-        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        await page.locator('.modal.open #pickerSections .chip', { hasText: 'Все' }).first().click();
         const total = await page.locator('#pickerList .excard').count();
         if (total < 60) throw new Error('в каталоге должно быть 75 упражнений, найдено: ' + total);
     });
@@ -876,6 +886,8 @@ test.describe('GymHelper e2e', function () {
         await startWorkoutUi(page);
         await openActiveDetail(page);
         await page.locator('[data-act="openPicker"]').click();
+        /* [UX-T30] дефолт — «★ Любимые» (пустые); отмечаем звезду в каталоге через «Все» */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
         const card = page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first();
         await card.locator('.star').click();
         await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).locator('.star')).toHaveClass(/fav/, { timeout: 5000 });
@@ -1168,11 +1180,13 @@ test.describe('GymHelper e2e', function () {
 
         /* второе и третье упражнения — чтобы в превью было ровно 3 строки упражнений */
         await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click(); /* [UX-T30] дефолт «★ Любимые» */
         await page.locator('.modal.open .excard', { hasText: 'Подтягивания' }).first().click();
         await page.locator('#mReps').fill('10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click(); /* [UX-T30] дефолт «★ Любимые» */
         await page.locator('.modal.open .excard', { hasText: 'Жим ногами' }).first().click();
         await page.locator('#mReps').fill('12');
         await page.locator('[data-act="saveEntry"]').click();
@@ -1366,6 +1380,8 @@ test.describe('мобильный (тач-экран)', function () {
         await openActiveDetail(page);
         await touchTap(page, page.locator('[data-act="openPicker"]'));
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        /* [UX-T30] дефолт пикера — «★ Любимые»; поиск по каталогу — на «Все» */
+        await touchTap(page, page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first());
 
         const q = page.locator('#pickerQ');
         await touchTap(page, q);
@@ -1383,6 +1399,8 @@ test.describe('мобильный (тач-экран)', function () {
         await touchTap(page, page.locator('.nav .nfab'));
         const modal = page.locator('.modal.open');
         await modal.waitFor({ state: 'visible', timeout: 5000 });
+        /* [UX-T30] дефолт пикера — «★ Любимые»; выбор из каталога — через «Все» */
+        await touchTap(page, modal.locator('.secrow .chip', { hasText: 'Все' }).first());
         await touchTap(page, modal.locator('.excard', { hasText: EX }).first());
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await touchTap(page, modal.locator('#mWeight'));
@@ -1649,6 +1667,7 @@ test.describe('live-PR и оценка 1ПМ [UX-T2]', function () {
         await openApp(page);
         await page.locator('.nav .nfab').click();
         await page.locator('.modal.open [data-act="newBlank"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click(); /* [UX-T30] дефолт «★ Любимые» */
         await page.locator('.modal.open .excard', { hasText: EX }).first().click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         /* новый блок 110 кг × 1 × 8 → e1RM = 110 × (1 + 8/30) ≈ 139 > 130 → PR */
@@ -1788,6 +1807,7 @@ test.describe('шаблоны тренировок [UX-T6/T7]', function () {
         await expect(m).toContainText('🔁 Повторить прошлую');
         /* таймер отдыха стартует с дефолта 90 сек */
         await m.locator('[data-act="newBlank"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click(); /* [UX-T30] дефолт «★ Любимые» */
         await page.locator('.modal.open .excard', { hasText: EX }).first().click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await fillEntry(page, '70', '1', '10');
