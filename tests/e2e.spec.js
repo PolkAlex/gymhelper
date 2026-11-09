@@ -2630,6 +2630,46 @@ test.describe('UX-B10: fullscreen safe-area шапки', function () {
         await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
         await expect(page.locator('body.fs .topbar')).toHaveCount(1);
     });
+
+    /* [UX-B11] узкий экран: в fullscreen topbar не ломается на 320px —
+       паддинг 56px, без горизонтального переполнения, шестерёнка кликабельна */
+    test('320px: в fullscreen topbar не ломается — паддинг 56px, без переполнения, шестерёнка кликабельна', async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await openApp(page);
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 44, bottom: 24, left: 0, right: 0 });
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: true });
+        });
+        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+        const m = await page.evaluate(function () {
+            const tb = document.querySelector('.topbar').getBoundingClientRect();
+            const gear = document.querySelector('.topbar [aria-label="Настройки"]').getBoundingClientRect();
+            return {
+                vw: document.documentElement.clientWidth,
+                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop,
+                tb: { left: Math.round(tb.left), right: Math.round(tb.right) },
+                gear: { left: Math.round(gear.left), right: Math.round(gear.right) }
+            };
+        });
+        if (m.pad !== '56px') throw new Error('padding-top topbar в fs на 320px: ' + m.pad + ', ожидался 56px');
+        if (m.overflow) throw new Error('горизонтальное переполнение на 320px в fullscreen: ' + JSON.stringify(m));
+        if (m.tb.left < 0 || m.tb.right > m.vw) throw new Error('topbar шире вьюпорта 320px в fs: ' + JSON.stringify(m.tb));
+        if (m.gear.left < 0 || m.gear.right > m.vw) throw new Error('шестерёнка вылезает за 320px в fs: ' + JSON.stringify(m.gear));
+        /* тап без force: Playwright проверяет hit — в fs шестерёнка реально кликабельна */
+        await page.locator('.topbar [aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
+        /* выход из fs тем же событием: класс снят, геометрия обычного режима (регресс 10px на 320px) */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: false });
+        });
+        await expect(page.locator('body.fs')).toHaveCount(0);
+        const padOut = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padOut !== '10px') throw new Error('padding-top .topbar после выхода из fs на 320px: ' + padOut + ', ожидался 10px');
+    });
 });
 
 /* ===== [UX-T27] экран «Настройки» (Story [UX-S4], спека §12) ===== */
