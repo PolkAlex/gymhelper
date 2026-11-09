@@ -432,8 +432,9 @@ textarea { min-height: 70px; resize: vertical; }
 
 details { margin-top: 12px; }
 summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
-/* [UX-T18] приписка «(в разработке)» у свёрнутых секций карточки тренировки */
-summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+/* [UX-T18] приписка «(в разработке)» у свёрнутых секций карточки тренировки;
+   [UX-T30] та же приписка у пунктов Настроек («Полноэкранный режим») */
+summary .wip, .setrow .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
 
 /* ============ карточки упражнений / каталог ============ */
 .ico {
