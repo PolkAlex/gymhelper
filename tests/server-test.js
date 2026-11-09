@@ -30,9 +30,13 @@ function sendJson(res, code, obj) {
 }
 
 http.createServer(function (req, res) {
-    const url = req.url.split('?')[0];
+    const raw = req.url;
+    const url = raw.split('?')[0];
     if (req.method === 'POST' && url === '/api/reset') {
         store = initialStore();
+        /* [UX-T29] /api/reset?noprofile=1 — сброс без профиля: сценарий новичка
+           (в initialStore по умолчанию legacy-профиль age-only для kcal-тестов) */
+        if ((raw.split('?')[1] || '').indexOf('noprofile') >= 0) delete store.profile;
         sendJson(res, 200, { ok: true });
         return;
     }

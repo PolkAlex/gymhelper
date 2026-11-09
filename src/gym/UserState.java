@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class UserState {
-    public enum Mode { MENU, WORKOUT, EX_WEIGHT, EX_SETS, EX_REPS, EDIT_EX, EDIT_ENTRY, EDIT_FIELD, RENAME, TITLE, NUTR, TIME, PROFILE, TPL_NAME }
+    public enum Mode { MENU, WORKOUT, EX_WEIGHT, EX_SETS, EX_REPS, EDIT_EX, EDIT_ENTRY, EDIT_FIELD, RENAME, TITLE, NUTR, TIME, PROFILE, PROFILE_MONTH, TPL_NAME }
 
     public Mode mode = Mode.MENU;
     public String currentExercise;
@@ -24,4 +24,10 @@ public final class UserState {
     public long pendingRepWid;
     /* [UX-E5] план-подсказка текущего упражнения (снимок из шаблона/повтора); null — плана нет */
     public TemplateExercise sugPlan;
+    /* [UX-T29] год-режим профиля: значения строки «пол X рост вес» до выбора месяца (bm:1..12);
+       storage.save только после выбора месяца, «🏠 Меню» отменяет */
+    public String pBirthSex = "";
+    public int pBirthYear;
+    public int pBirthHeight;
+    public double pBirthWeight;
 }

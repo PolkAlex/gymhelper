@@ -355,7 +355,7 @@ public final class BotLogic {
             case TITLE -> handleTitleInput(chatId, null, data, st, text);
             case NUTR -> handleNutrInput(chatId, null, data, st, text);
             case TIME -> handleTimeInput(chatId, null, data, st, text);
-            case PROFILE -> handleProfileInput(chatId, null, data, st, text);
+            case PROFILE, PROFILE_MONTH -> handleProfileInput(chatId, null, data, st, text);
             case TPL_NAME -> handleTplNameInput(chatId, null, data, st, text);
             case WORKOUT -> renderWorkoutScreen(chatId, null, data, st, data.active() == null ? 0 : data.active().id);
             default -> showMenu(chatId, null, data, st);
@@ -595,6 +595,14 @@ public final class BotLogic {
                     tplDelete(chatId, messageId, dataModel, st, Long.parseLong(data.substring(10)));
                 } else if (data.startsWith("tpl:del_")) {
                     tplDelAsk(chatId, messageId, dataModel, st, Long.parseLong(data.substring(8)));
+                } else if (data.startsWith("bm:")) {
+                    /* [UX-T29] выбор месяца рождения: сборка профиля из pending-полей год-режима */
+                    int month = Integer.parseInt(data.substring(3));
+                    if (st.mode != UserState.Mode.PROFILE_MONTH || month < 1 || month > 12 || st.pBirthYear == 0) {
+                        startProfile(chatId, messageId, dataModel, st);
+                        return;
+                    }
+                    applyBirthMonth(chatId, messageId, dataModel, st, month);
                 } else {
                     showMenu(chatId, messageId, dataModel, st);
                 }
@@ -1290,10 +1298,14 @@ public final class BotLogic {
         } else {
             b.append("Нужен для расчёта калорий 🔥\n\n");
         }
-        b.append("Введи одной строкой: пол возраст рост вес\nНапример: м 30 180 82");
+        b.append("Введи одной строкой: пол возраст рост вес\nНапример: м 30 180 82\nМожно вместо возраста указать год рождения: м 1990 180 82");
         send(chatId, mid, b.toString(), List.of(List.of(TelegramApi.button("🏠 Меню", "home"))));
     }
 
+    /* [UX-T29] профиль одной строкой «пол X рост вес»: X 5–100 = возраст (legacy-режим),
+       X 1930–текущий год = год рождения (диапазоны не пересекаются: 100 < 1930) →
+       после года бот спрашивает месяц кнопками (bm:1..12), сохранение только после него.
+       birth-поля существующей модели всегда переносятся — дата не теряется */
     private void handleProfileInput(long chatId, Long mid, GymData data, UserState st, String text) {
         String[] parts = text.trim().split("[\\s,;]+");
         if (parts.length != 4) {
@@ -1306,27 +1318,89 @@ public final class BotLogic {
             return;
         }
         try {
-            ProfileData p = new ProfileData();
-            p.sex = sex.equals("ж") || sex.equals("f") ? "ж" : "м";
-            p.age = Integer.parseInt(parts[1]);
-            p.height = Integer.parseInt(parts[2]);
-            p.weight = Double.parseDouble(parts[3].replace(',', '.'));
-            if (p.age < 10 || p.age > 100 || p.height < 100 || p.height > 250 || p.weight < 30 || p.weight > 300) {
-                send(chatId, mid, "Проверь значения: возраст 10–100, рост 100–250 см, вес 30–300 кг", List.of(List.of(TelegramApi.button("🏠 Меню", "home"))));
+            int x = Integer.parseInt(parts[1]);
+            int height = Integer.parseInt(parts[2]);
+            double weight = Double.parseDouble(parts[3].replace(',', '.'));
+            int curYear = java.time.LocalDate.now().getYear();
+            int yearLow = Math.max(1930, curYear - 100);
+            boolean ageMode = x >= 5 && x <= 100;
+            /* год новее «текущий − 5» (возраст < 5) распознаётся как год, но даёт ошибку диапазона */
+            boolean yearMode = x >= 1930 && x <= curYear && curYear - x >= 5;
+            if ((!ageMode && !yearMode) || height < 100 || height > 250 || weight < 30 || weight > 300) {
+                send(chatId, mid, "Проверь значения: возраст 5–100 или год рождения " + yearLow + "–" + (curYear - 5)
+                    + ", рост 100–250 см, вес 30–300 кг", List.of(List.of(TelegramApi.button("🏠 Меню", "home"))));
                 return;
             }
+            ProfileData p = new ProfileData();
+            /* перенос birth-полей из загруженной модели — не строим дату с нуля */
+            if (data.profile != null) {
+                p.birthYear = data.profile.birthYear;
+                p.birthMonth = data.profile.birthMonth;
+            }
+            p.sex = sex.equals("ж") || sex.equals("f") ? "ж" : "м";
+            p.height = height;
+            p.weight = weight;
+            if (yearMode) {
+                /* год-режим: значения держатся в UserState, storage.save только после месяца */
+                st.mode = UserState.Mode.PROFILE_MONTH;
+                st.pBirthSex = p.sex;
+                st.pBirthYear = x;
+                st.pBirthHeight = height;
+                st.pBirthWeight = weight;
+                send(chatId, mid, "🎂 Год рождения: " + x + "\nВыбери месяц рождения:", monthKb());
+                return;
+            }
+            String note = "";
+            if (p.birthYear > 0) {
+                /* [UX-T29] дата есть: введённый возраст не применяем — иначе он затёрся бы
+                   вычислением датой; sex/рост/вес обновляются, дата остаётся */
+                note = "\n\nℹ️ Дата рождения не изменилась — возраст считается по ней (введённый возраст не применён)";
+            } else {
+                p.age = x;
+            }
+            if (p.birthYear > 0) p.age = p.ageOf(); /* age-зеркало = вычисленный */
             data.profile = p;
             storage.save(chatId, data);
-            send(chatId, mid, "✅ Профиль сохранён\n\n" + profileSummary(p), mainKb());
+            send(chatId, mid, "✅ Профиль сохранён\n\n" + profileSummary(p) + note, mainKb());
             st.mode = UserState.Mode.MENU;
         } catch (NumberFormatException e) {
             send(chatId, mid, "Не понял числа 🤔 Формат: пол возраст рост вес\nНапример: м 30 180 82", List.of(List.of(TelegramApi.button("🏠 Меню", "home"))));
         }
     }
 
+    /* [UX-T29] месяц выбран — собираем профиль из pending-полей год-режима и сохраняем */
+    private void applyBirthMonth(long chatId, Long mid, GymData data, UserState st, int month) {
+        ProfileData p = new ProfileData();
+        p.sex = st.pBirthSex;
+        p.birthYear = st.pBirthYear;
+        p.birthMonth = month;
+        p.age = p.ageOf();
+        p.height = st.pBirthHeight;
+        p.weight = st.pBirthWeight;
+        data.profile = p;
+        storage.save(chatId, data);
+        st.mode = UserState.Mode.MENU;
+        send(chatId, mid, "✅ Профиль сохранён\n\n" + profileSummary(p)
+            + "\n\n🎂 Возраст теперь считается по дате рождения и обновляется сам", mainKb());
+    }
+
+    /* [UX-T29] клавиатура месяцев для год-режима: 3×4 сокращения + «🏠 Меню» (отмена выбора) */
+    private List<List<Map<String, Object>>> monthKb() {
+        String[] mon = {"Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"};
+        List<List<Map<String, Object>>> kb = new ArrayList<>();
+        for (int r = 0; r < 3; r++) {
+            List<Map<String, Object>> row = new ArrayList<>();
+            for (int c = 0; c < 4; c++) row.add(TelegramApi.button(mon[r * 4 + c], "bm:" + (r * 4 + c + 1)));
+            kb.add(row);
+        }
+        kb.add(List.of(TelegramApi.button("🏠 Меню", "home")));
+        return kb;
+    }
+
     private String profileSummary(ProfileData p) {
-        return "Пол: " + p.sex.toUpperCase() + " · Возраст: " + p.age + " · Рост: " + p.height
-            + " см · Вес: " + fmtW(p.weight) + " кг"
+        int age = p.ageOf();
+        return "Пол: " + p.sex.toUpperCase() + " · Возраст: " + age + " " + plural(age, "год", "года", "лет")
+            + " · Рост: " + p.height + " см · Вес: " + fmtW(p.weight) + " кг"
             + "\nBMR ≈ " + Math.round(bmr(p)) + " ккал/сут (Mifflin-St Jeor)";
     }
 
@@ -2267,7 +2341,9 @@ public final class BotLogic {
     }
 
     static double bmr(ProfileData p) {
-        double base = 10 * p.weight + 6.25 * p.height - 5.0 * p.age;
+        /* [UX-T29] возраст из ageOf: при валидной дате рождения — вычисленный (иначе
+           1 января у всех носителей даты BMR врал бы до следующего сохранения) */
+        double base = 10 * p.weight + 6.25 * p.height - 5.0 * p.ageOf();
         return p.sex.equalsIgnoreCase("ж") ? base - 161 : base + 5;
     }
 

@@ -40,6 +40,42 @@ public class GymContractTest {
         check(d.profile != null && d.profile.weight == 95, "profile");
         check(d.rev == 5, "rev");
 
+        /* [UX-T29] дата рождения: legacy age-only (фикстура выше без birth-ключей) —
+           читается «не указано» и не получает birth-ключей при записи (байт-в-байт) */
+        check(d.profile.birthYear == 0 && d.profile.birthMonth == 0, "legacy age-only: birth не указан");
+        String noBirthOut = Json.write(d.toJson());
+        check(!noBirthOut.contains("birthYear") && !noBirthOut.contains("birthMonth"),
+            "toJson без даты не пишет birth-ключи (legacy байт-в-байт)");
+
+        /* [UX-T29] birth-пара: чтение, round-trip без потерь; age-зеркало остаётся как записано;
+           ageOf — вычисленный возраст, наступает 1-го числа месяца рождения */
+        GymData db = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":36,\"height\":178,\"weight\":78.5,\"birthYear\":1990,\"birthMonth\":11},\"workouts\":[]}"));
+        check(db.profile.birthYear == 1990 && db.profile.birthMonth == 11, "birth-пара читается");
+        check(db.profile.age == 36, "age-зеркало читается как записано");
+        String birthOut = Json.write(db.toJson());
+        check(birthOut.contains("\"birthYear\":1990") && birthOut.contains("\"birthMonth\":11"), "toJson пишет birth-пару");
+        GymData db2 = GymData.fromJson((Map<String, Object>) Json.parse(birthOut));
+        check(db2.profile.birthYear == 1990 && db2.profile.birthMonth == 11 && db2.profile.age == 36,
+            "birth-пара переживает round-trip без потерь");
+        java.time.LocalDate todayBD = java.time.LocalDate.now();
+        int expAgeBD = todayBD.getYear() - 1990 - (todayBD.getMonthValue() < 11 ? 1 : 0);
+        check(db.profile.ageOf() == expAgeBD, "ageOf: 1990-11 → вычисленный возраст " + expAgeBD);
+
+        /* [UX-T29] мусор при чтении → «не указано» (границы чтения 1900–2100 / 1–12, оба-или-ничего) */
+        GymData dgb = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":1800,\"birthMonth\":13},\"workouts\":[]}"));
+        check(dgb.profile.birthYear == 0 && dgb.profile.birthMonth == 0, "мусор: год 1800 и месяц 13 → не указано");
+        GymData dgs = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":\"1990\",\"birthMonth\":\"5\"},\"workouts\":[]}"));
+        check(dgs.profile.birthYear == 0 && dgs.profile.birthMonth == 0, "мусор: birthYear строкой → не указано (без падения)");
+
+        /* [UX-T29] полуфабрикат: год без месяца → оба 0, ключи не пишутся */
+        GymData dh = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":1990},\"workouts\":[]}"));
+        check(dh.profile.birthYear == 0 && dh.profile.birthMonth == 0, "полуфабрикат: год без месяца → оба 0");
+        check(!Json.write(dh.toJson()).contains("birth"), "полуфабрикат: toJson не пишет birth-ключи");
+
         String legacy = "{\"nextId\":2,\"workouts\":[{\"id\":1,\"date\":\"2026-10-26\"," +
             "\"startedAt\":\"2026-10-26T18:00:00\",\"endedAt\":\"2026-10-26T19:00:00\"," +
             "\"finished\":true,\"exercises\":[{\"name\":\"Жим\",\"sets\":[{\"weight\":\"80\",\"sets\":1,\"reps\":\"10\"}]}]}]}";
@@ -324,6 +360,45 @@ public class GymContractTest {
             check(java.nio.file.Files.exists(chatFile), "resurrect: файл после пустого save создан заново (уже пустой)");
         } catch (Exception resErr) {
             throw new AssertionError("CONTRACT FAIL: resurrect " + resErr);
+        }
+
+        /* [UX-T29] merge-защита birth-полей: save профиля от клиента без birth-ключей
+           (старый кэш JS) не теряет дату рождения текущего профиля — реальный WebServer */
+        try {
+            java.nio.file.Path tmpB = java.nio.file.Files.createTempDirectory("gymbirth");
+            Storage stB = new Storage(tmpB);
+            WebServer wsB = new WebServer("contract-test-token", stB, tmpB);
+            java.net.ServerSocket probeB = new java.net.ServerSocket(0);
+            int portB = probeB.getLocalPort();
+            probeB.close();
+            wsB.start(portB);
+            String idB = tgInitData("contract-test-token", 424243);
+            java.time.LocalDate todayB = java.time.LocalDate.now();
+            int mirror = todayB.getYear() - 1990 - (todayB.getMonthValue() < 11 ? 1 : 0);
+            /* клиент с датой: birth-пара + age-зеркало = вычисленный возраст */
+            java.net.http.HttpResponse<String> rb1 = postSave(portB, idB, 0,
+                "{\"rev\":0,\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":" + mirror + ",\"height\":178,\"weight\":78.5,\"birthYear\":1990,\"birthMonth\":11},\"workouts\":[]}");
+            check(rb1.statusCode() == 200, "birth merge: save с датой — 200, а не " + rb1.statusCode());
+            GymData savedB = stB.load(424243);
+            check(savedB.profile != null && savedB.profile.birthYear == 1990 && savedB.profile.birthMonth == 11,
+                "birth merge: дата сохранена");
+            /* старый кэш JS: профиль без birth-ключей — дата переживает merge */
+            java.net.http.HttpResponse<String> rb2 = postSave(portB, idB, 1,
+                "{\"rev\":1,\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":50,\"height\":180,\"weight\":82},\"workouts\":[]}");
+            check(rb2.statusCode() == 200, "birth merge: save без birth-ключей — 200, а не " + rb2.statusCode());
+            GymData mergedB = stB.load(424243);
+            check(mergedB.profile.birthYear == 1990 && mergedB.profile.birthMonth == 11,
+                "birth merge: дата пережила merge от клиента без birth-ключей");
+            check(mergedB.profile.age == 50, "birth merge: сервер — не редактор, age = что прислал клиент");
+            /* клиент с датой снова сохраняет пару — зеркало обновляется вычисленным */
+            java.net.http.HttpResponse<String> rb3 = postSave(portB, idB, 2,
+                "{\"rev\":2,\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":" + mirror + ",\"height\":178,\"weight\":78.5,\"birthYear\":1990,\"birthMonth\":11},\"workouts\":[]}");
+            check(rb3.statusCode() == 200, "birth merge: повторный save с датой — 200, а не " + rb3.statusCode());
+            GymData backB = stB.load(424243);
+            check(backB.profile.age == mirror && backB.profile.birthYear == 1990 && backB.profile.birthMonth == 11,
+                "birth merge: зеркало обновлено клиентом с датой");
+        } catch (Exception birthErr) {
+            throw new AssertionError("CONTRACT FAIL: birth merge " + birthErr);
         }
 
         System.out.println("CONTRACT OK");
