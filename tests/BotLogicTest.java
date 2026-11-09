@@ -6,13 +6,19 @@ import java.util.Map;
 
 /* [TST-S1] юнит-тесты чистой логики бота: парсинг блока одной строкой, валидации
    веса/подходов/повторений, MET-модель калорий, e1RM и правила рекордов, даты
-   и заголовки, форматирование таймера отдыха, стат-подсказки (последние/популярные веса).
+   и заголовки, форматирование таймера отдыха, стат-подсказки (последние/популярные веса),
+   шаблоны тренировок [TST-E1]: авто-имя, обрезки имён, план-строка/компакт-план,
+   санитизация чтения шаблонов (GymData.fromJson).
    Класс живёт в пакете gym — так package-private статические функции BotLogic доступны
    без рефлексии. Раннер и стиль — как в tests/GymContractTest (БЕЗ внешних зависимостей).
    Всё, что зависит от времени (durationMin/calcKcal), принимает «сейчас» параметром —
    тесты детерминированы в любой день недели (урок дата-зависимых тестов).
    Парсинг /announce и /delete_my_data, renderLine, planCore, plural, csvField,
-   incomingNextId и Storage уже покрыты в GymContractTest — здесь не дублируются. */
+   incomingNextId, Storage и round-trip шаблонов уже покрыты в GymContractTest —
+   здесь не дублируются. Юнитом НЕ покрыто (приватные instance-методы с TelegramApi,
+   без рефакторинга видимости недостижимо): /templates-диалоги, лимит 20 (TPL_LIMIT),
+   применение шаблона → тренировка (startFromTemplate), старт при активной тренировке
+   (tplStart, pendingTplId) — поведенческая зона ручной проверки/будущего мока Api. */
 public class BotLogicTest {
     static void check(boolean b, String m) {
         if (!b) throw new AssertionError("UNIT FAIL: " + m);
@@ -251,8 +257,121 @@ public class BotLogicTest {
             && BotLogic.lastReps(ld, "Жим").equals(List.of("5", "6", "7", "8")),
             "подсказки: не больше 4 последних значений (из 5 уникальных)");
 
+        /* === 8. Шаблоны: авто-имя и обрезки (templateAutoName/trimName/shortName) === */
+        Workout tn1 = w(null, null, true);
+        tn1.title = "День 1\nЖим лёжа";
+        check(BotLogic.templateAutoName(tn1).equals("День 1"),
+            "templateAutoName: многострочный title → только первая строка");
+        Workout tn2 = w(null, null, true);
+        tn2.title = "  Спина и бицепс  \nЖим";
+        check(BotLogic.templateAutoName(tn2).equals("Спина и бицепс"),
+            "templateAutoName: первая строка title обрезается по краям");
+        Workout tn3 = w(null, null, true);
+        ex(tn3, "Жим", new SetEntry("60", 3, "10"));
+        ex(tn3, "Тяга", new SetEntry("", 4, "8"));
+        ex(tn3, "Присед", new SetEntry("80", 3, "8"));
+        check(BotLogic.templateAutoName(tn3).equals("Жим · Тяга"),
+            "templateAutoName: без title — максимум 2 упражнения через « · »");
+        Workout tn4 = w(null, null, true);
+        ex(tn4, "Жим", new SetEntry("60", 3, "10"));
+        ex(tn4, "Пустое", new SetEntry[0]);
+        check(BotLogic.templateAutoName(tn4).equals("Жим"),
+            "templateAutoName: упражнение без подходов не попадает в имя");
+        check(BotLogic.templateAutoName(w(null, null, true)).equals("Тренировка 09-11"),
+            "templateAutoName: ни title, ни упражнений → «Тренировка ДД-ММ» из даты");
+        Workout tn5 = w(null, null, true);
+        tn5.date = "осень";
+        check(BotLogic.templateAutoName(tn5).equals("Тренировка "),
+            "templateAutoName: неразборчивая дата → «Тренировка » (пустой хвост — поведение прод-кода)");
+        String sixty = "А".repeat(60);
+        check(BotLogic.trimName("  " + sixty + "  ").equals(sixty),
+            "trimName: пробелы по краям срезаются, ровно 60 символов не обрезается");
+        check(BotLogic.trimName("Б".repeat(70)).length() == 60,
+            "trimName: 70 символов → ровно 60 (лимит названия)");
+        check(BotLogic.trimName(null).isEmpty(), "trimName: null → пустая строка");
+        check(BotLogic.shortName("0123456789abcdef").equals("0123456789abcdef")
+            && BotLogic.shortName("0123456789abcdegx").equals("0123456789abcde…"),
+            "shortName: 16 символов целыми, 17 → 15 + «…»");
+        check(BotLogic.shortName(null).isEmpty(), "shortName: null → пустая строка");
+
+        /* === 9. Шаблоны: план-строка списка и компакт-план (templatePlanLine/compactPlan) === */
+        check(BotLogic.compactPlan(te("Жим", "60", 3, "10")).equals("60×3×10"),
+            "compactPlan: «60×3×10» (вес × подходы × повторения)");
+        check(BotLogic.compactPlan(te("Жим", "62.5", 3, "10")).equals("62,5×3×10"),
+            "compactPlan: точка в весе → запятая");
+        check(BotLogic.compactPlan(te("Жим", "60", 3, "")).equals("60×3")
+            && BotLogic.compactPlan(te("Жим", "", 3, "10")).equals("3×10"),
+            "compactPlan: без повторений «60×3», без веса «3×10»");
+        check(BotLogic.compactPlan(te("Жим", "", 2, "")).equals("2")
+            && BotLogic.compactPlan(te("Жим", null, 2, null)).equals("2"),
+            "compactPlan: только подходы (в т.ч. null-поля из JSON) → «2»");
+        Template tp1 = new Template();
+        tp1.exercises.add(te("Жим", "60", 3, "10"));
+        tp1.exercises.add(te("Тяга", "", 4, "10"));
+        check(BotLogic.templatePlanLine(tp1).equals("Жим 60×3×10 · Тяга 4×10"),
+            "templatePlanLine: первые упражнения с планом через « · »");
+        Template tp2 = new Template();
+        for (int i = 0; i < 5; i++) tp2.exercises.add(te("Упр" + i, "60", 3, "10"));
+        check(BotLogic.templatePlanLine(tp2).equals("Упр0 60×3×10 · Упр1 60×3×10 · Упр2 60×3×10 · +2"),
+            "templatePlanLine: показываются первые 3, остальные — счётчиком «+2»");
+        Template tp3 = new Template();
+        tp3.exercises.add(te("Тяга верхнего блока к груди", "60", 3, "10"));
+        check(BotLogic.templatePlanLine(tp3).equals("Тяга верхнего б… 60×3×10"),
+            "templatePlanLine: имя длиннее 16 символов клипается с «…»");
+        Template tp4 = new Template();
+        tp4.exercises.add(te("Жим", "", 1, ""));
+        tp4.exercises.add(te("Тяга", "", 1, ""));
+        check(BotLogic.templatePlanLine(tp4).isEmpty(),
+            "templatePlanLine: ни у одного упражнения нет осмысленного плана → пустая строка");
+        Template tp5 = new Template();
+        tp5.exercises.add(te("Голое", "", 1, ""));
+        tp5.exercises.add(te("Жим", "60", 3, "10"));
+        tp5.exercises.add(te("Тяга", "", 3, "8"));
+        tp5.exercises.add(te("Присед", "80", 3, "8"));
+        check(BotLogic.templatePlanLine(tp5).equals("Жим 60×3×10 · Тяга 3×8 · +1"),
+            "templatePlanLine: упражнение без плана пропускается, но учитывается в счётчике «+N»");
+
+        /* === 10. Чтение шаблонов из GymData.fromJson: санитизация (лимит и применение —
+           приватные instance-методы с TelegramApi, юнитом не покрыты) === */
+        GymData ts1 = tplData("{\"id\":1,\"name\":\"Т\",\"exercises\":[" +
+            "{\"name\":\"Жим\",\"w\":\"60\",\"s\":0,\"r\":\"10\"}," +
+            "{\"name\":\"Тяга\",\"w\":\"60\",\"s\":-5,\"r\":\"10\"}]}");
+        check(ts1.templates.get(0).exercises.get(0).s == 1 && ts1.templates.get(0).exercises.get(1).s == 1,
+            "чтение шаблонов: подходы меньше 1 (0 и отрицательные) → 1");
+        GymData ts2 = tplData("{\"id\":1,\"name\":\"Ок\",\"exercises\":[]}," +
+                "{\"id\":2,\"exercises\":[]}");
+        check(ts2.templates.size() == 1 && "Ок".equals(ts2.templates.get(0).name),
+            "чтение шаблонов: запись без имени пропускается, остальные читаются");
+        GymData ts3 = tplData("{\"id\":1,\"name\":\"Т\",\"exercises\":[" +
+                "{\"w\":\"60\",\"s\":2,\"r\":\"10\"}," +
+                "{\"name\":\"Тяга\",\"s\":2}]}");
+        check(ts3.templates.get(0).exercises.size() == 1 && "Тяга".equals(ts3.templates.get(0).exercises.get(0).name),
+            "чтение шаблонов: упражнение без имени пропускается");
+        GymData ts4 = tplData("{\"id\":1,\"name\":\"Т\",\"exercises\":[" +
+            "{\"name\":\"Жим\",\"w\":75.5,\"s\":3,\"r\":10}]}");
+        check("75.5".equals(ts4.templates.get(0).exercises.get(0).w)
+            && "10".equals(ts4.templates.get(0).exercises.get(0).r),
+            "чтение шаблонов: вес/повторения числом → строки (дробь сохраняется)");
+
         System.out.println("UNIT OK");
         System.exit(0);
+    }
+
+    /* шаблонное упражнение для план-тестов */
+    static TemplateExercise te(String name, String w, int s, String r) {
+        TemplateExercise t = new TemplateExercise();
+        t.name = name;
+        t.w = w;
+        t.s = s;
+        t.r = r;
+        return t;
+    }
+
+    /* данные с массивом templates (запятая между шаблонами в вызове) */
+    @SuppressWarnings("unchecked")
+    static GymData tplData(String templatesJson) {
+        return GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"templates\":[" + templatesJson + "],\"workouts\":[]}"));
     }
 
     /* свежие данные для сценариев рекордов: база id1 (Жим 100×3 «8-10» → 1ПМ 130;

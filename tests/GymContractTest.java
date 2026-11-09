@@ -76,6 +76,24 @@ public class GymContractTest {
         check(dh.profile.birthYear == 0 && dh.profile.birthMonth == 0, "полуфабрикат: год без месяца → оба 0");
         check(!Json.write(dh.toJson()).contains("birth"), "полуфабрикат: toJson не пишет birth-ключи");
 
+        /* [UX-T29, TST-E1] границы чтения: 1900–2100 и 1–12 валидны включительно, вне — «не указано»;
+           мусорный месяц обнуляет пару даже при валидном годе (оба-или-ничего) */
+        GymData dgl = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":1900,\"birthMonth\":1},\"workouts\":[]}"));
+        check(dgl.profile.birthYear == 1900 && dgl.profile.birthMonth == 1, "границы: 1900 и месяц 1 читаются (нижняя граница включительно)");
+        GymData dgu = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":2100,\"birthMonth\":12},\"workouts\":[]}"));
+        check(dgu.profile.birthYear == 2100 && dgu.profile.birthMonth == 12, "границы: 2100 и месяц 12 читаются (верхняя граница включительно)");
+        GymData dgy = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":2101,\"birthMonth\":6},\"workouts\":[]}"));
+        check(dgy.profile.birthYear == 0 && dgy.profile.birthMonth == 0, "границы: год 2101 → оба 0");
+        GymData dgm = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":1990,\"birthMonth\":0},\"workouts\":[]}"));
+        check(dgm.profile.birthYear == 0 && dgm.profile.birthMonth == 0, "границы: валидный год, месяц 0 → вся пара «не указано»");
+        GymData dgm13 = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"profile\":{\"sex\":\"м\",\"age\":30,\"height\":180,\"weight\":80,\"birthYear\":1990,\"birthMonth\":13},\"workouts\":[]}"));
+        check(dgm13.profile.birthYear == 0 && dgm13.profile.birthMonth == 0, "границы: валидный год, месяц 13 → вся пара «не указано»");
+
         String legacy = "{\"nextId\":2,\"workouts\":[{\"id\":1,\"date\":\"2026-10-26\"," +
             "\"startedAt\":\"2026-10-26T18:00:00\",\"endedAt\":\"2026-10-26T19:00:00\"," +
             "\"finished\":true,\"exercises\":[{\"name\":\"Жим\",\"sets\":[{\"weight\":\"80\",\"sets\":1,\"reps\":\"10\"}]}]}]}";
