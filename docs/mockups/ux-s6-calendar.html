@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[UX-S6] #162 · Календарь тренировок · редакция 2 · правки S6-update2 09.11 · Amber Glass</title>
+<title>[UX-S6] #162 · Календарь тренировок · редакция 2 · правки S6-update2/S6-update3 09.11 · Amber Glass</title>
 <style>
 /* ============ страница-презентация ============ */
 * { box-sizing: border-box; }
@@ -169,7 +169,7 @@ body.page {
 .cal-d.today .n { color: var(--accent); font-weight: 700; }
 .cal-d.sel { background: var(--nested); border-color: var(--btnbrd); }
 .cal-blank { min-height: 44px; }
-/* пустой месяц [S6-update 09.11; S6-update2 09.11]: «В <месяц>…» + «Предыдущая тренировка» (без года); ветки «Следующая» нет */
+/* пустой месяц [S6-update 09.11; S6-update3 09.11]: «В <месяц>…» + «Сегодня»; подсказка «Предыдущая тренировка» — ЗАГОТОВКА (рендер под SHOW_MONTH_HINTS = false), ветки «Следующая» нет */
 .calempty { text-align: center; color: var(--muted); font-size: 13px; padding: 18px 8px 2px; }
 .calhint { text-align: center; color: var(--muted); font-size: 11.5px; padding: 2px 8px 0; opacity: .85; }
 /* пилюля «Сегодня» (только не в текущем месяце) */
@@ -353,8 +353,9 @@ body.page {
 календарь закрывает. Сетка Пн–Вс; точки = завершённые тренировки (8 ноября —
 <b>две</b>, 2/4/6.11 — по одной). Сегодня (9-е) — янтарная рамка + <b>полая точка</b>:
 там идёт активная тренировка. На текущем месяце пилюли «Сегодня» нет — кнопка
-бывает только на не-текущем месяце [S6-update2 09.11], стрелка «›»
-погашена (max = текущий месяц). Память месяца: закрыл на октябре — открыл на октябре
+бывает только на не-текущем месяце [S6-update2 09.11]; стрелка «›» активна —
+будущие месяцы показываем, лимит вперёд — декабрь 2030 [S6-update3 09.11].
+Память месяца: закрыл на октябре — открыл на октябре
 (<code>gymCalMonth</code>).</p>
 <p class="note legend">
   <span class="li"><span class="lg-dot"></span> 1 тренировка</span>
@@ -370,7 +371,7 @@ body.page {
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
         <div class="cal-title">Ноябрь 2026</div>
-        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
       </div>
       <div class="cal-grid">
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
@@ -445,7 +446,7 @@ body.page {
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
         <div class="cal-title">Ноябрь 2026</div>
-        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
       </div>
       <div class="cal-grid">
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
@@ -507,15 +508,13 @@ body.page {
 <!-- ================================================================== -->
 <!-- 04 · Пустой месяц (тёмная)                                         -->
 <!-- ================================================================== -->
-<div class="caption">04 · Пустой месяц · октябрь 2026 <span>«Предыдущая тренировка»</span></div>
-<p class="note">Формулировка владельца [S6-update 09.11]: «В октябре тренировок не
-было.» + дата <b>последней тренировки ДО начала месяца</b>. В примере сентябрь имел
-и 26-е, и 29-е — поэтому подсказка честно показывает <b>29 сентября</b> (а не первую
-за сентябрь), <b>без года</b> [S6-update2 09.11]. Пилюля <b>«Сегодня»</b> — месяц
-не текущий; ветки «Следующая тренировка» в пустых месяцах нет вообще: если ранних
-нет — только честный текст и «Сегодня» [S6-update2 09.11, решение владельца].
-Обе стрелки активны: «‹» → сентябрь (предел листания назад — <b>фиксированный
-январь 2020</b>, до него далеко), «›» → ноябрь.</p>
+<div class="caption">04 · Пустой месяц · октябрь 2026 <span>только текст + «Сегодня»</span></div>
+<p class="note">Финальное решение владельца [S6-update3 09.11]: в пустом месяце —
+<b>только честный текст и пилюля «Сегодня»</b> (месяц не текущий). Подсказки
+«Предыдущая/Следующая тренировка» скрыты в обеих ветках и реализованы как
+<b>заготовка</b> под флагом <code>SHOW_MONTH_HINTS = false</code> в app.js
+(«скрыто, вернёмся позже»). Обе стрелки активны: «‹» → сентябрь (предел назад —
+<b>фиксированный январь 2020</b>), «›» → ноябрь.</p>
 <div class="phone"><div class="p">
   <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
   <div class="content">
@@ -558,7 +557,6 @@ body.page {
         <div class="cal-blank" aria-hidden="true"></div>
       </div>
       <div class="calempty">В октябре тренировок не было.</div>
-      <div class="calhint">Предыдущая тренировка — 29 сентября</div>
       <button class="cal-today">Сегодня</button>
     </div>
   </div>
@@ -580,8 +578,8 @@ body.page {
 «Пока пусто 💪» в списке не меняется. Текст <b>«Пока нет тренировок»</b> — без
 второй строки (§12 спеки). Пилюли <b>«Сегодня»</b> нет — месяц и так текущий:
 кнопка появляется только на не-текущем месяце [S6-update2 09.11]. Стрелка «›»
-погашена (max = текущий месяц), «‹» активна — предел фиксированный (январь 2020),
-хотя листать нечего.</p>
+активна — будущие месяцы показываем до декабря 2030 [S6-update3 09.11], «‹»
+активна — предел назад фиксированный (январь 2020), хотя листать нечего.</p>
 <div class="phone"><div class="p">
   <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
   <div class="content">
@@ -589,7 +587,7 @@ body.page {
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
         <div class="cal-title">Ноябрь 2026</div>
-        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
       </div>
       <div class="cal-grid">
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
@@ -644,9 +642,136 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 06 · Светлая тема                                                  -->
+<!-- 06 · Будущий месяц · декабрь 2026 (тёмная)                         -->
 <!-- ================================================================== -->
-<div class="caption">06 · Календарь · светлая тема <span>Amber Glass light</span></div>
+<div class="caption">06 · Будущий месяц · декабрь 2026 <span>пустой + «Сегодня»</span></div>
+<p class="note">Решение владельца [S6-update3 09.11]: будущие месяцы <b>показываем</b> —
+лимит листания вперёд фиксированный, <b>декабрь 2030</b> (было:
+<code>max(текущий, последняя тренировка)</code>). Будущий месяц пуст — вид тот же,
+что у пустых прошлых: честный текст + <b>«Сегодня»</b> (декабрь ≠ текущий ноябрь).
+Обе стрелки активны: «‹» → ноябрь 2026, «›» → январь 2027. Планирования нет —
+просто пустая сетка (§11).</p>
+<div class="phone"><div class="p">
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="content">
+    <div class="glass cal">
+      <div class="cal-nav">
+        <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+        <div class="cal-title">Декабрь 2026</div>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+        <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+        <!-- декабрь 2026: 1-е — вторник -->
+        <div class="cal-blank" aria-hidden="true"></div>
+        <button class="cal-d"><span class="n">1</span></button>
+        <button class="cal-d"><span class="n">2</span></button>
+        <button class="cal-d"><span class="n">3</span></button>
+        <button class="cal-d"><span class="n">4</span></button>
+        <button class="cal-d"><span class="n">5</span></button>
+        <button class="cal-d"><span class="n">6</span></button>
+
+        <button class="cal-d"><span class="n">7</span></button><button class="cal-d"><span class="n">8</span></button>
+        <button class="cal-d"><span class="n">9</span></button><button class="cal-d"><span class="n">10</span></button>
+        <button class="cal-d"><span class="n">11</span></button><button class="cal-d"><span class="n">12</span></button>
+        <button class="cal-d"><span class="n">13</span></button>
+
+        <button class="cal-d"><span class="n">14</span></button><button class="cal-d"><span class="n">15</span></button>
+        <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
+        <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+        <button class="cal-d"><span class="n">20</span></button>
+
+        <button class="cal-d"><span class="n">21</span></button><button class="cal-d"><span class="n">22</span></button>
+        <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
+        <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+        <button class="cal-d"><span class="n">27</span></button>
+
+        <button class="cal-d"><span class="n">28</span></button><button class="cal-d"><span class="n">29</span></button>
+        <button class="cal-d"><span class="n">30</span></button><button class="cal-d"><span class="n">31</span></button>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div>
+      </div>
+      <div class="calempty">В декабре тренировок не было.</div>
+      <button class="cal-today">Сегодня</button>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 07 · Предел вперёд · декабрь 2030 (тёмная)                         -->
+<!-- ================================================================== -->
+<div class="caption">07 · Предел вперёд · декабрь 2030 <span>«›» disabled</span></div>
+<p class="note">Жёсткий предел листания вперёд — <b>декабрь 2030</b>: стрелка «›»
+погашена (<code>disabled</code> + <code>aria-disabled="true"</code>), «‹» активна.
+Пустой будущий месяц выглядит как любой пустой: текст + «Сегодня» (месяц не
+текущий). <b>⚠️ 2028: расширить лимит будущих месяцев (до 2030+)</b> — напоминание
+владельца, спека §7.1; lead продублирует его в комментарий issue #162.</p>
+<div class="phone"><div class="p">
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="content">
+    <div class="glass cal">
+      <div class="cal-nav">
+        <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+        <div class="cal-title">Декабрь 2030</div>
+        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+        <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+        <!-- декабрь 2030: 1-е — пятница -->
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <button class="cal-d"><span class="n">1</span></button>
+        <button class="cal-d"><span class="n">2</span></button>
+        <button class="cal-d"><span class="n">3</span></button>
+
+        <button class="cal-d"><span class="n">4</span></button><button class="cal-d"><span class="n">5</span></button>
+        <button class="cal-d"><span class="n">6</span></button><button class="cal-d"><span class="n">7</span></button>
+        <button class="cal-d"><span class="n">8</span></button><button class="cal-d"><span class="n">9</span></button>
+        <button class="cal-d"><span class="n">10</span></button>
+
+        <button class="cal-d"><span class="n">11</span></button><button class="cal-d"><span class="n">12</span></button>
+        <button class="cal-d"><span class="n">13</span></button><button class="cal-d"><span class="n">14</span></button>
+        <button class="cal-d"><span class="n">15</span></button><button class="cal-d"><span class="n">16</span></button>
+        <button class="cal-d"><span class="n">17</span></button>
+
+        <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+        <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
+        <button class="cal-d"><span class="n">22</span></button><button class="cal-d"><span class="n">23</span></button>
+        <button class="cal-d"><span class="n">24</span></button>
+
+        <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+        <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
+        <button class="cal-d"><span class="n">29</span></button><button class="cal-d"><span class="n">30</span></button>
+        <button class="cal-d"><span class="n">31</span></button>
+      </div>
+      <div class="calempty">В декабре тренировок не было.</div>
+      <button class="cal-today">Сегодня</button>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 08 · Светлая тема                                                  -->
+<!-- ================================================================== -->
+<div class="caption">08 · Календарь · светлая тема <span>Amber Glass light</span></div>
 <p class="note">Все цвета — существующие токены обеих тем (<code>--glow</code>,
 <code>--glowbrd</code>, <code>--nested</code>, <code>--accent</code>), новых
 CSS-переменных не нужно. Янтарные точки читаются на светлой теме без изменений,
@@ -658,7 +783,7 @@ CSS-переменных не нужно. Янтарные точки читаю
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
         <div class="cal-title">Ноябрь 2026</div>
-        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
       </div>
       <div class="cal-grid">
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
@@ -712,9 +837,9 @@ CSS-переменных не нужно. Янтарные точки читаю
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 07 · 320px-регресс (тёмная)                                        -->
+<!-- 09 · 320px-регресс (тёмная)                                        -->
 <!-- ================================================================== -->
-<div class="caption">07 · Регресс 320px <span>узкий экран</span></div>
+<div class="caption">09 · Регресс 320px <span>узкий экран</span></div>
 <p class="note">Контент ≈ 296px → ячейка ≈ 37px при <code>min-height: 44px</code>
 (тап-таргет сохранён), точки 5px читаются. Заголовок месяца «Ноябрь 2026» и пара
 стрелок помещаются в одну строку; topbar с <b>двумя кнопками</b> (календарь +
@@ -727,7 +852,7 @@ CSS-переменных не нужно. Янтарные точки читаю
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
         <div class="cal-title">Ноябрь 2026</div>
-        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
       </div>
       <div class="cal-grid">
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
