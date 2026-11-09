@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[UX-S6] #162 · Календарь тренировок в Mini App · Amber Glass</title>
+<title>[UX-S6] #162 · Календарь тренировок · редакция 2 · Amber Glass</title>
 <style>
 /* ============ страница-презентация ============ */
 * { box-sizing: border-box; }
@@ -138,17 +138,6 @@ body.page {
 .meta { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
 .muted { color: var(--muted); font-size: 13px; }
 
-/* ============ сегмент «Список / Календарь» [UX-S6 §3.1] ============ */
-/* паттерн .seg [UX-T18] (пол М/Ж), на всю ширину контента */
-.seg { display: flex; margin: 0 0 10px; border: 1px solid var(--btnbrd); border-radius: 12px; overflow: hidden; background: var(--field); }
-.seg .seg-btn {
-    flex: 1 1 0; min-width: 0; height: 40px; border: none; background: none;
-    color: var(--muted); font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-}
-.seg .seg-btn + .seg-btn { border-left: 1px solid var(--btnbrd); }
-.seg .seg-btn.on { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: var(--on-accent); font-weight: 700; }
-
 /* ============ календарь [UX-S6 §4–7] ============ */
 .cal { padding: 12px 12px 14px; }
 .cal-nav { display: flex; align-items: center; gap: 6px; }
@@ -180,7 +169,7 @@ body.page {
 .cal-d.today .n { color: var(--accent); font-weight: 700; }
 .cal-d.sel { background: var(--nested); border-color: var(--btnbrd); }
 .cal-blank { min-height: 44px; }
-/* пустой месяц */
+/* пустой месяц [S6-update 09.11]: «В <месяц>…» + «Предыдущая/Следующая тренировка» */
 .calempty { text-align: center; color: var(--muted); font-size: 13px; padding: 18px 8px 2px; }
 .calhint { text-align: center; color: var(--muted); font-size: 11.5px; padding: 2px 8px 0; opacity: .85; }
 /* пилюля «Сегодня» (только не в текущем месяце) */
@@ -254,10 +243,17 @@ body.page {
 
 <!-- ================= SVG-иконки набора (catalog.js ICONS + шевроны) ================= -->
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- [UX-S6 §3.3] новая иконка calendar: корпус + линия шапки + два ушка -->
+    <rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/>
+  </symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/>
     <path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/>
     <path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/>
+  </symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
   </symbol>
   <symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/>
@@ -283,20 +279,20 @@ body.page {
 </svg>
 
 <!-- ================================================================== -->
-<!-- 01 · История · вид «Список» с новым сегментом (тёмная)             -->
+<!-- 01 · История · точка входа: календарь в topbar (тёмная)            -->
 <!-- ================================================================== -->
-<div class="caption">01 · История · вид «Список» <span>новое: сегмент</span></div>
-<p class="note">Точка входа — <b>переключатель «Список / Календарь»</b> под топбаром
-(вариант А из спеки §3): вкладка, данные и навигация не меняются, список остаётся видом
-по умолчанию. Сам список не тронут — рекорд недели, активная тренировка, карточки.</p>
+<div class="caption">01 · История · точка входа в календарь <span>ред. 2: кнопка в topbar</span></div>
+<p class="note">Решение владельца [S6-update 09.11]: переключатель «Список / Календарь»
+<b>отменён</b> — история остаётся списком как есть. Точка входа — <b>иконка-кнопка
+календаря в topbar</b>, только на вкладке История. Порядок: <b>календарь слева,
+шестерёнка справа</b> — ⚙ есть на всех вкладках и её крайняя правая позиция остаётся
+якорем мышечной памяти, глобальная кнопка не «прыгает» между экранами. Геометрия
+кнопки — как у шестерёнки (<code>.tb-user</code> 32×32). При открытой карточке
+тренировки и на экране Настроек кнопки нет. Сам список (рекорд, активная, карточки)
+не тронут.</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
-    <div class="seg" role="group" aria-label="Вид истории">
-      <button class="seg-btn on" aria-pressed="true">Список</button>
-      <button class="seg-btn" aria-pressed="false">Календарь</button>
-    </div>
-
     <div class="reccard">
       <div class="rec-l">Рекорд недели · Жим лёжа</div>
       <div class="rec-num">92,5 <small>кг</small></div>
@@ -352,10 +348,13 @@ body.page {
 <!-- 02 · Календарь · ноябрь 2026 (тёмная)                              -->
 <!-- ================================================================== -->
 <div class="caption">02 · Календарь · ноябрь 2026 <span>тёмная тема</span></div>
-<p class="note">Сетка Пн–Вс; точки = завершённые тренировки (8 ноября — <b>две</b>,
-2.04.06.11 — по одной). Сегодня (9-е) — янтарная рамка + <b>полая точка</b>: там идёт
-активная тренировка. На текущем месяце пилюли «Сегодня» нет, стрелка «›» погашена
-(max = текущий месяц). Прошлый месяц доступен: в примере сентябрь (26.09, 29.09).</p>
+<p class="note">Календарь — <b>подэкран как Настройки</b> [S6-update 09.11]: шапка
+«← Назад» возвращает на Историю, нижняя навигация остаётся, тап по любому табу
+календарь закрывает. Сетка Пн–Вс; точки = завершённые тренировки (8 ноября —
+<b>две</b>, 2/4/6.11 — по одной). Сегодня (9-е) — янтарная рамка + <b>полая точка</b>:
+там идёт активная тренировка. На текущем месяце пилюли «Сегодня» нет, стрелка «›»
+погашена (max = текущий месяц). Память месяца: закрыл на октябре — открыл на октябре
+(<code>gymCalMonth</code>).</p>
 <p class="note legend">
   <span class="li"><span class="lg-dot"></span> 1 тренировка</span>
   <span class="li"><span class="lg-dot"></span><span class="lg-dot"></span> 2 тренировки</span>
@@ -364,13 +363,8 @@ body.page {
   <span class="li"><span class="lg-today">9</span> сегодня</span>
 </p>
 <div class="phone"><div class="p">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
   <div class="content">
-    <div class="seg" role="group" aria-label="Вид истории">
-      <button class="seg-btn" aria-pressed="false">Список</button>
-      <button class="seg-btn on" aria-pressed="true">Календарь</button>
-    </div>
-
     <div class="glass cal">
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
@@ -441,15 +435,11 @@ body.page {
 <p class="note">Тап по дню с 2+ тренировками <b>не</b> открывает модалку — под сеткой
 появляется инлайн-панель этого дня: дата, счётчик, строки тренировок по времени.
 Ячейка 8-го подсвечена (<code>.sel</code>). Тап по строке — карточка тренировки
-(<code>openHistory</code>), тап по другому дню — панель перерисовывается на месте.</p>
+(<code>openHistory</code>), «Назад» backbar'а возвращает в календарь на тот же месяц;
+тап по другому дню — панель перерисовывается на месте.</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
   <div class="content">
-    <div class="seg" role="group" aria-label="Вид истории">
-      <button class="seg-btn" aria-pressed="false">Список</button>
-      <button class="seg-btn on" aria-pressed="true">Календарь</button>
-    </div>
-
     <div class="glass cal">
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
@@ -516,20 +506,16 @@ body.page {
 <!-- ================================================================== -->
 <!-- 04 · Пустой месяц (тёмная)                                         -->
 <!-- ================================================================== -->
-<div class="caption">04 · Пустой месяц · октябрь 2026 <span>пустота + «Сегодня»</span></div>
-<p class="note">Пользователь пропустил октябрь: точек нет, честный текст пустоты +
-подсказка с датой первой тренировки (26.09 — она же граница: на сентябре «‹» погаснет,
-лимит листания = месяц первой тренировки, спека §7.1). Обе стрелки здесь активны:
-«‹» → сентябрь с данными, «›» → ноябрь (текущий). Пилюля <b>«Сегодня»</b> появляется
-только когда просматриваемый месяц не текущий.</p>
+<div class="caption">04 · Пустой месяц · октябрь 2026 <span>«Предыдущая тренировка»</span></div>
+<p class="note">Формулировка владельца [S6-update 09.11]: «В октябре тренировок не
+было.» + дата <b>последней тренировки ДО начала месяца</b>. В примере сентябрь имел
+и 26-е, и 29-е — поэтому подсказка честно показывает <b>29 сентября</b> (а не первую
+за сентябрь). Пилюля <b>«Сегодня»</b> — месяц не текущий. Обе стрелки активны:
+«‹» → сентябрь (предел листания назад — <b>фиксированный январь 2020</b>, до него
+далеко), «›» → ноябрь.</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
   <div class="content">
-    <div class="seg" role="group" aria-label="Вид истории">
-      <button class="seg-btn" aria-pressed="false">Список</button>
-      <button class="seg-btn on" aria-pressed="true">Календарь</button>
-    </div>
-
     <div class="glass cal">
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
@@ -568,8 +554,8 @@ body.page {
         <button class="cal-d"><span class="n">30</span></button><button class="cal-d"><span class="n">31</span></button>
         <div class="cal-blank" aria-hidden="true"></div>
       </div>
-      <div class="calempty">В октябре тренировок не было</div>
-      <div class="calhint">Первая тренировка — 26 сентября</div>
+      <div class="calempty">В октябре тренировок не было.</div>
+      <div class="calhint">Предыдущая тренировка — 29 сентября</div>
       <button class="cal-today">Сегодня</button>
     </div>
   </div>
@@ -583,20 +569,86 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 05 · Светлая тема                                                  -->
+<!-- 05 · Ноль тренировок (тёмная)                                      -->
 <!-- ================================================================== -->
-<div class="caption">05 · Календарь · светлая тема <span>Amber Glass light</span></div>
+<div class="caption">05 · Календарь · ноль тренировок <span>«Пока нет тренировок»</span></div>
+<p class="note">Календарь доступен и при полностью пустой истории: кнопка в topbar
+есть всегда на Истории (topbar единообразен, отдельная ветка не нужна), hero
+«Пока пусто 💪» в списке не меняется. Текст <b>«Пока нет тренировок»</b> — без
+второй строки (§12 спеки). Стрелка «›» погашена (max = текущий месяц), «‹» активна —
+предел фиксированный (январь 2020), хотя листать нечего.</p>
+<div class="phone"><div class="p">
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="content">
+    <div class="glass cal">
+      <div class="cal-nav">
+        <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+        <div class="cal-title">Ноябрь 2026</div>
+        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+        <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <button class="cal-d"><span class="n">1</span></button>
+
+        <button class="cal-d"><span class="n">2</span></button>
+        <button class="cal-d"><span class="n">3</span></button>
+        <button class="cal-d"><span class="n">4</span></button>
+        <button class="cal-d"><span class="n">5</span></button>
+        <button class="cal-d"><span class="n">6</span></button>
+        <button class="cal-d"><span class="n">7</span></button>
+        <button class="cal-d"><span class="n">8</span></button>
+
+        <button class="cal-d"><span class="n">9</span></button>
+        <button class="cal-d"><span class="n">10</span></button>
+        <button class="cal-d"><span class="n">11</span></button>
+        <button class="cal-d"><span class="n">12</span></button>
+        <button class="cal-d"><span class="n">13</span></button>
+        <button class="cal-d"><span class="n">14</span></button>
+        <button class="cal-d"><span class="n">15</span></button>
+
+        <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
+        <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+        <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
+        <button class="cal-d"><span class="n">22</span></button>
+
+        <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
+        <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+        <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
+        <button class="cal-d"><span class="n">29</span></button>
+
+        <button class="cal-d"><span class="n">30</span></button>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+      </div>
+      <div class="calempty">Пока нет тренировок</div>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 06 · Светлая тема                                                  -->
+<!-- ================================================================== -->
+<div class="caption">06 · Календарь · светлая тема <span>Amber Glass light</span></div>
 <p class="note">Все цвета — существующие токены обеих тем (<code>--glow</code>,
 <code>--glowbrd</code>, <code>--nested</code>, <code>--accent</code>), новых
-CSS-переменных не нужно. Янтарные точки читаются на светлой теме без изменений.</p>
+CSS-переменных не нужно. Янтарные точки читаются на светлой теме без изменений,
+кнопки topbar'а — тот же <code>.tb-user</code>.</p>
 <div class="phone"><div class="p light">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
   <div class="content">
-    <div class="seg" role="group" aria-label="Вид истории">
-      <button class="seg-btn" aria-pressed="false">Список</button>
-      <button class="seg-btn on" aria-pressed="true">Календарь</button>
-    </div>
-
     <div class="glass cal">
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
@@ -655,21 +707,17 @@ CSS-переменных не нужно. Янтарные точки читаю
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 06 · 320px-регресс (тёмная)                                        -->
+<!-- 07 · 320px-регресс (тёмная)                                        -->
 <!-- ================================================================== -->
-<div class="caption">06 · Регресс 320px <span>узкий экран</span></div>
+<div class="caption">07 · Регресс 320px <span>узкий экран</span></div>
 <p class="note">Контент ≈ 296px → ячейка ≈ 37px при <code>min-height: 44px</code>
 (тап-таргет сохранён), точки 5px читаются. Заголовок месяца «Ноябрь 2026» и пара
-стрелок помещаются в одну строку; сегмент — две половины на всю ширину. Проверить
-на коде также «Декабрь 2025» — самый длинный заголовок.</p>
+стрелок помещаются в одну строку; topbar с <b>двумя кнопками</b> (календарь +
+шестерёнка) тоже — заголовок при нехватке места режется ellipsis. Проверить на коде
+также «Декабрь 2025» — самый длинный заголовок месяца.</p>
 <div class="phone small"><div class="p">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
-    <div class="seg" role="group" aria-label="Вид истории">
-      <button class="seg-btn" aria-pressed="false">Список</button>
-      <button class="seg-btn on" aria-pressed="true">Календарь</button>
-    </div>
-
     <div class="glass cal">
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
