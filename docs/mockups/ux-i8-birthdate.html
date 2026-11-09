@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-I8] #64 · Дата рождения (год+месяц) вместо возраста · Amber Glass · v2 select</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+.upd { color: #ffc220; font-weight: 700; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    /* тёмная тема (базовая) — значения из web/style.css */
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28); --glow: rgba(255,194,32,.08);
+    --nested: rgba(0,0,0,.18); --nestedbrd: rgba(255,255,255,.05);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    --field: rgba(0,0,0,.22); --fieldbrd: rgba(255,255,255,.12);
+    --cardshadow: rgba(0,0,0,.28); --blik: rgba(255,255,255,.06);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+/* ============ каркас экрана ============ */
+.topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 10px 12px; margin: 4px 0 12px;
+}
+.tb-title { font-weight: 700; font-size: 17px; letter-spacing: .2px; }
+.tbtn {
+    width: 32px; height: 32px; border-radius: 9px; border: none; flex: none; cursor: pointer;
+    background: var(--btn); color: var(--muted);
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.tbtn svg { width: 18px; height: 18px; }
+.content { padding: 0 12px 120px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 40;
+    margin: 0 -12px; padding: 8px 14px 12px;
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { display: inline-flex; line-height: 1; }
+.nav .nic svg { width: 20px; height: 20px; color: inherit; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px;
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+.nav .nfab svg { width: 24px; height: 24px; }
+
+/* ============ карточки / текст / кнопки (Amber Glass) ============ */
+.card {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-bottom: 10px;
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow);
+}
+.t1 { margin: 0 0 4px; font-weight: 700; font-size: 16px; }
+.meta { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+.meta + .meta { margin-top: 3px; }
+.flabel { font-size: 11px; font-weight: 600; color: var(--muted); margin: 8px 0 4px; white-space: nowrap; }
+.hr { height: 1px; background: var(--nestedbrd); margin: 10px 0; }
+
+.btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 10px 14px; border-radius: 13px; border: 1px solid var(--btnbrd);
+    background: var(--btn); color: var(--text); font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit; min-height: 40px;
+}
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-color: transparent;
+    box-shadow: 0 6px 18px rgba(255,194,32,.22);
+}
+
+/* сегмент пола */
+.sexrow { display: flex; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; border-radius: 11px; overflow: hidden; border: 1px solid var(--btnbrd); }
+.seg .seg-btn {
+    border: none; background: var(--btn); color: var(--muted);
+    min-width: 46px; height: 34px; font-weight: 700; font-size: 13px; cursor: pointer;
+}
+.seg .seg-btn.on {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+}
+
+/* prow: рост/вес/сохранить (как в web) */
+.prow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+.prow .pf { flex: 1 1 0; min-width: 58px; }
+.prow .pf label { display: block; margin: 6px 0 3px; font-size: 11px; white-space: nowrap; color: var(--muted); font-weight: 600; }
+.prow .pf input {
+    width: 100%; padding: 8px; height: 40px; text-align: center; font-size: 15px;
+    border-radius: 12px; border: 1px solid var(--fieldbrd); background: var(--field);
+    color: var(--text); font-family: inherit;
+}
+.prow .pfsave { flex: 1 1 100%; }
+
+/* ==== [UX-I8] карточка «Дата рождения» — [I8-update 09.11]:
+       два нативных select в ряд, стиль = .prow .pf (лейбл 11px, --field,
+       --fieldbrd, радиус 12px, высота 40px — референс владельца: «Рост, см»
+       и «Вес, кг» бок о бок) ==== */
+.brow { display: flex; align-items: flex-start; gap: 6px; margin-top: 2px; }
+.brow .bf { flex: 1 1 0; min-width: 0; }
+.bf label { display: block; margin: 6px 0 3px; font-size: 11px; white-space: nowrap; color: var(--muted); font-weight: 600; }
+.bf select {
+    width: 100%; height: 40px; padding: 8px 24px 8px 10px; font-size: 15px; font-family: inherit;
+    border-radius: 12px; border: 1px solid var(--fieldbrd); background-color: var(--field);
+    color: var(--text); cursor: pointer;
+    text-align: center; text-align-last: center;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa0aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center;
+}
+.bf select.ph { color: var(--muted); }
+.bf select.err { border-color: var(--danger); box-shadow: 0 0 0 1px rgba(255,107,94,.35); }
+.bage { font-size: 12.5px; color: var(--accent); font-weight: 600; margin: 8px 0 0; }
+
+/* плашка-подсказка миграции (age-only) */
+.hint {
+    display: flex; gap: 8px; align-items: flex-start;
+    background: var(--glow); border: 1px solid var(--glowbrd); border-radius: 12px;
+    padding: 9px 11px; margin-top: 10px; font-size: 12.5px; color: var(--text); line-height: 1.4;
+}
+.hint .hico { flex: none; font-size: 14px; line-height: 1.2; }
+
+/* бейдж месяца рождения */
+.bdg {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,194,32,.12); border: 1px solid var(--glowbrd);
+    border-radius: 999px; padding: 4px 11px; margin-top: 8px;
+    font-size: 12.5px; font-weight: 600; color: var(--accent);
+}
+
+/* тост */
+.toast {
+    position: absolute; left: 50%; bottom: 88px; transform: translate(-50%, 8px);
+    background: rgba(36,39,45,.94); color: var(--text);
+    border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+    padding: 9px 14px; font-size: 13px; font-weight: 600;
+    max-width: 84%; text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,.45); opacity: 1; z-index: 60;
+}
+.toast.err { background: var(--danger); color: #fff; border-color: transparent; }
+
+/* ==== бот: чат + клавиатура ==== */
+.chat { padding: 4px 0; }
+.msg {
+    max-width: 84%; border-radius: 14px; padding: 9px 12px; font-size: 13.5px;
+    line-height: 1.45; margin-bottom: 8px; white-space: pre-line;
+}
+.msg.bot { background: var(--glass); border: 1px solid var(--glassbrd); border-top-left-radius: 5px; }
+.msg.user {
+    margin-left: auto; background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-top-right-radius: 5px; font-weight: 600;
+}
+.msg .kb {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 9px;
+}
+.msg .kb button {
+    border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.07);
+    color: var(--text); font-size: 13px; font-weight: 600; padding: 9px 0;
+    cursor: pointer; font-family: inherit;
+}
+.msg .kb button.wide { grid-column: 1 / -1; }
+.msg .kb button.hit { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: var(--on-accent); border-color: transparent; }
+
+/* палитра-вынос */
+.pal { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.swatch { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: #7d838e; }
+.swatch i { width: 22px; height: 22px; border-radius: 7px; display: inline-block; border: 1px solid rgba(255,255,255,.14); }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+<div style="margin: 6px 2px 4px; font-size: 21px; font-weight: 800; color: #f2f3f5;">[UX-I8] Дата рождения: год + месяц вместо возраста</div>
+<div class="note"><span class="upd">Редакция 2 · [I8-update 09.11]</span> — макет v1 (текстовый год + чипы) владелец НЕ одобрил: ввод — <b>два нативных select в ряд</b> в стиле полей «Рост, см / Вес, кг», минимальный возраст <b>5 лет</b> (годы 2021→1930 для 2026). Спецификация: <code>docs/spec-ux-i8-birthdate.md</code> · issue #64 · Amber Glass, тёмная тема, 390px. Возраст вычисляется на 1-е число месяца рождения; день не собирается (приватность).</div>
+
+<!-- ================= 1. Профиль: дата указана ================= -->
+<div class="caption">1 · Профиль — дата указана <span>целевой вид · [I8-update]</span></div>
+<div class="note">Пользователь 1990-11 (ноябрь). Год и месяц — <b>два select в ряд</b>, стиль повторяет поля «Рост, см / Вес, кг» (лейбл над полем, тёмная заливка, скругление, та же высота 40px — референс-скрин владельца). Список годов — <b>по убыванию</b>: от 2021 (5 лет) до 1930; месяц — полные имена. Тап открывает системный пикер. Саммари: вычисленный возраст <b>36 лет</b>, бейдж «🎂 в этом месяце» (сейчас ноябрь). Карточка рост/вес — <b>без поля «Возраст»</b>.</div>
+<div class="phone"><div class="p">
+    <div class="topbar">
+        <div class="tb-title">GymHelper · Профиль</div>
+        <button class="tbtn" title="Настройки" aria-label="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+    </div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">Профиль</p>
+            <p class="meta">Алексей</p>
+            <p class="meta">М · 36 лет · 178 см · 78,5 кг</p>
+            <p class="meta">BMR ≈ 1723 ккал/сут (Mifflin-St Jeor)</p>
+            <div class="bdg">🎂 Твой день рождения в этом месяце</div>
+        </div>
+        <div class="card">
+            <div class="sexrow"><p class="t1" style="margin:0;">Пол</p>
+                <div class="seg" role="group" aria-label="Пол">
+                    <button class="seg-btn on">М</button>
+                    <button class="seg-btn">Ж</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="flabel" style="margin-top:0;">Дата рождения</div>
+            <div class="brow">
+                <div class="bf"><label for="y1">Год рождения</label>
+                    <select id="y1"><option>1990</option></select></div>
+                <div class="bf"><label for="m1">Месяц рождения</label>
+                    <select id="m1"><option>Ноябрь</option></select></div>
+            </div>
+            <p class="bage">Возраст: 36 лет</p>
+            <p class="meta">Возраст пересчитается сам · день не нужен</p>
+            <p class="meta">Хранится вместе с дневником · политика — в ⚙️ Настройках</p>
+            <div class="hr"></div>
+            <div class="prow" style="margin-top:4px;">
+                <div class="pf"><label>Рост, см</label><input value="178"></div>
+                <div class="pf"><label>Вес, кг</label><input value="78,5"></div>
+                <button class="btn pfsave">💾 Сохранить</button>
+            </div>
+        </div>
+        <div class="card">
+            <p class="t1">⭐ Любимые упражнения</p>
+            <p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>
+            <div style="margin-top:8px;"><button class="btn" style="width:100%;">Открыть в технике</button></div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>История</button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg></span>Статистика</button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>Техника</button>
+        <button class="nbtn on"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c1.5-3.6 4-5.4 7-5.4s5.5 1.8 7 5.4"/></svg></span>Профиль</button>
+    </div>
+</div></div>
+
+<!-- ================= 2. Ввод в процессе ================= -->
+<div class="caption">2 · Ввод в процессе <span>год выбран, месяц — «Выбрать…»</span></div>
+<div class="note">Живая строка возраста скрыта, пока пара неполная. Новый пользователь (профиля ещё нет): саммари зовёт заполнить. Сохранение заблокирует частичный ввод тостом «Укажи и год, и месяц…» (см. экран 5).</div>
+<div class="phone"><div class="p">
+    <div class="topbar">
+        <div class="tb-title">GymHelper · Профиль</div>
+        <button class="tbtn" aria-label="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+    </div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">Профиль</p>
+            <p class="meta">Нужен для расчёта калорий 🔥</p>
+        </div>
+        <div class="card">
+            <div class="sexrow"><p class="t1" style="margin:0;">Пол</p>
+                <div class="seg" role="group" aria-label="Пол">
+                    <button class="seg-btn on">М</button>
+                    <button class="seg-btn">Ж</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="flabel" style="margin-top:0;">Дата рождения</div>
+            <div class="brow">
+                <div class="bf"><label for="y2">Год рождения</label>
+                    <select id="y2"><option>1985</option></select></div>
+                <div class="bf"><label for="m2">Месяц рождения</label>
+                    <select id="m2" class="ph"><option>Выбрать…</option></select></div>
+            </div>
+            <p class="meta">Выбери месяц — и возраст посчитается сам</p>
+            <div class="hr"></div>
+            <div class="prow" style="margin-top:4px;">
+                <div class="pf"><label>Рост, см</label><input placeholder="180"></div>
+                <div class="pf"><label>Вес, кг</label><input placeholder="80"></div>
+                <button class="btn pfsave">💾 Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>История</button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg></span>Статистика</button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>Техника</button>
+        <button class="nbtn on"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c1.5-3.6 4-5.4 7-5.4s5.5 1.8 7 5.4"/></svg></span>Профиль</button>
+    </div>
+</div></div>
+
+<!-- ================= 3. Новый пользователь ================= -->
+<div class="caption">3 · Новый пользователь <span>оба поля «не указано»</span></div>
+<div class="note">Плейсхолдер-опции: год — <b>«—»</b>, месяц — <b>«Выбрать…»</b> (текст цвета <code>--muted</code>). Для нового профиля дата рождения обязательна — без неё сохранение отклоняется тостом (расчёт BMR невозможен).</div>
+<div class="phone"><div class="p">
+    <div class="topbar">
+        <div class="tb-title">GymHelper · Профиль</div>
+        <button class="tbtn" aria-label="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+    </div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">Профиль</p>
+            <p class="meta">Нужен для расчёта калорий 🔥</p>
+        </div>
+        <div class="card">
+            <div class="sexrow"><p class="t1" style="margin:0;">Пол</p>
+                <div class="seg" role="group" aria-label="Пол">
+                    <button class="seg-btn on">М</button>
+                    <button class="seg-btn">Ж</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="flabel" style="margin-top:0;">Дата рождения</div>
+            <div class="brow">
+                <div class="bf"><label for="y3">Год рождения</label>
+                    <select id="y3" class="ph"><option>—</option></select></div>
+                <div class="bf"><label for="m3">Месяц рождения</label>
+                    <select id="m3" class="ph"><option>Выбрать…</option></select></div>
+            </div>
+            <p class="meta">Возраст пересчитается сам · день не нужен</p>
+            <div class="hr"></div>
+            <div class="prow" style="margin-top:4px;">
+                <div class="pf"><label>Рост, см</label><input placeholder="180"></div>
+                <div class="pf"><label>Вес, кг</label><input placeholder="80"></div>
+                <button class="btn pfsave">💾 Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>История</button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg></span>Статистика</button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>Техника</button>
+        <button class="nbtn on"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c1.5-3.6 4-5.4 7-5.4s5.5 1.8 7 5.4"/></svg></span>Профиль</button>
+    </div>
+</div></div>
+
+<!-- ================= 4. Legacy: только возраст ================= -->
+<div class="caption">4 · Legacy-профиль (только age) <span>мягкая миграция</span></div>
+<div class="note">Старый файл читается как есть: возраст показан из <code>age</code> (31 год), автоподстановки года нет — «миграция не молча». Плашка просит указать дату; сохранение веса <b>без даты разрешено</b> (подсказка остаётся до заполнения).</div>
+<div class="phone"><div class="p">
+    <div class="topbar">
+        <div class="tb-title">GymHelper · Профиль</div>
+        <button class="tbtn" aria-label="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+    </div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">Профиль</p>
+            <p class="meta">М · 31 год · 190 см · 95 кг</p>
+            <p class="meta">BMR ≈ 1988 ккал/сут (Mifflin-St Jeor)</p>
+        </div>
+        <div class="card">
+            <div class="sexrow"><p class="t1" style="margin:0;">Пол</p>
+                <div class="seg" role="group" aria-label="Пол">
+                    <button class="seg-btn on">М</button>
+                    <button class="seg-btn">Ж</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="flabel" style="margin-top:0;">Дата рождения</div>
+            <div class="brow">
+                <div class="bf"><label for="y4">Год рождения</label>
+                    <select id="y4" class="ph"><option>—</option></select></div>
+                <div class="bf"><label for="m4">Месяц рождения</label>
+                    <select id="m4" class="ph"><option>Выбрать…</option></select></div>
+            </div>
+            <div class="hint"><span class="hico">🎂</span><span>Укажи год и месяц рождения — возраст станет обновляться сам</span></div>
+            <p class="meta">Возраст пересчитается сам · день не нужен</p>
+            <div class="hr"></div>
+            <div class="prow" style="margin-top:4px;">
+                <div class="pf"><label>Рост, см</label><input value="190"></div>
+                <div class="pf"><label>Вес, кг</label><input value="95"></div>
+                <button class="btn pfsave">💾 Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>История</button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg></span>Статистика</button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>Техника</button>
+        <button class="nbtn on"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c1.5-3.6 4-5.4 7-5.4s5.5 1.8 7 5.4"/></svg></span>Профиль</button>
+    </div>
+</div></div>
+
+<!-- ================= 5. Частичный ввод: ошибка сохранения ================= -->
+<div class="caption">5 · Частичный ввод <span>ошибка сохранения · [I8-update]</span></div>
+<div class="note">Год 1985 выбран, месяц «—» → тост «Укажи и год, и месяц…», оба select с рамкой <code>--danger</code>. Выход за диапазон <b>невозможен</b>: список годов содержит только допустимые (2021…1930 = возраст 5–96 лет); защитная проверка 5–100 остаётся на сервере и в боте. Сохранение заблокировано, дата из профиля не тронута.</div>
+<div class="phone"><div class="p">
+    <div class="topbar">
+        <div class="tb-title">GymHelper · Профиль</div>
+        <button class="tbtn" aria-label="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+    </div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">Профиль</p>
+            <p class="meta">М · 36 лет · 178 см · 78,5 кг</p>
+            <p class="meta">BMR ≈ 1723 ккал/сут (Mifflin-St Jeor)</p>
+        </div>
+        <div class="card">
+            <div class="sexrow"><p class="t1" style="margin:0;">Пол</p>
+                <div class="seg" role="group" aria-label="Пол">
+                    <button class="seg-btn on">М</button>
+                    <button class="seg-btn">Ж</button>
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="flabel" style="margin-top:0;">Дата рождения</div>
+            <div class="brow">
+                <div class="bf"><label for="y5">Год рождения</label>
+                    <select id="y5" class="err"><option>1985</option></select></div>
+                <div class="bf"><label for="m5">Месяц рождения</label>
+                    <select id="m5" class="ph err"><option>Выбрать…</option></select></div>
+            </div>
+            <div class="hr"></div>
+            <div class="prow" style="margin-top:4px;">
+                <div class="pf"><label>Рост, см</label><input value="178"></div>
+                <div class="pf"><label>Вес, кг</label><input value="78,5"></div>
+                <button class="btn pfsave">💾 Сохранить</button>
+            </div>
+        </div>
+    </div>
+    <div class="toast err">Укажи и год, и месяц — или выбери „—“ в обоих полях</div>
+    <div class="nav">
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>История</button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 20v-8M12 20V5M19 20v-5"/></svg></span>Статистика</button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6M8 7v10M16 7v10M20 9v6M8 12h8"/></svg></span>Техника</button>
+        <button class="nbtn on"><span class="nic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c1.5-3.6 4-5.4 7-5.4s5.5 1.8 7 5.4"/></svg></span>Профиль</button>
+    </div>
+</div></div>
+
+<!-- ================= 6. Бот: сценарий ввода года ================= -->
+<div class="caption">6 · Бот: ввод года одной строкой + клавиатура месяцев <span>сценарий</span></div>
+<div class="note">Формат строки прежний «пол X рост вес»: X <b>5–100</b> = возраст (как раньше; [I8-update 09.11] минимум 5 вместо 10), X 1930–2021 = год рождения (диапазоны не пересекаются: 100 &lt; 1930; год с возрастом &lt; 5 — ошибка диапазона). После год-ввода бот просит месяц кнопками (callback <code>bm:1…bm:12</code>); сохранение — только после выбора месяца. «🏠 Меню» отменяет.</div>
+<div class="phone"><div class="p">
+    <div class="content" style="padding-top:10px;">
+        <div class="chat">
+            <div class="msg bot">⚙️ Профиль
+
+Пол: М · Возраст: 36 лет · Рост: 178 см · Вес: 78,5 кг
+BMR ≈ 1723 ккал/сут (Mifflin-St Jeor)
+
+Введи одной строкой: пол возраст рост вес
+Например: м 30 180 82
+Можно вместо возраста указать год рождения: м 1990 180 82</div>
+            <div class="msg user">м 1990 178 78,5</div>
+            <div class="msg bot">🎂 Год рождения: 1990
+Выбери месяц рождения:
+<div class="kb">
+    <button>Янв</button><button>Фев</button><button>Мар</button><button>Апр</button>
+    <button>Май</button><button>Июн</button><button>Июл</button><button>Авг</button>
+    <button>Сен</button><button>Окт</button><button class="hit">Ноя</button><button>Дек</button>
+    <button class="wide">🏠 Меню</button>
+</div></div>
+            <div class="msg bot">✅ Профиль сохранён
+
+Пол: М · Возраст: 36 лет · Рост: 178 см · Вес: 78,5 кг
+BMR ≈ 1723 ккал/сут (Mifflin-St Jeor)
+
+🎂 Возраст теперь считается по дате рождения и обновляется сам</div>
+            <div class="msg bot">А если ввести возраст при уже заданной дате — пол/рост/вес обновятся, а дата останется:
+«ℹ️ Дата рождения не изменилась — возраст считается по ней (введённый возраст не применён)»</div>
+        </div>
+    </div>
+</div></div>
+
+<!-- ================= 7. Компоненты и палитра ================= -->
+<div class="caption">7 · Компоненты и палитра <span>вынос · [I8-update]</span></div>
+<div class="note">Select = стиль полей «Рост, см / Вес, кг» (<code>.prow .pf</code>): лейбл 11px, фон <code>--field</code>, рамка <code>--fieldbrd</code>, радиус 12px, высота 40px, <code>appearance:none</code> + шеврон <code>--muted</code>; плейсхолдер — текст <code>--muted</code>; бейдж = янтарный тинт <code>rgba(255,194,32,.12)</code> + рамка <code>--glow-brd</code>; плашка = <code>--glow</code>; ошибка = <code>--danger</code>.</div>
+<div class="phone"><div class="p" style="height:auto; min-height:220px;">
+    <div class="content" style="padding-bottom:16px;">
+        <div class="card">
+            <p class="t1">Select года/месяца (стиль Рост/Вес)</p>
+            <div class="brow" style="margin-top:8px;">
+                <div class="bf"><label>Год рождения</label><select><option>1990</option></select></div>
+                <div class="bf"><label>Месяц рождения</label><select class="ph"><option>—</option></select></div>
+            </div>
+            <div class="pal" style="margin-top:10px;">
+                <span class="swatch"><i style="background: rgba(0,0,0,.22);"></i>фон --field</span>
+                <span class="swatch"><i style="background: rgba(255,255,255,.12);"></i>рамка --fieldbrd</span>
+                <span class="swatch"><i style="background: #9aa0aa;"></i>шеврон/плейсхолдер --muted</span>
+            </div>
+        </div>
+        <div class="card">
+            <p class="t1">Бейдж месяца рождения</p>
+            <div class="bdg">🎂 Твой день рождения в этом месяце</div>
+            <div class="pal" style="margin-top:10px;">
+                <span class="swatch"><i style="background: rgba(255,194,32,.12);"></i>фон .12</span>
+                <span class="swatch"><i style="background: rgba(255,194,32,.28);"></i>рамка --glow-brd</span>
+                <span class="swatch"><i style="background: #ffc220;"></i>текст --accent</span>
+            </div>
+        </div>
+        <div class="card">
+            <p class="t1">Плашка миграции и ошибка</p>
+            <div class="hint"><span class="hico">🎂</span><span>Укажи год и месяц рождения — возраст станет обновляться сам</span></div>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap;">
+                <div class="bf" style="flex:0 0 120px;"><label>Год рождения</label><select class="err"><option>1985</option></select></div>
+                <span class="swatch"><i style="background: #ff6b5e;"></i>ошибка --danger</span>
+            </div>
+        </div>
+    </div>
+</div></div>
+
+<div class="note" style="margin-top:18px;">Спецификация: <code>docs/spec-ux-i8-birthdate.md</code> · макет без интерактива (статичный, для согласования; тап по select в реальном приложении открывает системный пикер) · все тексты — финальные формулировки из §12 спеки.</div>
+
+</div>
+</body>
+</html>

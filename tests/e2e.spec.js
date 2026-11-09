@@ -2982,6 +2982,27 @@ test.describe('UX-T29: дата рождения в Профиле', function ()
         }
     });
 
+    /* [UX-T29] §4.5 п.3: валидация рост/вес — вес 500 отклоняется тостом, профиль не записан */
+    test('рост/вес: вес 500 — тост «Проверь значения…», профиль на сервере не изменён', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await expect(page.locator('#pfBirthYear')).toBeVisible({ timeout: 5000 });
+        /* дата валидна — ошибка именно по росту/весу (порядок проверок §4.5: дата → рост/вес) */
+        const now = new Date();
+        await page.locator('#pfBirthYear').selectOption('1990');
+        await page.locator('#pfBirthMonth').selectOption(String(now.getMonth() + 1));
+        await page.locator('#pfHeight').fill('180');
+        await page.locator('#pfWeight').fill('500');
+        await page.locator('[data-act="saveProfile"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Проверь значения: рост 100–250, вес 30–300', { timeout: 5000 });
+        /* профиль на сервере не записан: остался дефолтный legacy (age 30, weight 90), birth-ключей нет */
+        const st = await (await request.get('/api/state')).json();
+        if (!st.profile || st.profile.weight !== 90 || st.profile.age !== 30
+            || st.profile.birthYear !== undefined || st.profile.birthMonth !== undefined) {
+            throw new Error('профиль записался с невалидным весом: ' + JSON.stringify(st.profile));
+        }
+    });
+
     /* §11.5: границы возраста [I8-update 09.11: минимум 5 лет вместо 10] —
        год текущий−5 (5 лет) и 1930 сохраняются без ошибок */
     test('границы возраста: год текущий−5 → ровно 5 лет; год 1930 сохраняется', async ({ page, request }) => {

@@ -131,7 +131,11 @@ public class BotLogicTest {
         pbNext.sex = "м"; pbNext.height = 180; pbNext.weight = 80;
         pbNext.birthYear = todayBD.getYear() - 30;
         pbNext.birthMonth = (todayBD.getMonthValue() % 12) + 1; /* следующий месяц (с заворотом декабря) */
-        check(pbNext.ageOf() == 29, "ageOf: месяц рождения ещё не наступил → 29");
+        /* ожидание считается по правилу ageOf (год−birthYear − (текущийМесяц < birthMonth ? 1 : 0)):
+           месяц больше текущего → 29; в декабре «следующий» = январь, он в текущем году уже
+           прошёл → 30 — без этого ожидания тест падал бы каждый декабрь */
+        int expNext = 30 - (pbNext.birthMonth > todayBD.getMonthValue() ? 1 : 0);
+        check(pbNext.ageOf() == expNext, "ageOf: месяц рождения ещё не наступил → " + expNext);
         ProfileData pLegacyBD = new ProfileData();
         pLegacyBD.sex = "м"; pLegacyBD.age = 44; pLegacyBD.height = 180; pLegacyBD.weight = 80;
         check(pLegacyBD.ageOf() == 44, "ageOf: без даты — статический age");

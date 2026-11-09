@@ -1324,8 +1324,9 @@ public final class BotLogic {
             int curYear = java.time.LocalDate.now().getYear();
             int yearLow = Math.max(1930, curYear - 100);
             boolean ageMode = x >= 5 && x <= 100;
-            /* год новее «текущий − 5» (возраст < 5) распознаётся как год, но даёт ошибку диапазона */
-            boolean yearMode = x >= 1930 && x <= curYear && curYear - x >= 5;
+            /* год новее «текущий − 5» (возраст < 5) распознаётся как год, но даёт ошибку диапазона;
+               низ = yearLow — тот же динамический диапазон, что в тексте ошибки и в вебе */
+            boolean yearMode = x >= yearLow && x <= curYear && curYear - x >= 5;
             if ((!ageMode && !yearMode) || height < 100 || height > 250 || weight < 30 || weight > 300) {
                 send(chatId, mid, "Проверь значения: возраст 5–100 или год рождения " + yearLow + "–" + (curYear - 5)
                     + ", рост 100–250 см, вес 30–300 кг", List.of(List.of(TelegramApi.button("🏠 Меню", "home"))));
