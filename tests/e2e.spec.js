@@ -3374,7 +3374,7 @@ test.describe('UX-S6 календарь', function () {
         const ym2 = monthShift(-2);
         await seedWorkouts(request, [
             workoutAt(1, isoOf(ym2, 26), '09:30:00', '10:30:00', EX),
-            workoutAt(2, isoOf(ym2, 29), '09:30:00', '10:30:00', EX),
+            workoutAt(2, isoOf(ym2, 26), '09:30:00', '10:30:00', EX),
             workoutAt(3, isoDate(now), '09:30:00', '10:30:00', EX)
         ]);
         await openApp(page);
@@ -3487,7 +3487,7 @@ test.describe('UX-S6 календарь', function () {
         const now = new Date();
         const ym2 = monthShift(-2);
         await seedWorkouts(request, [
-            workoutAt(1, isoOf(ym2, 29), '09:30:00', '10:30:00', EX),
+            workoutAt(1, isoOf(ym2, 26), '09:30:00', '10:30:00', EX),
             workoutAt(2, isoDate(now), '09:30:00', '10:30:00', EX)
         ]);
         await openApp(page);
@@ -3495,5 +3495,64 @@ test.describe('UX-S6 календарь', function () {
         await page.locator('[data-act="calPrev"]').click();
         await expect(page.locator('.calempty')).toBeVisible();
         await expect(page.locator('.calhint')).toHaveCount(0);
+    });
+
+    /* ниже — усиление тестировщика сверх 18 кейсов спецификации [§14]: переход через
+       границу годов стрелкой и полая точка активной тренировки ВНЕ сегодняшней клетки */
+    test('§14.19 граница годов: декабрь 2020 → январь 2021 стрелкой и назад, сетка Пн-старт не ломается', async ({ page, request }) => {
+        await seedWorkouts(request, [workoutAt(1, '2020-12-31', '09:30:00', '10:30:00', EX)]);
+        await openApp(page);
+        /* дефолтный месяц = месяц последней тренировки = декабрь 2020 [§7.3] */
+        await openCalendar(page);
+        await expect(page.locator('.cal-title')).toHaveText('Декабрь 2020');
+        /* 1 декабря 2020 — вторник: 1 заглушка (Пн), 31 день, точка на 31-м */
+        await expect(page.locator('.cal-blank')).toHaveCount(1);
+        await expect(page.locator('.cal-d').first()).toHaveAttribute('data-a', '2020-12-01');
+        await expect(page.locator('.cal-d').last()).toHaveAttribute('data-a', '2020-12-31');
+        await expect(page.locator('.cal-d[data-a="2020-12-31"] .dot')).toHaveCount(1);
+        await expect(page.locator('.cal-today')).toBeVisible();
+        await expect(page.locator('[data-act="calPrev"]')).toBeEnabled();
+        /* › через границу года → январь 2021 */
+        await page.locator('[data-act="calNext"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('Январь 2021');
+        /* 1 января 2021 — пятница: 4 заглушки (Пн-Чт) */
+        await expect(page.locator('.cal-blank')).toHaveCount(4);
+        await expect(page.locator('.cal-d').first()).toHaveAttribute('data-a', '2021-01-01');
+        await expect(page.locator('.cal-d').last()).toHaveAttribute('data-a', '2021-01-31');
+        await expect(page.locator('.cal-d.has')).toHaveCount(0);
+        await expect(page.locator('.calempty')).toHaveText('В январе тренировок не было.');
+        await expect(page.locator('.cal-today')).toBeVisible();
+        await expect(page.locator('[data-act="calPrev"]')).toBeEnabled();
+        await expect(page.locator('[data-act="calNext"]')).toBeEnabled();
+        /* gymCalMonth пережил переход года [§7.3] */
+        const saved = await page.evaluate(function () { return localStorage.getItem('gymCalMonth'); });
+        expect(saved).toBe('2021-01');
+        /* ‹ назад через границу → декабрь 2020, точка на месте */
+        await page.locator('[data-act="calPrev"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('Декабрь 2020');
+        await expect(page.locator('.cal-d[data-a="2020-12-31"] .dot')).toHaveCount(1);
+    });
+
+    test('§14.20 полая точка активной тренировки вне сегодняшней клетки: hollow, «идёт тренировка»', async ({ page, request }) => {
+        const now = new Date();
+        const ym = monthShift(-1);
+        const dayPrev = isoOf(ym, 15); /* 15-е число прошлого месяца — никогда не сегодня */
+        await seedWorkouts(request, [
+            { id: 1, date: dayPrev, started: dayPrev + 'T08:00:00', ended: '', finished: false, title: '', nutrition: '',
+                exercises: [{ name: EX, st: dayPrev + 'T08:01:00', en: '', sets: [{ w: '60', s: 2, r: '10', t: dayPrev + 'T08:02:00' }] }] },
+            workoutAt(2, isoDate(now), '09:30:00', '10:30:00', EX)
+        ]);
+        await openApp(page);
+        await openCalendar(page);
+        /* дефолт = текущий месяц (последняя тренировка сегодня) → ‹ в прошлый */
+        await page.locator('[data-act="calPrev"]').click();
+        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[ym.m] + ' ' + ym.y);
+        const cell = page.locator('.cal-d[data-a="' + dayPrev + '"]');
+        await expect(cell).toHaveClass(/has/);
+        await expect(cell).not.toHaveClass(/\btoday\b/);
+        /* ровно одна точка и она полая (finished=false) [§5] */
+        await expect(cell.locator('.dot')).toHaveCount(1);
+        await expect(cell.locator('.dot.hollow')).toHaveCount(1);
+        await expect(cell).toHaveAttribute('aria-label', '15 ' + CAL_MONTHS_GEN[ym.m] + ', идёт тренировка');
     });
 });
