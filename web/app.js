@@ -1711,7 +1711,7 @@ function renderSettings() {
         swToggleHtml(dark, 'setTheme', dark ? 'light' : 'dark', 'Тёмная тема',
             dark ? ICONS.moon : ICONS.sun, dark ? ICONS.sun : ICONS.moon, dark ? 'l' : 'r') + '</div>' +
         '<p class="meta">Без выбора — тема как в клиенте Telegram</p>';
-    h += '<div class="setrow"><span class="lbl">Полноэкранный режим</span>' +
+    h += '<div class="setrow"><span class="lbl">Полноэкранный режим <span class="wip">(в разработке)</span></span>' +
         (fsAvail
             ? swToggleHtml(fullscreenOn(), 'fullscreenToggle', null, 'Полноэкранный режим')
             : '<button class="switch locked" role="switch" aria-checked="' + (fullscreenOn() ? 'true' : 'false') +
@@ -2102,7 +2102,8 @@ function deleteWorkout(id) {
 function openPicker(wid) {
     const w = findW(wid);
     if (!w || w.finished) return; /* [UX-B6] у завершённой тренировки добавления нет */
-    PICKER = { wid, section: 'all', cat: null, q: '' };
+    /* [UX-T30] дефолт — «★ Любимые»; вкладка «Техника» использует свой дефолт «Все» */
+    PICKER = { wid, section: 'fav', cat: null, q: '' };
     renderPickerModal();
 }
 function favsList() {
