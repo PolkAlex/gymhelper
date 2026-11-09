@@ -1731,6 +1731,11 @@ function renderSettings() {
     const presets = [60, 90, 120, 180];
     const off = rs === 0;
     const custom = !off && (REST_CUSTOM || presets.indexOf(rs) < 0);
+    /* [UX-B12] тап «Своё…» при «Выкл» (off) молча ничего не делал: custom = !off && ...
+       глушил флаг REST_CUSTOM — поле не открывалось, выглядело как «некликабельно».
+       customOpen открывает инлайн-поле всегда по явному тапу; подсветка чипа (custom)
+       остаётся честной: при «Выкл» горит «Выкл», пока своё значение не сохранено */
+    const customOpen = custom || REST_CUSTOM;
     h += '<div class="card"><p class="t1">⏱ Таймер отдыха</p>' +
         '<p class="meta">Запускается автоматически после записи подхода; «Выкл» — отсчёт не запускается.</p>' +
         '<div class="chips">' +
@@ -1740,7 +1745,7 @@ function renderSettings() {
         '<button class="chip' + (off ? ' on' : '') + '" data-act="restSet" data-a="0">Выкл</button>' +
         '<button class="chip' + (custom ? ' on' : '') + '" data-act="restCustom">Своё…</button>' +
         '</div>';
-    if (custom) {
+    if (customOpen) {
         h += '<div class="setrow"><span class="lbl">Своё, сек (30–600)</span>' +
             '<input id="restCustomSec" type="number" inputmode="numeric" value="' + rs + '">' +
             '<button class="btn" data-act="restCustomSave">ОК</button></div>';
