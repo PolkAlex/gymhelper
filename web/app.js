@@ -864,8 +864,9 @@ function fullscreenToggle() {
    safeAreaChanged); на старте isFullscreen вендор восстанавливает из sessionStorage
    синхронно. safeAreaInset.top — число px (вендор дублирует в --tg-safe-area-inset-*,
    свойство держим своё — не зависим от наличия API). Переменная ставится ВСЕГДА, поэтому
-   CSS-фолбэк var(--fs-inset-top, 28px) не срабатывает: нет корректного числа от API —
-   пишем сразу 28px (запас для клиентов без safe-area API), есть — фактический inset */
+   CSS-фолбэк не срабатывает: нет корректного числа от API — пишем JS-дефолт top=28,
+   но правило [UX-B11] берёт max(56px, var(--fs-inset-top, 56px)) — фактический
+   минимум остаётся 56px; есть число от API — фактический inset */
 function applyFsChrome() {
     let on = false, top = 28;
     try { on = !!(tg && tg.isFullscreen); } catch (e1) { /* noop */ }
@@ -2082,7 +2083,7 @@ function renderProfileTab() {
         '<div class="bf"><label for="pfBirthMonth">Месяц рождения</label>' +
         '<select id="pfBirthMonth" class="' + (pm ? '' : 'ph') + '">' + monthOpts + '</select></div>' +
         '</div>' +
-        '<p class="bage" id="pfBirthAge"' + (liveAge ? '' : ' style="display:none;"') + '>' + liveAge + '</p>' +
+        '<p class="badg" id="pfBirthAge"' + (liveAge ? '' : ' style="display:none;"') + '>' + liveAge + '</p>' +
         (legacyHint ? '<div class="hint"><span class="hico">🎂</span><span>Укажи год и месяц рождения — возраст станет обновляться сам</span></div>' : '') +
         '<p class="meta">Возраст пересчитается сам · день не нужен</p>' +
         '<p class="meta">Хранится вместе с дневником · политика — в ⚙️ Настройках</p>' +
