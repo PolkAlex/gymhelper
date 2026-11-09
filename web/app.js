@@ -20,6 +20,17 @@ let railOpen = false;
    сохраняется сама (tab не сбрасывается при открытии, viewWid карточки не трогается) —
    «←» (closeSettings) возвращает на неё, тап по табу закрывает Настройки */
 let settingsOpen = false;
+/* [UX-S6] календарь тренировок: подэкран-оверлей как Настройки. calOpen — в памяти,
+   месяц — CAL {y, m, sel}, переживает закрытие через localStorage gymCalMonth [§3.4, §7.3] */
+let calOpen = false;
+let CAL = { y: 0, m: 0, sel: null };
+/* [UX-S6] фиксированные пределы листания месяцев (от данных не зависят) [§7.1] */
+const MIN_MONTH = '2020-01';
+const MAX_MONTH = '2030-12';
+/* [UX-S6] подсказки пустых месяцев («Предыдущая тренировка — <дата>») — ЗАГОТОВКА:
+   ветка рендера написана, но выключена решением владельца 09.11 («скрыто, вернёмся
+   позже»); включение показа — перевести в true [§8, §12, §13] */
+const SHOW_MONTH_HINTS = false;
 /* таймер отдыха [UX-T4]: состояние в localStorage gymRest по абсолютной метке end */
 let REST = null;          /* {end, dur, paused, left, mini, ex} — см. спеку §1.7 */
 let REST_CUSTOM = false;  /* поле «Своё…» в Профиле открыто */
@@ -28,6 +39,10 @@ let __restExpiredFired = false; /* сигнал «истёк» — один ра
 
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+/* [UX-S6] падежные формы месяцев и полные дни недели для календаря [§8, §12] */
+const MONTHS_PREP = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'];
+const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+const DOW_FULL = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
 
 /* старые темы из прошлых версий: маппинг на тёмную/светлую (совместимость localStorage) */
 const OLD_THEME_LIGHT = ['sage', 'peach', 'lavender', 'rose', 'mint', 'ice', 'coffee'];
@@ -875,6 +890,8 @@ const ACTIONS = {
         if (tab === 'history' && viewWid && isDirty()) save();
         /* [UX-T27] тап по любому табу закрывает Настройки и переходит на вкладку [UX-S4 §3] */
         settingsOpen = false;
+        /* [UX-S6] тап по любому табу закрывает и календарь [§3.4] */
+        calOpen = false;
         tab = a; viewWid = 0; render();
     },
     /* [UX-T27] шестерёнка в topbar: экран «Настройки» поверх текущей вкладки [UX-S4 §3] */
@@ -886,6 +903,38 @@ const ACTIONS = {
     closeSettings: function () {
         settingsOpen = false;
         window.scrollTo(0, 0);
+        render();
+    },
+    /* [UX-S6] календарь тренировок — подэкран как Настройки [§3.4]; все смены месяца
+       пишут gymCalMonth [§7.3] */
+    openCal: function () {
+        calOpen = true;
+        calInitMonth();
+        window.scrollTo(0, 0);
+        render();
+    },
+    closeCal: function () {
+        calOpen = false;
+        window.scrollTo(0, 0);
+        render();
+    },
+    calPrev: function () { calShift(-1); },
+    calNext: function () { calShift(1); },
+    calToday: function () {
+        const t = new Date();
+        CAL.y = t.getFullYear();
+        CAL.m = t.getMonth();
+        CAL.sel = null;
+        calSaveMonth();
+        render();
+    },
+    /* тап по дню: 1 тренировка → карточка (calOpen сохраняется — «Назад» backbar'а
+       вернёт в календарь), 2+ → инлайн-панель дня, 0 → ничего [§6] */
+    calDay: function (a) {
+        const list = workoutsByDate()[a] || [];
+        if (!list.length) return;
+        if (list.length === 1) { ACTIONS.openHistory(String(list[0].id)); return; }
+        CAL.sel = CAL.sel === a ? null : a; /* повторный тап — сброс выбора */
         render();
     },
     openHistory: function (a) {
@@ -1000,7 +1049,11 @@ function render() {
     let h = topbarHtml();
     /* [UX-T27] Настройки — подэкран поверх вкладки: контент вкладки и backbar карточки
        тренировки не рендерим, нижняя навигация остаётся [UX-S4 §3] */
+    /* [UX-S6] Календарь — подэкран как Настройки; открытая карточка (viewWid) приоритетнее:
+       openHistory из календаря НЕ сбрасывает calOpen, «← Назад» backbar'а возвращает
+       в календарь с сохранённым месяцем и выбором [§6] */
     if (settingsOpen) h += renderSettings();
+    else if (calVisible()) h += renderCalendar();
     else {
         if (tab === 'history') h += renderHistoryTab();
         if (tab === 'tech') h += renderTechTab();
@@ -1060,6 +1113,11 @@ function navHtml() {
         '<button class="nfab" data-act="startWorkout" title="Начать тренировку">' + ICONS.plus + '</button>' +
         right.map(btn).join('') + '</div>';
 }
+/* [UX-S6] календарь виден как подэкран, если открыт и не перебит карточкой тренировки
+   (viewWid) — карточка из календаря рендерится поверх с своим backbar'ом [§6] */
+function calVisible() {
+    return calOpen && !(tab === 'history' && viewWid);
+}
 function topbarHtml() {
     /* [UX-T27] вкладка profile снова подписывается «Профиль» (артефакт «Настройки» убран);
        точка входа в настройки — шестерёнка на всех вкладках [UX-S4 §3] */
@@ -1069,8 +1127,18 @@ function topbarHtml() {
         return '<div class="topbar"><button class="tb-user" data-act="closeSettings" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
             '<span class="tb-title">GymHelper · Настройки</span></div>';
     }
+    /* [UX-S6] экран календаря: «←» слева (возврат на Историю), справа пусто [§3.4] */
+    if (calOpen && !(tab === 'history' && viewWid)) {
+        return '<div class="topbar"><button class="tb-user" data-act="closeCal" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
+            '<span class="tb-title">GymHelper · Календарь</span></div>';
+    }
     /* [UX-T23] стрелка «←» (tb-back/goBack) убрана: топбар — «GymHelper · <вкладка>» + настройки */
-    return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' +
+    /* [UX-S6] кнопка календаря — только на вкладке История без открытой карточки
+       (Настройки/календарь отсечены выше); календарь СЛЕВА, шестерёнка справа —
+       глобальный якорь мышечной памяти не «прыгает» между экранами [§3.2] */
+    const calBtn = (tab === 'history' && !viewWid) ?
+        '<button class="tb-user" data-act="openCal" title="Календарь" aria-label="Календарь">' + ICONS.calendar + '</button>' : '';
+    return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' + calBtn +
         '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
 }
 
@@ -1178,6 +1246,169 @@ function openHistory(id) {
 /* [UX-T22] «есть несохранённые изменения» = снапшот G на входе в карточку (openHistory)
    разошёлся с текущим состоянием; выход (closeHistory) такой сдвиг тихо сохраняет */
 function isDirty() { return editSnap !== null && editSnap !== JSON.stringify(G); }
+
+/* ---------- [UX-S6] календарь тренировок ---------- */
+function monthIdx(y, m) { return y * 12 + m; }
+/* clamp месяца в [MIN_MONTH, MAX_MONTH] — на случай устаревшего gymCalMonth [§7.1, §10.12] */
+function calClamp(y, m) {
+    const p = MIN_MONTH.split('-'), q = MAX_MONTH.split('-');
+    const lo = monthIdx(+p[0], +p[1] - 1), hi = monthIdx(+q[0], +q[1] - 1);
+    const v = monthIdx(y, m);
+    if (v < lo) return { y: +p[0], m: +p[1] - 1 };
+    if (v > hi) return { y: +q[0], m: +q[1] - 1 };
+    return { y: y, m: m };
+}
+function calSaveMonth() {
+    try { localStorage.setItem('gymCalMonth', CAL.y + '-' + pad2(CAL.m + 1)); } catch (e) { /* noop */ }
+}
+/* начальный месяц openCal [§7.3]: валидный gymCalMonth (clamp) → дефолт «месяц последней
+   тренировки» → текущий; битая строка — игнор; sel сессионный, между открытиями не хранится */
+function calInitMonth() {
+    const t = new Date();
+    let y = t.getFullYear(), m = t.getMonth();
+    let last = null;
+    for (const w of G.workouts) {
+        const d = parseDateISO(w.date);
+        if (d && (!last || d > last)) last = d;
+    }
+    if (last) { y = last.getFullYear(); m = last.getMonth(); }
+    try {
+        const mm = /^(\d{4})-(\d{2})$/.exec(localStorage.getItem('gymCalMonth') || '');
+        if (mm) { y = +mm[1]; m = +mm[2] - 1; }
+    } catch (e) { /* noop */ }
+    const cl = calClamp(y, m);
+    CAL.y = cl.y;
+    CAL.m = cl.m;
+    CAL.sel = null;
+    calSaveMonth();
+}
+/* смена месяца стрелками: переход года, clamp на границе, сброс выбора дня [§7.1, §10.9] */
+function calShift(dir) {
+    let y = CAL.y, m = CAL.m + dir;
+    if (m < 0) { m = 11; y--; }
+    if (m > 11) { m = 0; y++; }
+    const cl = calClamp(y, m);
+    if (cl.y !== y || cl.m !== m) return; /* на границе — стрелка disabled, защиты мало не бывает */
+    CAL.y = cl.y;
+    CAL.m = cl.m;
+    CAL.sel = null;
+    calSaveMonth();
+    render();
+}
+/* map тренировок по ISO-датам за один проход O(n): активные тоже попадают (полая
+   точка); тренировки с битой датой — мимо календаря (в списке как раньше) [§8, §10.1] */
+function workoutsByDate() {
+    const byDate = {};
+    for (const w of G.workouts) {
+        const d = parseDateISO(w.date);
+        if (!d) continue;
+        const iso = w.date.slice(0, 10);
+        (byDate[iso] = byDate[iso] || []).push(w);
+    }
+    for (const k in byDate) {
+        byDate[k].sort(function (a, b) {
+            const sa = String(a.started || ''), sb = String(b.started || '');
+            if (sa === sb) return a.id - b.id;
+            return sa < sb ? -1 : 1;
+        });
+    }
+    return byDate;
+}
+/* дата последней тренировки СТРОГО раньше 1-го числа месяца y-m — заготовка подсказки
+   пустого месяца (рендер под SHOW_MONTH_HINTS = false, решение владельца 09.11) [§8] */
+function prevWorkoutBefore(y, m) {
+    const first = new Date(y, m, 1);
+    let best = null;
+    for (const w of G.workouts) {
+        const d = parseDateISO(w.date);
+        if (d && d < first && (!best || d > best)) best = d;
+    }
+    return best;
+}
+/* подпись строки панели дня: первая строка title → первые 2 упражнения с сетами →
+   «Без упражнений» [§6.1] */
+function dayRowName(w) {
+    if (w.title && w.title.trim()) return String(w.title).split('\n')[0].trim();
+    const exs = (w.exercises || []).filter(function (e) { return e.sets.length; });
+    if (exs.length) return exs.slice(0, 2).map(function (e) { return e.name; }).join(' · ');
+    return 'Без упражнений';
+}
+function renderCalendar() {
+    const byDate = workoutsByDate();
+    const now = new Date();
+    const todayIso = todayISO();
+    const minP = MIN_MONTH.split('-'), maxP = MAX_MONTH.split('-');
+    const minIdx = monthIdx(+minP[0], +minP[1] - 1), maxIdx = monthIdx(+maxP[0], +maxP[1] - 1);
+    const curIdx = monthIdx(now.getFullYear(), now.getMonth());
+    const viewIdx = monthIdx(CAL.y, CAL.m);
+    const chevL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>';
+    const chevR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg>';
+    let h = '<div class="card cal">';
+    /* шапка месяца: ‹ заголовок ›; на границе — dim + disabled [§4.1, §7.1] */
+    const atMin = viewIdx <= minIdx, atMax = viewIdx >= maxIdx;
+    h += '<div class="cal-nav">' +
+        '<button class="cal-navbtn' + (atMin ? ' dim' : '') + '" data-act="calPrev" title="Предыдущий месяц" aria-label="Предыдущий месяц"' + (atMin ? ' disabled aria-disabled="true"' : '') + '>' + chevL + '</button>' +
+        '<div class="cal-title">' + MONTHS_FULL[CAL.m] + ' ' + CAL.y + '</div>' +
+        '<button class="cal-navbtn' + (atMax ? ' dim' : '') + '" data-act="calNext" title="Следующий месяц" aria-label="Следующий месяц"' + (atMax ? ' disabled aria-disabled="true"' : '') + '>' + chevR + '</button>' +
+        '</div>';
+    /* сетка: Пн-старт, смежные дни — пустые заглушки [§4.2] */
+    h += '<div class="cal-grid">';
+    for (const d of DOW) h += '<div class="cal-dow">' + d + '</div>';
+    const lead = (new Date(CAL.y, CAL.m, 1).getDay() + 6) % 7;
+    for (let i = 0; i < lead; i++) h += '<div class="cal-blank" aria-hidden="true"></div>';
+    const daysInMonth = new Date(CAL.y, CAL.m + 1, 0).getDate();
+    const monthPrefix = CAL.y + '-' + pad2(CAL.m + 1) + '-';
+    for (let d = 1; d <= daysInMonth; d++) {
+        const iso = monthPrefix + pad2(d);
+        const list = byDate[iso] || [];
+        const isToday = iso === todayIso;
+        const isSel = CAL.sel === iso;
+        let dots = '';
+        if (list.length) {
+            dots = '<span class="cal-dots">';
+            for (const w of list.slice(0, 3)) dots += '<i class="dot' + (w.finished ? '' : ' hollow') + '"></i>';
+            dots += '</span>';
+        }
+        const going = list.length === 1 && !list[0].finished;
+        const aria = list.length ? ' aria-label="' + d + ' ' + MONTHS_GEN[CAL.m] + ', ' + (going ? 'идёт тренировка' : list.length + ' ' + trainWord(list.length)) + '"' : '';
+        h += '<button class="cal-d' + (list.length ? ' has' : '') + (isToday ? ' today' : '') + (isSel ? ' sel' : '') + '" data-act="calDay" data-a="' + iso + '"' + aria + '>' +
+            '<span class="n">' + d + '</span>' + dots + '</button>';
+    }
+    h += '</div>';
+    /* инлайн-панель дня при выборе дня с 2+ тренировками [§6.1] */
+    if (CAL.sel && CAL.sel.indexOf(monthPrefix) === 0) {
+        const list = byDate[CAL.sel] || [];
+        if (list.length > 1) {
+            const dd = parseDateISO(CAL.sel);
+            h += '<div class="daypanel" aria-live="polite">';
+            h += '<div class="dph"><span>' + DOW_FULL[(dd.getDay() + 6) % 7] + ', ' + dd.getDate() + ' ' + MONTHS_GEN[CAL.m] + '</span><span class="cnt">' + list.length + ' ' + trainWord(list.length) + '</span></div>';
+            for (const w of list) {
+                const tm = w.started ? ((w.finished && w.ended) ? String(w.started).slice(11, 16) + '–' + String(w.ended).slice(11, 16) : 'с ' + String(w.started).slice(11, 16)) : '—';
+                const sets = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
+                h += '<button class="drow" data-act="openHistory" data-a="' + w.id + '">' +
+                    '<span class="tm">' + tm + '</span>' +
+                    '<span class="nm">' + esc(dayRowName(w)) + '</span>' +
+                    (w.finished ? '' : '<span class="live">⚫ идёт</span>') +
+                    '<span class="st">🏋 ' + sets + '</span></button>';
+            }
+            h += '</div>';
+        }
+    }
+    /* пустой месяц [§12]: честный текст (+ ЗАГОТОВКА подсказки под SHOW_MONTH_HINTS) */
+    if (!Object.keys(byDate).some(function (iso) { return iso.indexOf(monthPrefix) === 0; })) {
+        h += '<div class="calempty">' + (G.workouts.length ? 'В ' + MONTHS_PREP[CAL.m] + ' тренировок не было.' : 'Пока нет тренировок') + '</div>';
+        if (SHOW_MONTH_HINTS && G.workouts.length) {
+            const prev = prevWorkoutBefore(CAL.y, CAL.m);
+            if (prev) h += '<div class="calhint">Предыдущая тренировка — ' + prev.getDate() + ' ' + MONTHS_GEN[prev.getMonth()] + '</div>';
+        }
+    }
+    /* пилюля «Сегодня» — только когда просматриваемый месяц ≠ текущий [§7.2] */
+    if (viewIdx !== curIdx) {
+        h += '<button class="cal-today" data-act="calToday" aria-label="Вернуться к текущему месяцу">Сегодня</button>';
+    }
+    h += '</div>';
+    return h;
+}
 
 /* ---------- карточка тренировки ---------- */
 function workoutCard(w) {
