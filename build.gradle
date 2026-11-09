@@ -51,7 +51,16 @@ tasks.register('contractTest', JavaExec) {
     mainClass = 'GymContractTest'
 }
 
-// проверка: gradlew check -> build + контрактный тест
+// юнит-тесты чистой логики бота [TST-S1]: tests/BotLogicTest.java (пакет gym — доступ
+// к package-private статикам BotLogic/Records без рефлексии)
+tasks.register('botLogicTest', JavaExec) {
+    group = 'verification'
+    description = 'Юнит-тесты логики BotLogic/Records (без Telegram Api).'
+    classpath = sourceSets.contractTest.runtimeClasspath
+    mainClass = 'gym.BotLogicTest'
+}
+
+// проверка: gradlew check -> build + контрактный тест + юнит-тесты логики
 tasks.named('check') {
-    dependsOn 'contractTest'
+    dependsOn 'contractTest', 'botLogicTest'
 }
