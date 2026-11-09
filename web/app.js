@@ -369,7 +369,9 @@ async function doSave() {
             console.error('save rejected 409: server data was deleted');
             toast('Данные были удалены — приложение обновлено', true);
             await reloadSilently(true, true);
-            return 'err';
+            /* [UX-T28] не 'err': свои тосты про «Нет связи» при 409 не показывать —
+               тот уже от doSave; остальные 'err'-путей это не касается */
+            return 'conflict';
         }
         console.error('save failed', r.status);
         toast('Ошибка сохранения: сервер ответил ' + r.status, true);
@@ -1832,7 +1834,8 @@ function startBlank() {
         if (G.nextId < 1) G.nextId = 1;
         G.workouts.push(w);
         save().then(function (r) {
-            if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
+            /* [UX-T28] при 409 (conflict) тост «Данные были удалены...» уже от doSave */
+            if (r === 'err') toast('Нет связи: тренировка сохранится при следующей записи', true);
             /* сразу экран редактирования тренировки (карточка + пикер), а не главный экран */
             openHistory(w.id);
             openPicker(w.id);
@@ -1964,7 +1967,8 @@ function createFromList(t, isRepeat) {
         if (G.nextId < 1) G.nextId = 1;
         G.workouts.push(w);
         save().then(function (r) {
-            if (r !== 'ok') toast('Нет связи: тренировка сохранится при следующей записи', true);
+            /* [UX-T28] при 409 (conflict) тост «Данные были удалены...» уже от doSave */
+            if (r === 'err') toast('Нет связи: тренировка сохранится при следующей записи', true);
             toast((isRepeat ? '🔁 Повтор прошлой тренировки: ' : '📋 Шаблон применён: ')
                 + w.exercises.length + ' ' + tplExWord(w.exercises.length));
             openHistory(w.id);
@@ -2703,8 +2707,11 @@ async function saveTime(wid) {
     if (endVal) w2.ended = endVal;
     else if (!w2.finished) w2.ended = '';
     const r = await save();
-    /* [UX-B9] успех — только при реальном сохранении (ошибку сети уже показал doSave) */
-    if (r === 'ok' && (!errEl || !errEl.textContent)) toast('✓ Сохранено');
+    /* [UX-B9] успех — только при реальном сохранении (ошибку сети уже показал doSave);
+       [UX-T28] при сбое модалка НЕ закрывается — введённое время остаётся для повтора
+       (как в closeHistory [UX-T22]) */
+    if (r !== 'ok') return;
+    if (!errEl || !errEl.textContent) toast('✓ Сохранено');
     closeModal();
     render();
 }
