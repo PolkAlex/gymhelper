@@ -62,6 +62,8 @@ http.createServer(function (req, res) {
                 if (typeof d.restSec === 'number') store.restSec = d.restSec;
                 if (typeof d.nextId === 'number') store.nextId = d.nextId;
                 if (Array.isArray(d.del)) store.del = d.del;
+                /* ⚠️ отличается от прода: прод делает selective-merge birth-полей ([UX-T29]);
+                   мок упрощён — не принимать за контракт */
                 if (d.profile) store.profile = d.profile;
                 store.rev = (store.rev || 0) + 1;
                 sendJson(res, 200, { ok: true, rev: store.rev });
