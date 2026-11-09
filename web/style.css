@@ -1341,6 +1341,169 @@ html.has-bg body::after {
     opacity: .58;
 }
 
+/* ============ календарь тренировок [UX-S6] ============ */
+/* цвета — только существующие токены Amber Glass; источник — макет
+   docs/mockups/ux-s6-calendar.html (§4–7) */
+.cal { padding: 12px 12px 14px; }
+.cal-nav { display: flex; align-items: center; gap: 6px; }
+.cal-navbtn {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    border: 1px solid var(--btn-brd);
+    background: var(--btn);
+    color: var(--text);
+    cursor: pointer;
+    flex: none;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: inherit;
+    -webkit-tap-highlight-color: transparent;
+}
+.cal-navbtn svg { width: 18px; height: 18px; }
+.cal-navbtn:disabled, .cal-navbtn.dim { opacity: .35; cursor: default; }
+.cal-title {
+    flex: 1;
+    text-align: center;
+    font-size: 15.5px;
+    font-weight: 700;
+    letter-spacing: .2px;
+    white-space: nowrap;
+}
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 10px; }
+.cal-dow {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: .5px;
+    padding: 4px 0 6px;
+}
+.cal-d {
+    position: relative;
+    min-height: 44px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+}
+.cal-d .n { line-height: 1; }
+.cal-d.has { cursor: pointer; }
+.cal-d.has:active { background: var(--nested); }
+.cal-dots {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 6px;
+    display: flex;
+    justify-content: center;
+    gap: 3px;
+}
+.dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: block; }
+.dot.hollow { width: 7px; height: 7px; background: transparent; border: 1.5px solid var(--accent); }
+.cal-d.today { background: var(--glow); border-color: var(--glow-brd); }
+.cal-d.today .n { color: var(--accent); font-weight: 700; }
+/* порядок: .sel ниже .today — фон выбора перекрывает фон «сегодня» (§5);
+   рамка «сегодня» при этом остаётся — состояния различимы */
+.cal-d.sel { background: var(--nested); border-color: var(--btn-brd); }
+.cal-d.today.sel { border-color: var(--glow-brd); }
+.cal-blank { min-height: 44px; }
+/* пустой месяц: «В <месяц>…» + пилюля «Сегодня»; подсказка «Предыдущая тренировка» —
+   ЗАГОТОВКА (рендер под SHOW_MONTH_HINTS = false в app.js) [§12] */
+.calempty { text-align: center; color: var(--muted); font-size: 13px; padding: 18px 8px 2px; }
+.calhint { text-align: center; color: var(--muted); font-size: 11.5px; padding: 2px 8px 0; opacity: .85; }
+/* пилюля «Сегодня» (только на не-текущем месяце) [§7.2] */
+.cal-today {
+    display: block;
+    margin: 12px auto 0;
+    background: var(--glow);
+    border: 1px solid var(--glow-brd);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 7px 18px;
+    font-size: 12.5px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+/* панель дня — инлайн под сеткой, не модалка [§6.1] */
+.daypanel {
+    background: var(--nested);
+    border: 1px solid var(--nested-brd);
+    border-radius: 14px;
+    padding: 10px 11px 11px;
+    margin-top: 10px;
+}
+.dph {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--muted);
+}
+.dph .cnt { color: var(--accent); font-size: 12px; white-space: nowrap; }
+.drow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: var(--btn);
+    border: 1px solid var(--btn-brd);
+    border-radius: 12px;
+    padding: 9px 10px;
+    margin-top: 7px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+    text-align: left;
+    -webkit-tap-highlight-color: transparent;
+}
+.drow:active { background: var(--nested); }
+.drow .tm {
+    flex: none;
+    min-width: 74px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.drow .nm {
+    flex: 1;
+    min-width: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.drow .st { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.drow .live {
+    flex: none;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--glow);
+    border: 1px solid var(--glow-brd);
+    border-radius: 999px;
+    padding: 2px 8px;
+    white-space: nowrap;
+}
+
 /* ============ плавные анимации ============ */
 .card, .btn, .chip, .excard, .nav .nbtn, .nav .nfab, .barebtn, .prevpill, .entry, .expill {
     transition: background .22s ease, border-color .22s ease, color .22s ease,
@@ -1369,4 +1532,5 @@ html.has-bg body::after {
 /* все интерактивные элементы — курсор-палец */
 .btn, .chip, .entry, .excard, .star, .nav .nbtn, .nav .nfab, summary, .switch,
 .prevpill, .barebtn, .tb-user, .inwrap .clr, .keyrow .k, .expill .exhead,
-.rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel, .seg .seg-btn { cursor: pointer; }
+.rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel, .seg .seg-btn,
+.cal-d, .drow, .cal-today { cursor: pointer; }
