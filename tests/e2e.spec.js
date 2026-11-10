@@ -3257,6 +3257,33 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-grid')).toHaveCount(0);
     });
 
+    test('§14.2б (доп.) ⚙ с календаря: Настройки поверх календаря; «← Назад» возвращает в календарь, таб закрывает оба', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
+        await openApp(page);
+        await openCalendar(page);
+        await page.locator('[data-act="calPrev"]').click();
+        const prevYm = monthShift(-1);
+        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[prevYm.m] + ' ' + prevYm.y);
+        /* ⚙ на экране календаря → Настройки [S6-update5, §3.4] */
+        await page.locator('.topbar [data-act="openSettings"]').click();
+        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        /* «← Назад» с Настроек — возврат В КАЛЕНДАРЬ (calOpen сохраняется), месяц тот же [§3.4] */
+        await page.locator('.topbar [data-act="closeSettings"]').click();
+        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Календарь');
+        await expect(page.locator('.cal-grid')).toBeVisible();
+        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[prevYm.m] + ' ' + prevYm.y);
+        /* снова ⚙, затем тап нижнего таба: switchTab закрывает и Настройки, и календарь [§3.4] */
+        await page.locator('.topbar [data-act="openSettings"]').click();
+        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await expect(page.locator('.tb-title')).toHaveText('GymHelper · История');
+        await expect(page.locator('.cal-grid')).toHaveCount(0);
+        /* повторное открытие с таба-источника — месяц восстановился из gymCalMonth [§7.3] */
+        await openCalendar(page);
+        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[prevYm.m] + ' ' + prevYm.y);
+    });
+
     test('§14.3 отметки: точки по числу тренировок (1 и 2), завершённые — заливка', async ({ page, request }) => {
         const now = new Date();
         const dayA = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 5);
@@ -3604,6 +3631,35 @@ test.describe('UX-S6 календарь', function () {
         await openCalendar(page);
         await page.locator('[data-act="calPrev"]').click();
         await expect(page.locator('.calempty')).toBeVisible();
+        await expect(page.locator('.calhint')).toHaveCount(0);
+    });
+
+    test('§14.19б (доп.) SHOW_MONTH_HINTS=true (рантайм-патч): подсказка «Предыдущая тренировка — …» появляется, без года', async ({ page, request }) => {
+        /* флаг — const в замыкании app.js, в рантайме не переворачивается: патчим тело
+           app.js в ответе тест-сервера, чтобы рендер-ветка [§14.19] реально отработала */
+        await page.route('**/app.js*', async function (route) {
+            const resp = await route.fetch();
+            const body = (await resp.text()).replace('const SHOW_MONTH_HINTS = false', 'const SHOW_MONTH_HINTS = true');
+            await route.fulfill({ response: resp, body: body });
+        });
+        const now = new Date();
+        const ym2 = monthShift(-2);
+        await seedWorkouts(request, [
+            workoutAt(1, isoOf(ym2, 26), '09:30:00', '10:30:00', EX),
+            workoutAt(2, isoOf(ym2, 29), '09:30:00', '10:30:00', EX),
+            workoutAt(3, isoDate(now), '09:30:00', '10:30:00', EX)
+        ]);
+        await openApp(page);
+        await openCalendar(page);
+        await page.locator('[data-act="calPrev"]').click();
+        const ym1 = monthShift(-1);
+        await expect(page.locator('.calempty')).toHaveText('В ' + CAL_MONTHS_PREP[ym1.m] + ' тренировок не было.');
+        /* подсказка = последняя тренировка до 1-го числа просматриваемого месяца
+           (29-е ym2, не 26-е), формат «<день> <месяц>» БЕЗ года [§14.19] */
+        await expect(page.locator('.calhint')).toHaveText('Предыдущая тренировка — 29 ' + CAL_MONTHS_GEN[ym2.m]);
+        /* пилюля «Сегодня» рядом с подсказкой работает */
+        await page.locator('.cal-today').click();
+        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[now.getMonth()] + ' ' + now.getFullYear());
         await expect(page.locator('.calhint')).toHaveCount(0);
     });
 
