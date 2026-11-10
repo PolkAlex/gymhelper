@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[UX-S6] #162 · Календарь тренировок · редакция 2 · правки S6-update2/S6-update3 09.11 · Amber Glass</title>
+<title>[UX-S6] #162 · Календарь тренировок · редакция 7.3 · правки S6-update6d 10.11 · Amber Glass</title>
 <style>
 /* ============ страница-презентация ============ */
 * { box-sizing: border-box; }
@@ -14,10 +14,11 @@ body.page {
     color: #c9ccd2;
     padding: 28px 12px 90px;
 }
-.stage { max-width: 454px; margin: 0 auto; }
-.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+/* стейдж шире (760px) — экран 0 держит ДВА телефона рядом; подписи/ноты остаются узкой колонкой */
+.stage { max-width: 760px; margin: 0 auto; }
+.caption { margin: 42px auto 12px; max-width: 520px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
 .caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
-.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.6; }
+.note { margin: -6px auto 14px; max-width: 520px; font-size: 12.5px; color: #7d838e; line-height: 1.6; }
 .note b { color: #a9aeb8; font-weight: 600; }
 .note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
@@ -30,6 +31,15 @@ body.page {
     border-radius: 6px; border: 1px solid rgba(255,194,32,.4); background: rgba(255,194,32,.1);
     color: #ffc220; font-size: 11px; font-weight: 700;
 }
+/* пара телефонов «ДО / ПОСЛЕ» [S6-update4 §4.3] */
+.duo { display: flex; gap: 16px; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
+.duo .col { flex: 1 1 300px; max-width: 330px; min-width: 0; }
+.duo .phone { height: 500px; }
+.duo .content { padding-bottom: 16px; }
+.duolabel { margin: 0 4px 10px; font-size: 12.5px; font-weight: 700; letter-spacing: .3px; }
+.duolabel small { display: block; font-weight: 600; color: #7d838e; margin-top: 3px; font-size: 11.5px; letter-spacing: 0; }
+.duolabel.b { color: #ff9b8f; }
+.duolabel.a { color: #ffc220; }
 
 /* ============ телефон 390px (компакт-версия — 320px) ============ */
 .phone {
@@ -138,37 +148,92 @@ body.page {
 .meta { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
 .muted { color: var(--muted); font-size: 13px; }
 
-/* ============ календарь [UX-S6 §4–7] ============ */
-.cal { padding: 12px 12px 14px; }
+/* ============ вкладка «Профиль» (экран 2, статика реальной вкладки [UX-S4]) ============ */
+.flabel { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+label { display: block; font-size: 12.5px; color: var(--muted); margin: 8px 0 3px; font-weight: 600; }
+.sexrow { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.sexrow .t1 { margin: 0; }
+.sexrow .seg { flex: 1 1 auto; max-width: 220px; margin-left: auto; }
+.seg { display: flex; border: 1px solid var(--btnbrd); border-radius: 12px; overflow: hidden; background: var(--field); }
+.seg .seg-btn {
+    flex: 1 1 0; min-width: 0; height: 40px; border: none; background: none; color: var(--muted);
+    font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.seg .seg-btn + .seg-btn { border-left: 1px solid var(--btnbrd); }
+.seg .seg-btn.on { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: var(--on-accent); font-weight: 700; }
+.brow { display: flex; align-items: flex-start; gap: 6px; margin-top: 2px; }
+.brow .bf { flex: 1 1 0; min-width: 0; }
+.bf select {
+    width: 100%; box-sizing: border-box; height: 40px; padding: 8px 24px 8px 10px;
+    font-size: 15px; font-family: inherit; border-radius: 12px;
+    border: 1px solid var(--fieldbrd); background-color: var(--field); color: var(--text);
+    cursor: pointer; text-align: center; text-align-last: center;
+    appearance: none; -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239aa0aa' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center;
+}
+.badg { font-size: 12.5px; color: var(--accent); font-weight: 600; margin: 8px 0 0; }
+.hr { border-top: 1px solid var(--nestedbrd); margin: 13px 0 12px; }
+.prow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+.prow .pf { flex: 1 1 0; min-width: 58px; }
+.prow .pf label { margin: 6px 0 3px; font-size: 11px; white-space: nowrap; }
+.prow .pf input {
+    width: 100%; box-sizing: border-box; padding: 8px; height: 40px; text-align: center; font-size: 15px;
+    font-family: inherit; border-radius: 12px; border: 1px solid var(--fieldbrd);
+    background: var(--field); color: var(--text);
+}
+.btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 1px solid var(--btnbrd); border-radius: 12px; background: var(--btn);
+    color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600;
+    padding: 10px 12px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.btn.pfsave { flex: 0 0 auto; margin-left: auto; height: 40px; padding: 8px 12px; font-size: 13px; font-weight: 700; }
+.btnrow { margin-top: 8px; }
+.btn.wide { width: 100%; padding: 9px 12px; font-size: 13.5px; }
+
+/* ============ календарь [UX-S6 §4–7] — КОМПАКТ ред. 7 [S6-update6 10.11]: ещё +10% высоты (ячейки 35→38px) ============ */
+.cal { padding: 10px 12px 12px; }
 .cal-nav { display: flex; align-items: center; gap: 6px; }
 .cal-navbtn {
-    width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--btnbrd);
+    width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--btnbrd);
     background: var(--btn); color: var(--text); cursor: pointer; flex: none; padding: 0;
     display: inline-flex; align-items: center; justify-content: center;
     -webkit-tap-highlight-color: transparent;
 }
-.cal-navbtn svg { width: 18px; height: 18px; }
+.cal-navbtn svg { width: 16px; height: 16px; }
 .cal-navbtn:disabled, .cal-navbtn.dim { opacity: .35; cursor: default; }
-.cal-title { flex: 1; text-align: center; font-size: 15.5px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 10px; }
-.cal-dow { font-size: 11px; font-weight: 700; color: var(--muted); text-align: center; letter-spacing: .5px; padding: 4px 0 6px; }
+.cal-title { flex: 1; text-align: center; font-size: 15px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 9px; }
+.cal-dow { font-size: 10.5px; font-weight: 700; color: var(--muted); text-align: center; letter-spacing: .5px; padding: 3px 0 4px; }
 .cal-d {
-    position: relative; min-height: 44px; padding: 0; border: 1px solid transparent; border-radius: 12px;
+    position: relative; min-height: 38px; padding: 0; border: 1px solid transparent; border-radius: 9px;
     background: transparent; color: var(--text); font-family: inherit;
-    font-size: 14.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+    font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums;
     display: flex; align-items: center; justify-content: center;
     -webkit-tap-highlight-color: transparent;
 }
 .cal-d .n { line-height: 1; }
 .cal-d.has { cursor: pointer; }
 .cal-d.has:active { background: var(--nested); }
-.cal-dots { position: absolute; left: 0; right: 0; bottom: 6px; display: flex; justify-content: center; gap: 3px; }
+.cal-dots { position: absolute; left: 0; right: 0; bottom: 2px; display: flex; justify-content: center; gap: 3px; }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: block; }
 .dot.hollow { width: 7px; height: 7px; background: transparent; border: 1.5px solid var(--accent); }
 .cal-d.today { background: var(--glow); border-color: var(--glowbrd); }
 .cal-d.today .n { color: var(--accent); font-weight: 700; }
 .cal-d.sel { background: var(--nested); border-color: var(--btnbrd); }
-.cal-blank { min-height: 44px; }
+.cal-blank { min-height: 38px; }
+/* «ДО» — текущая реализация 1.28 (только экран 0 «до/после», сравнение высоты) */
+.cal-old.cal { padding: 12px 12px 14px; }
+.cal-old .cal-navbtn { width: 36px; height: 36px; border-radius: 10px; }
+.cal-old .cal-navbtn svg { width: 18px; height: 18px; }
+.cal-old .cal-title { font-size: 15.5px; }
+.cal-old .cal-grid { margin-top: 10px; }
+.cal-old .cal-dow { font-size: 11px; padding: 4px 0 6px; }
+.cal-old .cal-d, .cal-old .cal-blank { min-height: 44px; border-radius: 12px; }
+.cal-old .cal-d { font-size: 14.5px; }
+.cal-old .cal-dots { bottom: 6px; }
 /* пустой месяц [S6-update 09.11; S6-update3 09.11]: «В <месяц>…» + «Сегодня»; подсказка «Предыдущая тренировка» — ЗАГОТОВКА (рендер под SHOW_MONTH_HINTS = false), ветки «Следующая» нет */
 .calempty { text-align: center; color: var(--muted); font-size: 13px; padding: 18px 8px 2px; }
 .calhint { text-align: center; color: var(--muted); font-size: 11.5px; padding: 2px 8px 0; opacity: .85; }
@@ -183,6 +248,11 @@ body.page {
 .daypanel { background: var(--nested); border: 1px solid var(--nestedbrd); border-radius: 14px; padding: 10px 11px 11px; margin-top: 10px; }
 .dph { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .dph .cnt { color: var(--accent); font-size: 12px; white-space: nowrap; }
+/* панель дня [S6-update6 10.11 §6.1] — ЕДИНЫЙ вид для любого числа тренировок:
+   шапка .dph + строки .drow (время .tm | название .nm | подходы .st); при
+   1 тренировке — одна строка, тап по строке → карточка, шапка не таповая.
+   Сетка упражнений 2×2 (.dsum) из ред. 5–6 ОТМЕНЕНА владельцем («такое
+   НЕ используем») — классов .dsum в CSS больше нет */
 .drow {
     display: flex; align-items: center; gap: 10px; width: 100%;
     background: var(--btn); border: 1px solid var(--btnbrd); border-radius: 12px;
@@ -191,7 +261,20 @@ body.page {
 }
 .drow:active { background: var(--nested); }
 .drow .tm { flex: none; min-width: 74px; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.drow .nm { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* содержимое строк панели — ЕДИНОЕ при 1+ тренировках [S6-update6c/d 10.11]:
+   12px, БЕЗ жирного (400) — «не жирным вообще, чтобы побольше слов поместилось»,
+   правка существующего стиля 1.28 (было 13.5px/600), одобрена владельцем.
+   Перенос не меняется: обычные строки (2+, список) —
+   одна строка с ellipsis; .drow.multi (1 тренировка) — до 2 строк (clamp-2) */
+.drow .nm { flex: 1; min-width: 0; font-size: 12px; font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* 12px БЕЗ жирного [S6-update6d 10.11 — «не жирным вообще», больше слов в строку]; правка стиля 1.28 (13.5px/600) */
+/* строка панели при 1 тренировке [S6-update6b 10.11 §6.1]: содержимое .nm —
+   НЕ название, а до 4 подходящих упражнений через запятую; до 2 строк с
+   переносом и ellipsis на конце. У обычных строк (2+ тренировки, список
+   тренировок) — как было: одна строка с ellipsis */
+.drow.multi .nm {
+    white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden;
+}
 .drow .st { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .drow .live {
     flex: none; font-size: 10.5px; font-weight: 700; color: var(--accent);
@@ -244,7 +327,7 @@ body.page {
 <!-- ================= SVG-иконки набора (catalog.js ICONS + шевроны) ================= -->
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
   <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <!-- [UX-S6 §3.3] новая иконка calendar: корпус + линия шапки + два ушка -->
+    <!-- [UX-S6 §3.3] иконка calendar: корпус + линия шапки + два ушка (в проде с 1.28) -->
     <rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/>
   </symbol>
   <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -279,17 +362,181 @@ body.page {
 </svg>
 
 <!-- ================================================================== -->
-<!-- 01 · История · точка входа: календарь в topbar (тёмная)            -->
+<!-- Вводка: что нового в редакции 5                                    -->
 <!-- ================================================================== -->
-<div class="caption">01 · История · точка входа в календарь <span>ред. 2: кнопка в topbar</span></div>
-<p class="note">Решение владельца [S6-update 09.11]: переключатель «Список / Календарь»
-<b>отменён</b> — история остаётся списком как есть. Точка входа — <b>иконка-кнопка
-календаря в topbar</b>, только на вкладке История. Порядок: <b>календарь слева,
-шестерёнка справа</b> — ⚙ есть на всех вкладках и её крайняя правая позиция остаётся
-якорем мышечной памяти, глобальная кнопка не «прыгает» между экранами. Геометрия
-кнопки — как у шестерёнки (<code>.tb-user</code> 32×32). При открытой карточке
-тренировки и на экране Настроек кнопки нет. Сам список (рекорд, активная, карточки)
-не тронут.</p>
+<div class="caption">Календарь тренировок · макет редакции 7.3 <span>S6-update6d · 10.11</span></div>
+<p class="note">Вторая порция фидбека владельца по макету ред. 6 — два решения
+и три уточнения, все утверждены к исполнению: <b>высота ещё +10%</b> — ячейки
+35→38px, карточка 6-недельного месяца ≈310→330px (сравнение — экран 0; зазор
+кольца и цифры ≈3px); <b>панель дня при 1 тренировке — как при 2+: ОБЫЧНЫЕ
+строки</b> — сетка упражнений 2×2 из ред. 5–6 <b>полностью отменена</b>
+владельцем («такое НЕ используем!») — экраны 4–5, 11; <b>уточнение
+[S6-update6b]</b>: в строке при 1 тренировке вместо названия — <b>до 4
+упражнений через запятую</b>, до 2 строк с переносом (панели при 2+ —
+с названиями, без изменений); <b>уточнение [S6-update6c → 6d]</b>: содержимое строк
+панели — <b>12px, БЕЗ жирного (regular)</b> — «не жирным вообще, чтобы
+побольше слов поместилось», единый стиль при любом числе тренировок
+(правка стиля 1.28 13.5px/600). Из ред. 5–6 остаётся:
+сначала панель, потом карточка; шестерёнка Настроек в topbar календаря (экраны
+3–12); кнопка календаря на всех вкладках. Полная спека —
+<code>docs/spec-ux-s6-calendar.md</code> (§15 — перечень экранов). Пример данных:
+ноябрь 2026 — тренировки 02.11, 04.11 («Спина + бицепс»), 06.11 («Ноги»),
+08.11 (×2: «Грудь + спина», «Жим · трицепс»), активная сегодня 09.11; октябрь
+пуст, в сентябре — 26.09 и 29.09.</p>
+
+<!-- ================================================================== -->
+<!-- 0 · Сравнение высоты ДО/ПОСЛЕ (главное для владельца)              -->
+<!-- ================================================================== -->
+<div class="caption">0 · Сравнение ДО / ПОСЛЕ <span>ред. 7: компакт высоты v3 (+10%)</span></div>
+<div class="duo">
+  <div class="col">
+    <div class="duolabel b">ДО · прод 1.28 (ред. 1–4)<small>ячейки 44px · карточка ≈374px</small></div>
+    <div class="phone"><div class="p">
+      <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+      <div class="content">
+        <div class="glass cal cal-old">
+          <div class="cal-nav">
+            <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+            <div class="cal-title">Ноябрь 2026</div>
+            <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
+          </div>
+          <div class="cal-grid">
+            <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+            <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+            <!-- неделя 1: 1 ноября — воскресенье -->
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <button class="cal-d has"><span class="n">1</span></button>
+
+            <!-- неделя 2 -->
+            <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
+            <button class="cal-d"><span class="n">3</span></button>
+            <button class="cal-d has" aria-label="4 ноября, 1 тренировка"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
+            <button class="cal-d"><span class="n">5</span></button>
+            <button class="cal-d has" aria-label="6 ноября, 1 тренировка"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
+            <button class="cal-d"><span class="n">7</span></button>
+            <button class="cal-d has" aria-label="8 ноября, 2 тренировки"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
+
+            <!-- неделя 3: сегодня 9-е, идёт активная тренировка -->
+            <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
+            <button class="cal-d"><span class="n">10</span></button>
+            <button class="cal-d"><span class="n">11</span></button>
+            <button class="cal-d"><span class="n">12</span></button>
+            <button class="cal-d"><span class="n">13</span></button>
+            <button class="cal-d"><span class="n">14</span></button>
+            <button class="cal-d"><span class="n">15</span></button>
+
+            <!-- неделя 4 -->
+            <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
+            <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+            <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
+            <button class="cal-d"><span class="n">22</span></button>
+
+            <!-- неделя 5 -->
+            <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
+            <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+            <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
+            <button class="cal-d"><span class="n">29</span></button>
+
+            <!-- неделя 6 -->
+            <button class="cal-d"><span class="n">30</span></button>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+  <div class="col">
+    <div class="duolabel a">ПОСЛЕ · компакт v3 (ред. 7)<small>ячейки 38px · карточка ≈330px</small></div>
+    <div class="phone"><div class="p">
+      <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+      <div class="content">
+        <div class="glass cal">
+          <div class="cal-nav">
+            <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+            <div class="cal-title">Ноябрь 2026</div>
+            <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
+          </div>
+          <div class="cal-grid">
+            <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+            <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+            <!-- неделя 1: 1 ноября — воскресенье -->
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <button class="cal-d has"><span class="n">1</span></button>
+
+            <!-- неделя 2 -->
+            <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
+            <button class="cal-d"><span class="n">3</span></button>
+            <button class="cal-d has" aria-label="4 ноября, 1 тренировка"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
+            <button class="cal-d"><span class="n">5</span></button>
+            <button class="cal-d has" aria-label="6 ноября, 1 тренировка"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
+            <button class="cal-d"><span class="n">7</span></button>
+            <button class="cal-d has" aria-label="8 ноября, 2 тренировки"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
+
+            <!-- неделя 3: сегодня 9-е, идёт активная тренировка -->
+            <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
+            <button class="cal-d"><span class="n">10</span></button>
+            <button class="cal-d"><span class="n">11</span></button>
+            <button class="cal-d"><span class="n">12</span></button>
+            <button class="cal-d"><span class="n">13</span></button>
+            <button class="cal-d"><span class="n">14</span></button>
+            <button class="cal-d"><span class="n">15</span></button>
+
+            <!-- неделя 4 -->
+            <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
+            <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+            <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
+            <button class="cal-d"><span class="n">22</span></button>
+
+            <!-- неделя 5 -->
+            <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
+            <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+            <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
+            <button class="cal-d"><span class="n">29</span></button>
+
+            <!-- неделя 6 -->
+            <button class="cal-d"><span class="n">30</span></button>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+            <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </div>
+</div>
+<p class="note">Запросы владельца: «сделай макеты до и после, чтобы я сравнил
+высоту» (ред. 5), «немного растяни календарь, на 15%» (ред. 6) и «ещё +10%»
+(ред. 7, 10.11). Одинаковый ноябрь 2026 (1-е — воскресенье → <b>6 недель</b>) с
+одними и теми же отметками: 2/4/6.11 — по точке, 8.11 — две, 9-е — «сегодня» +
+полое кольцо активной. Высоты карточек (шапка + строка дней недели + сетка, без
+панели дня и пилюли): <b>ДО ≈374px</b> (паддинг 12/14, navbtn 36×36, строка DOW
+≈26px, ячейки 44px) → <b>ПОСЛЕ ≈330px</b> (паддинг 10/12, navbtn 32×32,
+DOW ≈22px, ячейки 38px) — <b>−44px (−12%)</b>. Типичный 5-недельный месяц:
+328 → 275px. Наложения цифры и кольца НЕТ: цифра 14px в центре ячейки 38px
+занимает ≈12–26px, кольцо 7px при bottom 2px — ≈29–36px, зазор ≈3px. Логика
+отметок и переходов не меняется. Нижняя навигация в паре не показана —
+сравнивается именно карточка; оба календаря влезают в кадр целиком.</p>
+
+<!-- ================================================================== -->
+<!-- 1 · История · список (тёмная) — кнопка на всех вкладках            -->
+<!-- ================================================================== -->
+<div class="caption">1 · История · список <span>ред. 5: кнопка на всех вкладках</span></div>
+<p class="note">Сам список не изменён (рекорд недели, активная, карточки) — календарь
+другой взгляд на те же данные. Точка входа [S6-update4 09.11] — <b>иконка-кнопка
+календаря в topbar на ВСЕХ вкладках</b> («как и настройки»): пара <b>[ 📅 ][ ⚙ ]</b>
+стоит всегда в одном месте — календарь слева, шестерёнка справа (крайняя правая
+позиция шестерёнки остаётся якорем мышечной памяти, кнопки не «прыгают» между
+экранами). Геометрия — как у шестерёнки (32×32, радиус 9). Кнопки скрыты при
+открытой карточке тренировки и на Настройках; на самом календаре [S6-update5
+10.11] остаётся шестерёнка, кнопки 📅 нет — календарь уже открыт.</p>
 <div class="phone"><div class="p">
   <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
@@ -345,18 +592,80 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 02 · Календарь · ноябрь 2026 (тёмная)                              -->
+<!-- 2 · Профиль (тёмная) — та же пара кнопок на другой вкладке         -->
 <!-- ================================================================== -->
-<div class="caption">02 · Календарь · ноябрь 2026 <span>тёмная тема</span></div>
-<p class="note">Календарь — <b>подэкран как Настройки</b> [S6-update 09.11]: шапка
-«← Назад» возвращает на Историю, нижняя навигация остаётся, тап по любому табу
-календарь закрывает. Сетка Пн–Вс; точки = завершённые тренировки (8 ноября —
-<b>две</b>, 2/4/6.11 — по одной). Сегодня (9-е) — янтарная рамка + <b>полая точка</b>:
-там идёт активная тренировка. На текущем месяце пилюли «Сегодня» нет — кнопка
-бывает только на не-текущем месяце [S6-update2 09.11]; стрелка «›» активна —
-будущие месяцы показываем, лимит вперёд — декабрь 2030 [S6-update3 09.11].
-Память месяца: закрыл на октябре — открыл на октябре
-(<code>gymCalMonth</code>).</p>
+<div class="caption">2 · Профиль <span>та же пара [ 📅 ][ ⚙ ]</span></div>
+<p class="note">Демонстрация «кнопка на всех вкладках» [S6-update4 09.11]: пара
+<b>[ 📅 ][ ⚙ ]</b> одинакова на Истории, Тренере, Технике, Статистике и Профиле.
+Тап по 📅 открывает календарь с любой вкладки; «← Назад» календаря возвращает
+на <b>вкладку-источник</b> (<code>calFromTab</code>) — в этом примере на Профиль.
+Тап по любому табу нижней навигации закрывает календарь без восстановления
+источника. Профиль показан как в проде (статика реальной вкладки).</p>
+<div class="phone"><div class="p">
+  <div class="topbar"><span class="tb-title">GymHelper · Профиль</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="content">
+    <div class="glass">
+      <p class="t1">Профиль</p>
+      <p class="meta">Александр</p>
+      <p class="meta">М · 34 года · 180 см · 82,5 кг</p>
+      <p class="meta">BMR ≈ 1785 ккал/сут (Mifflin-St Jeor)</p>
+    </div>
+    <div class="glass">
+      <div class="sexrow">
+        <p class="t1">Пол</p>
+        <div class="seg" role="group" aria-label="Пол">
+          <button class="seg-btn on" title="Мужской" aria-label="Мужской">М</button>
+          <button class="seg-btn" title="Женский" aria-label="Женский">Ж</button>
+        </div>
+      </div>
+    </div>
+    <div class="glass">
+      <div class="flabel" style="margin-top:0;">Дата рождения</div>
+      <div class="brow">
+        <div class="bf"><label for="pfBirthYear">Год рождения</label>
+          <select id="pfBirthYear"><option selected>1992</option></select></div>
+        <div class="bf"><label for="pfBirthMonth">Месяц рождения</label>
+          <select id="pfBirthMonth"><option selected>Май</option></select></div>
+      </div>
+      <p class="badg">Возраст: 34 года</p>
+      <p class="meta">Возраст пересчитается сам · день не нужен</p>
+      <p class="meta">Хранится вместе с дневником · политика — в ⚙️ Настройках</p>
+      <div class="hr"></div>
+      <div class="prow">
+        <div class="pf"><label for="pfHeight">Рост, см</label><input id="pfHeight" type="number" inputmode="numeric" value="180"></div>
+        <div class="pf"><label for="pfWeight">Вес, кг</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="82.5"></div>
+        <button class="btn pfsave">💾 Сохранить</button>
+      </div>
+    </div>
+    <div class="glass">
+      <p class="t1">⭐ Любимые упражнения</p>
+      <p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>
+      <div class="btnrow"><button class="btn wide">Открыть в технике</button></div>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nbtn"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 3 · Календарь · ноябрь 2026 (тёмная, компакт)                      -->
+<!-- ================================================================== -->
+<div class="caption">3 · Календарь · ноябрь 2026 <span>компакт v3 · шестерёнка в topbar</span></div>
+<p class="note">Компакт ред. 7 [S6-update6 10.11]: ячейки <b>38px</b> (в ред. 6 —
+35px, в ред. 5 — 30px, в 1.28 — 44px), карточка 6-недельного ноября ≈<b>330px</b>
+(было ≈374px) — сравнение на экране 0. Календарь — подэкран как Настройки: шапка «← Назад»
+возвращает на вкладку-источник, нижняя навигация остаётся; справа в topbar —
+<b>шестерёнка Настроек</b> [S6-update5: «не вижу Настройки. Добавляй»], кнопки 📅
+нет — календарь уже открыт. Сетка Пн–Вс; 2/4/6.11 — по точке, 8.11 — две, сегодня (9-е) —
+янтарная рамка + <b>полое кольцо</b> активной тренировки. Пилюли «Сегодня» нет —
+месяц текущий («ты и так там») [S6-update2]; «›» активна — будущие месяцы
+показываем, лимит вперёд — декабрь 2030 [S6-update3]. Память месяца —
+<code>gymCalMonth</code>.</p>
 <p class="note legend">
   <span class="li"><span class="lg-dot"></span> 1 тренировка</span>
   <span class="li"><span class="lg-dot"></span><span class="lg-dot"></span> 2 тренировки</span>
@@ -365,7 +674,7 @@ body.page {
   <span class="li"><span class="lg-today">9</span> сегодня</span>
 </p>
 <div class="phone"><div class="p">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
     <div class="glass cal">
       <div class="cal-nav">
@@ -431,16 +740,29 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 03 · Тап на день с 2 тренировками (тёмная)                         -->
+<!-- 4 · Тап на день с 1 тренировкой: 4 упражнения (ГЛАВНЫЙ экран)      -->
 <!-- ================================================================== -->
-<div class="caption">03 · Выбран день 8 ноября (2 тренировки) <span>панель дня</span></div>
-<p class="note">Тап по дню с 2+ тренировками <b>не</b> открывает модалку — под сеткой
-появляется инлайн-панель этого дня: дата, счётчик, строки тренировок по времени.
-Ячейка 8-го подсвечена (<code>.sel</code>). Тап по строке — карточка тренировки
-(<code>openHistory</code>), «Назад» backbar'а возвращает в календарь на тот же месяц;
-тап по другому дню — панель перерисовывается на месте.</p>
+<div class="caption">4 · Тап на день с 1 тренировкой <span>панель как при 2+ · главный экран</span></div>
+<p class="note">ГЛАВНОЕ [S6-update6 + уточнение S6-update6b, 10.11]: тап по дню
+с 1 тренировкой <b>больше не открывает карточку напрямую</b> — под сеткой
+появляется панель дня, и выглядит она <b>точно как панель при 2+</b> (скрин
+владельца): шапка «Пятница, 6 ноября» (инфо, не таповая) + справа счётчик
+«1 тренировка» (янтарный), ниже — <b>ОДНА обычная строка</b>: время
+«08:40–09:30» (нет started → «—», идёт → «с 08:40») · содержимое — <b>до 4
+упражнений через запятую</b> «Приседания, Жим ногами, Разгибания, Икры стоя»
+(уточнение владельца; фильтр как в previewCard — непустые сеты, не разминка;
+5+ → первые 4 без «и ещё N»; 0 подходящих → «Без упражнений»), <b>до 2 строк</b>
+с переносом и ellipsis на конце · 🏋 18 (сумма подходов). Содержимое строки —
+<b>12px, БЕЗ жирного (regular)</b> — «не жирным вообще, чтобы побольше слов
+поместилось» — единый стиль строк панели при любом числе тренировок
+[S6-update6d; правка стиля 1.28 13.5px/600]. Сетка 2×2 из ред. 5–6
+<b>отменена владельцем</b> («такое НЕ используем!»). Строка — кнопка:
+тап → карточка (<code>openHistory</code>); «Назад» backbar'а возвращает в
+календарь — тот же месяц и выбранный день. Высота строки естественная —
+1–2 строки текста. День 6-го подсвечен (<code>.sel</code>), пилюли «Сегодня»
+нет (месяц текущий).</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
     <div class="glass cal">
       <div class="cal-nav">
@@ -452,19 +774,22 @@ body.page {
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
         <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
 
+        <!-- неделя 1: 1 ноября — воскресенье -->
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <button class="cal-d has"><span class="n">1</span></button>
 
+        <!-- неделя 2 -->
         <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
         <button class="cal-d"><span class="n">3</span></button>
         <button class="cal-d has" aria-label="4 ноября, 1 тренировка"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
         <button class="cal-d"><span class="n">5</span></button>
-        <button class="cal-d has" aria-label="6 ноября, 1 тренировка"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d has sel" aria-label="6 ноября, 1 тренировка" aria-pressed="true"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
         <button class="cal-d"><span class="n">7</span></button>
-        <button class="cal-d has sel" aria-label="8 ноября, 2 тренировки" aria-pressed="true"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
+        <button class="cal-d has" aria-label="8 ноября, 2 тренировки"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
 
+        <!-- неделя 3: сегодня 9-е, идёт активная тренировка -->
         <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
         <button class="cal-d"><span class="n">10</span></button>
         <button class="cal-d"><span class="n">11</span></button>
@@ -473,22 +798,207 @@ body.page {
         <button class="cal-d"><span class="n">14</span></button>
         <button class="cal-d"><span class="n">15</span></button>
 
+        <!-- неделя 4 -->
         <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
         <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
         <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
         <button class="cal-d"><span class="n">22</span></button>
 
+        <!-- неделя 5 -->
         <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
         <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
         <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
         <button class="cal-d"><span class="n">29</span></button>
 
+        <!-- неделя 6 -->
         <button class="cal-d"><span class="n">30</span></button>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
       </div>
 
+      <!-- панель дня [S6-update6 + S6-update6b §6.1]: единый вид с 2+ — шапка +
+           ОДНА строка .drow.multi; в .nm — до 4 упражнений через запятую
+           (максимум 2 строки), сетка 2×2 отменена владельцем -->
+      <div class="daypanel" aria-live="polite">
+        <div class="dph"><span>Пятница, 6 ноября</span><span class="cnt">1 тренировка</span></div>
+        <button class="drow multi" aria-label="Открыть карточку тренировки">
+          <span class="tm">08:40–09:30</span>
+          <span class="nm">Приседания, Жим ногами, Разгибания, Икры стоя</span>
+          <span class="st">🏋 18</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 5 · Тап на день с 1 тренировкой: 2 упражнения, высота та же        -->
+<!-- ================================================================== -->
+<div class="caption">5 · Тап на день с 1 тренировкой (4 ноября) <span>вид панели единый</span></div>
+<p class="note">Панель для «Спины + бицепса» (4 ноября) — <b>тот же единый вид</b>,
+что на экранах 4 и 6: шапка + одна строка (19:05–19:50 · Подтягивания,
+Тяга блока · 🏋 12). Упражнений мало — короткий запятая-список помещается
+в одну строку (максимум — две, как на экране 4). Содержимое строки —
+<b>12px, БЕЗ жирного (regular)</b>, единый для 1+ [S6-update6d]. Отдельной ветки для
+1 тренировки НЕТ — панель всегда рендерит строки <code>.drow</code>; сетка 2×2
+отменена [S6-update6]. Тап по строке → карточка.</p>
+<div class="phone"><div class="p">
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="content">
+    <div class="glass cal">
+      <div class="cal-nav">
+        <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+        <div class="cal-title">Ноябрь 2026</div>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+        <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+        <!-- неделя 1: 1 ноября — воскресенье -->
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <button class="cal-d has"><span class="n">1</span></button>
+
+        <!-- неделя 2 -->
+        <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">3</span></button>
+        <button class="cal-d has sel" aria-label="4 ноября, 1 тренировка" aria-pressed="true"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">5</span></button>
+        <button class="cal-d has" aria-label="6 ноября, 1 тренировка"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">7</span></button>
+        <button class="cal-d has" aria-label="8 ноября, 2 тренировки"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
+
+        <!-- неделя 3: сегодня 9-е, идёт активная тренировка -->
+        <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
+        <button class="cal-d"><span class="n">10</span></button>
+        <button class="cal-d"><span class="n">11</span></button>
+        <button class="cal-d"><span class="n">12</span></button>
+        <button class="cal-d"><span class="n">13</span></button>
+        <button class="cal-d"><span class="n">14</span></button>
+        <button class="cal-d"><span class="n">15</span></button>
+
+        <!-- неделя 4 -->
+        <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
+        <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+        <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
+        <button class="cal-d"><span class="n">22</span></button>
+
+        <!-- неделя 5 -->
+        <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
+        <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+        <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
+        <button class="cal-d"><span class="n">29</span></button>
+
+        <!-- неделя 6 -->
+        <button class="cal-d"><span class="n">30</span></button>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+      </div>
+
+      <!-- панель дня 4 ноября [S6-update6b]: единый вид — шапка + одна строка,
+           короткий запятая-список упражнений -->
+      <div class="daypanel" aria-live="polite">
+        <div class="dph"><span>Среда, 4 ноября</span><span class="cnt">1 тренировка</span></div>
+        <button class="drow multi" aria-label="Открыть карточку тренировки">
+          <span class="tm">19:05–19:50</span>
+          <span class="nm">Подтягивания, Тяга блока</span>
+          <span class="st">🏋 12</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 6 · Тап на день с 2 тренировками (панель-список как в 1.28)        -->
+<!-- ================================================================== -->
+<div class="caption">6 · Тап на день с 2 тренировками <span>панель-список как в 1.28</span></div>
+<p class="note">День с 2+ тренировками — панель-список как в 1.28: дата «Воскресенье,
+8 ноября» + счётчик «2 тренировки» + строки по возрастанию времени (время ·
+название · 🏋 N). Тоже <b>сначала панель, не карточка</b> [S6-update4] — единый
+сценарий «обзор → карточка» для любого числа тренировок. Тап по строке — карточка
+этой тренировки; тап по другому дню — панель перерисовывается на месте; повторный
+тап по выбранному дню — сброс панели. Панель при 2+ тренировках — <b>без
+изменений по структуре</b> (строки с названиями); содержимое строк —
+<b>12px, БЕЗ жирного (regular)</b>, единый при любом числе тренировок [S6-update6d — правка
+стиля 1.28 13.5px/600]; с ред. 7 [S6-update6] панель при 1 тренировке
+выглядит так же — единый вид. Шестерёнка — в topbar календаря [S6-update5].
+Ячейка 8-го подсвечена (<code>.sel</code>).</p>
+<div class="phone"><div class="p">
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="content">
+    <div class="glass cal">
+      <div class="cal-nav">
+        <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+        <div class="cal-title">Ноябрь 2026</div>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+        <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+        <!-- неделя 1: 1 ноября — воскресенье -->
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <button class="cal-d has"><span class="n">1</span></button>
+
+        <!-- неделя 2 -->
+        <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">3</span></button>
+        <button class="cal-d has" aria-label="4 ноября, 1 тренировка"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">5</span></button>
+        <button class="cal-d has" aria-label="6 ноября, 1 тренировка"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">7</span></button>
+        <button class="cal-d has sel" aria-label="8 ноября, 2 тренировки" aria-pressed="true"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
+
+        <!-- неделя 3: сегодня 9-е, идёт активная тренировка -->
+        <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
+        <button class="cal-d"><span class="n">10</span></button>
+        <button class="cal-d"><span class="n">11</span></button>
+        <button class="cal-d"><span class="n">12</span></button>
+        <button class="cal-d"><span class="n">13</span></button>
+        <button class="cal-d"><span class="n">14</span></button>
+        <button class="cal-d"><span class="n">15</span></button>
+
+        <!-- неделя 4 -->
+        <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
+        <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+        <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
+        <button class="cal-d"><span class="n">22</span></button>
+
+        <!-- неделя 5 -->
+        <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
+        <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+        <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
+        <button class="cal-d"><span class="n">29</span></button>
+
+        <!-- неделя 6 -->
+        <button class="cal-d"><span class="n">30</span></button>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+      </div>
+
+      <!-- панель-список 2+ тренировок (как в 1.28, без изменений) -->
       <div class="daypanel" aria-live="polite">
         <div class="dph"><span>Воскресенье, 8 ноября</span><span class="cnt">2 тренировки</span></div>
         <button class="drow"><span class="tm">08:40–09:30</span><span class="nm">Грудь + спина</span><span class="st">🏋 18</span></button>
@@ -506,17 +1016,18 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 04 · Пустой месяц (тёмная)                                         -->
+<!-- 7 · Пустой месяц · октябрь 2026 (тёмная, компакт)                  -->
 <!-- ================================================================== -->
-<div class="caption">04 · Пустой месяц · октябрь 2026 <span>только текст + «Сегодня»</span></div>
-<p class="note">Финальное решение владельца [S6-update3 09.11]: в пустом месяце —
-<b>только честный текст и пилюля «Сегодня»</b> (месяц не текущий). Подсказки
-«Предыдущая/Следующая тренировка» скрыты в обеих ветках и реализованы как
-<b>заготовка</b> под флагом <code>SHOW_MONTH_HINTS = false</code> в app.js
-(«скрыто, вернёмся позже»). Обе стрелки активны: «‹» → сентябрь (предел назад —
-<b>фиксированный январь 2020</b>), «›» → ноябрь.</p>
+<div class="caption">7 · Пустой месяц · октябрь 2026 <span>подсказки скрыты</span></div>
+<p class="note">Пустой месяц — только честный текст «В октябре тренировок не было.»
++ пилюля «Сегодня» (месяц не текущий). Подсказки «Предыдущая/Следующая тренировка»
+скрыты в обеих ветках — заготовка под флагом <code>SHOW_MONTH_HINTS = false</code>
+[S6-update3 09.11]. Данные прошлого месяца в примере: тренировки <b>26.09 и 29.09</b> —
+именно из них состояла бы скрытая строка «Предыдущая тренировка — 29 сентября».
+Обе стрелки активны: «‹» → сентябрь (предел назад — фиксированный январь 2020),
+«›» → ноябрь.</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
     <div class="glass cal">
       <div class="cal-nav">
@@ -557,7 +1068,7 @@ body.page {
         <div class="cal-blank" aria-hidden="true"></div>
       </div>
       <div class="calempty">В октябре тренировок не было.</div>
-      <button class="cal-today">Сегодня</button>
+      <button class="cal-today" aria-label="Вернуться к текущему месяцу">Сегодня</button>
     </div>
   </div>
   <div class="nav">
@@ -570,18 +1081,17 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 05 · Ноль тренировок (тёмная)                                      -->
+<!-- 8 · Ноль тренировок (тёмная, компакт)                              -->
 <!-- ================================================================== -->
-<div class="caption">05 · Календарь · ноль тренировок <span>«Пока нет тренировок»</span></div>
-<p class="note">Календарь доступен и при полностью пустой истории: кнопка в topbar
-есть всегда на Истории (topbar единообразен, отдельная ветка не нужна), hero
-«Пока пусто 💪» в списке не меняется. Текст <b>«Пока нет тренировок»</b> — без
-второй строки (§12 спеки). Пилюли <b>«Сегодня»</b> нет — месяц и так текущий:
-кнопка появляется только на не-текущем месяце [S6-update2 09.11]. Стрелка «›»
-активна — будущие месяцы показываем до декабря 2030 [S6-update3 09.11], «‹»
-активна — предел назад фиксированный (январь 2020), хотя листать нечего.</p>
+<div class="caption">8 · Ноль тренировок <span>«Пока нет тренировок»</span></div>
+<p class="note">Календарь доступен и при полностью пустой истории: пара
+[ 📅 ][ ⚙ ] в topbar — на всех вкладках, отдельной ветки нет; hero «Пока пусто 💪»
+в списке не меняется. Текст <b>«Пока нет тренировок»</b> — без второй строки.
+Пилюли «Сегодня» нет — месяц и так текущий («ты и так там») [S6-update2].
+Стрелки активны: пределы листания фиксированные (январь 2020 / декабрь 2030),
+хотя листать нечего.</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
     <div class="glass cal">
       <div class="cal-nav">
@@ -593,11 +1103,13 @@ body.page {
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
         <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
 
+        <!-- неделя 1: 1 ноября — воскресенье -->
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <button class="cal-d"><span class="n">1</span></button>
 
+        <!-- неделя 2 -->
         <button class="cal-d"><span class="n">2</span></button>
         <button class="cal-d"><span class="n">3</span></button>
         <button class="cal-d"><span class="n">4</span></button>
@@ -606,6 +1118,7 @@ body.page {
         <button class="cal-d"><span class="n">7</span></button>
         <button class="cal-d"><span class="n">8</span></button>
 
+        <!-- неделя 3 -->
         <button class="cal-d"><span class="n">9</span></button>
         <button class="cal-d"><span class="n">10</span></button>
         <button class="cal-d"><span class="n">11</span></button>
@@ -614,16 +1127,19 @@ body.page {
         <button class="cal-d"><span class="n">14</span></button>
         <button class="cal-d"><span class="n">15</span></button>
 
+        <!-- неделя 4 -->
         <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
         <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
         <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
         <button class="cal-d"><span class="n">22</span></button>
 
+        <!-- неделя 5 -->
         <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
         <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
         <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
         <button class="cal-d"><span class="n">29</span></button>
 
+        <!-- неделя 6 -->
         <button class="cal-d"><span class="n">30</span></button>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
@@ -642,17 +1158,17 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 06 · Будущий месяц · декабрь 2026 (тёмная)                         -->
+<!-- 9 · Будущий месяц · декабрь 2026 (тёмная, компакт)                 -->
 <!-- ================================================================== -->
-<div class="caption">06 · Будущий месяц · декабрь 2026 <span>пустой + «Сегодня»</span></div>
-<p class="note">Решение владельца [S6-update3 09.11]: будущие месяцы <b>показываем</b> —
-лимит листания вперёд фиксированный, <b>декабрь 2030</b> (было:
-<code>max(текущий, последняя тренировка)</code>). Будущий месяц пуст — вид тот же,
-что у пустых прошлых: честный текст + <b>«Сегодня»</b> (декабрь ≠ текущий ноябрь).
+<div class="caption">9 · Будущий месяц · декабрь 2026 <span>пустой + «Сегодня»</span></div>
+<p class="note">Будущие месяцы <b>показываем</b> [S6-update3 09.11]: лимит вперёд —
+фиксированный <b>декабрь 2030</b> (было: <code>max(текущий, последняя тренировка)</code>).
+Пустой будущий месяц выглядит как любой пустой: честный текст + <b>«Сегодня»</b>
+(декабрь ≠ текущий ноябрь — правило едино для прошлых и будущих месяцев).
 Обе стрелки активны: «‹» → ноябрь 2026, «›» → январь 2027. Планирования нет —
-просто пустая сетка (§11).</p>
+просто пустая сетка.</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
     <div class="glass cal">
       <div class="cal-nav">
@@ -694,7 +1210,7 @@ body.page {
         <div class="cal-blank" aria-hidden="true"></div>
       </div>
       <div class="calempty">В декабре тренировок не было.</div>
-      <button class="cal-today">Сегодня</button>
+      <button class="cal-today" aria-label="Вернуться к текущему месяцу">Сегодня</button>
     </div>
   </div>
   <div class="nav">
@@ -707,107 +1223,42 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 07 · Предел вперёд · декабрь 2030 (тёмная)                         -->
+<!-- 10 · Предел вперёд · декабрь 2030 (тёмная, компакт)                -->
 <!-- ================================================================== -->
-<div class="caption">07 · Предел вперёд · декабрь 2030 <span>«›» disabled</span></div>
+<div class="caption">10 · Предел вперёд · декабрь 2030 <span>«›» disabled</span></div>
 <p class="note">Жёсткий предел листания вперёд — <b>декабрь 2030</b>: стрелка «›»
-погашена (<code>disabled</code> + <code>aria-disabled="true"</code>), «‹» активна.
-Пустой будущий месяц выглядит как любой пустой: текст + «Сегодня» (месяц не
-текущий). <b>⚠️ 2028: расширить лимит будущих месяцев (до 2030+)</b> — напоминание
-владельца, спека §7.1; lead продублирует его в комментарий issue #162.</p>
+погашена (<code>disabled</code> + <code>.dim</code> + <code>aria-disabled="true"</code>),
+«‹» активна. Пустой будущий месяц выглядит как любой пустой: текст + «Сегодня»
+(месяц не текущий). Декабрь 2030: 1-е — воскресенье → 6 недель.
+<b>⚠️ 2028: расширить лимит будущих месяцев (до 2030+)</b> — напоминание владельца
+(§7.1 спеки; lead продублирует в комментарий issue #162).</p>
 <div class="phone"><div class="p">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
     <div class="glass cal">
       <div class="cal-nav">
         <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
         <div class="cal-title">Декабрь 2030</div>
-        <button class="cal-navbtn" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
+        <button class="cal-navbtn dim" disabled aria-label="Следующий месяц" aria-disabled="true"><svg><use href="#i-chev-r"/></svg></button>
       </div>
       <div class="cal-grid">
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
         <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
 
-        <!-- декабрь 2030: 1-е — пятница -->
+        <!-- декабрь 2030: 1-е — воскресенье (поправка ред. 5: в макете 1.28 была пятница) -->
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <button class="cal-d"><span class="n">1</span></button>
-        <button class="cal-d"><span class="n">2</span></button>
-        <button class="cal-d"><span class="n">3</span></button>
 
+        <button class="cal-d"><span class="n">2</span></button><button class="cal-d"><span class="n">3</span></button>
         <button class="cal-d"><span class="n">4</span></button><button class="cal-d"><span class="n">5</span></button>
         <button class="cal-d"><span class="n">6</span></button><button class="cal-d"><span class="n">7</span></button>
-        <button class="cal-d"><span class="n">8</span></button><button class="cal-d"><span class="n">9</span></button>
-        <button class="cal-d"><span class="n">10</span></button>
+        <button class="cal-d"><span class="n">8</span></button>
 
+        <button class="cal-d"><span class="n">9</span></button><button class="cal-d"><span class="n">10</span></button>
         <button class="cal-d"><span class="n">11</span></button><button class="cal-d"><span class="n">12</span></button>
         <button class="cal-d"><span class="n">13</span></button><button class="cal-d"><span class="n">14</span></button>
-        <button class="cal-d"><span class="n">15</span></button><button class="cal-d"><span class="n">16</span></button>
-        <button class="cal-d"><span class="n">17</span></button>
-
-        <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
-        <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
-        <button class="cal-d"><span class="n">22</span></button><button class="cal-d"><span class="n">23</span></button>
-        <button class="cal-d"><span class="n">24</span></button>
-
-        <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
-        <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
-        <button class="cal-d"><span class="n">29</span></button><button class="cal-d"><span class="n">30</span></button>
-        <button class="cal-d"><span class="n">31</span></button>
-      </div>
-      <div class="calempty">В декабре тренировок не было.</div>
-      <button class="cal-today">Сегодня</button>
-    </div>
-  </div>
-  <div class="nav">
-    <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
-    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
-    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
-    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
-    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
-  </div>
-</div></div>
-
-<!-- ================================================================== -->
-<!-- 08 · Светлая тема                                                  -->
-<!-- ================================================================== -->
-<div class="caption">08 · Календарь · светлая тема <span>Amber Glass light</span></div>
-<p class="note">Все цвета — существующие токены обеих тем (<code>--glow</code>,
-<code>--glowbrd</code>, <code>--nested</code>, <code>--accent</code>), новых
-CSS-переменных не нужно. Янтарные точки читаются на светлой теме без изменений,
-кнопки topbar'а — тот же <code>.tb-user</code>.</p>
-<div class="phone"><div class="p light">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span></div>
-  <div class="content">
-    <div class="glass cal">
-      <div class="cal-nav">
-        <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
-        <div class="cal-title">Ноябрь 2026</div>
-        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
-      </div>
-      <div class="cal-grid">
-        <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
-        <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
-
-        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
-        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
-        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
-        <button class="cal-d has"><span class="n">1</span></button>
-
-        <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
-        <button class="cal-d"><span class="n">3</span></button>
-        <button class="cal-d has" aria-label="4 ноября, 1 тренировка"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
-        <button class="cal-d"><span class="n">5</span></button>
-        <button class="cal-d has" aria-label="6 ноября, 1 тренировка"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
-        <button class="cal-d"><span class="n">7</span></button>
-        <button class="cal-d has" aria-label="8 ноября, 2 тренировки"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
-
-        <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
-        <button class="cal-d"><span class="n">10</span></button>
-        <button class="cal-d"><span class="n">11</span></button>
-        <button class="cal-d"><span class="n">12</span></button>
-        <button class="cal-d"><span class="n">13</span></button>
-        <button class="cal-d"><span class="n">14</span></button>
         <button class="cal-d"><span class="n">15</span></button>
 
         <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
@@ -820,11 +1271,102 @@ CSS-переменных не нужно. Янтарные точки читаю
         <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
         <button class="cal-d"><span class="n">29</span></button>
 
+        <button class="cal-d"><span class="n">30</span></button><button class="cal-d"><span class="n">31</span></button>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div>
+      </div>
+      <div class="calempty">В декабре тренировок не было.</div>
+      <button class="cal-today" aria-label="Вернуться к текущему месяцу">Сегодня</button>
+    </div>
+  </div>
+  <div class="nav">
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 11 · Светлая тема: компакт + панель дня (строка)                    -->
+<!-- ================================================================== -->
+<div class="caption">11 · Светлая тема <span>компакт + панель дня</span></div>
+<p class="note">Светлая тема Amber Glass на тех же токенах (<code>--glow</code>,
+<code>--glowbrd</code>, <code>--nested</code>, <code>--accent</code>) — новых
+CSS-переменных не нужно. Компактная сетка (ячейки 38px) + панель дня 6 ноября —
+шапка + обычная строка (время · запятая-список упражнений · 🏋), как при 2+
+[S6-update6 + S6-update6b]: точки и «сегодня»-рамка не теряются, кнопки
+topbar'а (включая шестерёнку) — тот же стиль. Содержимое строки — <b>12px,
+БЕЗ жирного (regular)</b>, единый при любом числе тренировок [S6-update6d] — читается на
+светлом фоне. Поведение панели — как на
+экране 4 (тап по строке → карточка).</p>
+<div class="phone"><div class="p light">
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="content">
+    <div class="glass cal">
+      <div class="cal-nav">
+        <button class="cal-navbtn" aria-label="Предыдущий месяц"><svg><use href="#i-chev-l"/></svg></button>
+        <div class="cal-title">Ноябрь 2026</div>
+        <button class="cal-navbtn" aria-label="Следующий месяц"><svg><use href="#i-chev-r"/></svg></button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
+        <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
+
+        <!-- неделя 1: 1 ноября — воскресенье -->
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
+        <button class="cal-d has"><span class="n">1</span></button>
+
+        <!-- неделя 2 -->
+        <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">3</span></button>
+        <button class="cal-d has" aria-label="4 ноября, 1 тренировка"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">5</span></button>
+        <button class="cal-d has sel" aria-label="6 ноября, 1 тренировка" aria-pressed="true"><span class="n">6</span><span class="cal-dots"><i class="dot"></i></span></button>
+        <button class="cal-d"><span class="n">7</span></button>
+        <button class="cal-d has" aria-label="8 ноября, 2 тренировки"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
+
+        <!-- неделя 3: сегодня 9-е, идёт активная тренировка -->
+        <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
+        <button class="cal-d"><span class="n">10</span></button>
+        <button class="cal-d"><span class="n">11</span></button>
+        <button class="cal-d"><span class="n">12</span></button>
+        <button class="cal-d"><span class="n">13</span></button>
+        <button class="cal-d"><span class="n">14</span></button>
+        <button class="cal-d"><span class="n">15</span></button>
+
+        <!-- неделя 4 -->
+        <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
+        <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
+        <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
+        <button class="cal-d"><span class="n">22</span></button>
+
+        <!-- неделя 5 -->
+        <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
+        <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
+        <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
+        <button class="cal-d"><span class="n">29</span></button>
+
+        <!-- неделя 6 -->
         <button class="cal-d"><span class="n">30</span></button>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
       </div>
+
+      <!-- панель дня в светлой теме [S6-update6b]: шапка + строка с запятая-списком -->
+      <div class="daypanel" aria-live="polite">
+        <div class="dph"><span>Пятница, 6 ноября</span><span class="cnt">1 тренировка</span></div>
+        <button class="drow multi" aria-label="Открыть карточку тренировки">
+          <span class="tm">08:40–09:30</span>
+          <span class="nm">Приседания, Жим ногами, Разгибания, Икры стоя</span>
+          <span class="st">🏋 18</span>
+        </button>
+      </div>
     </div>
   </div>
   <div class="nav">
@@ -837,16 +1379,17 @@ CSS-переменных не нужно. Янтарные точки читаю
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 09 · 320px-регресс (тёмная)                                        -->
+<!-- 12 · 320px-регресс (тёмная, компакт)                               -->
 <!-- ================================================================== -->
-<div class="caption">09 · Регресс 320px <span>узкий экран</span></div>
-<p class="note">Контент ≈ 296px → ячейка ≈ 37px при <code>min-height: 44px</code>
-(тап-таргет сохранён), точки 5px читаются. Заголовок месяца «Ноябрь 2026» и пара
-стрелок помещаются в одну строку; topbar с <b>двумя кнопками</b> (календарь +
-шестерёнка) тоже — заголовок при нехватке места режется ellipsis. Проверить на коде
-также «Декабрь 2025» — самый длинный заголовок месяца.</p>
+<div class="caption">12 · Регресс 320px <span>компакт без переполнений</span></div>
+<p class="note">Контент ≈296px → ячейка ≈37×38px (компакт ред. 7 сохраняется и на
+узком экране), точки 5px читаются, горизонтального скролла нет. Шапка месяца
+«Ноябрь 2026» и стрелки 32px — в одну строку; topbar календаря <b>«← Назад» +
+заголовок + шестерёнка</b> [S6-update5 10.11] — тоже в одну строку, при нехватке
+места заголовок — ellipsis. Проверить в коде также «Декабрь 2025» — самый длинный
+заголовок месяца — и topbar вкладок (заголовок + 📅 + ⚙).</p>
 <div class="phone small"><div class="p">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Календарь</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content">
     <div class="glass cal">
       <div class="cal-nav">
@@ -858,11 +1401,13 @@ CSS-переменных не нужно. Янтарные точки читаю
         <div class="cal-dow">Пн</div><div class="cal-dow">Вт</div><div class="cal-dow">Ср</div>
         <div class="cal-dow">Чт</div><div class="cal-dow">Пт</div><div class="cal-dow">Сб</div><div class="cal-dow">Вс</div>
 
+        <!-- неделя 1: 1 ноября — воскресенье -->
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <button class="cal-d has"><span class="n">1</span></button>
 
+        <!-- неделя 2 -->
         <button class="cal-d has" aria-label="2 ноября, 1 тренировка"><span class="n">2</span><span class="cal-dots"><i class="dot"></i></span></button>
         <button class="cal-d"><span class="n">3</span></button>
         <button class="cal-d has" aria-label="4 ноября, 1 тренировка"><span class="n">4</span><span class="cal-dots"><i class="dot"></i></span></button>
@@ -871,6 +1416,7 @@ CSS-переменных не нужно. Янтарные точки читаю
         <button class="cal-d"><span class="n">7</span></button>
         <button class="cal-d has" aria-label="8 ноября, 2 тренировки"><span class="n">8</span><span class="cal-dots"><i class="dot"></i><i class="dot"></i></span></button>
 
+        <!-- неделя 3: сегодня 9-е, идёт активная тренировка -->
         <button class="cal-d has today" aria-label="9 ноября, идёт тренировка"><span class="n">9</span><span class="cal-dots"><i class="dot hollow"></i></span></button>
         <button class="cal-d"><span class="n">10</span></button>
         <button class="cal-d"><span class="n">11</span></button>
@@ -879,16 +1425,19 @@ CSS-переменных не нужно. Янтарные точки читаю
         <button class="cal-d"><span class="n">14</span></button>
         <button class="cal-d"><span class="n">15</span></button>
 
+        <!-- неделя 4 -->
         <button class="cal-d"><span class="n">16</span></button><button class="cal-d"><span class="n">17</span></button>
         <button class="cal-d"><span class="n">18</span></button><button class="cal-d"><span class="n">19</span></button>
         <button class="cal-d"><span class="n">20</span></button><button class="cal-d"><span class="n">21</span></button>
         <button class="cal-d"><span class="n">22</span></button>
 
+        <!-- неделя 5 -->
         <button class="cal-d"><span class="n">23</span></button><button class="cal-d"><span class="n">24</span></button>
         <button class="cal-d"><span class="n">25</span></button><button class="cal-d"><span class="n">26</span></button>
         <button class="cal-d"><span class="n">27</span></button><button class="cal-d"><span class="n">28</span></button>
         <button class="cal-d"><span class="n">29</span></button>
 
+        <!-- неделя 6 -->
         <button class="cal-d"><span class="n">30</span></button>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
         <div class="cal-blank" aria-hidden="true"></div><div class="cal-blank" aria-hidden="true"></div>
