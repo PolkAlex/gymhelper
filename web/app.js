@@ -1172,7 +1172,6 @@ function weekRecords(limit) {
     list.sort(function (a, b) { return b.w - a.w; });
     return list.slice(0, limit || 3);
 }
-function weekRecord() { return weekRecords(1)[0] || null; }
 function recordCardHtml(rec) {
     const pct = Math.max(1, Math.min(100, Math.round(rec.w / rec.all * 100)));
     return '<div class="reccard glow">' +
@@ -1231,9 +1230,8 @@ function renderHistoryTab() {
             '<p class="muted">Начни первую тренировку — кнопка ниже или «+» в нижнем меню.</p>' +
             '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
     }
+    /* [UX-T31] карточка «Рекорд недели» перенесена во вкладку Статистика */
     let h = '';
-    const rec = weekRecord();
-    if (rec) h += recordCardHtml(rec);
     if (act) h += previewCard(act);
     for (const w of fin) h += previewCard(w);
     return h;
