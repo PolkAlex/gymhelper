@@ -24,6 +24,8 @@ let settingsOpen = false;
    месяц — CAL {y, m, sel}, переживает закрытие через localStorage gymCalMonth [§3.4, §7.3] */
 let calOpen = false;
 let CAL = { y: 0, m: 0, sel: null };
+/* [UX-S6] вкладка-источник календаря: «← Назад» возвращает на неё [ред. 5, §3.4] */
+let calFromTab = 'history';
 /* [UX-S6] фиксированные пределы листания месяцев (от данных не зависят) [§7.1] */
 const MIN_MONTH = '2020-01';
 const MAX_MONTH = '2030-12';
@@ -910,12 +912,14 @@ const ACTIONS = {
        пишут gymCalMonth [§7.3] */
     openCal: function () {
         calOpen = true;
+        calFromTab = tab; /* ред. 5: кнопка на всех вкладках — «Назад» вернёт на источник [§3.4] */
         calInitMonth();
         window.scrollTo(0, 0);
         render();
     },
     closeCal: function () {
         calOpen = false;
+        tab = calFromTab; /* возврат на вкладку, с которой открыли календарь [§3.4] */
         window.scrollTo(0, 0);
         render();
     },
@@ -929,12 +933,11 @@ const ACTIONS = {
         calSaveMonth();
         render();
     },
-    /* тап по дню: 1 тренировка → карточка (calOpen сохраняется — «Назад» backbar'а
-       вернёт в календарь), 2+ → инлайн-панель дня, 0 → ничего [§6] */
+    /* тап по дню: 1+ тренировок → инлайн-панель дня (карточка напрямую НЕ открывается —
+       ред. 4/5: единый сценарий «сначала обзор → потом карточка»), 0 → ничего [§6] */
     calDay: function (a) {
         const list = workoutsByDate()[a] || [];
         if (!list.length) return;
-        if (list.length === 1) { ACTIONS.openHistory(String(list[0].id)); return; }
         CAL.sel = CAL.sel === a ? null : a; /* повторный тап — сброс выбора */
         render();
     },
@@ -1128,16 +1131,19 @@ function topbarHtml() {
         return '<div class="topbar"><button class="tb-user" data-act="closeSettings" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
             '<span class="tb-title">GymHelper · Настройки</span></div>';
     }
-    /* [UX-S6] экран календаря: «←» слева (возврат на Историю), справа пусто [§3.4] */
+    /* [UX-S6] экран календаря: «←» слева (возврат на вкладку-источник), шестерёнка
+       справа [ред. 5 — владелец: «не вижу Настройки. Добавляй»] [§3.4]; кнопки 📅
+       при открытом календаре нет — он уже открыт */
     if (calOpen && !(tab === 'history' && viewWid)) {
         return '<div class="topbar"><button class="tb-user" data-act="closeCal" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
-            '<span class="tb-title">GymHelper · Календарь</span></div>';
+            '<span class="tb-title">GymHelper · Календарь</span>' +
+            '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
     }
     /* [UX-T23] стрелка «←» (tb-back/goBack) убрана: топбар — «GymHelper · <вкладка>» + настройки */
-    /* [UX-S6] кнопка календаря — только на вкладке История без открытой карточки
-       (Настройки/календарь отсечены выше); календарь СЛЕВА, шестерёнка справа —
-       глобальный якорь мышечной памяти не «прыгает» между экранами [§3.2] */
-    const calBtn = (tab === 'history' && !viewWid) ?
+    /* [UX-S6] кнопка календаря — на ВСЕХ вкладках без открытой карточки (ред. 5 —
+       «как и настройки»; Настройки/календарь отсечены выше); календарь СЛЕВА,
+       шестерёнка справа — пара [ 📅 ][ ⚙ ] всегда в одном месте [§3.2] */
+    const calBtn = !viewWid ?
         '<button class="tb-user" data-act="openCal" title="Календарь" aria-label="Календарь">' + ICONS.calendar + '</button>' : '';
     return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' + calBtn +
         '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
@@ -1334,6 +1340,14 @@ function dayRowName(w) {
     if (exs.length) return exs.slice(0, 2).map(function (e) { return e.name; }).join(' · ');
     return 'Без упражнений';
 }
+/* запятая-список до 4 подходящих упражнений для строки панели при 1 тренировке
+   (фильтр как в previewCard); 5+ → первые 4 без «и ещё N», 0 → «Без упражнений»
+   [ред. 7.3 S6-update6b, §6.1, §13] */
+function dayRowExList(w) {
+    const exs = (w.exercises || []).filter(e => e.sets.length && !isWarmupName(e.name));
+    if (!exs.length) return 'Без упражнений';
+    return exs.slice(0, 4).map(e => e.name).join(', ');
+}
 function renderCalendar() {
     const byDate = workoutsByDate();
     const now = new Date();
@@ -1376,19 +1390,22 @@ function renderCalendar() {
             '<span class="n">' + d + '</span>' + dots + '</button>';
     }
     h += '</div>';
-    /* инлайн-панель дня при выборе дня с 2+ тренировками [§6.1] */
+    /* инлайн-панель дня при выборе дня с 1+ тренировками — ЕДИНЫЙ вид: шапка .dph +
+       строки .drow по числу тренировок [ред. 7.3 S6-update6, §6.1]; при 1 тренировке
+       .nm — запятая-список упражнений и модификатор .multi (clamp-2) [S6-update6b] */
     if (CAL.sel && CAL.sel.indexOf(monthPrefix) === 0) {
         const list = byDate[CAL.sel] || [];
-        if (list.length > 1) {
+        if (list.length) {
             const dd = parseDateISO(CAL.sel);
             h += '<div class="daypanel" aria-live="polite">';
             h += '<div class="dph"><span>' + DOW_FULL[(dd.getDay() + 6) % 7] + ', ' + dd.getDate() + ' ' + MONTHS_GEN[CAL.m] + '</span><span class="cnt">' + list.length + ' ' + trainWord(list.length) + '</span></div>';
             for (const w of list) {
                 const tm = w.started ? ((w.finished && w.ended) ? String(w.started).slice(11, 16) + '–' + String(w.ended).slice(11, 16) : 'с ' + String(w.started).slice(11, 16)) : '—';
                 const sets = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
-                h += '<button class="drow" data-act="openHistory" data-a="' + w.id + '">' +
+                const multi = list.length === 1;
+                h += '<button class="drow' + (multi ? ' multi' : '') + '" data-act="openHistory" data-a="' + w.id + '">' +
                     '<span class="tm">' + tm + '</span>' +
-                    '<span class="nm">' + esc(dayRowName(w)) + '</span>' +
+                    '<span class="nm">' + esc(multi ? dayRowExList(w) : dayRowName(w)) + '</span>' +
                     (w.finished ? '' : '<span class="live">⚫ идёт</span>') +
                     '<span class="st">🏋 ' + sets + '</span></button>';
             }

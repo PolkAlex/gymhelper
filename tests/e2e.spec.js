@@ -3151,7 +3151,7 @@ test.describe('UX-T29: дата рождения в Профиле', function ()
        покрыт тестом «[UX-T29] 320px: дата рождения и ряд профиля…» выше */
 });
 
-/* ============ [UX-S6] календарь тренировок (18 кейсов §14 спеки) ============ */
+/* ============ [UX-S6] календарь тренировок (20 кейсов §14 спеки, ред. 7.3) ============ */
 const CAL_MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 const CAL_MONTHS_PREP = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'];
 const CAL_MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
@@ -3185,7 +3185,7 @@ test.describe('UX-S6 календарь', function () {
                 sets: [{ w: '60', s: 3, r: '8-10', t: day + 'T' + start }] }] };
     }
 
-    test('§14.1 точка входа: кнопка на Истории перед шестерёнкой, тап открывает, Назад возвращает, на других вкладках нет', async ({ page }) => {
+    test('§14.1 точка входа: кнопка на ВСЕХ пяти вкладках перед шестерёнкой; «Назад» возвращает на вкладку-источник', async ({ page }) => {
         await openApp(page);
         const calBtn = page.locator('.topbar [data-act="openCal"]');
         await expect(calBtn).toHaveCount(1);
@@ -3193,21 +3193,35 @@ test.describe('UX-S6 календарь', function () {
         const btns = page.locator('.topbar .tb-user');
         await expect(btns.nth(0)).toHaveAttribute('aria-label', 'Календарь');
         await expect(btns.nth(1)).toHaveAttribute('aria-label', 'Настройки');
+        /* кнопка есть на КАЖДОЙ из пяти вкладок [S6-update4 — «как и настройки»] */
+        for (const t of ['Статистика', 'Техника', 'Профиль']) {
+            await page.locator('.nav button', { hasText: t }).click();
+            await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · ' + t);
+            await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
+        }
+        /* «Тренер» — через Настройки («Открыть раздел») */
+        await page.locator('.topbar [data-act="openSettings"]').click();
+        await page.locator('[data-act="switchTab"][data-a="coach"]').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · Тренер');
+        await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
+        /* тап с Профиля: заголовок, «Назад», шестерёнка в topbar, сетка видна [S6-update5] */
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
         await calBtn.click();
         await expect(page.locator('.tb-title')).toHaveText('GymHelper · Календарь');
         await expect(page.locator('.topbar [data-act="closeCal"]')).toHaveCount(1);
+        await expect(page.locator('.topbar [data-act="openSettings"]')).toHaveCount(1);
         await expect(page.locator('.cal-grid')).toBeVisible();
+        /* «Назад» — возврат на вкладку-источник (calFromTab) [§3.4] */
         await page.locator('.topbar [data-act="closeCal"]').click();
-        await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
-        /* на остальных вкладках кнопки календаря нет */
-        for (const t of ['Статистика', 'Техника', 'Профиль']) {
-            await page.locator('.nav button', { hasText: t }).click();
-            await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(0);
-            await expect(page.locator('.topbar [data-act="closeCal"]')).toHaveCount(0);
-        }
+        await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · Профиль');
+        /* с Истории — как в 1.28 */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await openCalendar(page);
+        await page.locator('.topbar [data-act="closeCal"]').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · История');
     });
 
-    test('§14.2 кнопка скрыта: при открытой карточке тренировки и на экране Настроек', async ({ page, request }) => {
+    test('§14.2 кнопка скрыта: при открытой карточке и на Настройках; на календаре 📅 нет, но шестерёнка ЕСТЬ', async ({ page, request }) => {
         const today = isoDate(new Date());
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
         await openApp(page);
@@ -3218,6 +3232,16 @@ test.describe('UX-S6 календарь', function () {
         await page.locator('.topbar [data-act="openSettings"]').click();
         await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
         await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(0);
+        await page.locator('.topbar [data-act="closeSettings"]').click();
+        /* на экране календаря кнопки 📅 нет — он уже открыт; шестерёнка открывает Настройки [S6-update5] */
+        await openCalendar(page);
+        await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(0);
+        const gear = page.locator('.topbar [data-act="openSettings"]');
+        await expect(gear).toHaveCount(1);
+        await expect(gear).toHaveAttribute('aria-label', 'Настройки');
+        await gear.click();
+        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        await expect(page.locator('.cal-grid')).toHaveCount(0);
     });
 
     test('§14.3 отметки: точки по числу тренировок (1 и 2), завершённые — заливка', async ({ page, request }) => {
@@ -3239,28 +3263,64 @@ test.describe('UX-S6 календарь', function () {
         await expect(cellB).toHaveAttribute('aria-label', '8 ' + CAL_MONTHS_GEN[now.getMonth()] + ', 2 тренировки');
     });
 
-    test('§14.4 тап дня с 1 тренировкой → карточка; «Назад» → календарь с тем же месяцем', async ({ page, request }) => {
-        const ym = monthShift(-1), now = new Date();
-        const dayPrev = isoOf(ym, 5), today = isoDate(now);
-        await seedWorkouts(request, [
-            workoutAt(1, dayPrev, '09:30:00', '10:30:00', EX),
-            workoutAt(2, today, '09:30:00', '10:30:00', EX)
-        ]);
+    test('§14.4 тап дня с 1 тренировкой → панель (.drow.multi, запятая-список ≤4), НЕ карточка; тап строки → карточка', async ({ page, request }) => {
+        const now = new Date();
+        const dayB = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 6);
+        const mk = workoutAt(1, dayB, '08:40:00', '09:30:00', 'Приседания');
+        /* 5 упражнений: в .nm попадут первые 4 через запятую, «и ещё N» нет [S6-update6b] */
+        mk.exercises = ['Приседания', 'Жим ногами', 'Разгибания', 'Икры стоя', 'Сгибания'].map(function (n, i) {
+            return { name: n, st: dayB + 'T08:4' + i + ':00', en: dayB + 'T09:00:00',
+                sets: [{ w: '60', s: 3, r: '8-10', t: dayB + 'T08:4' + i + ':00' }] };
+        });
+        await seedWorkouts(request, [mk]);
         await openApp(page);
         await openCalendar(page);
-        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[now.getMonth()] + ' ' + now.getFullYear());
-        await page.locator('[data-act="calPrev"]').click();
-        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[ym.m] + ' ' + ym.y);
-        await page.locator('.cal-d[data-a="' + dayPrev + '"]').click();
-        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
-        /* calOpen сохранён: «Назад» backbar'а возвращает в КАЛЕНДАРЬ [§6] */
+        await page.locator('.cal-d[data-a="' + dayB + '"]').click();
+        /* карточка НЕ открыта — панель всегда первая [S6-update4] */
+        await expect(page.locator('.backbar')).toHaveCount(0);
+        await expect(page.locator('.wcicons')).toHaveCount(0);
+        const panel = page.locator('.daypanel');
+        await expect(panel).toBeVisible({ timeout: 5000 });
+        await expect(panel.locator('.dph .cnt')).toHaveText('1 тренировка');
+        const row = panel.locator('.drow');
+        await expect(row).toHaveCount(1);
+        await expect(row).toHaveClass(/multi/);
+        /* .nm — запятая-список первых 4 упражнений; .tm время; .st подходы */
+        await expect(row.locator('.nm')).toHaveText('Приседания, Жим ногами, Разгибания, Икры стоя');
+        await expect(row.locator('.tm')).toContainText('08:40');
+        await expect(row.locator('.st')).toHaveText(/🏋/);
+        /* clamp-2 в CSS: перенос ограничен двумя строками [§6.1] */
+        const clamp = await row.locator('.nm').evaluate(function (el) { return getComputedStyle(el).webkitLineClamp; });
+        expect(clamp).toBe('2');
+        /* тап по строке → карточка этой тренировки (id совпадает) */
+        await row.click();
+        await expect(page.locator('#w1')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.backbar')).toBeVisible();
+        /* «Назад» backbar'а → календарь: месяц и выбранный день сохранены [§6] */
         await page.locator('.bb-back').click();
         await expect(page.locator('.cal-grid')).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[ym.m] + ' ' + ym.y);
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Календарь');
+        await expect(page.locator('.daypanel')).toBeVisible();
+        await expect(page.locator('.cal-d.sel')).toHaveAttribute('data-a', dayB);
     });
 
-    test('§14.5 тап дня с 2 тренировками → панель дня, тап строки → карточка по id', async ({ page, request }) => {
+    test('§14.4б (доп.) 1 тренировка без подходящих упражнений: .nm = «Без упражнений», тап строки всё равно открывает', async ({ page, request }) => {
+        const now = new Date();
+        const dayB = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 6);
+        const w = workoutAt(1, dayB, '08:40:00', '09:30:00', 'Разминка');
+        w.exercises = [{ name: 'Разминка', st: dayB + 'T08:41:00', en: dayB + 'T09:00:00', sets: [] }];
+        await seedWorkouts(request, [w]);
+        await openApp(page);
+        await openCalendar(page);
+        await page.locator('.cal-d[data-a="' + dayB + '"]').click();
+        const row = page.locator('.daypanel .drow');
+        await expect(row).toHaveCount(1);
+        await expect(row).toHaveClass(/multi/);
+        await expect(row.locator('.nm')).toHaveText('Без упражнений');
+        await row.click();
+        await expect(page.locator('#w1')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('§14.5 тап дня с 2 тренировками → панель (карточка НЕ открыта), тап строки → карточка по id', async ({ page, request }) => {
         const now = new Date();
         const dayB = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 8);
         await seedWorkouts(request, [
@@ -3272,8 +3332,14 @@ test.describe('UX-S6 календарь', function () {
         await page.locator('.cal-d[data-a="' + dayB + '"]').click();
         const panel = page.locator('.daypanel');
         await expect(panel).toBeVisible({ timeout: 5000 });
+        /* карточка НЕ открыта — панель едина для любого числа тренировок [S6-update4/6] */
+        await expect(page.locator('.backbar')).toHaveCount(0);
         await expect(panel.locator('.dph .cnt')).toHaveText('2 тренировки');
         await expect(panel.locator('.drow')).toHaveCount(2);
+        /* при 2+ — названия по firstLine, БЕЗ .multi и запятая-списка [S6-update6b] */
+        await expect(panel.locator('.drow.multi')).toHaveCount(0);
+        await expect(panel.locator('.drow .nm').first()).toHaveText('Грудь + спина');
+        await expect(panel.locator('.drow .nm').nth(1)).toHaveText('Жим · трицепс');
         /* строки по возрастанию времени: 08:40 первая */
         await expect(panel.locator('.drow .tm').first()).toContainText('08:40');
         await expect(panel.locator('.drow .tm').nth(1)).toContainText('18:10');
@@ -3285,7 +3351,37 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.daypanel')).toBeVisible({ timeout: 5000 });
     });
 
-    test('§14.6 навигация: ‹/› работают, «Сегодня» только на не-текущем месяце', async ({ page, request }) => {
+    test('§14.6 переключение/сброс панели: тап другого дня заменяет содержимое, повторный — скрывает, пустой день не меняет', async ({ page, request }) => {
+        const now = new Date();
+        const dayA = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 5);
+        const dayB = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 8);
+        const dayC = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 12); /* без тренировок */
+        await seedWorkouts(request, [
+            workoutAt(1, dayA, '09:30:00', '10:30:00', 'Ноги'),
+            workoutAt(2, dayB, '08:40:00', '09:30:00', 'Грудь + спина'),
+            workoutAt(3, dayB, '18:10:00', '19:05:00', 'Жим · трицепс')
+        ]);
+        await openApp(page);
+        await openCalendar(page);
+        await page.locator('.cal-d[data-a="' + dayA + '"]').click();
+        const panel = page.locator('.daypanel');
+        await expect(panel).toBeVisible({ timeout: 5000 });
+        await expect(panel.locator('.dph .cnt')).toHaveText('1 тренировка');
+        /* тап по дню Б — панель заменилась содержимым на месте [§6] */
+        await page.locator('.cal-d[data-a="' + dayB + '"]').click();
+        await expect(panel.locator('.dph .cnt')).toHaveText('2 тренировки');
+        await expect(panel.locator('.drow')).toHaveCount(2);
+        await expect(page.locator('.cal-d.sel')).toHaveAttribute('data-a', dayB);
+        /* повторный тап по Б — панель скрыта (sel = null) */
+        await page.locator('.cal-d[data-a="' + dayB + '"]').click();
+        await expect(panel).toHaveCount(0);
+        /* тап по дню без тренировок — панель не появляется [§6] */
+        await page.locator('.cal-d[data-a="' + dayC + '"]').click();
+        await expect(panel).toHaveCount(0);
+        await expect(page.locator('.cal-d.sel')).toHaveCount(0);
+    });
+
+    test('§14.7 навигация: ‹/› работают, «Сегодня» только на не-текущем месяце', async ({ page, request }) => {
         const now = new Date();
         const today = isoDate(now);
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
@@ -3309,7 +3405,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-today')).toBeVisible();
     });
 
-    test('§14.7 предел назад = январь 2020: ‹ disabled', async ({ page, request }) => {
+    test('§14.8 предел назад = январь 2020: ‹ disabled', async ({ page, request }) => {
         const today = isoDate(new Date());
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
         await openApp(page);
@@ -3321,7 +3417,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(prevBtn).toHaveAttribute('aria-disabled', 'true');
     });
 
-    test('§14.8 память месяца: закрыл/открыл — месяц тот же (gymCalMonth)', async ({ page, request }) => {
+    test('§14.9 память месяца: закрыл/открыл — месяц тот же (gymCalMonth)', async ({ page, request }) => {
         const now = new Date();
         const today = isoDate(now);
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
@@ -3338,7 +3434,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[now.getMonth()] + ' ' + now.getFullYear());
     });
 
-    test('§14.9 битый gymCalMonth: без ошибки, дефолтный месяц (месяц последней тренировки)', async ({ page, request }) => {
+    test('§14.10 битый gymCalMonth: без ошибки, дефолтный месяц (месяц последней тренировки)', async ({ page, request }) => {
         const now = new Date();
         const today = isoDate(now);
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
@@ -3351,7 +3447,7 @@ test.describe('UX-S6 календарь', function () {
         expect(saved).toBe(now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
     });
 
-    test('§14.10 «сегодня»: рамка+фон; с активной — полая точка', async ({ page, request }) => {
+    test('§14.11 «сегодня»: рамка+фон; с активной — полая точка', async ({ page, request }) => {
         const now = new Date();
         const today = isoDate(now);
         await seedWorkouts(request, [
@@ -3369,7 +3465,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(todayCell.locator('.dot.hollow')).toHaveCount(1);
     });
 
-    test('§14.11 пустой месяц (есть ранние): честный текст, БЕЗ подсказок (заготовка выключена), «Сегодня» видна', async ({ page, request }) => {
+    test('§14.12 пустой месяц (есть ранние): честный текст, БЕЗ подсказок (заготовка выключена), «Сегодня» видна', async ({ page, request }) => {
         const now = new Date();
         const ym2 = monthShift(-2);
         await seedWorkouts(request, [
@@ -3388,7 +3484,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[now.getMonth()] + ' ' + now.getFullYear());
     });
 
-    test('§14.12 пустой месяц (ранних нет): текст без подсказок, «Сегодня» возвращает к точке', async ({ page, request }) => {
+    test('§14.13 пустой месяц (ранних нет): текст без подсказок, «Сегодня» возвращает к точке', async ({ page, request }) => {
         const now = new Date();
         const day25 = isoOf({ y: now.getFullYear(), m: now.getMonth() }, 25);
         await seedWorkouts(request, [workoutAt(1, day25, '09:30:00', '10:30:00', EX)]);
@@ -3404,7 +3500,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-d[data-a="' + day25 + '"] .dot')).toHaveCount(1);
     });
 
-    test('§14.13 ноль тренировок: «Пока нет тренировок», пилюли нет, hero Истории не изменился', async ({ page }) => {
+    test('§14.14 ноль тренировок: «Пока нет тренировок», пилюли нет, hero Истории не изменился', async ({ page }) => {
         await openApp(page);
         await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible();
         await openCalendar(page);
@@ -3415,7 +3511,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible();
     });
 
-    test('§14.14 битая дата: в списке есть, в календаре точки нет, ошибок в консоли нет', async ({ page, request }) => {
+    test('§14.15 битая дата: в списке есть, в календаре точки нет, ошибок в консоли нет', async ({ page, request }) => {
         const consoleErrors = [];
         page.on('console', function (m) { if (m.type() === 'error') consoleErrors.push(m.text()); });
         const broken = workoutAt(1, '', '09:30:00', '10:30:00', EX);
@@ -3428,7 +3524,7 @@ test.describe('UX-S6 календарь', function () {
         expect(consoleErrors).toEqual([]);
     });
 
-    test('§14.15 320px: сетка без горизонтального скролла, 7 колонок, topbar в одну строку', async ({ page }) => {
+    test('§14.16 320px: сетка без горизонтального скролла, 7 колонок, topbar в одну строку', async ({ page }) => {
         await page.setViewportSize({ width: 320, height: 640 });
         await openApp(page);
         await openCalendar(page);
@@ -3445,7 +3541,7 @@ test.describe('UX-S6 календарь', function () {
         expect(tb.height).toBeLessThan(70);
     });
 
-    test('§14.16 предел вперёд = декабрь 2030: › disabled, ‹ активна', async ({ page, request }) => {
+    test('§14.17 предел вперёд = декабрь 2030: › disabled, ‹ активна', async ({ page, request }) => {
         const today = isoDate(new Date());
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
         await openApp(page);
@@ -3458,7 +3554,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('[data-act="calPrev"]')).toBeEnabled();
     });
 
-    test('§14.17 будущий месяц пуст: честный текст + «Сегодня», возврат к точке тренировки', async ({ page, request }) => {
+    test('§14.18 будущий месяц пуст: честный текст + «Сегодня», возврат к точке тренировки', async ({ page, request }) => {
         const now = new Date();
         const today = isoDate(now);
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
@@ -3475,7 +3571,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-d[data-a="' + today + '"] .dot')).toHaveCount(1);
     });
 
-    test('§14.18 заготовка подсказки: SHOW_MONTH_HINTS=false — .calhint нет; ветка рендера в коде есть', async ({ page, request }) => {
+    test('§14.19 заготовка подсказки: SHOW_MONTH_HINTS=false — .calhint нет; ветка рендера в коде есть', async ({ page, request }) => {
         const fs = require('fs');
         const path = require('path');
         const src = fs.readFileSync(path.join(__dirname, '..', 'web', 'app.js'), 'utf8');
@@ -3497,9 +3593,27 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.calhint')).toHaveCount(0);
     });
 
-    /* ниже — усиление тестировщика сверх 18 кейсов спецификации [§14]: переход через
+    test('§14.20 компактная высота: .cal-d = 38px (компакт v3), регресс от возврата 44px и отката к 30/35px', async ({ page, request }) => {
+        const now = new Date();
+        const today = isoDate(now);
+        await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
+        await openApp(page);
+        await openCalendar(page);
+        /* высота ячейки дня = ровно 38px [§4.3; на 30px кольцо активной заходило на цифру] */
+        const cell = await page.locator('.cal-d[data-a="' + today + '"]').boundingBox();
+        expect(cell.height).toBe(38);
+        /* заглушка смежного месяца — той же высоты [§4.2] */
+        const blank = await page.locator('.cal-blank').first().boundingBox();
+        expect(blank.height).toBe(38);
+        /* кнопки ‹/› — 32×32 (компакт v3) */
+        const nav = await page.locator('.cal-navbtn').first().boundingBox();
+        expect(nav.height).toBe(32);
+        expect(nav.width).toBe(32);
+    });
+
+    /* ниже — усиление тестировщика сверх 20 кейсов спецификации [§14]: переход через
        границу годов стрелкой и полая точка активной тренировки ВНЕ сегодняшней клетки */
-    test('§14.19 граница годов: декабрь 2020 → январь 2021 стрелкой и назад, сетка Пн-старт не ломается', async ({ page, request }) => {
+    test('доп.1 граница годов: декабрь 2020 → январь 2021 стрелкой и назад, сетка Пн-старт не ломается', async ({ page, request }) => {
         await seedWorkouts(request, [workoutAt(1, '2020-12-31', '09:30:00', '10:30:00', EX)]);
         await openApp(page);
         /* дефолтный месяц = месяц последней тренировки = декабрь 2020 [§7.3] */
@@ -3533,7 +3647,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-d[data-a="2020-12-31"] .dot')).toHaveCount(1);
     });
 
-    test('§14.20 полая точка активной тренировки вне сегодняшней клетки: hollow, «идёт тренировка»', async ({ page, request }) => {
+    test('доп.2 полая точка активной тренировки вне сегодняшней клетки: hollow, «идёт тренировка»', async ({ page, request }) => {
         const now = new Date();
         const ym = monthShift(-1);
         const dayPrev = isoOf(ym, 15); /* 15-е число прошлого месяца — никогда не сегодня */
