@@ -2271,13 +2271,18 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
             await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
             await expect(page.locator('.topbar .tb-back')).toHaveCount(0);
         }
-        /* топбар — ровно два элемента: заголовок секции и кнопка настроек */
+        /* топбар — ровно три элемента: заголовок, кнопка календаря и шестерёнка
+           [UX-S6 ред. 5: пара [ 📅 ][ ⚙ ] на всех вкладках, календарь слева] */
         const parts = await page.locator('.topbar').evaluate(function (bar) {
             return Array.prototype.slice.call(bar.children).map(function (el) {
                 return (el.classList.contains('tb-title') ? 'title' : '') + (el.classList.contains('tb-user') ? 'user' : '');
             }).join(',');
         });
-        if (parts !== 'title,user') throw new Error('состав topbar: ' + parts + ', ожидалось title,user');
+        if (parts !== 'title,user,user') throw new Error('состав topbar: ' + parts + ', ожидалось title,user,user');
+        const tbLabels = await page.locator('.topbar .tb-user').evaluateAll(function (btns) {
+            return btns.map(function (b) { return b.getAttribute('aria-label'); }).join('|');
+        });
+        if (tbLabels !== 'Календарь|Настройки') throw new Error('кнопки topbar: ' + tbLabels);
         /* [UX-T27] кнопка шестерёнки жива: ведёт в Настройки с любой вкладки */
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
         await expect(page.locator('.topbar [aria-label="Настройки"]')).toHaveCount(1);
