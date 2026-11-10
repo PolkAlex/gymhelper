@@ -12,8 +12,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/* HTTP-клиент Telegram Bot API: чистый JDK (HttpURLConnection), JSON — через gym.Json */
-public final class TelegramApi {
+/* HTTP-клиент Telegram Bot API: чистый JDK (HttpURLConnection), JSON — через gym.Json.
+   Класс не final: юнит-тесты подменяют его заглушкой (tests/BotLogicTest), сценарии
+   гоняются через BotLogic.handle() без сети. */
+public class TelegramApi {
     private final String base;
 
     public TelegramApi(String token) {

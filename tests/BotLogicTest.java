@@ -1,6 +1,7 @@
 package gym;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -15,10 +16,16 @@ import java.util.Map;
    тесты детерминированы в любой день недели (урок дата-зависимых тестов).
    Парсинг /announce и /delete_my_data, renderLine, planCore, plural, csvField,
    incomingNextId, Storage и round-trip шаблонов уже покрыты в GymContractTest —
-   здесь не дублируются. Юнитом НЕ покрыто (приватные instance-методы с TelegramApi,
-   без рефакторинга видимости недостижимо): /templates-диалоги, лимит 20 (TPL_LIMIT),
-   применение шаблона → тренировка (startFromTemplate), старт при активной тренировке
-   (tplStart, pendingTplId) — поведенческая зона ручной проверки/будущего мока Api. */
+   здесь не дублируются.
+   [TST-T4] Поведенческая зона (лимит 20 шаблонов, мастер ввода, применение шаблона)
+   гоняется через публичную точку входа BotLogic.handle() с заглушкой TelegramApi
+   (FakeApi — тексты сообщений собираются в список, сети нет) и реальным Storage во
+   временном каталоге: состояние — по logic.states (package-private) и storage.load().
+   Сценарии: старт мастера (wk:add → ex:i_N), ввод веса/подходов/повторений с отказами,
+   отмена «готово», запись блока и запуск таймера отдыха; лимит TPL_LIMIT (19→ок «20 из 20»,
+   20→отказ во всех трёх точках: tplNew, имя, авто-имя); применение шаблона tpl:start
+   (план w/s/r снимается в запись, пустой шаблон/1 упражнение, старт при активной
+   тренировке → wk:discard доустанавливает отложенный шаблон §4.6). */
 public class BotLogicTest {
     static void check(boolean b, String m) {
         if (!b) throw new AssertionError("UNIT FAIL: " + m);
@@ -353,6 +360,19 @@ public class BotLogicTest {
             && "10".equals(ts4.templates.get(0).exercises.get(0).r),
             "чтение шаблонов: вес/повторения числом → строки (дробь сохраняется)");
 
+        /* === 11. Лимит 20 шаблонов [TST-T4]: константы и поведенческий сценарий === */
+        check(BotLogic.TPL_LIMIT == 20 && BotLogic.TPL_EX_LIMIT == 20,
+            "лимиты шаблонов: 20 на пользователя и 20 упражнений в шаблоне (спека §0.2)");
+        runLimitScenario();
+
+        /* === 12. Мастер ввода [TST-T4]: старт → вес → подходы → повторения → запись,
+            отказы на каждом шаге, отмена «готово», таймер отдыха после записи === */
+        runWizardScenario();
+
+        /* === 13. Применение шаблона [TST-T4]: tpl:start снимает план в запись,
+            пустой шаблон и 1 упражнение, активная тренировка → отложенный шаблон (§4.6) === */
+        runApplyScenario();
+
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -365,6 +385,352 @@ public class BotLogicTest {
         t.s = s;
         t.r = r;
         return t;
+    }
+
+    /* ===== [TST-T4] поведенческие сценарии: заглушка Api + handle() ===== */
+
+    /* Заглушка TelegramApi: все исходящие тексты складываются в список, HTTP не дёргается.
+       Наследование возможно, т.к. TelegramApi не final (см. src/gym/TelegramApi.java). */
+    static final class FakeApi extends TelegramApi {
+        final List<String> texts = new ArrayList<>();
+
+        FakeApi() {
+            super("fake-token-unit-tests");
+        }
+
+        @Override
+        public void sendMessage(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
+            texts.add(text);
+        }
+
+        @Override
+        public boolean editMessageText(long chatId, long messageId, String text, List<List<Map<String, Object>>> keyboard) {
+            texts.add(text);
+            return true;
+        }
+
+        @Override
+        public void sendMessageSilent(long chatId, String text) {
+            texts.add(text);
+        }
+
+        @Override
+        public long sendMessageGetId(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
+            texts.add(text);
+            return 100; /* сообщение-отсчёт «отправилось» — сессия таймера создаётся */
+        }
+
+        @Override
+        public void answerCallbackQuery(String callbackId, String text) {
+            /* подтверждение колбэка — игнорируем */
+        }
+
+        String last() {
+            return texts.get(texts.size() - 1);
+        }
+
+        boolean any(String part) {
+            return texts.stream().anyMatch(t -> t.contains(part));
+        }
+    }
+
+    /* Telegram-update с callback_query (нажатие inline-кнопки) */
+    static Map<String, Object> cbUpdate(long chatId, long mid, String data) {
+        return Map.of("callback_query", Map.of(
+            "id", "cb" + chatId + data,
+            "data", data,
+            "message", Map.of("message_id", mid, "chat", Map.of("id", chatId))));
+    }
+
+    /* Telegram-update с текстовым сообщением пользователя */
+    static Map<String, Object> msgUpdate(long chatId, String text) {
+        return Map.of("message", Map.of(
+            "message_id", 77, "chat", Map.of("id", chatId), "text", text));
+    }
+
+    /* завершённая тренировка с одной записью — источник для «💾 В шаблоны» */
+    static GymData limData() {
+        GymData d = new GymData();
+        d.nextId = 51;
+        Workout done = w(null, null, true);
+        done.id = 50;
+        ex(done, "Жим", new SetEntry("60", 3, "10"));
+        d.workouts.add(done);
+        return d;
+    }
+
+    static Template tpl(int id, String name) {
+        Template t = new Template();
+        t.id = id;
+        t.name = name;
+        t.createdAt = "2026-11-0" + (1 + id % 8) + "T10:00:00";
+        t.exercises.add(te("Жим", "60", 3, "10"));
+        return t;
+    }
+
+    /* лимит 20: 19-й сохраняется с текстом «20 из 20», 21-й отказывает во всех трёх
+       точках входа (кнопка «В шаблоны», ввод имени, кнопка «Авто-имя»), состояние не мутирует */
+    static void runLimitScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymtplimit");
+            Storage storage = new Storage(tmp);
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0);
+            long chat = 9002;
+
+            GymData d = limData();
+            for (int i = 1; i <= 19; i++) d.templates.add(tpl(i, "Шаблон " + i));
+            storage.save(chat, d);
+
+            /* 19 → 20: диалог открывается, имя сохраняется, текст хвалит «20 из 20» */
+            logic.handle(cbUpdate(chat, 10, "tpl:new_50"));
+            UserState st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.TPL_NAME && st.editWorkoutId == 50,
+                "лимит 19/20: tpl:new открывает диалог имени (TPL_NAME, editWorkoutId=50)");
+            check(api.last().contains("Сохраним тренировку как шаблон"),
+                "лимит 19/20: показан диалог «💾 Сохраним тренировку как шаблон»");
+            logic.handle(msgUpdate(chat, "Спина и бицепс"));
+            GymData after = storage.load(chat);
+            check(after.templates.size() == 20, "лимит 19/20: сохранён ровно 20-й шаблон");
+            check("Спина и бицепс".equals(after.templates.get(19).name) && after.templates.get(19).id == 20,
+                "лимит 19/20: имя от пользователя, id = maxId+1 = 20");
+            check(api.last().contains("✅ Шаблон «Спина и бицепс» сохранён (20 из 20)"),
+                "лимит 19/20: текст подтверждения с счётчиком «20 из 20»");
+            check(st.mode == UserState.Mode.MENU, "лимит 19/20: после сохранения режим MENU");
+
+            /* 20/20: кнопка «💾 В шаблоны» — отказ до диалога, TPL_NAME не включается */
+            logic.handle(cbUpdate(chat, 11, "tpl:new_50"));
+            check(api.last().equals("Лимит — 20 шаблонов. Удали лишний: /templates"),
+                "лимит 20/20: tpl:new отказывает текстом лимита");
+            check(logic.states.get(chat).mode == UserState.Mode.MENU,
+                "лимит 20/20: диалог имени не открывается (режим остался MENU)");
+
+            /* 20/20: кнопка «🔤 Авто-имя» — отказ, шаблон не добавлен */
+            logic.handle(cbUpdate(chat, 12, "tpl:auto_50"));
+            check(api.last().equals("Лимит — 20 шаблонов. Удали лишний: /templates"),
+                "лимит 20/20: tpl:auto отказывает текстом лимита");
+            check(storage.load(chat).templates.size() == 20,
+                "лимит 20/20: 21-й шаблон НЕ добавлен");
+
+            /* 20/20: ввод имени в «зависшем» диалоге (режим открыт до исчерпания лимита) —
+               отказ, состояние сбрасывается в MENU */
+            UserState stale = logic.states.get(chat);
+            stale.mode = UserState.Mode.TPL_NAME;
+            stale.editWorkoutId = 50;
+            logic.handle(msgUpdate(chat, "Ещё один шаблон"));
+            check(api.last().equals("Лимит — 20 шаблонов. Удали лишний: /templates"),
+                "лимит 20/20: ввод имени отказывает текстом лимита");
+            check(stale.mode == UserState.Mode.MENU,
+                "лимит 20/20: после отказа в имени режим сброшен в MENU");
+            check(storage.load(chat).templates.size() == 20,
+                "лимит 20/20: ввод имени не создаёт 21-й шаблон");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: лимит-сценарий " + e);
+        }
+    }
+
+    /* мастер ввода: wk:add → выбор из каталога → вес (отказ на мусоре) → подходы
+       (отказ на мусоре и 99) → повторения (отказ на длинном) → запись блока +
+       запуск таймера; «готово» отменяет мастер без записи */
+    static void runWizardScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymwizard");
+            Storage storage = new Storage(tmp);
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0);
+            long chat = 9001;
+
+            GymData d = new GymData();
+            d.nextId = 2;
+            Workout active = w(null, null, false);
+            active.id = 1;
+            d.workouts.add(active);
+            storage.save(chat, d);
+
+            /* старт: каталог упражнений → выбор «Жим» (ex:i_0) */
+            logic.handle(cbUpdate(chat, 10, "wk:add"));
+            check(api.last().equals("Выбери упражнение:"), "мастер: wk:add показывает каталог");
+            check(logic.states.get(chat).mode == UserState.Mode.WORKOUT, "мастер: после wk:add режим WORKOUT");
+            logic.handle(cbUpdate(chat, 11, "ex:i_0"));
+            UserState st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.EX_WEIGHT && "Жим".equals(st.currentExercise),
+                "мастер: выбор упражнения → EX_WEIGHT, currentExercise=«Жим»");
+            check(api.last().contains("«Жим» добавлено") && api.last().contains("Введи вес (кг)"),
+                "мастер: экран ввода веса с пометкой «добавлено»");
+            check(storage.load(chat).findById(1).exercises.size() == 1,
+                "мастер: запись упражнения создана в активной тренировке");
+
+            /* отмена из EX_WEIGHT: «готово» возвращает на экран тренировки, set не пишется */
+            logic.handle(msgUpdate(chat, "готово"));
+            st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.WORKOUT && st.currentExercise == null,
+                "мастер: «готово» из EX_WEIGHT → экран тренировки (WORKOUT, currentExercise=null)");
+            check(storage.load(chat).findById(1).exercises.get(0).sets.isEmpty(),
+                "мастер: отмена до ввода — блоков нет");
+
+            /* ввод веса: мусор отклоняется, валидный вес двигает в EX_SETS */
+            logic.handle(cbUpdate(chat, 12, "wk:add"));
+            logic.handle(cbUpdate(chat, 13, "ex:i_0"));
+            st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.EX_WEIGHT && !api.last().contains("добавлено"),
+                "мастер: повторный выбор существующего упражнения — без «добавлено»");
+            logic.handle(msgUpdate(chat, "тяжело!!!"));
+            check(api.last().contains("Не понял вес 🤔") && logic.states.get(chat).mode == UserState.Mode.EX_WEIGHT,
+                "мастер: буквенный вес отклонён, режим EX_WEIGHT сохранён");
+            logic.handle(msgUpdate(chat, "45"));
+            st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.EX_SETS && "45".equals(st.pendingWeight),
+                "мастер: «45» → EX_SETS, pendingWeight=45");
+            check(api.last().contains("Вес: 45кг") && api.last().contains("Сколько подходов?"),
+                "мастер: экран подходов показывает вес и вопрос");
+
+            /* отмена из EX_SETS: «готово» — введённый вес не записывается */
+            logic.handle(msgUpdate(chat, "готово"));
+            check(logic.states.get(chat).mode == UserState.Mode.WORKOUT,
+                "мастер: «готово» из EX_SETS → экран тренировки");
+            check(storage.load(chat).findById(1).exercises.get(0).sets.isEmpty(),
+                "мастер: отмена из EX_SETS — блоков нет");
+
+            /* подходы: мусор и 99 отклоняются, 4 двигает в EX_REPS */
+            logic.handle(cbUpdate(chat, 14, "wk:add"));
+            logic.handle(cbUpdate(chat, 15, "ex:i_0"));
+            logic.handle(msgUpdate(chat, "45"));
+            logic.handle(msgUpdate(chat, "abc"));
+            check(api.last().contains("Введи число подходов") && logic.states.get(chat).mode == UserState.Mode.EX_SETS,
+                "мастер: нечисловые подходы отклонены");
+            logic.handle(msgUpdate(chat, "99"));
+            check(api.last().contains("Число подходов от 1 до 30") && logic.states.get(chat).mode == UserState.Mode.EX_SETS,
+                "мастер: подходы вне 1..30 отклонены");
+            logic.handle(msgUpdate(chat, "4"));
+            st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.EX_REPS && st.pendingSets == 4,
+                "мастер: «4» → EX_REPS, pendingSets=4");
+            check(api.last().contains("подходов: 4") && api.last().contains("Сколько повторений?"),
+                "мастер: экран повторений показывает вес/подходы и вопрос");
+
+            /* повторения: длинная строка отклоняется, «12» завершает мастер записью */
+            logic.handle(msgUpdate(chat, "01234567890123456"));
+            check(api.last().contains("Введи количество повторений") && logic.states.get(chat).mode == UserState.Mode.EX_REPS,
+                "мастер: повторения длиннее 15 символов отклонены");
+            logic.handle(msgUpdate(chat, "12"));
+            st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.WORKOUT, "мастер: запись завершает мастер (WORKOUT)");
+            SetEntry written = storage.load(chat).findById(1).exercises.get(0).sets.get(0);
+            check("45".equals(written.weight) && written.sets == 4 && "12".equals(written.reps),
+                "мастер: записан блок 45 кг × 4 × 12");
+            check(api.any("✅ Записано: Жим 45 кг, 4 подхода по 12 повторений"),
+                "мастер: подтверждение записи с живым склонением");
+            check(api.any("⏱ Отдых: 1:30"), "мастер: после записи запущен таймер отдыха 90 сек");
+
+            /* итоговая тренировка живёт в данных как активная */
+            check(storage.load(chat).active() != null && storage.load(chat).active().id == 1,
+                "мастер: тренировка осталась активной после записи");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: мастер-ввод " + e);
+        }
+    }
+
+    /* применение шаблона: tpl:start создаёт тренировку с планом из шаблона в каждой записи;
+       при активной тренировке шаблон откладывается (pendingTplId) и применяется после
+       «Удалить и начать новую» (wk:discard, §4.6); пустой шаблон и 1 упражнение */
+    static void runApplyScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymtpapply");
+            Storage storage = new Storage(tmp);
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0);
+            long chat = 9003;
+
+            GymData d = new GymData();
+            d.nextId = 2;
+            Workout hist = w(null, null, true);
+            hist.id = 1;
+            ex(hist, "Жим", new SetEntry("60", 3, "10"));
+            d.workouts.add(hist);
+            Template two = new Template();
+            two.id = 1;
+            two.name = "Спина и бицепс";
+            two.createdAt = "2026-11-06T18:30:00";
+            two.exercises.add(te("Тяга верхнего блока", "75-175", 3, "10"));
+            two.exercises.add(te("Подтягивания", "", 4, "8"));
+            d.templates.add(two);
+            Template one = tpl(2, "Один");
+            one.exercises.clear();
+            one.exercises.add(te("Жим", "60", 5, "12"));
+            d.templates.add(one);
+            Template empty = new Template();
+            empty.id = 3;
+            empty.name = "Пустой";
+            empty.createdAt = "2026-11-07T18:30:00";
+            d.templates.add(empty);
+            storage.save(chat, d);
+
+            /* старт из шаблона с 2 упражнениями: план снимается в записи, id/nextId двигаются */
+            logic.handle(cbUpdate(chat, 10, "tpl:start_1"));
+            UserState st = logic.states.get(chat);
+            GymData after = storage.load(chat);
+            check(after.workouts.size() == 2 && after.findById(2) != null,
+                "применение: создана новая тренировка id=2");
+            check(after.nextId == 3, "применение: nextId увеличен до 3");
+            Workout w2 = after.findById(2);
+            check(!w2.finished && after.active() == w2, "применение: новая тренировка активна");
+            check(w2.exercises.size() == 2
+                    && "Тяга верхнего блока".equals(w2.exercises.get(0).name)
+                    && "Подтягивания".equals(w2.exercises.get(1).name),
+                "применение: упражнения шаблона в тренировке по порядку");
+            check("75-175".equals(w2.exercises.get(0).planW) && w2.exercises.get(0).planS == 3
+                    && "10".equals(w2.exercises.get(0).planR),
+                "применение: план 1-й записи = план шаблона (75-175×3×10)");
+            check("".equals(w2.exercises.get(1).planW) && w2.exercises.get(1).planS == 4
+                    && "8".equals(w2.exercises.get(1).planR),
+                "применение: блок без веса снимается как пустой план ×4×8");
+            check(w2.exercises.get(0).sets.isEmpty() && w2.exercises.get(0).startedAt.equals(w2.startedAt),
+                "применение: записи стартуют пустыми, время упражнения = времени тренировки");
+            check(st.mode == UserState.Mode.WORKOUT && st.pendingTplId == 0 && st.editWorkoutId == 0,
+                "применение: режим WORKOUT, отложенных/редактируемых id нет");
+            check(api.last().startsWith("📋 Шаблон «Спина и бицепс» применён — 2 упражнения"),
+                "применение: шапка с именем шаблона и счётчиком «2 упражнения»");
+
+            /* старт при активной тренировке: шаблон «Один» (id=2) откладывается */
+            logic.handle(cbUpdate(chat, 11, "tpl:start_2"));
+            st = logic.states.get(chat);
+            check(st.pendingTplId == 2 && api.last().contains("незавершённая тренировка от"),
+                "применение: при активной — диалог конфликта, pendingTplId=2");
+            check(storage.load(chat).workouts.size() == 2, "применение: конфликт — ничего не создано");
+
+            /* «Удалить и начать новую» доустанавливает отложенный шаблон (§4.6) */
+            logic.handle(cbUpdate(chat, 12, "wk:discard"));
+            after = storage.load(chat);
+            check(after.findById(2) == null && after.findById(3) != null,
+                "применение: старая активная удалена, создана id=3");
+            check(after.nextId == 4, "применение: nextId=4 после отложенного старта");
+            Workout w3 = after.findById(3);
+            check(w3.exercises.size() == 1 && "Жим".equals(w3.exercises.get(0).name)
+                    && "60".equals(w3.exercises.get(0).planW) && w3.exercises.get(0).planS == 5
+                    && "12".equals(w3.exercises.get(0).planR),
+                "применение: отложенный «Один» применился (Жим 60×5×12)");
+            check(logic.states.get(chat).pendingTplId == 0,
+                "применение: pendingTplId сброшен после отложенного старта");
+
+            /* шаблон с 1 упражнением — форма «1 упражнение» (после отмены активной) */
+            logic.handle(cbUpdate(chat, 13, "wk:cancelok"));
+            check(storage.load(chat).active() == null, "применение: активная отменена (wk:cancelok)");
+            logic.handle(cbUpdate(chat, 14, "tpl:start_2"));
+            check(api.last().startsWith("📋 Шаблон «Один» применён — 1 упражнение."),
+                "применение: 1 упражнение — форма «1 упражнение»");
+
+            /* пустой шаблон: тренировка создаётся без записей */
+            logic.handle(cbUpdate(chat, 15, "wk:cancelok"));
+            logic.handle(cbUpdate(chat, 16, "tpl:start_3"));
+            after = storage.load(chat);
+            Workout w5 = after.findById(after.workouts.get(after.workouts.size() - 1).id);
+            check(w5.exercises.isEmpty() && after.active() == w5,
+                "применение: пустой шаблон → активная тренировка без записей");
+            check(api.last().startsWith("📋 Шаблон «Пустой» применён — 0 упражнений"),
+                "применение: 0 упражнений — форма «0 упражнений»");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: применение шаблона " + e);
+        }
     }
 
     /* данные с массивом templates (запятая между шаблонами в вызове) */
