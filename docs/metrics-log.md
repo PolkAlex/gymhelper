@@ -46,6 +46,20 @@ T5 #79 (M, SP3), T6 #82 (L, SP5), T7 #84 (L, SP5). Вместимость 4 эп
 | 10.11.2026 | #175 [UX-T27], #176 [UX-T31] | In Test | Ready To Deploy | PR #179 merged; CI main success (Java + static/e2e + Docker publish) |
 | 10.11.2026 | #175 [UX-T27], #176 [UX-T31], #174 [UX-S8] | Ready To Deploy | Done | **Релиз 1.30 задеплоен** (docker compose pull/up; container healthy; health ok 5 чатов; свежая статика: 38px/drow.multi/calFromTab/dayRowExList). Деплой по явному мандату владельца 10.11 («деплой без моего аппрува этот релиз»). Issues #175/#176 auto-closed, #174 закрыт lead'ом |
 
+### Релиз-батч 10.11 (вечер) — TST-E1 добит + Онбординг-макеты
+
+| Дата | Тикеты | Было | Стало | Примечание |
+|---|---|---|---|---|
+| 10.11.2026 | #171 [TST-T4] | Backlog | In Dev | «После этого релиза запускай в работу [TST-E1]» (владелец): PR #180 — +56 юнит-проверок BotLogicTest (95→151: лимит 20 шаблонов ×3 точки, мастер ввода, применение шаблона) через handle()+FakeApi+Storage; рефакторинг видимости 3 строки (TelegramApi public, states/TPL package-private), прод-поведение не менялось |
+| 10.11.2026 | #171 [TST-T4] | In Dev | Code Review | ревью APPROVE (2 non-blocking вне объёма: поведенческий тест TPL_EX_LIMIT, уборка temp-каталогов) |
+| 10.11.2026 | #171 [TST-T4] | Code Review | In Test | PR #180 merged; CI main success; полный цикл: UNIT 151 + CONTRACT OK + e2e **536 passed (134×4)**; test-plan актуализирован |
+| 10.11.2026 | #171 [TST-T4], #4 [TST-E1] | In Test → RtD | Done | деплой не требуется (прод-поведение не менялось, образ актуален); **эпик TST-E1 закрыт** — все дети Done; остаточные темы (диалоги /templates, tpl:rep_, PROFILE_MONTH) — в test-plan на готовой FakeApi-инфраструктуре |
+| 10.11.2026 | docs (без тикета) | — | — | Онбординг: черновик спеки docs/spec-onb-onboarding.md + макет docs/mockups/onb-onboarding.html (14 экранов: приветствие ×2 варианта, туториал ×2 механики, FAQ, контакты, «Что нового»; тёмная+светлая, 320px) — design-агент по мандату владельца («только макеты, приду проверять сам»); 12 открытых вопросов владельцу в §9 спеки; закоммичено в main |
+
+### WIP-снимок (конец дня 10.11.2026)
+
+In Dev: 0; Code Review: 0; In Test: 0 — все тикеты дня Done (Релиз 1.30 + TST-E1 закрыт).
+
 РтD: ожидает ручной проверки владельцем на тестовом боте (чек-лист —
 docs/test-plan.md, «Бот-часть спринта 1»). После отмашки — все 6 задач → Ready To Deploy,
 затем Done по факту деплоя.
