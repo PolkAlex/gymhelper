@@ -629,6 +629,12 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.statgrid')).toContainText('подходов всего');
         await expect(page.locator('.card', { hasText: 'Тренды' })).toBeVisible();
         await expect(page.locator('.card', { hasText: 'Упражнения' })).toBeVisible();
+        /* [UX-T31] рекорд недели теперь только в Статистике: карточка видна здесь,
+           а в Истории больше не рендерится */
+        await expect(card).toBeVisible();
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await expect(page.locator('.reccard')).toHaveCount(0);
+        await expect(page.locator('.pcard').first()).toBeVisible();
     });
 
     test('статистика: серия из двух дней подряд и группы недели', async ({ page, request }) => {
