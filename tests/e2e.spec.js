@@ -3236,6 +3236,8 @@ test.describe('UX-S6 календарь', function () {
         await page.locator('.bb-back').click();
         await page.locator('.topbar [data-act="openSettings"]').click();
         await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        /* на Настройках шестерёнки нет — своя шапка [§3.2, §14.2] */
+        await expect(page.locator('.topbar [data-act="openSettings"]')).toHaveCount(0);
         await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(0);
         await page.locator('.topbar [data-act="closeSettings"]').click();
         /* на экране календаря кнопки 📅 нет — он уже открыт; шестерёнка открывает Настройки [S6-update5] */
@@ -3301,9 +3303,10 @@ test.describe('UX-S6 календарь', function () {
         await row.click();
         await expect(page.locator('#w1')).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.backbar')).toBeVisible();
-        /* «Назад» backbar'а → календарь: месяц и выбранный день сохранены [§6] */
+        /* «Назад» backbar'а → календарь: месяц и выбранный день сохранены [§6, §14.4] */
         await page.locator('.bb-back').click();
         await expect(page.locator('.cal-grid')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[now.getMonth()] + ' ' + now.getFullYear());
         await expect(page.locator('.daypanel')).toBeVisible();
         await expect(page.locator('.cal-d.sel')).toHaveAttribute('data-a', dayB);
     });
@@ -3599,13 +3602,17 @@ test.describe('UX-S6 календарь', function () {
     });
 
     test('§14.20 компактная высота: .cal-d = 38px (компакт v3), регресс от возврата 44px и отката к 30/35px', async ({ page, request }) => {
-        const now = new Date();
-        const today = isoDate(now);
+        const today = isoDate(new Date());
         await seedWorkouts(request, [workoutAt(1, today, '09:30:00', '10:30:00', EX)]);
         await openApp(page);
+        /* фиксируем ноябрь 2026 (1-е — воскресенье → 6 заглушек): на текущем месяце
+           заглушек может не быть (месяц с понедельника) — boundingBox вернул бы null.
+           Высоты от месяца не зависят [§4.3]; gymCalMonth читается при openCal [§7.3] */
+        await page.evaluate(function () { localStorage.setItem('gymCalMonth', '2026-11'); });
         await openCalendar(page);
+        await expect(page.locator('.cal-title')).toHaveText('Ноябрь 2026');
         /* высота ячейки дня = ровно 38px [§4.3; на 30px кольцо активной заходило на цифру] */
-        const cell = await page.locator('.cal-d[data-a="' + today + '"]').boundingBox();
+        const cell = await page.locator('.cal-d[data-a="2026-11-15"]').boundingBox();
         expect(cell.height).toBe(38);
         /* заглушка смежного месяца — той же высоты [§4.2] */
         const blank = await page.locator('.cal-blank').first().boundingBox();
