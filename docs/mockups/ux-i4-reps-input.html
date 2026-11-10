@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-I4] Ввод повторений — макеты модалки записи</title>
+<style>
+    /* Amber Glass, тёмная тема — палитра web/style.css */
+    :root {
+        --bg: #101114;
+        --text: #f2f3f5;
+        --muted: #9aa0aa;
+        --accent: #ffc220;
+        --accent-deep: #ffb000;
+        --on-accent: #14120a;
+        --glass: rgba(255,255,255,.055);
+        --glass-brd: rgba(255,255,255,.10);
+        --glow-brd: rgba(255,194,32,.28);
+        --glow: rgba(255,194,32,.08);
+        --blik: rgba(255,255,255,.06);
+        --btn: rgba(255,255,255,.07);
+        --btn-pressed: rgba(255,255,255,.12);
+        --btn-brd: rgba(255,255,255,.08);
+        --field: rgba(0,0,0,.22);
+        --field-brd: rgba(255,255,255,.12);
+        --sheet: rgba(30,32,38,.92);
+        --backdrop: rgba(8,9,11,.55);
+        --danger: #ff6b5e;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background:
+            radial-gradient(1100px 500px at 15% -5%, rgba(255,178,32,.15), transparent 60%),
+            radial-gradient(900px 500px at 95% 15%, rgba(255,138,60,.09), transparent 60%),
+            radial-gradient(1000px 600px at 50% 110%, rgba(150,92,25,.18), transparent 60%),
+            var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        padding: 28px 16px 60px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 40px;
+    }
+    .doc-head { max-width: 620px; text-align: center; }
+    .doc-head h1 { font-size: 20px; margin: 0 0 8px; }
+    .doc-head p { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0; }
+
+    .case { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .case-label {
+        display: inline-flex; align-items: center; gap: 10px;
+        font-size: 14px; font-weight: 700; max-width: 620px; text-align: left;
+    }
+    .badge {
+        font-size: 11px; font-weight: 800; letter-spacing: .4px;
+        border-radius: 999px; padding: 4px 10px; white-space: nowrap;
+    }
+    .badge.asis { background: rgba(255,107,94,.14); color: var(--danger); border: 1px solid rgba(255,107,94,.35); }
+    .badge.tobe { background: var(--glow); color: var(--accent); border: 1px solid var(--glow-brd); }
+
+    /* «телефон» 390px, снизу — модалка как в приложении (align-items: flex-end) */
+    .phone {
+        width: 390px;
+        height: 620px;
+        border-radius: 28px;
+        border: 1px solid var(--glass-brd);
+        background: var(--bg);
+        box-shadow: 0 18px 50px rgba(0,0,0,.45);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        position: relative;
+    }
+    .phone::before { /* намёк на контент под модалкой */
+        content: "";
+        position: absolute; inset: 0;
+        background:
+            radial-gradient(220px 90px at 60px 90px, rgba(255,194,32,.10), transparent 70%),
+            radial-gradient(260px 110px at 320px 150px, rgba(255,194,32,.06), transparent 70%);
+    }
+    .phone::after { /* затемнение фона как backdrop модалки */
+        content: "";
+        position: absolute; inset: 0;
+        background: var(--backdrop);
+    }
+
+    .modal-box {
+        position: relative;
+        z-index: 2;
+        background: var(--sheet);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid var(--glass-brd);
+        border-bottom: none;
+        width: 100%;
+        border-radius: 22px 22px 0 0;
+        padding: 12px 14px 18px;
+    }
+    .mtitle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .mtitle { font-size: 17px; font-weight: 700; margin: 0; }
+    .barebtn {
+        background: none; border: none; color: var(--text);
+        font-size: 17px; line-height: 1; padding: 6px 8px; cursor: pointer;
+        border-radius: 10px;
+    }
+    .barebtn:active { background: var(--btn-pressed); }
+    .msub { color: var(--accent); font-size: 12.5px; font-weight: 600; margin: 2px 0 2px; }
+
+    .fglass {
+        background: var(--glass);
+        border: 1px solid var(--glass-brd);
+        border-radius: 20px;
+        box-shadow: inset 0 1px 0 var(--blik);
+        padding: 10px;
+        margin-top: 8px;
+    }
+    .flabel { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+    .inwrap { position: relative; display: flex; align-items: center; }
+    .inwrap input {
+        width: 100%;
+        border: 1px solid var(--field-brd);
+        border-radius: 14px;
+        padding: 6px 84px 6px 12px;
+        font-size: 18px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        background: var(--field);
+        color: var(--text);
+        outline: none;
+        font-family: inherit;
+        min-height: 36px;
+    }
+    .inwrap input:focus { border-color: var(--accent); }
+    .inwrap .clr {
+        position: absolute; right: 10px;
+        background: none; border: none;
+        color: var(--muted); font-size: 12px;
+        padding: 8px 2px; cursor: pointer;
+    }
+
+    .keyrow { display: flex; gap: 4px; margin-top: 5px; }
+    .keyrow .k {
+        flex: 1 1 0; min-width: 0;
+        border: 1px solid var(--btn-brd);
+        cursor: pointer;
+        background: var(--btn);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 6px 0;
+        font-size: 13px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        text-align: center;
+        font-family: inherit;
+    }
+    .keyrow .k:active { transform: scale(.95); background: var(--btn-pressed); }
+    .keyrow .k.plus { border-color: var(--accent); color: var(--accent); }
+
+    /* пилюля (паттерн prevpill): план / прошлый подход */
+    .prevpill {
+        display: inline-flex; align-items: center; gap: 6px;
+        margin-top: 8px;
+        border: 1px solid var(--glow-brd);
+        background: var(--glow);
+        color: var(--accent);
+        border-radius: 999px;
+        padding: 7px 12px;
+        font-size: 12.5px;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        cursor: pointer;
+    }
+    .prevpill.dim { opacity: .55; } /* «уже применена» — визуальная приглушённость */
+
+    .btnrow { display: flex; gap: 6px; margin-top: 10px; }
+    .btn {
+        border: none; border-radius: 14px;
+        padding: 11px 14px;
+        font-size: 14px; font-weight: 700;
+        cursor: pointer; width: 100%;
+        background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+        color: var(--on-accent);
+        font-family: inherit;
+    }
+    .btn:active { transform: scale(.97); }
+
+    .notes {
+        max-width: 620px;
+        margin: 0; padding: 0 0 0 18px;
+        color: var(--muted); font-size: 13px; line-height: 1.55;
+    }
+    .notes b { color: var(--text); }
+    .notes .acc { color: var(--accent); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<header class="doc-head">
+    <h1>[UX-I4] Ввод повторений — макеты</h1>
+    <p>Модалка записи (390px, тёмная тема Amber Glass). Экран 1 — как сейчас; экраны 2–3 —
+       рекомендация: пилюля «🔁 Прошлый подход» (один тап = вес + подходы + повторения),
+       чип «15» в ряду пресетов, свободный текст для диапазонов сохраняется.
+       Спека: docs/spec-ux-i4-reps-input.md</p>
+</header>
+
+<!-- ЭКРАН 1 -->
+<section class="case">
+    <div class="case-label"><span class="badge asis">AS IS</span> Экран 1. «Новая запись» — текущее состояние (2-й подход, вес подставлен [UX-T12])</div>
+    <div class="phone">
+        <div class="modal-box">
+            <div class="mtitle-row">
+                <p class="mtitle">Новая запись</p>
+                <button class="barebtn" title="Назад">←</button>
+            </div>
+            <p class="msub">Жим штанги лёжа</p>
+
+            <div class="fglass">
+                <div class="flabel">Вес, кг (0 — без веса)</div>
+                <div class="inwrap"><input value="60"><button class="clr">Очистить</button></div>
+                <div class="keyrow">
+                    <button class="k plus">+0,25</button><button class="k plus">+1</button><button class="k plus">+2</button><button class="k plus">+5</button><button class="k plus">+10</button><button class="k plus">+15</button><button class="k plus">+20</button><button class="k plus">+50</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k">10</button><button class="k">20</button><button class="k">30</button><button class="k">50</button><button class="k">60</button><button class="k">80</button><button class="k">100</button><button class="k">200</button>
+                </div>
+            </div>
+
+            <div class="fglass">
+                <div class="flabel">Подходы</div>
+                <div class="inwrap"><input value="1"><button class="clr">Очистить</button></div>
+                <div class="keyrow">
+                    <button class="k">1</button><button class="k">2</button><button class="k">3</button><button class="k">4</button><button class="k">5</button><button class="k">6</button><button class="k">7</button><button class="k">8</button>
+                </div>
+            </div>
+
+            <div class="fglass">
+                <div class="flabel">Повторения (например 12, 8-10)</div>
+                <div class="inwrap"><input value="1"><button class="clr">Очистить</button></div>
+                <div class="keyrow">
+                    <button class="k">1</button><button class="k">2</button><button class="k">3</button><button class="k">4</button><button class="k">5</button><button class="k">6</button><button class="k">7</button><button class="k">8</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k">10</button><button class="k">12</button><button class="k plus">+1</button><button class="k plus">+2</button><button class="k plus">+5</button><button class="k plus">+10</button>
+                </div>
+            </div>
+
+            <div class="btnrow"><button class="btn">➕ Добавить</button></div>
+        </div>
+    </div>
+    <ul class="notes">
+        <li>Вес 60 подставился молча ([UX-T12]), а <b>подходы и повторения — «1» и «1»</b>:
+            для 2-го подхода той же схемы нужно 2–3 правки (подходы, повторения).</li>
+        <li>Пресетов только <b>10 и 12</b> — «15», «9», «13» требуют клавиатуры.</li>
+        <li>Ловушка: на поле «8-10» тап «+2» молча даёт «12» — диапазон теряется.</li>
+        <li>«Повторить подход целиком» не существует вовсе.</li>
+    </ul>
+</section>
+
+<!-- ЭКРАН 2 -->
+<section class="case">
+    <div class="case-label"><span class="badge tobe">РЕКОМЕНДАЦИЯ</span> Экран 2. Тот же кейс — пилюля «🔁 Прошлый подход» + чип «15»</div>
+    <div class="phone">
+        <div class="modal-box">
+            <div class="mtitle-row">
+                <p class="mtitle">Новая запись</p>
+                <button class="barebtn" title="Назад">←</button>
+            </div>
+            <p class="msub">Жим штанги лёжа</p>
+
+            <div class="fglass">
+                <div class="flabel">Вес, кг (0 — без веса)</div>
+                <div class="inwrap"><input value="60"><button class="clr">Очистить</button></div>
+                <button class="prevpill">🔁 Прошлый подход: 60 кг × 3 × 12 — подставить</button>
+                <div class="keyrow">
+                    <button class="k plus">+0,25</button><button class="k plus">+1</button><button class="k plus">+2</button><button class="k plus">+5</button><button class="k plus">+10</button><button class="k plus">+15</button><button class="k plus">+20</button><button class="k plus">+50</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k">10</button><button class="k">20</button><button class="k">30</button><button class="k">50</button><button class="k">60</button><button class="k">80</button><button class="k">100</button><button class="k">200</button>
+                </div>
+            </div>
+
+            <div class="fglass">
+                <div class="flabel">Подходы</div>
+                <div class="inwrap"><input value="1"><button class="clr">Очистить</button></div>
+                <div class="keyrow">
+                    <button class="k">1</button><button class="k">2</button><button class="k">3</button><button class="k">4</button><button class="k">5</button><button class="k">6</button><button class="k">7</button><button class="k">8</button>
+                </div>
+            </div>
+
+            <div class="fglass">
+                <div class="flabel">Повторения (например 12, 8-10)</div>
+                <div class="inwrap"><input value="1"><button class="clr">Очистить</button></div>
+                <div class="keyrow">
+                    <button class="k">1</button><button class="k">2</button><button class="k">3</button><button class="k">4</button><button class="k">5</button><button class="k">6</button><button class="k">7</button><button class="k">8</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k">10</button><button class="k">12</button><button class="k">15</button><button class="k plus">+1</button><button class="k plus">+2</button><button class="k plus">+5</button><button class="k plus">+10</button>
+                </div>
+            </div>
+
+            <div class="btnrow"><button class="btn">➕ Добавить</button></div>
+        </div>
+    </div>
+    <ul class="notes">
+        <li><span class="acc">Пилюля «🔁 Прошлый подход»</span> — один тап подставляет
+            <b>вес + подходы + повторения</b> прошлой записи. Частый кейс («2-й–4-й подход те же»)
+            ускоряется до 1 тапа, клавиатура не открывается.</li>
+        <li>Пилюля стоит на месте пилюли плана [UX-E5]: пока записей нет — «📋 План»,
+            после первой записи — «🔁 Прошлый подход» (взаимоисключаемо).</li>
+        <li>Автоподстановки по-прежнему нет — решение [UX-T12/T17] «повторения не подставлять
+            молча» не реверсируется: поля меняются только по явному тапу.</li>
+        <li>Чип <b>15</b> добавлен в ряд пресетов (7 кнопок вместо 6, инкременты сохранены
+            [UX-T26]). Значения 9/11/13/14 — редки, их закрывает пилюля или клавиатура.</li>
+    </ul>
+</section>
+
+<!-- ЭКРАН 3 -->
+<section class="case">
+    <div class="case-label"><span class="badge tobe">РЕКОМЕНДАЦИЯ</span> Экран 3. Свой вес + диапазон: пилюля скопировала «3 × 8-10» (после тапа)</div>
+    <div class="phone">
+        <div class="modal-box">
+            <div class="mtitle-row">
+                <p class="mtitle">Новая запись</p>
+                <button class="barebtn" title="Назад">←</button>
+            </div>
+            <p class="msub">Подтягивания</p>
+
+            <div class="fglass">
+                <div class="flabel">Вес, кг (0 — без веса)</div>
+                <div class="inwrap"><input value=""><button class="clr">Очистить</button></div>
+                <button class="prevpill dim">🔁 Прошлый подход: 3 × 8-10 — подставить</button>
+                <div class="keyrow">
+                    <button class="k plus">+0,25</button><button class="k plus">+1</button><button class="k plus">+2</button><button class="k plus">+5</button><button class="k plus">+10</button><button class="k plus">+15</button><button class="k plus">+20</button><button class="k plus">+50</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k">10</button><button class="k">20</button><button class="k">30</button><button class="k">50</button><button class="k">60</button><button class="k">80</button><button class="k">100</button><button class="k">200</button>
+                </div>
+            </div>
+
+            <div class="fglass">
+                <div class="flabel">Подходы</div>
+                <div class="inwrap"><input value="3"><button class="clr">Очистить</button></div>
+                <div class="keyrow">
+                    <button class="k">1</button><button class="k">2</button><button class="k">3</button><button class="k">4</button><button class="k">5</button><button class="k">6</button><button class="k">7</button><button class="k">8</button>
+                </div>
+            </div>
+
+            <div class="fglass">
+                <div class="flabel">Повторения (например 12, 8-10)</div>
+                <div class="inwrap"><input value="8-10"><button class="clr">Очистить</button></div>
+                <div class="keyrow">
+                    <button class="k">1</button><button class="k">2</button><button class="k">3</button><button class="k">4</button><button class="k">5</button><button class="k">6</button><button class="k">7</button><button class="k">8</button>
+                </div>
+                <div class="keyrow">
+                    <button class="k">10</button><button class="k">12</button><button class="k">15</button><button class="k plus">+1</button><button class="k plus">+2</button><button class="k plus">+5</button><button class="k plus">+10</button>
+                </div>
+            </div>
+
+            <div class="btnrow"><button class="btn">➕ Добавить</button></div>
+        </div>
+    </div>
+    <ul class="notes">
+        <li>Упражнение без веса: в пилюле короткая форма — <b>«🔁 Прошлый подход: 3 × 8-10»</b>
+            (edge-кейс E6 спеки).</li>
+        <li>Диапазон <b>«8-10» скопирован строкой как есть</b> — формат данных не меняется,
+            в карточке будет «3 подхода по 8-10 повторений».</li>
+        <li>После тапа пилюля остаётся видимой, но приглушённой — как пилюля плана
+            («вернуть значения» повторным тапом).</li>
+        <li>Диапазон, введённый вручную: тап «8» → клавиатура «-10». Текстовые записи
+            («до отказа») — только клавиатура, валидация ≤ 15 символов сохраняется.</li>
+    </ul>
+</section>
+
+</body>
+</html>

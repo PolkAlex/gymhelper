@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-T15] #106 · Разминка 10 мин — время входит в тренировку · Amber Glass</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --nested: rgba(0,0,0,.18); --btn: rgba(255,255,255,.07);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+.glass {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-top: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+.glass.glow { border-color: var(--glowbrd); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28), 0 0 26px rgba(255,194,32,.08); }
+
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: rgba(255,255,255,.07); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.content { padding: 4px 12px 120px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -12px; padding: 8px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { font-size: 19px; line-height: 1; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+
+/* кнопки */
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn {
+    border: 1px solid rgba(255,255,255,.08); border-radius: 14px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+    background: var(--btn); color: var(--text); text-align: center;
+}
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent); font-weight: 700;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.btn.wide { flex: 1 1 100%; }
+
+/* карточка тренировки: шапка, пилюли [как в web/app.js workoutCard] */
+.wct { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wct .t1 { font-size: 17px; font-weight: 700; margin: 0; }
+.wchead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wchead .wcicons { display: flex; gap: 2px; flex: none; }
+.barebtn {
+    width: 32px; height: 32px; border-radius: 9px; border: none; flex: none; cursor: pointer;
+    background: none; color: var(--muted); font-size: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.wcpill {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; width: 100%;
+    background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 12px; padding: 7px 12px; margin: 8px 0 2px;
+}
+.wpill { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wpill.wp-k { color: var(--accent); }
+/* [UX-T15] маркер учтённой разминки: статичный пилл (активная и завершённая) */
+.wpill.wp-w { color: var(--accent); opacity: .85; }
+/* [UX-T15] чип-кнопка тогла (только активная): OFF — приглушённый, ON — янтарный */
+.wchip {
+    display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+    font-size: 11.5px; font-weight: 600; font-family: inherit; white-space: nowrap;
+    color: var(--muted); background: var(--btn);
+    border: 1px solid rgba(255,255,255,.10); border-radius: 999px; padding: 4px 10px;
+    margin-left: auto;
+}
+.wchip.on { color: var(--on-accent); background: linear-gradient(135deg, var(--accent-deep), var(--accent)); border-color: transparent; }
+.expill {
+    background: var(--nested); border: 1px solid rgba(255,255,255,.05);
+    border-radius: 14px; padding: 10px; margin-top: 10px;
+}
+.exhead { display: flex; align-items: center; gap: 8px; }
+.exhead .ic {
+    width: 32px; height: 32px; border-radius: 10px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--btn); border: 1px solid var(--glassbrd); font-size: 15px;
+}
+.exhead .en { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; }
+.entry { font-size: 12.5px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
+
+/* ============ модалки (шторки) ============ */
+.backdrop {
+    position: absolute; inset: 0; z-index: 50;
+    background: rgba(8,9,11,.55);
+    display: flex; align-items: flex-end;
+}
+.sheet {
+    background: rgba(30,32,38,.96); border: 1px solid var(--glassbrd); border-bottom: none;
+    width: 100%; border-radius: 22px 22px 0 0; padding: 12px 14px 16px;
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    max-height: 92%; overflow-y: auto; scrollbar-width: none;
+}
+.sheet::-webkit-scrollbar { display: none; }
+.mtitle { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+.msub { color: var(--accent); font-size: 12.5px; font-weight: 600; margin: 0 0 8px; }
+.hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.45; }
+.hint .w { color: var(--accent); font-weight: 600; }
+
+/* кнопка старта с подзаголовком [bigstart из openStartModal] */
+.bigstart {
+    display: block; width: 100%; border: none; cursor: pointer; font-family: inherit;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 16px; padding: 13px;
+    font-size: 15px; font-weight: 700; margin-top: 12px;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.bigstart:active { transform: scale(.98); }
+.bigstart.alt {
+    background: var(--btn); border: 1px solid rgba(255,255,255,.08);
+    color: var(--text); font-weight: 600; box-shadow: none;
+}
+.bigstart.alt.warm { border-color: rgba(255,194,32,.35); color: var(--accent); }
+.bigstart .sub { display: block; font-size: 11.5px; font-weight: 600; opacity: .72; margin-top: 2px; }
+
+/* карточка шаблона в модалке старта */
+.tcard {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 16px; padding: 11px 12px; margin-top: 8px; cursor: pointer;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+}
+.tc-head { display: flex; align-items: center; gap: 10px; }
+.tc-head .tic {
+    width: 38px; height: 38px; border-radius: 12px; flex: none;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 17px;
+    background: rgba(255,194,32,.12); border: 1px solid rgba(255,194,32,.2);
+}
+.tc-head .tn { flex: 1; min-width: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+.tc-head .meta { font-size: 11.5px; color: var(--muted); margin-top: 1px; font-variant-numeric: tabular-nums; }
+
+/* тост */
+.toast {
+    position: sticky; bottom: 158px; z-index: 40;
+    margin: 0 auto; width: fit-content; max-width: 88%;
+    background: rgba(36,39,45,.94); border: 1px solid var(--glassbrd);
+    border-radius: 14px; padding: 10px 18px; font-size: 14px; font-weight: 600; color: var(--text);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 28px rgba(0,0,0,.4);
+}
+
+/* форма времени [timeModal] */
+label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+input[type="text"] {
+    width: 100%; border: 1px solid rgba(255,255,255,.12); border-radius: 12px;
+    padding: 10px 12px; font-size: 15px; background: rgba(0,0,0,.22); color: var(--text);
+    outline: none; font-family: inherit;
+}
+input[type="text"]:focus { border-color: var(--accent); }
+input[type="text"].dim { opacity: .55; }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">«Разминка 10 мин» — время входит в тренировку <span>[UX-T15] #106 · Amber Glass</span></div>
+    <div class="note">Рекомендован <b>вариант А</b>: быстрое действие, а не системный шаблон (см. спеку §2).
+    Действие сдвигает <code>started</code> на −10 мин и ставит маркер <code>wm: 10</code> (JSON-ключ <code>wm</code>,
+    опциональный). Длительность и ккал пересчитываются сами — и в Mini App, и в боте, без фиктивных упражнений.
+    Тексты и идентификаторы соответствуют коду: <code>openStartModal()</code>, <code>startWarmupWorkout()</code>,
+    <code>workoutCard()</code>, <code>warmupToggle</code>, <code>calcWorkoutKcal()</code>, <code>timeModal()</code>.</div>
+
+    <!-- ================= ЭКРАН 1: МОДАЛКА СТАРТА ================= -->
+    <div class="caption">Экран 1 · Быстрое действие в модалке старта <span>openStartModal()</span></div>
+    <div class="note">Новая кнопка между «С пустого списка» и «Повторить прошлую»:
+    <code>data-act="startWarmup"</code> → <code>startWarmupWorkout()</code> = <code>startBlank()</code> с
+    <code>started = now − 10 мин</code>, <code>wm = 10</code>, тостом и открытием пикера.
+    Через <code>activeConflictAsk()</code> [UX-B7] — как у обычного старта.
+    «🔁 Повторить прошлую» наследует разминку источника: подзаголовок «· 🤸 с разминкой».</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>11:24</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content" style="filter:blur(2px);opacity:.55">
+                <div class="glass">
+                    <div class="wct"><p class="t1">05-11, Чт</p></div>
+                    <div class="wcpill"><span class="wpill">🕐 18:20–19:05</span><span class="wpill wp-k">🔥 312 ккал</span><span class="wpill">🏋 9 подх.</span></div>
+                </div>
+                <div class="glass">
+                    <div class="wct"><p class="t1">03-11, Вт</p></div>
+                </div>
+            </div>
+
+            <div class="backdrop">
+                <div class="sheet">
+                    <p class="mtitle">Новая тренировка</p>
+
+                    <button class="bigstart">🏋️ С пустого списка</button>
+
+                    <!-- [UX-T15] НОВОЕ: быстрое действие «Разминка 10 мин» -->
+                    <button class="bigstart alt warm">🤸 Разминка 10 мин
+                        <span class="sub">старт с −10 мин · время войдёт в длительность и ккал</span>
+                    </button>
+
+                    <!-- «Повторить прошлую»: в источнике была разминка → наследуется -->
+                    <button class="bigstart alt">🔁 Повторить прошлую
+                        <span class="sub">05-11, Чт · 3 упражнения · 🤸 с разминкой</span>
+                    </button>
+
+                    <p class="msub" style="margin-top:14px">📋 Шаблоны · 1 из 20</p>
+
+                    <div class="tcard">
+                        <div class="tc-head">
+                            <span class="tic">📋</span>
+                            <span style="flex:1;min-width:0">
+                                <span class="tn">Спина и бицепс</span>
+                                <span class="meta" style="display:block">4 упр. · 60 кг · свой вес</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="btnrow" style="margin-top:12px">
+                        <button class="btn wide">Закрыть</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+    <div class="note">У новичка (нет истории и шаблонов) модалка не открывается [UX-T7] — FAB стартует мгновенно,
+    разминка ставится чипом на карточке (экран 2). Старт из настоящего шаблона — <b>без</b> разминки:
+    схему <code>Template</code> не расширяем, чип доступен на карточке после старта.</div>
+
+    <!-- ================= ЭКРАН 2: АКТИВНАЯ, ДО ТАПА ================= -->
+    <div class="caption">Экран 2 · Карточка активной тренировки — чип выключен <span>workoutCard()</span></div>
+    <div class="note">Начал в 11:25 (уже размявшись до этого? — тогда тапни чип). Ряд <code>.wcpill</code>:
+    время, ккал от 40 основных минут (объём 1800 кг → MET 3.5 → 196 ккал), подходы.
+    Чип <code>.wchip</code> <code>data-act="warmupToggle"</code> — только у активной тренировки.
+    Семантика: «я размялся 10 мин <b>до</b> старта» → сдвиг назад. Если стартуешь <b>перед</b> разминкой —
+    отмечать не нужно: минуты и так войдут (started уже стоит).</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>12:05</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass glow">
+                    <div class="wchead">
+                        <p class="t1">08.11, Вс</p>
+                        <div class="wcicons">
+                            <button class="barebtn" title="Добавить упражнение">＋</button>
+                            <button class="barebtn" title="Отменить тренировку">✕</button>
+                            <button class="barebtn" title="Завершить тренировку">✓</button>
+                        </div>
+                    </div>
+                    <div class="wcpill">
+                        <span class="wpill">🕐 с 11:25</span>
+                        <span class="wpill wp-k">🔥 196 ккал</span>
+                        <span class="wpill">🏋 6 подх.</span>
+                        <!-- [UX-T15] чип-тогл, OFF -->
+                        <button class="wchip" data-act="warmupToggle" aria-label="Учесть разминку 10 минут">🤸 Разминка</button>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧷</span><span class="en">Тяга верхнего блока</span></div>
+                        <div class="entry">60 кг, 3 подхода по 10</div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧗</span><span class="en">Подтягивания</span></div>
+                        <div class="entry">без веса, 3 подхода по 8</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= ЭКРАН 3: ПОСЛЕ ТАПА ================= -->
+    <div class="caption">Экран 3 · Тот же экран после тапа — разминка учтена <span>toggleWarmup(wid)</span></div>
+    <div class="note">Чип в состоянии ON (янтарный), время «с 11:15», маркер-пилл
+    <code>.wpill.wp-w</code> «🤸 разминка 10 мин», ккал пересчитались: 50 мин × MET 3.5 × 80 кг ÷ 200 = <b>245</b> (+49).
+    MET-тир считается по основным минутам (<code>perMin = объём / (минуты − wm</code>) — добавление разминки
+    не может «уронить» ккал (спека §5.2). Тост подтверждает сдвиг. Повторный тап — откат
+    <code>started += 10</code> (clamp: не позже «сейчас»), маркер и тост снятия.</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>12:06</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass glow">
+                    <div class="wchead">
+                        <p class="t1">08.11, Вс</p>
+                        <div class="wcicons">
+                            <button class="barebtn" title="Добавить упражнение">＋</button>
+                            <button class="barebtn" title="Отменить тренировку">✕</button>
+                            <button class="barebtn" title="Завершить тренировку">✓</button>
+                        </div>
+                    </div>
+                    <div class="wcpill">
+                        <span class="wpill">🕐 с 11:15</span>
+                        <span class="wpill wp-k">🔥 245 ккал</span>
+                        <span class="wpill">🏋 6 подх.</span>
+                        <span class="wpill wp-w">🤸 разминка 10 мин</span>
+                        <!-- [UX-T15] чип-тогл, ON -->
+                        <button class="wchip on" data-act="warmupToggle" aria-label="Убрать разминку">🤸 разминка 10 мин</button>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧷</span><span class="en">Тяга верхнего блока</span></div>
+                        <div class="entry">60 кг, 3 подхода по 10</div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧗</span><span class="en">Подтягивания</span></div>
+                        <div class="entry">без веса, 3 подхода по 8</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toast">🤸 +10 мин разминки — начало сдвинуто на 11:15</div>
+
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+    <div class="note">В списке истории превью-карточка (<code>previewCard</code>) маркер НЕ показывает —
+    «🕐 с 11:15» уже отражает сдвиг; пилл-стек не расширяем (спека §5.3).</div>
+
+    <!-- ================= ЭКРАН 4: ЗАВЕРШЁННАЯ С РАЗМИНКОЙ ================= -->
+    <div class="caption">Экран 4 · Завершённая тренировка с разминкой <span>ретро-случай</span></div>
+    <div class="note">Маркер-пилл виден и у завершённой, но чипа-кнопки там нет (принцип [UX-T19]:
+    минимум действий; ретро-разминка — вручную через «⏱ Время», спека §6.5).
+    Диапазон «🕐 11:15–12:05» — разминка внутри длительности; «💾 В шаблоны» разминку
+    не уносит (шаблон = список упражнений, спека §6.6).</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="tgchrome">
+                <div class="statusrow"><b>12:10</b><span class="sig">TELEGRAM</span></div>
+                <div class="apphead">
+                    <div class="ttl">GymHelper · История</div>
+                    <button class="tbtn">👤</button>
+                </div>
+            </div>
+            <div class="content">
+                <div class="glass">
+                    <div class="wchead fin">
+                        <p class="t1">08.11, Вс</p>
+                        <div class="wcicons">
+                            <button class="barebtn" title="Повторить">🔁</button>
+                            <button class="barebtn" title="Сохранить">💾</button>
+                            <button class="barebtn" title="Время">⏱</button>
+                            <button class="barebtn" title="Удалить">🗑</button>
+                        </div>
+                    </div>
+                    <div class="wcpill">
+                        <span class="wpill">🕐 11:15–12:05</span>
+                        <span class="wpill wp-k">🔥 245 ккал</span>
+                        <span class="wpill">🏋 8 подх.</span>
+                        <!-- [UX-T15] маркер без кнопки у завершённой -->
+                        <span class="wpill wp-w">🤸 разминка 10 мин</span>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧷</span><span class="en">Тяга верхнего блока</span></div>
+                        <div class="entry">60 кг, 3 подхода по 10</div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">🧗</span><span class="en">Подтягивания</span></div>
+                        <div class="entry">без веса, 3 подхода по 8</div>
+                    </div>
+                    <div class="expill">
+                        <div class="exhead"><span class="ic">💪</span><span class="en">Молотки</span></div>
+                        <div class="entry">25 кг, 2 подхода по 12</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="nav">
+                <button class="nbtn on"><span class="nic">⌂</span>История</button>
+                <button class="nbtn"><span class="nic">📈</span>Статистика</button>
+                <button class="nfab">+</button>
+                <button class="nbtn"><span class="nic">📖</span>Техника</button>
+                <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= ЭКРАН 5: РЕТРО-ВВОД ВРЕМЕНИ ================= -->
+    <div class="caption">Экран 5 · «⏱ Время» при учтённой разминке <span>timeModal()</span></div>
+    <div class="note">Ретро-ввод не ломается: поля дат/времени работают как раньше (маски те же).
+    При <code>wm &gt; 0</code> добавляется подсказка. Ручная правка «Начало» <b>не сбрасывает</b>
+    разминку — маркер остаётся честным (спека §6.4). Полуночный сдвиг (00:04 → 23:55 вчера):
+    <code>date</code> следует за <code>started</code>, как в <code>saveTime</code> (спека §6.2).</div>
+
+    <div class="phone">
+        <div class="p">
+            <div class="backdrop" style="position:sticky;inset:auto;top:0;bottom:0;height:100%">
+                <div class="sheet">
+                    <p class="mtitle">⏱ Даты и время тренировки</p>
+
+                    <label>Начало — дата (ДД.ММ.ГГГГ)</label>
+                    <input type="text" value="08.11.2026">
+                    <label>Начало — время (ЧЧ:ММ)</label>
+                    <input type="text" value="11:15">
+                    <label>Окончание — дата</label>
+                    <input type="text" class="dim" placeholder="08.11.2026">
+                    <label>Окончание — время</label>
+                    <input type="text" class="dim" placeholder="12:05">
+
+                    <!-- [UX-T15] подсказка при wm > 0 -->
+                    <p class="hint"><span class="w">🤸 В длительность входит разминка 10 мин</span> —
+                    поле «Начало» уже сдвинуто. Правка времени её не уберёт: снять — тапом по чипу на карточке.</p>
+
+                    <div class="formerr" style="color:var(--danger);font-size:12.5px;min-height:16px"></div>
+                    <div class="btnrow">
+                        <button class="btn wide">💾 Сохранить</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

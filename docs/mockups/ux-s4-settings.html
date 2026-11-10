@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-S4] #137 · Экран «Настройки» + переработка «Профиля» · Amber Glass</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    /* тёмная тема (базовая) — значения из web/style.css */
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --nested: rgba(0,0,0,.18); --nestedbrd: rgba(255,255,255,.05);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    --field: rgba(0,0,0,.22); --fieldbrd: rgba(255,255,255,.12);
+    --cardshadow: rgba(0,0,0,.28); --blik: rgba(255,255,255,.06);
+    /* тогл-компонент [UX-S4]: тёмные значения */
+    --sw-track-off: rgba(0,0,0,.35); --sw-track-brd: rgba(255,255,255,.10);
+    --sw-knob: rgba(255,255,255,.92); --sw-knob-brd: rgba(255,255,255,.25);
+    --sw-knob-ico: #565b64;
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.45;
+    scrollbar-width: none;
+}
+/* светлые значения [data-theme=light] из web/style.css */
+.p.light {
+    --bg: #f6f6f4; --text: #16181b; --muted: #8a9099;
+    --accent: #ffb000; --accent-deep: #e09000; --on-accent: #14120a;
+    --danger: #e25548;
+    --glass: rgba(255,255,255,.6); --glassbrd: rgba(22,24,27,.08);
+    --glowbrd: rgba(255,176,0,.40);
+    --nested: rgba(22,24,27,.05); --nestedbrd: rgba(22,24,27,.05);
+    --btn: rgba(255,255,255,.70); --btnbrd: rgba(22,24,27,.08);
+    --field: rgba(255,255,255,.72); --fieldbrd: rgba(22,24,27,.12);
+    --cardshadow: rgba(22,24,27,.10); --blik: rgba(255,255,255,.60);
+    --sw-track-off: rgba(22,24,27,.14); --sw-track-brd: rgba(22,24,27,.10);
+    --sw-knob: #ffffff; --sw-knob-brd: rgba(22,24,27,.12);
+    --sw-knob-ico: #8a9099;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p.light::before { opacity: .6; }
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+/* ============ каркас экрана ============ */
+.topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 10px 12px; max-width: 536px; margin: 4px 0 12px;
+}
+.p.light .topbar { background: linear-gradient(180deg, rgba(246,246,244,.96) 62%, rgba(246,246,244,.8)); }
+.tb-title { font-weight: 700; font-size: 17px; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
+.tbtn {
+    width: 32px; height: 32px; border-radius: 9px; border: none; flex: none; cursor: pointer;
+    background: var(--btn); color: var(--muted);
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.tbtn svg { width: 18px; height: 18px; }
+.content { padding: 0 12px 120px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 40;
+    margin: 0 -12px; padding: 8px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.p.light .nav { background: linear-gradient(180deg, rgba(246,246,244,.2), rgba(246,246,244,.94) 40%); }
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.p.light .nav .nbtn { color: rgba(22,24,27,.42); }
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { display: inline-flex; line-height: 1; }
+.nav .nic svg { width: 20px; height: 20px; color: inherit; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px;
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+.nav .nfab svg { width: 24px; height: 24px; }
+
+/* ============ карточки / текст / кнопки ============ */
+.glass {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-bottom: 10px;
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow);
+}
+.glass.glow { border-color: var(--glowbrd); box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow), 0 0 26px rgba(255,194,32,.08); }
+.t1 { font-size: 18px; font-weight: 700; margin: 0 0 2px; letter-spacing: .2px; }
+.meta { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+.muted { color: var(--muted); font-size: 13px; }
+.flabel { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+.hr { border-top: 1px solid var(--nestedbrd); margin: 13px 0 12px; }
+
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn {
+    border: 1px solid var(--btnbrd); border-radius: 14px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+    background: var(--btn); color: var(--text); text-align: center;
+    -webkit-tap-highlight-color: transparent;
+}
+.btn.sec { background: var(--btn); }
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent); font-weight: 700;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.btn.wide { flex: 1 1 100%; }
+.split2 { display: flex; gap: 8px; margin-top: 8px; width: 100%; }
+.split2 .btn { flex: 1 1 0; min-width: 0; font-size: 14.5px; padding: 12px 8px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 4px; }
+.chip {
+    border: 1px solid var(--btnbrd); color: var(--text); background: var(--btn);
+    border-radius: 999px; padding: 8px 13px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit; -webkit-tap-highlight-color: transparent;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+.setrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.setrow .lbl { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.setrow-dim { color: var(--muted); }
+
+/* ============ тогл-компонент [UX-S4] ============ */
+.switch {
+    width: 66px; height: 44px; padding: 0; border: none; background: none;
+    display: inline-flex; align-items: center; justify-content: flex-end;
+    cursor: pointer; flex: none; font-family: inherit;
+    -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+.sw-track {
+    position: relative; width: 56px; height: 32px; border-radius: 999px;
+    box-sizing: border-box;
+    background: var(--sw-track-off); border: 1px solid var(--sw-track-brd);
+    transition: background .2s ease, border-color .2s ease;
+}
+.switch.on .sw-track {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent;
+}
+.sw-knob {
+    position: absolute; top: 2px; left: 2px; width: 26px; height: 26px;
+    border-radius: 50%; background: var(--sw-knob);
+    border: 1px solid var(--sw-knob-brd);
+    box-shadow: 0 2px 8px var(--cardshadow), inset 0 1px 0 var(--blik);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--sw-knob-ico);
+    transition: transform .22s cubic-bezier(.2,.8,.25,1), background .2s ease;
+}
+.switch.on .sw-knob {
+    transform: translateX(24px);
+    background: #fff; border-color: transparent;
+    color: var(--accent-deep);
+}
+.sw-knob svg { width: 15px; height: 15px; pointer-events: none; }
+.sw-ico { position: absolute; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--muted); opacity: .55; pointer-events: none; }
+.sw-ico.l { left: 6px; } .sw-ico.r { right: 6px; }
+.sw-ico svg { width: 14px; height: 14px; display: block; }
+.switch.on .sw-ico { color: rgba(20,18,10,.45); opacity: 1; }
+.switch.locked { opacity: .45; pointer-events: none; }
+
+/* ============ профиль ============ */
+.sexrow { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.sexrow .t1 { margin: 0; flex: 1; }
+.seg { display: flex; border: 1px solid var(--btnbrd); border-radius: 12px; overflow: hidden; background: var(--field); max-width: 220px; margin-left: auto; }
+.seg .seg-btn {
+    flex: 1 1 0; min-width: 0; height: 40px; border: none; background: none;
+    color: var(--muted); font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+}
+.seg .seg-btn + .seg-btn { border-left: 1px solid var(--btnbrd); }
+.seg .seg-btn.on { background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: var(--on-accent); font-weight: 700; }
+.prow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; }
+.prow .pf { flex: 1 1 0; min-width: 58px; }
+.prow .pf label { display: block; margin: 6px 0 3px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.prow .pf input {
+    width: 100%; padding: 8px; height: 40px; text-align: center; font-size: 15px;
+    border: 1px solid var(--fieldbrd); border-radius: 12px; background: var(--field); color: var(--text);
+    font-family: inherit; box-sizing: border-box; outline: none;
+}
+.prow .pfsave { flex: 0 0 auto; margin-left: auto; height: 40px; padding: 8px 12px; font-size: 13px; font-weight: 700; }
+.prof .glass { padding: 12px; margin-bottom: 8px; }
+
+/* ============ превью-карточка истории ============ */
+.pcard {
+    display: grid; grid-template-columns: minmax(0,1fr) auto; column-gap: 8px;
+    padding: 10px; border-radius: 20px; margin-top: 8px; cursor: pointer;
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow);
+}
+.pc-date { font-size: 15px; font-weight: 700; }
+.pc-dow { font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); margin-top: 3.5px; justify-self: center; }
+.pc-ex { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+
+/* ============ палитра компонентов ============ */
+.swgallery { display: flex; flex-direction: column; gap: 8px; }
+.swrow {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--glass); border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 6px 14px;
+}
+.swrow .lbl { flex: 1; font-size: 13.5px; font-weight: 600; }
+.swrow .tag {
+    font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; color: var(--muted);
+    background: var(--nested); border-radius: 6px; padding: 2px 7px; white-space: nowrap;
+}
+.icon-demo { display: flex; align-items: center; gap: 18px; background: var(--glass); border: 1px solid var(--glassbrd); border-radius: 16px; padding: 14px; }
+.icon-demo .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.icon-demo .cell .sz { font-family: ui-monospace, Consolas, monospace; font-size: 10px; color: var(--muted); }
+.icon-demo svg { stroke: currentColor; }
+.arrow-demo { font-size: 20px; color: var(--muted); }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+<!-- ================= SVG-иконки набора (каталог ICONS, stroke currentColor 1.7) ================= -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/>
+    <path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/>
+    <path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/>
+  </symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/>
+  </symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>
+  </symbol>
+  <symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/>
+  </symbol>
+  <symbol id="i-pilates" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5v14M5 12h14"/>
+  </symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="4"/><path d="M12 3v2.5"/><path d="M12 18.5V21"/><path d="M3 12h2.5"/><path d="M18.5 12H21"/><path d="M5.6 5.6l1.8 1.8"/><path d="M18.4 5.6l-1.8 1.8"/><path d="M5.6 18.4l1.8-1.8"/><path d="M18.4 18.4l-1.8-1.8"/>
+  </symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 4.5a5.7 5.7 0 008 8 8 8 0 11-8-8z"/><path d="M19.5 2.8v4.4"/><path d="M17.3 5h4.4"/><path d="M20 15.8v3.4"/><path d="M18.3 17.5h3.4"/><path d="M15.8 20.9h.01"/>
+  </symbol>
+</svg>
+
+<!-- ================================================================ -->
+<h2 class="caption">1 · Вкладка «История» — топбар с шестерёнкой <span>точка входа</span></h2>
+<p class="note">Иконка профиля <code>ICONS.user</code> в правом верхнем углу заменена на шестерёнку
+<code>ICONS.gear</code> (<code>data-act="openSettings"</code>). Кнопка одна на <b>все вкладки</b>
+и на экране открытой карточки тренировки. Заголовок вкладки снова «GymHelper · История»
+(артефакт «Настройки» у вкладки profile убран). Нижняя навигация не меняется.</p>
+<div class="phone"><div class="p">
+  <div class="content">
+    <div class="topbar">
+      <span class="tb-title">GymHelper · История</span>
+      <button class="tbtn" title="Настройки" aria-label="Настройки"><svg width="18" height="18"><use href="#i-gear"/></svg></button>
+    </div>
+    <div class="glass glow">
+      <div class="muted" style="font-size:13px; text-transform:capitalize; font-weight:600;">суббота, 8 ноября</div>
+      <div class="t1" style="margin-top:4px;">Готов к тренировке?</div>
+      <div class="btnrow"><button class="btn prime wide">Начать тренировку</button></div>
+    </div>
+    <div class="pcard">
+      <div>
+        <div style="display:flex; align-items:center; gap:8px;"><span class="pc-date">05-11</span><span class="pc-ex">4 упр · 12 подходов</span></div>
+        <div class="pc-ex">Жим лёжа · Тяга блока · Приседания · Планка</div>
+      </div>
+      <div class="pc-dow">ЧТ</div>
+    </div>
+    <div class="pcard">
+      <div>
+        <div style="display:flex; align-items:center; gap:8px;"><span class="pc-date">03-11</span><span class="pc-ex">3 упр · 9 подходов</span></div>
+        <div class="pc-ex">Подтягивания · Отжимания на брусьях · Планка</div>
+      </div>
+      <div class="pc-dow">ВТ</div>
+    </div>
+    <div class="nav">
+      <button class="nbtn on"><span class="nic"><svg width="20" height="20"><use href="#i-history"/></svg></span><span>История</span></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-chart"/></svg></span><span>Статистика</span></button>
+      <button class="nfab" title="Начать тренировку"><svg width="24" height="24"><use href="#i-plus"/></svg></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-pilates"/></svg></span><span>Техника</span></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-user"/></svg></span><span>Профиль</span></button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ================================================================ -->
+<h2 class="caption">2 · Экран «Настройки» целиком <span>тоглы, чипы, фон, тренер, резерв политики</span></h2>
+<p class="note">Вход — шестерёнка из топбара (с любой вкладки), выход — «←» в шапке (возврат на исходную вкладку).
+Состав сверху вниз: <b>Оформление</b> (тогл «Тёмная тема» — ON, тогл «Полноэкранный режим» — OFF, фон),
+<b>Таймер отдыха</b> (чипы + тогл звука — ON), <b>Персональный тренер</b>, <b>О приложении</b>
+(резерв под политику [ONB-T2]: в прод до тикета <b>не рендерится</b>, здесь показан для согласования дизайна).
+Полноэкранный тогл на клиентах без Telegram 8.0+ — состояние <code>locked</code> с текстом
+«Недоступно: обнови Telegram до 8.0+» (см. секцию 4).</p>
+<div class="phone"><div class="p">
+  <div class="content">
+    <div class="topbar">
+      <button class="tbtn" title="Назад" aria-label="Назад"><svg width="18" height="18"><use href="#i-back"/></svg></button>
+      <span class="tb-title">GymHelper · Настройки</span>
+    </div>
+
+    <div class="glass">
+      <p class="t1">🎨 Оформление</p>
+      <div class="setrow">
+        <span class="lbl">Тёмная тема</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Тёмная тема">
+          <span class="sw-track">
+            <span class="sw-ico l"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+            <span class="sw-knob"><svg width="15" height="15"><use href="#i-moon"/></svg></span>
+          </span>
+        </button>
+      </div>
+      <p class="meta">Без выбора — тема как в клиенте Telegram</p>
+      <div class="setrow">
+        <span class="lbl">Полноэкранный режим</span>
+        <button class="switch" role="switch" aria-checked="false" aria-label="Полноэкранный режим">
+          <span class="sw-track">
+            <span class="sw-knob"></span>
+          </span>
+        </button>
+      </div>
+      <p class="meta">Автоматически разворачивает приложение на весь экран</p>
+      <div class="hr"></div>
+      <div class="flabel">Фон приложения</div>
+      <p class="meta" style="margin:0;">Картинка хранится только на этом устройстве</p>
+      <div class="split2">
+        <button class="btn sec">📷 Из галереи</button>
+        <button class="btn sec">Убрать фон</button>
+      </div>
+    </div>
+
+    <div class="glass">
+      <p class="t1">⏱ Таймер отдыха</p>
+      <p class="meta">Запускается автоматически после записи подхода; «Выкл» — отсчёт не запускается.</p>
+      <div class="chips">
+        <button class="chip">60</button>
+        <button class="chip on">90</button>
+        <button class="chip">120</button>
+        <button class="chip">180</button>
+        <button class="chip">Выкл</button>
+        <button class="chip">Своё…</button>
+      </div>
+      <div class="setrow">
+        <span class="lbl">Звук по окончании</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Звук по окончании">
+          <span class="sw-track">
+            <span class="sw-knob"></span>
+          </span>
+        </button>
+      </div>
+    </div>
+
+    <div class="glass">
+      <p class="t1">🧑‍🏫 Персональный тренер</p>
+      <p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>
+      <div class="btnrow"><button class="btn sec wide">Открыть раздел</button></div>
+    </div>
+
+    <div class="glass">
+      <p class="t1">ℹ️ О приложении</p>
+      <div class="setrow">
+        <span class="lbl setrow-dim">Политика конфиденциальности</span>
+        <span class="meta">Скоро</span>
+      </div>
+    </div>
+
+    <div class="nav">
+      <button class="nbtn on"><span class="nic"><svg width="20" height="20"><use href="#i-history"/></svg></span><span>История</span></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-chart"/></svg></span><span>Статистика</span></button>
+      <button class="nfab" title="Начать тренировку"><svg width="24" height="24"><use href="#i-plus"/></svg></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-pilates"/></svg></span><span>Техника</span></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-user"/></svg></span><span>Профиль</span></button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ================================================================ -->
+<h2 class="caption">3 · Профиль после переработки <span>только данные пользователя</span></h2>
+<p class="note">Из Профиля ушли: тема, полноэкранный, фон, таймер отдыха + звук, персональный тренер
+(→ Настройки). Остались ровно 4 карточки: саммари (заголовок «Профиль» — без эмодзи-шестерёнки ⚙️,
+она теперь означает Настройки), «Пол», перс. данные («Сохранить» работает как раньше),
+«⭐ Любимые упражнения» («Открыть в технике»). Поле «имя» не заводим — данных имени в GymData нет (вопрос владельцу).</p>
+<div class="phone"><div class="p">
+  <div class="content prof">
+    <div class="topbar">
+      <span class="tb-title">GymHelper · Профиль</span>
+      <button class="tbtn" title="Настройки" aria-label="Настройки"><svg width="18" height="18"><use href="#i-gear"/></svg></button>
+    </div>
+
+    <div class="glass">
+      <p class="t1">Профиль</p>
+      <p class="meta">М · 34 лет · 178 см · 78,5 кг</p>
+      <p class="meta">BMR ≈ 1733 ккал/сут (Mifflin-St Jeor)</p>
+    </div>
+
+    <div class="glass">
+      <div class="sexrow">
+        <p class="t1">Пол</p>
+        <div class="seg" role="group" aria-label="Пол">
+          <button class="seg-btn on" title="Мужской" aria-label="Мужской">М</button>
+          <button class="seg-btn" title="Женский" aria-label="Женский">Ж</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="prow">
+        <div class="pf"><label for="pfAge">Возраст</label><input id="pfAge" type="number" value="34"></div>
+        <div class="pf"><label for="pfHeight">Рост, см</label><input id="pfHeight" type="number" value="178"></div>
+        <div class="pf"><label for="pfWeight">Вес, кг</label><input id="pfWeight" type="number" step="0.1" value="78.5"></div>
+        <button class="btn pfsave">💾 Сохранить</button>
+      </div>
+    </div>
+
+    <div class="glass">
+      <p class="t1">⭐ Любимые упражнения</p>
+      <p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>
+      <div class="btnrow"><button class="btn sec wide">Открыть в технике</button></div>
+    </div>
+
+    <div class="nav">
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-history"/></svg></span><span>История</span></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-chart"/></svg></span><span>Статистика</span></button>
+      <button class="nfab" title="Начать тренировку"><svg width="24" height="24"><use href="#i-plus"/></svg></button>
+      <button class="nbtn"><span class="nic"><svg width="20" height="20"><use href="#i-pilates"/></svg></span><span>Техника</span></button>
+      <button class="nbtn on"><span class="nic"><svg width="20" height="20"><use href="#i-user"/></svg></span><span>Профиль</span></button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ================================================================ -->
+<h2 class="caption">4 · Тогл-компонент — все состояния <span>тёмная и светлая темы</span></h2>
+<p class="note">Единый компонент <code>.switch</code>: кнопка-тап-зона 66×44, трек 56×32, ручка ⌀26 (переезд 24px).
+ON — янтарный градиент (как сегмент пола / CTA), ручка белая, иконка — <code>accent-deep</code>;
+OFF — стеклянный трек, ручка слева. Тема: ручка несёт иконку активной темы
+(<code>ICONS.moon</code>/<code>ICONS.sun</code> — существующие), на свободном конце — «призрак» пассивной.
+Fullscreen и звук — без иконок. <code>locked</code> = disabled (старый клиент без Telegram 8.0+).</p>
+
+<div class="phone"><div class="p">
+  <div class="content">
+    <div class="swgallery" style="margin-top:6px;">
+      <div class="swrow">
+        <span class="lbl">Тёмная тема</span>
+        <span class="tag">.on · aria-checked=true</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Тёмная тема">
+          <span class="sw-track">
+            <span class="sw-ico l"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+            <span class="sw-knob"><svg width="15" height="15"><use href="#i-moon"/></svg></span>
+          </span>
+        </button>
+      </div>
+      <div class="swrow">
+        <span class="lbl">Тёмная тема (выключена → светлая)</span>
+        <span class="tag">.off · aria-checked=false</span>
+        <button class="switch" role="switch" aria-checked="false" aria-label="Тёмная тема">
+          <span class="sw-track">
+            <span class="sw-ico r"><svg width="14" height="14"><use href="#i-moon"/></svg></span>
+            <span class="sw-knob"><svg width="15" height="15"><use href="#i-sun"/></svg></span>
+          </span>
+        </button>
+      </div>
+      <div class="swrow">
+        <span class="lbl">Полноэкранный режим</span>
+        <span class="tag">.on · без иконок</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Полноэкранный режим">
+          <span class="sw-track"><span class="sw-knob"></span></span>
+        </button>
+      </div>
+      <div class="swrow">
+        <span class="lbl">Полноэкранный режим</span>
+        <span class="tag">.off</span>
+        <button class="switch" role="switch" aria-checked="false" aria-label="Полноэкранный режим">
+          <span class="sw-track"><span class="sw-knob"></span></span>
+        </button>
+      </div>
+      <div class="swrow">
+        <span class="lbl">Полноэкранный · старый клиент</span>
+        <span class="tag">.locked · aria-disabled</span>
+        <button class="switch on locked" role="switch" aria-checked="true" aria-disabled="true" aria-label="Полноэкранный режим">
+          <span class="sw-track"><span class="sw-knob"></span></span>
+        </button>
+      </div>
+      <div class="swrow">
+        <span class="lbl">Звук по окончании</span>
+        <span class="tag">.on</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Звук по окончании">
+          <span class="sw-track"><span class="sw-knob"></span></span>
+        </button>
+      </div>
+      <div class="swrow">
+        <span class="lbl">Звук по окончании</span>
+        <span class="tag">.off</span>
+        <button class="switch" role="switch" aria-checked="false" aria-label="Звук по окончании">
+          <span class="sw-track"><span class="sw-knob"></span></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+    <div class="flabel">Та же палитра в светлой теме (data-theme="light")</div>
+
+    <div class="p light" style="margin:8px -12px -12px; padding:12px; border-top:1px solid var(--glassbrd);">
+      <div class="swgallery">
+        <div class="swrow">
+          <span class="lbl">Тёмная тема · ON (ручка справа, луна)</span>
+          <button class="switch on" role="switch" aria-checked="true" aria-label="Тёмная тема">
+            <span class="sw-track">
+              <span class="sw-ico l"><svg width="14" height="14"><use href="#i-sun"/></svg></span>
+              <span class="sw-knob"><svg width="15" height="15"><use href="#i-moon"/></svg></span>
+            </span>
+          </button>
+        </div>
+        <div class="swrow">
+          <span class="lbl">Тёмная тема · OFF (ручка слева, солнце)</span>
+          <button class="switch" role="switch" aria-checked="false" aria-label="Тёмная тема">
+            <span class="sw-track">
+              <span class="sw-ico r"><svg width="14" height="14"><use href="#i-moon"/></svg></span>
+              <span class="sw-knob"><svg width="15" height="15"><use href="#i-sun"/></svg></span>
+            </span>
+          </button>
+        </div>
+        <div class="swrow">
+          <span class="lbl">Полноэкранный · ON / OFF / locked</span>
+          <span style="display:flex; gap:4px;">
+            <button class="switch on" role="switch" aria-checked="true" aria-label="Полноэкранный режим"><span class="sw-track"><span class="sw-knob"></span></span></button>
+            <button class="switch" role="switch" aria-checked="false" aria-label="Полноэкранный режим"><span class="sw-track"><span class="sw-knob"></span></span></button>
+            <button class="switch locked" role="switch" aria-checked="false" aria-disabled="true" aria-label="Полноэкранный режим"><span class="sw-track"><span class="sw-knob"></span></span></button>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ================================================================ -->
+<h2 class="caption">5 · Иконка шестерёнки <span>ICONS.gear</span></h2>
+<p class="note">Линейная шестерёнка в стиле набора: корпус <code>r=6.2</code>, втулка <code>r=2.6</code>,
+8 зубцов-штрихов вплотную к корпусу (у <code>ICONS.sun</code> лучи с зазором — иконки различимы).
+Отрисовка в топбаре — 18×18. В код добавляется в <code>web/catalog.js</code>:</p>
+<p class="note"><code>gear: _s('&lt;circle cx="12" cy="12" r="6.2"/&gt;&lt;circle cx="12" cy="12" r="2.6"/&gt;&lt;path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/&gt;&lt;path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/&gt;')</code></p>
+<div class="phone"><div class="p">
+  <div class="content">
+    <div class="icon-demo" style="margin-top:6px;">
+      <div class="cell">
+        <svg width="48" height="48"><use href="#i-gear"/></svg>
+        <span class="sz">48px</span>
+      </div>
+      <div class="cell">
+        <svg width="32" height="32"><use href="#i-gear"/></svg>
+        <span class="sz">32px</span>
+      </div>
+      <div class="cell">
+        <svg width="24" height="24"><use href="#i-gear"/></svg>
+        <span class="sz">24px</span>
+      </div>
+      <div class="cell">
+        <div class="tbtn" style="width:40px;height:40px;"><svg width="20" height="20"><use href="#i-gear"/></svg></div>
+        <span class="sz">20px в кнопке</span>
+      </div>
+      <div class="cell">
+        <div class="tbtn"><svg width="18" height="18"><use href="#i-gear"/></svg></div>
+        <span class="sz">18px · топбар</span>
+      </div>
+      <div class="arrow-demo">→</div>
+      <div class="cell" style="opacity:.6;">
+        <svg width="32" height="32"><use href="#i-user"/></svg>
+        <span class="sz">было · user</span>
+      </div>
+    </div>
+
+    <div class="glass" style="margin-top:16px;">
+      <p class="t1" style="display:flex; align-items:center; gap:10px;">
+        <span class="tbtn"><svg width="18" height="18"><use href="#i-gear"/></svg></span>
+        Читаемость на месте: топбар, вкладка «История»
+      </p>
+      <p class="meta">Соседние иконки набора — chart, history, user — сохраняют вес линии 1.7; шестерёнка не выбивается по плотности.</p>
+    </div>
+  </div>
+</div></div>
+
+</div>
+</body>
+</html>
