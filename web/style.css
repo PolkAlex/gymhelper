@@ -1343,13 +1343,13 @@ html.has-bg body::after {
 
 /* ============ календарь тренировок [UX-S6] ============ */
 /* цвета — только существующие токены Amber Glass; источник — макет
-   docs/mockups/ux-s6-calendar.html (§4–7) */
-.cal { padding: 12px 12px 14px; }
+   docs/mockups/ux-s6-calendar.html (§4–7); высоты — компакт v3, ред. 7.3 (§4.3) */
+.cal { padding: 10px 12px 12px; }
 .cal-nav { display: flex; align-items: center; gap: 6px; }
 .cal-navbtn {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
     border: 1px solid var(--btn-brd);
     background: var(--btn);
     color: var(--text);
@@ -1367,30 +1367,30 @@ html.has-bg body::after {
 .cal-title {
     flex: 1;
     text-align: center;
-    font-size: 15.5px;
+    font-size: 15px;
     font-weight: 700;
     letter-spacing: .2px;
     white-space: nowrap;
 }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 10px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; margin-top: 9px; }
 .cal-dow {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
     color: var(--muted);
     text-align: center;
     letter-spacing: .5px;
-    padding: 4px 0 6px;
+    padding: 3px 0 4px;
 }
 .cal-d {
     position: relative;
-    min-height: 44px;
+    min-height: 38px;
     padding: 0;
     border: 1px solid transparent;
-    border-radius: 12px;
+    border-radius: 9px;
     background: transparent;
     color: var(--text);
     font-family: inherit;
-    font-size: 14.5px;
+    font-size: 14px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     display: flex;
@@ -1405,7 +1405,7 @@ html.has-bg body::after {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 6px;
+    bottom: 2px;
     display: flex;
     justify-content: center;
     gap: 3px;
@@ -1418,7 +1418,7 @@ html.has-bg body::after {
    рамка «сегодня» при этом остаётся — состояния различимы */
 .cal-d.sel { background: var(--nested); border-color: var(--btn-brd); }
 .cal-d.today.sel { border-color: var(--glow-brd); }
-.cal-blank { min-height: 44px; }
+.cal-blank { min-height: 38px; }
 /* пустой месяц: «В <месяц>…» + пилюля «Сегодня»; подсказка «Предыдущая тренировка» —
    ЗАГОТОВКА (рендер под SHOW_MONTH_HINTS = false в app.js) [§12] */
 .calempty { text-align: center; color: var(--muted); font-size: 13px; padding: 18px 8px 2px; }
@@ -1485,11 +1485,22 @@ html.has-bg body::after {
 .drow .nm {
     flex: 1;
     min-width: 0;
-    font-size: 13.5px;
-    font-weight: 600;
+    /* [ред. 7.3 S6-update6c→6d] единый стиль строк панели при 1+ тренировках:
+       12px без жирного («не жирным вообще, чтобы побольше слов поместилось») */
+    font-size: 12px;
+    font-weight: 400;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+/* [ред. 7.3 S6-update6b] строка при 1 тренировке: .nm — до 4 упражнений через
+   запятую, до 2 строк с переносом и ellipsis на конце */
+.drow.multi .nm {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 .drow .st { flex: none; font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .drow .live {
