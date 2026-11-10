@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[ONB] Онбординг и помощь · черновик макета · 10.11 · Amber Glass</title>
+<title>[ONB] Онбординг и помощь · редакция 2 [ONB-update 10.11] · Amber Glass</title>
 <style>
 /* ============ страница-презентация (как ux-s6-calendar.html) ============ */
 * { box-sizing: border-box; }
@@ -202,7 +202,6 @@ body.page {
     cursor: pointer; -webkit-tap-highlight-color: transparent;
     box-shadow: 0 10px 30px rgba(255,194,32,.35);
 }
-.wfoot { font-size: 12px; color: var(--muted); text-align: center; margin: 12px 0 0; }
 .wskip { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 13.5px; font-weight: 600; padding: 10px; cursor: pointer; width: 100%; -webkit-tap-highlight-color: transparent; }
 /* карусель преимуществ (вариант B) */
 .car { display: flex; gap: 10px; width: 100%; margin-top: 24px; overflow: hidden; }
@@ -250,20 +249,6 @@ body.page {
 .tiprow .btn.acc { padding: 8px 16px; font-size: 13.5px; }
 .tskip { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; margin-left: auto; padding: 8px; -webkit-tap-highlight-color: transparent; }
 
-/* ============ ТУТОРИАЛ · карточки (экраны 8–9) ============ */
-.tcard {
-    width: 100%; text-align: left;
-    background: var(--glass); border: 1px solid var(--glassbrd); border-radius: 22px; padding: 18px 16px 14px;
-    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
-    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow);
-}
-.tcard.glow { border-color: var(--glowbrd); }
-.tcard .step { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--accent); }
-.tcard .cic { font-size: 40px; margin-top: 12px; }
-.tcard .tt { font-size: 18px; font-weight: 700; margin-top: 10px; }
-.tcard .tx { font-size: 14px; color: var(--muted); line-height: 1.55; margin: 6px 0 0; }
-.tcard .dots { justify-content: flex-start; margin-top: 18px; }
-
 /* ============ НАСТРОЙКИ · точка входа (экран 10) ============ */
 .setrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
 .setrow .lbl { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
@@ -284,6 +269,8 @@ body.page {
 }
 .arow + .arow { border-top: 1px solid var(--nestedbrd); }
 .arow .chevr { margin-left: auto; width: 16px; height: 16px; color: var(--muted); flex: none; }
+/* [13.1] строка «О приложении»: СВОЯ иконка у каждой строки (вопрос / искра / щит) */
+.arow .aico { width: 18px; height: 18px; color: var(--muted); flex: none; }
 .newpill {
     flex: none; font-size: 10px; font-weight: 700; letter-spacing: .4px;
     color: var(--accent); background: var(--glow); border: 1px solid var(--glowbrd);
@@ -341,7 +328,7 @@ body.page {
     color: var(--accent); background: var(--glow); border: 1px solid var(--glowbrd);
     border-radius: 999px; padding: 4px 10px; white-space: nowrap;
 }
-.wni { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; }
+.wni { display: flex; gap: 10px; align-items: center; padding: 9px 0; }
 .wni + .wni { border-top: 1px solid var(--nestedbrd); }
 .wi {
     flex: none; width: 34px; height: 34px; border-radius: 10px;
@@ -352,21 +339,48 @@ body.page {
 .wni span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .wnm .cta { height: 46px; font-size: 15px; margin-top: 12px; }
 
-/* ============ живая тренировка (экран 6) ============ */
-.exhead { display: flex; align-items: center; gap: 8px; }
-.exhead .t1 { flex: 1; min-width: 0; font-size: 16px; }
-.live {
-    flex: none; font-size: 10.5px; font-weight: 700; color: var(--accent);
-    background: var(--glow); border: 1px solid var(--glowbrd);
-    border-radius: 999px; padding: 2px 8px; white-space: nowrap;
-}
-.setl {
-    display: flex; align-items: center; gap: 10px;
+/* ============ карточка активной тренировки (экран 7) — по реальной вёрстке web/app.js ============ */
+.barebtn { background: none; border: none; padding: 7px; cursor: pointer; display: inline-flex; color: var(--muted); -webkit-tap-highlight-color: transparent; }
+.barebtn svg { width: 18px; height: 18px; }
+.trash-bare { color: var(--danger); }
+.wchead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.wchead.act .wctitles { padding-top: 6px; }
+.wchead.act .wctitles .t1 { font-size: 15.5px; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wcicons { display: flex; align-items: center; gap: 2px; flex: none; }
+.wcpill {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;
     background: var(--nested); border: 1px solid var(--nestedbrd);
-    border-radius: 10px; padding: 9px 10px; margin-top: 6px;
+    border-radius: 12px; padding: 7px 12px; margin: 8px 0 2px;
 }
-.setl .si { flex: none; color: var(--muted); font-size: 12px; width: 16px; font-variant-numeric: tabular-nums; }
-.setl .sv { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wpill.wp-s { color: var(--text); }
+.expill { background: var(--nested); border: 1px solid var(--nestedbrd); border-radius: 14px; padding: 10px; margin-top: 10px; }
+.expill .exhead { display: flex; align-items: center; gap: 8px; }
+.expill .exhead .ico { width: 32px; height: 32px; border-radius: 10px; background: var(--btn); border: 1px solid var(--btnbrd); display: flex; align-items: center; justify-content: center; color: var(--accent); flex: none; }
+.expill .exhead .ico svg { width: 19px; height: 19px; }
+.exname { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+/* записи подходов: прозрачные строки внутри .expill, тап — редактирование */
+.expill .entry { background: transparent; border: none; margin-top: 1px; padding: 4px 2px; border-radius: 8px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+.rectext { flex: 1; min-width: 0; }
+/* [UX-T22] РЕАЛЬНАЯ кнопка добавления подхода — тонкий плюсик в шапке упражнения */
+.ex-add { background: none; border: none; padding: 6px 2px 6px 4px; display: inline-flex; color: var(--muted); flex: none; -webkit-tap-highlight-color: transparent; }
+.ex-add svg { width: 18px; height: 18px; }
+.prtag { flex: none; margin-left: auto; background: var(--glow); border: 1px solid var(--glowbrd); color: var(--accent); border-radius: 9px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.restline { font-size: 12px; color: var(--muted); margin-top: 4px; }
+/* backbar активной тренировки: 🗑 Удалить / ✓ Завершить (prime) / ← Назад — fixed над навигацией */
+.btn.prime { border: none; background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: var(--on-accent); font-weight: 700; font-size: 15px; box-shadow: 0 8px 26px rgba(255,194,32,.3); }
+.backbar { position: absolute; left: 12px; right: 12px; bottom: 78px; z-index: 39; }
+.backbar .ab-row { display: flex; gap: 8px; }
+.backbar .btn { width: 100%; padding: 11px 8px; font-size: 13px; }
+.backbar .bb-del { color: var(--danger); gap: 6px; }
+.backbar .bb-del svg { width: 16px; height: 16px; }
+.backbar .bb-back { gap: 6px; }
+.backbar .bb-back svg { width: 16px; height: 16px; }
+/* «Проверить сервер»: строка результата под кнопкой (экраны 13–14) */
+.serline { margin: 10px 2px 0; font-size: 13px; font-weight: 700; }
+.serline.ok { color: #3ddc97; }
+.serline.fail { color: var(--danger); }
+/* «Что нового»: вторичная muted-кнопка под «Понятно» */
+.wnskip { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 13px; font-weight: 600; width: 100%; padding: 10px 0 2px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 </style>
 </head>
 <body class="page">
@@ -416,63 +430,72 @@ body.page {
     <!-- лого-гантели: блины + гриф -->
     <path d="M7.5 6v12M16.5 6v12"/><path d="M3.5 9.5v5M20.5 9.5v5"/><path d="M7.5 12h9"/>
   </symbol>
+  <symbol id="i-plus-thin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <!-- [UX-T22] тонкий плюсик «Добавить запись» в шапке упражнения (как ICONS.plusThin) -->
+    <path d="M12 5.5v13M5.5 12h13"/>
+  </symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.5 6.5h15"/><path d="M8.5 6.5V4.8c0-.7.6-1.3 1.3-1.3h4.4c.7 0 1.3.6 1.3 1.3v1.7"/>
+    <path d="M6.5 6.5l.8 12.2c.06.99.88 1.8 1.88 1.8h6.64c1 0 1.82-.81 1.88-1.8l.8-12.2"/>
+    <path d="M10 10.5v6M14 10.5v6"/>
+  </symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="13.5" r="7"/><path d="M12 10v3.5l2.4 1.4"/><path d="M9.5 3h5"/><path d="M12 3v2.4"/>
+  </symbol>
+  <symbol id="i-barbell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- иконка упражнения «Жим лёжа» (штанга) в стиле набора -->
+    <path d="M1.5 12h3.5M19 12h3.5"/><rect x="5" y="7.5" width="3.2" height="9" rx="1.4"/><rect x="15.8" y="7.5" width="3.2" height="9" rx="1.4"/><path d="M8.2 12h7.6"/>
+  </symbol>
+  <symbol id="i-q" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.4c.3-1.3 1.4-2.1 2.6-2.1 1.4 0 2.5 1 2.5 2.3 0 1.7-2.4 1.9-2.8 3.4"/><path d="M12 16.6v.01"/>
+  </symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- искры — строка «Что нового» -->
+    <path d="M11 4.5l1.5 3.9 3.9 1.5-3.9 1.5L11 15.3l-1.5-3.9-3.9-1.5 3.9-1.5L11 4.5z"/><path d="M18 14.5l.9 2.3 2.3.9-2.3.9-.9 2.3-.9-2.3-2.3-.9 2.3-.9.9-2.3z"/>
+  </symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l7 2.8v5.4c0 4.6-3 7.9-7 9.8-4-1.9-7-5.2-7-9.8V5.8L12 3z"/><path d="M9.2 11.8l2 2 3.6-3.8"/>
+  </symbol>
 </svg>
 
 <!-- ================================================================== -->
 <!-- Вводка                                                             -->
 <!-- ================================================================== -->
-<div class="caption">Онбординг и помощь в Mini App · черновик макета <span>ONB · 10.11</span></div>
-<p class="note">Черновик направления «Онбординг и помощь» (ONB) на обсуждение:
-<b>приветствие</b> при первом входе (два варианта — A «минимал» и B «карусель
-преимуществ»), <b>туториал из 4 шагов</b> (две механики на выбор: подсказки
-поверх реального экрана или последовательные карточки), <b>«❓ Помощь»</b>
-с FAQ из Настроек, модалка <b>«Что нового»</b> после релиза (issue #91) и экран
-<b>«Сообщить о проблеме»</b>. Всё — скипаемое, без обязательных шагов; бот
-и данные не трогаются. Контакты в макете — заглушки (<code>@PolkAlex</code>,
-<code>support@gym-helper.com</code>) — реальные уточнит владелец. Спека-черновик:
-<code>docs/spec-onb-onboarding.md</code> (§9 — открытые вопросы). Данные
-в примерах — как в одобренном макете календаря: Александр, жим лёжа 92,5 кг
-(личный рекорд 110 кг), тренировки 4–8 ноября.</p>
+<div class="caption">Онбординг и помощь в Mini App · редакция 2 <span>ONB-update · 10.11</span></div>
+<p class="note">Редакция 2 по ответам владельца на черновик (10.11): <b>приветствие —
+вариант B «Карусель»</b> (дорисованы слайды 2–3, финальный слайд с кнопкой
+«Начать»); <b>туториал — подсказки поверх реальных экранов</b>, 4 шага
+(шаг 2 перерисован по реальной вёрстке активной тренировки — спотлайт на
+<b>тонком плюсике «Добавить запись»</b> в шапке упражнения [UX-T22]; шаг 4
+«Статистика» дорисован); автопоказ — <b>новым пользователям</b>, повтор —
+кнопкой «▶ Повторить подсказки» из Помощи; FAQ и контакты — <b>один экран</b>;
+FAQ — 7 вопросов (убран вопрос про тему, «Как считаются калории?»); <b>«Что
+нового» — по умолчанию всем</b>: кнопки «Понятно» и «Больше не показывать»,
+закрытие также тапом по фону; в Настройках — строка «Что нового» и тогл
+<b>«Сообщать об обновлениях»</b>; иконки строк «О приложении» — разные
+(вопрос / искра / щит); «Проверить сервер» — инлайн-результат
+«✅ Сервер работает» / «⛔ Сервер не отвечает» (оба состояния — экраны 13–14);
+связь с разработчиком — <b>чат с ботом GymHelperBot</b> (рекомендация,
+<b>на утверждении владельца</b>) + копируемый email; <b>тон — на «Вы»</b>;
+онбординг показывается и существующим пользователям. Спека:
+<code>docs/spec-onb-onboarding.md</code>, ред. 2 (решения — в блок-цитате,
+открытый вопрос — §9). Данные в примерах: Александр, жим лёжа 92,5 кг
+(личный рекорд 110 кг), тренировки 4–9 ноября.</p>
 
 <!-- ================================================================== -->
-<!-- 1 · Приветствие · вариант A «Минимал» (тёмная)                     -->
+<!-- 1 · Приветствие · вариант B · слайд 1 из 3 (тёмная)                -->
 <!-- ================================================================== -->
-<div class="caption">1 · Приветствие · вариант A «Минимал» <span>тёмная · первый вход</span></div>
-<p class="note">Первый запуск Mini App (флага <code>gymOnbDone</code> нет):
-логотип, название, ценностное предложение одной фразой и единственная кнопка
-<b>«Начать»</b>. Никакой «регистрации» и обязательных шагов — дневник и так
-работает. «Начать» → туториал (если включён автопоказ, экраны 5–9) или сразу
-в приложение. Сноска под кнопкой отвечает на частый вопрос новичка «а где мои
-тренировки из чата?». Показывается один раз навсегда; существующим пользователям
-не показываем (рекомендация, §9 спеки). Нижней навигации на экране нет — это
-модальный слой поверх приложения.</p>
-<div class="phone"><div class="p">
-  <div class="ob">
-    <div class="ob-center">
-      <div class="wlogo"><svg><use href="#i-dumb"/></svg></div>
-      <div class="wtitle">GymHelper</div>
-      <div class="wtag">Дневник тренировок в Telegram</div>
-      <p class="wvalue">Записывай подходы за секунды, следи за прогрессом<br>и бей рекорды — прямо в Telegram,<br>без установки приложений.</p>
-    </div>
-    <div class="ob-bottom">
-      <button class="cta">Начать</button>
-      <p class="wfoot">Занимаешься через бота? История появится сама</p>
-    </div>
-  </div>
-</div></div>
-
-<!-- ================================================================== -->
-<!-- 2 · Приветствие · вариант B «Карусель» (тёмная)                    -->
-<!-- ================================================================== -->
-<div class="caption">2 · Приветствие · вариант B «Карусель» <span>3 карточки-преимущества</span></div>
-<p class="note">Тот же первый запуск, но с коротким обзором ключевых фич:
-3 слайда-карточки (свайп или кнопка «Далее»), точки-прогресс, «Пропустить»
-доступна всегда. На третьем слайде кнопка «Далее» становится «Начать».
-Слайд 1 — <b>пошаговый ввод</b> (главная механика продукта), слайд 2 —
-<b>рекорды и 1ПМ</b>, слайд 3 — <b>календарь и статистика</b>. В макете показан
-слайд 1 из 3 (справа подсвечен краешек второго). Дороже варианта A
-в реализации и чуть медленнее первый вход — зато пользователь сразу видит,
-зачем приложение.</p>
+<div class="caption">1 · Приветствие · вариант B · слайд 1/3 <span>тёмная · ввод подходов</span></div>
+<p class="note">РЕШЕНИЕ ВЛАДЕЛЬЦА [ONB-update 10.11]: приветствие — <b>вариант B
+«Карусель»</b> (вариант A «Минимал» не выбран и из макета убран). Три слайда:
+1 — <b>пошаговый ввод</b> (главная механика), 2 — <b>рекорды и 1ПМ</b> (экран 2),
+3 — <b>календарь и статистика</b>, финальный: кнопка «Далее» становится
+«Начать» (экран 3). «Пропустить» доступна на слайдах 1–2; любой выход ставит
+флаг <code>gymOnbDone</code> и ведёт в туториал (автопоказ) или сразу
+в приложение. Показ — <b>всем при первом открытии после релиза онбординга</b>,
+включая существующих пользователей (решение 12); один раз навсегда. Тексты —
+на «Вы» (решение 14). Нижней навигации нет — модальный слой поверх
+приложения.</p>
 <div class="phone"><div class="p">
   <div class="ob">
     <div class="ob-center" style="margin-top:6px">
@@ -483,7 +506,7 @@ body.page {
         <div class="car-card glow">
           <div class="cic">🏋</div>
           <div class="ch">Дневник за секунды</div>
-          <p class="cp">Вес, подходы и повторения — в несколько тапов. Кнопки подсказывают значения с прошлой тренировки, ничего не вводишь с нуля.</p>
+          <p class="cp">Вес, подходы и повторения — в несколько тапов. Кнопки подсказывают значения с прошлой тренировки, ничего не нужно вводить с нуля.</p>
         </div>
         <div class="car-card peek">
           <div class="cic">🏆</div>
@@ -501,65 +524,176 @@ body.page {
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 3 · Приветствие A · светлая тема                                   -->
+<!-- 2 · Приветствие · вариант B · слайд 2 из 3 (тёмная)                -->
 <!-- ================================================================== -->
-<div class="caption">3 · Приветствие A · светлая тема <span>те же токены</span></div>
+<div class="caption">2 · Приветствие · вариант B · слайд 2/3 <span>тёмная · рекорды</span></div>
+<p class="note">Слайд 2 — <b>рекорды и прогресс</b>: сравнение с прошлой
+тренировкой, оценка 1ПМ по Эпли и живой рекорд 🏆. Слева виден край слайда 1,
+справа — слайда 3 (трек карусели сдвинут на один шаг — в макете
+<code>margin-left</code>; в реализации — свайп или кнопка «Далее»). Точки:
+активна вторая. Все три слайда собираются одними классами
+<code>.car/.car-card</code> — один массив слайдов и сдвиг трека.</p>
+<div class="phone"><div class="p">
+  <div class="ob">
+    <div class="ob-center" style="margin-top:6px">
+      <div class="wlogo" style="width:72px;height:72px;border-radius:22px;"><svg style="width:38px;height:38px;"><use href="#i-dumb"/></svg></div>
+      <div class="wtitle" style="font-size:24px;margin-top:14px;">GymHelper</div>
+      <div class="wtag">Дневник тренировок в Telegram</div>
+      <div class="car" style="margin-left:-250px;">
+        <div class="car-card peek">
+          <div class="cic">🏋</div>
+          <div class="ch">Дневник за секунды</div>
+          <p class="cp">Вес, подходы и повторения — в несколько тапов. Кнопки подсказывают значения с прошлой тренировки, ничего не нужно вводить с нуля.</p>
+        </div>
+        <div class="car-card glow">
+          <div class="cic">🏆</div>
+          <div class="ch">Прогресс и рекорды</div>
+          <p class="cp">Сравнение с прошлой тренировкой, оценка 1ПМ по Эпли и живой рекорд — когда побит личный максимум.</p>
+        </div>
+        <div class="car-card peek">
+          <div class="cic">📅</div>
+          <div class="ch">Календарь и статистика</div>
+          <p class="cp">Месяц с отметками тренировок, объём, время и калории — весь прогресс под рукой.</p>
+        </div>
+      </div>
+      <div class="dots"><i></i><i class="on"></i><i></i></div>
+    </div>
+    <div class="ob-bottom">
+      <button class="cta">Далее</button>
+      <button class="wskip">Пропустить</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 3 · Приветствие · вариант B · слайд 3 из 3 (тёмная) — финал        -->
+<!-- ================================================================== -->
+<div class="caption">3 · Приветствие · вариант B · слайд 3/3 <span>финал · кнопка «Начать»</span></div>
+<p class="note">Финальный слайд — <b>календарь и статистика</b>: месяц с точками
+([UX-S6]), объём, время и калории. Кнопка «Далее» становится <b>«Начать»</b>,
+«Пропустить» убрана (заканчивать уже нечего). «Начать» → туториал (автопоказ —
+решение 3) или сразу в приложение. После любого выхода карусель больше
+не показывается (<code>gymOnbDone</code>). Трек сдвинут на два шага — слева
+краешек слайда 2.</p>
+<div class="phone"><div class="p">
+  <div class="ob">
+    <div class="ob-center" style="margin-top:6px">
+      <div class="wlogo" style="width:72px;height:72px;border-radius:22px;"><svg style="width:38px;height:38px;"><use href="#i-dumb"/></svg></div>
+      <div class="wtitle" style="font-size:24px;margin-top:14px;">GymHelper</div>
+      <div class="wtag">Дневник тренировок в Telegram</div>
+      <div class="car" style="margin-left:-540px;">
+        <div class="car-card peek">
+          <div class="cic">🏋</div>
+          <div class="ch">Дневник за секунды</div>
+          <p class="cp">Вес, подходы и повторения — в несколько тапов. Кнопки подсказывают значения с прошлой тренировки, ничего не нужно вводить с нуля.</p>
+        </div>
+        <div class="car-card peek">
+          <div class="cic">🏆</div>
+          <div class="ch">Прогресс и рекорды</div>
+          <p class="cp">Сравнение с прошлой тренировкой, оценка 1ПМ по Эпли и живой рекорд — когда побит личный максимум.</p>
+        </div>
+        <div class="car-card glow">
+          <div class="cic">📅</div>
+          <div class="ch">Календарь и статистика</div>
+          <p class="cp">Месяц с отметками тренировок, объём, время и калории — весь прогресс под рукой.</p>
+        </div>
+      </div>
+      <div class="dots"><i></i><i></i><i class="on"></i></div>
+    </div>
+    <div class="ob-bottom">
+      <button class="cta">Начать</button>
+    </div>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 4 · Приветствие · слайд 1 · светлая тема                           -->
+<!-- ================================================================== -->
+<div class="caption">4 · Приветствие · слайд 1 · светлая тема <span>те же токены</span></div>
 <p class="note">Светлая тема Amber Glass на существующих токенах
 (<code>--glow</code>, <code>--glowbrd</code>, <code>--accent</code>) — новых
-CSS-переменных не нужно. Логотип и CTA остаются янтарными, сноска — muted.
-Вариант B в светлой теме собирается теми же классами (в реализации проверить
-на всех трёх слайдах).</p>
+CSS-переменных не нужно. Логотип и CTA остаются янтарными, «Пропустить» —
+muted. Слайды 2–3 в светлой теме собираются теми же классами (проверить
+в реализации на всех трёх слайдах и обеих темах).</p>
 <div class="phone"><div class="p light">
   <div class="ob">
-    <div class="ob-center">
-      <div class="wlogo"><svg><use href="#i-dumb"/></svg></div>
-      <div class="wtitle">GymHelper</div>
+    <div class="ob-center" style="margin-top:6px">
+      <div class="wlogo" style="width:72px;height:72px;border-radius:22px;"><svg style="width:38px;height:38px;"><use href="#i-dumb"/></svg></div>
+      <div class="wtitle" style="font-size:24px;margin-top:14px;">GymHelper</div>
       <div class="wtag">Дневник тренировок в Telegram</div>
-      <p class="wvalue">Записывай подходы за секунды, следи за прогрессом<br>и бей рекорды — прямо в Telegram,<br>без установки приложений.</p>
+      <div class="car">
+        <div class="car-card glow">
+          <div class="cic">🏋</div>
+          <div class="ch">Дневник за секунды</div>
+          <p class="cp">Вес, подходы и повторения — в несколько тапов. Кнопки подсказывают значения с прошлой тренировки, ничего не нужно вводить с нуля.</p>
+        </div>
+        <div class="car-card peek">
+          <div class="cic">🏆</div>
+          <div class="ch">Прогресс и рекорды</div>
+          <p class="cp">Сравнение с прошлой тренировкой, оценка 1ПМ и живой рекорд — когда побит личный максимум.</p>
+        </div>
+      </div>
+      <div class="dots"><i class="on"></i><i></i><i></i></div>
     </div>
     <div class="ob-bottom">
-      <button class="cta">Начать</button>
-      <p class="wfoot">Занимаешься через бота? История появится сама</p>
+      <button class="cta">Далее</button>
+      <button class="wskip">Пропустить</button>
     </div>
   </div>
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 4 · Приветствие A · 320px                                          -->
+<!-- 5 · Приветствие · слайд 1 · 320px                                  -->
 <!-- ================================================================== -->
-<div class="caption">4 · Приветствие A · регресс 320px <span>тёмная</span></div>
-<p class="note">Узкий экран: лого 72px, заголовок 23px, текст 14px —
-вертикальная центровка сохраняется, кнопка и сноска — во всю ширину,
-горизонтального скролла нет. В реализации проверить также вариант B на 320px:
-карточка карусели — 82% ширины, краешек соседней может не влезать — допустимо
-обрезать без «съезда» вёрстки.</p>
+<div class="caption">5 · Приветствие · слайд 1 · регресс 320px <span>тёмная</span></div>
+<p class="note">Узкий экран: лого 72px, заголовок 23px, карточка карусели —
+82% ширины; краешек следующего слайда почти не влезает — допустимо обрезать
+без «съезда» вёрстки. «Далее» и «Пропустить» — во всю ширину, горизонтального
+скролла нет. В реализации проверить также слайды 2–3 и обе темы на 320px.</p>
 <div class="phone small"><div class="p">
   <div class="ob">
-    <div class="ob-center">
-      <div class="wlogo"><svg><use href="#i-dumb"/></svg></div>
-      <div class="wtitle">GymHelper</div>
+    <div class="ob-center" style="margin-top:4px">
+      <div class="wlogo" style="width:64px;height:64px;border-radius:20px;"><svg style="width:34px;height:34px;"><use href="#i-dumb"/></svg></div>
+      <div class="wtitle" style="font-size:21px;margin-top:12px;">GymHelper</div>
       <div class="wtag">Дневник тренировок в Telegram</div>
-      <p class="wvalue">Записывай подходы за секунды, следи за прогрессом<br>и бей рекорды — прямо в Telegram,<br>без установки приложений.</p>
+      <div class="car">
+        <div class="car-card glow">
+          <div class="cic">🏋</div>
+          <div class="ch">Дневник за секунды</div>
+          <p class="cp">Вес, подходы и повторения — в несколько тапов. Кнопки подсказывают значения с прошлой тренировки, ничего не нужно вводить с нуля.</p>
+        </div>
+        <div class="car-card peek">
+          <div class="cic">🏆</div>
+          <div class="ch">Прогресс и рекорды</div>
+          <p class="cp">Сравнение с прошлой тренировкой, оценка 1ПМ и живой рекорд — когда побит личный максимум.</p>
+        </div>
+      </div>
+      <div class="dots"><i class="on"></i><i></i><i></i></div>
     </div>
     <div class="ob-bottom">
-      <button class="cta">Начать</button>
-      <p class="wfoot">Занимаешься через бота? История появится сама</p>
+      <button class="cta">Далее</button>
+      <button class="wskip">Пропустить</button>
     </div>
   </div>
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 5 · Туториал · подсказки поверх · шаг 1/4 (FAB)                    -->
+<!-- 6 · Туториал · подсказки поверх · шаг 1/4 (FAB)                    -->
 <!-- ================================================================== -->
-<div class="caption">5 · Туториал · подсказки поверх · шаг 1/4 <span>спотлайт на FAB</span></div>
-<p class="note">Механика 1 — <b>подсказки поверх реального экрана</b> (спотлайт):
-приложение живёт своей жизнью, поверх — затемнение, янтарное кольцо на нужном
-элементе и тултип «Шаг N из 4» с кнопками <b>«Дальше»</b> / <b>«Пропустить»</b>.
-На время туториала элементы под подсказкой не кликаются — сценарий линейный.
-Шаг 1: жёлтый «+» на нижней панели — старт тренировки. Показ здесь — поверх
-Истории с данными; у новичка будет «Пока пусто 💪», подсказка работает
-одинаково. Спотлайт — элемент-кольцо с гигантской тенью-затемнением
-(<code>box-shadow: 0 0 0 4000px</code>), в реализации — тот же приём.</p>
+<div class="caption">6 · Туториал · подсказки поверх · шаг 1/4 <span>спотлайт выровнен по FAB</span></div>
+<p class="note">РЕШЕНИЕ ВЛАДЕЛЬЦА [ONB-update 10.11]: механика туториала —
+<b>подсказки поверх реальных экранов</b> (карточная механика не выбрана и из
+макета убрана). Правка 2.1: в ред. 1 кольцо не совпадало с плюсом — теперь
+<b>точно по FAB</b>: кнопка 52px стоит в центре нижней панели, её низ — 12px
+над краем экрана → центр в 38px от низа; кольцо <b>68px = FAB + 8px</b> ореола,
+<code>bottom: 4px</code>, по горизонтали — центр экрана. Поверх — затемнение
+(<code>box-shadow: 0 0 0 4000px</code>) и тултип «Шаг N из 4» с кнопками
+<b>«Дальше»</b> / <b>«Пропустить»</b> (пропуск на каждом шаге — решение 4);
+на время туториала элементы под подсказкой не кликаются. Автопоказ — новым
+пользователям после приветствия (решение 3); повтор — кнопкой «▶ Повторить
+подсказки» из Помощи (экран 11). Показ здесь — поверх Истории с данными;
+у новичка будет «Пока пусто 💪», подсказка работает одинаково. Тон —
+на «Вы».</p>
 <div class="phone"><div class="p fix">
   <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content" style="padding-bottom:110px;">
@@ -595,9 +729,9 @@ CSS-переменных не нужно. Логотип и CTA остаются
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- оверлей туториала: спотлайт на FAB + тултип -->
-  <div class="spot" style="left:50%;bottom:26px;width:74px;height:74px;transform:translateX(-50%);"></div>
-  <div class="tip" style="bottom:118px;">
+  <!-- оверлей туториала: спотлайт 68px = FAB 52px + 8px ореола, центр FAB (низ 12px + 26px = 38px → кольцо bottom 4px) -->
+  <div class="spot" style="left:50%;bottom:4px;width:68px;height:68px;transform:translateX(-50%);"></div>
+  <div class="tip" style="bottom:84px;">
     <div class="step">Шаг 1 из 4 · Новая тренировка</div>
     <div class="tt">Начать — жёлтый «+» внизу</div>
     <p class="tx">Тап по кнопке открывает пошаговый ввод: упражнение → вес → подходы. В конце — «✓ Завершить».</p>
@@ -606,29 +740,55 @@ CSS-переменных не нужно. Логотип и CTA остаются
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 6 · Туториал · подсказки поверх · шаг 2/4 (подходы)                -->
+<!-- 7 · Туториал · подсказки поверх · шаг 2/4 (подходы)                -->
 <!-- ================================================================== -->
-<div class="caption">6 · Туториал · подсказки поверх · шаг 2/4 <span>спотлайт на «＋ Подход»</span></div>
-<p class="note">Шаг 2 — внесение подходов: спотлайт на кнопке <b>«＋ Подход»</b>
-под упражнением живой тренировки. Текст объясняет главную «магию» — вес
-подставляется с прошлого раза. Внизу экрана — backbar активной тренировки
-(«✓ Завершить»), как в проде [UX-T22/T23]; тултип не мешает. Шаг 3 — пара
-[ 📅 ][ ⚙ ] в шапке (экран 7), шаг 4 — таб «Статистика» (вид аналогичен
-экрану 5, отдельно не рисуем). Экран фикс (без скролла) — спотлайт и тултип
-привязаны к кадру.</p>
+<div class="caption">7 · Туториал · подсказки поверх · шаг 2/4 <span>перерисовано по прод-вёрстке</span></div>
+<p class="note">РЕШЕНИЕ ВЛАДЕЛЬЦА 2.2: экран тренировки перерисован по реальной
+вёрстке <code>web/app.js</code> (<code>workoutCard()</code> + <code>.expill</code>/
+<code>.entry</code> из style.css). Шапка карточки <code>.wchead</code>: название
+«09-11 ПН» + иконка «⏱ Время»; строка пилюль <code>.wcpill</code>: время /
+калории / подходы. Упражнение — <code>.expill</code>: иконка из каталога →
+название → 🗑 (удалить упражнение) → <b>тонкий плюсик
+<code>.ex-add</code></b>. <b>Реальная кнопка добавления подхода — именно этот
+тонкий «+» справа в шапке упражнения</b> ([UX-T22]: «➕ Запись» — тонкий плюсик
+справа в exhead; отдельной кнопки «＋ Подход» под сетами в проде НЕТ —
+под упражнениями только «➕ Добавить упражнение»). Записи — прозрачные строки
+<code>.entry</code> «80 кг, 2 подхода по 8 повторений», у рекордной — чип
+🏆 с оценкой 1ПМ; под записями — «упражнение активно — время идёт».
+Внизу — фиксированный backbar активной: «🗑 Удалить» / «<b>✓ Завершить</b>»
+(жёлтая prime) / «← Назад» [UX-T22]. Спотлайт — на <code>.ex-add</code>
+первого упражнения (кольцо 56px по центру кнопки), тултип ниже. Экран фикс
+(без скролла) — спотлайт и тултип привязаны к кадру.</p>
 <div class="phone"><div class="p fix">
-  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Тренировка</span><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
-  <div class="content" style="padding-bottom:96px;">
+  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="content" style="padding-bottom:150px;">
     <div class="glass">
-      <div class="exhead"><span class="t1">🏋 Жим лёжа</span><span class="live">⚫ идёт · с 18:10</span></div>
-      <div class="setl"><span class="si">1</span><span class="sv">80 кг, 2 подхода по 8</span></div>
-      <div class="setl"><span class="si">2</span><span class="sv">82,5 кг, 1 подход по 6</span></div>
-      <div class="btnrow"><button class="btn wide">＋ Подход</button></div>
-    </div>
-    <div class="glass">
-      <div class="exhead"><span class="t1">🏋 Трицепс на блоке</span></div>
-      <div class="setl"><span class="si">1</span><span class="sv">35 кг, 2 подхода по 12</span></div>
-      <div class="btnrow"><button class="btn wide">＋ Подход</button></div>
+      <div class="wchead act">
+        <div class="wctitles"><p class="t1">09-11 ПН</p></div>
+        <div class="wcicons"><button class="barebtn" title="Время"><svg><use href="#i-timer"/></svg></button></div>
+      </div>
+      <div class="wcpill"><span class="wpill">🕐 с 18:10</span><span class="wpill wp-k">🔥 96 ккал</span><span class="wpill wp-s">🏋 5 подх.</span></div>
+      <div class="expill">
+        <div class="exhead">
+          <span class="ico"><svg><use href="#i-barbell"/></svg></span>
+          <span class="exname">Жим лёжа</span>
+          <button class="barebtn trash-bare" title="Удалить упражнение"><svg><use href="#i-trash"/></svg></button>
+          <button class="ex-add" title="Добавить запись"><svg><use href="#i-plus-thin"/></svg></button>
+        </div>
+        <div class="entry"><span class="rectext">80 кг, 2 подхода по 8 повторений</span></div>
+        <div class="entry"><span class="rectext">82,5 кг, 1 подход по 6 повторений</span><span class="prtag">🏆 99</span></div>
+        <div class="restline">упражнение активно — время идёт</div>
+      </div>
+      <div class="expill">
+        <div class="exhead">
+          <span class="ico"><svg><use href="#i-dumb"/></svg></span>
+          <span class="exname">Трицепс на блоке</span>
+          <button class="barebtn trash-bare" title="Удалить упражнение"><svg><use href="#i-trash"/></svg></button>
+          <button class="ex-add" title="Добавить запись"><svg><use href="#i-plus-thin"/></svg></button>
+        </div>
+        <div class="entry"><span class="rectext">35 кг, 2 подхода по 12 повторений</span></div>
+      </div>
+      <div class="btnrow"><button class="btn wide">➕ Добавить упражнение</button></div>
     </div>
   </div>
   <div class="nav">
@@ -638,25 +798,32 @@ CSS-переменных не нужно. Логотип и CTA остаются
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- оверлей туториала: спотлайт на «＋ Подход» первого упражнения + тултип ниже -->
-  <div class="spot rect" style="left:26px;right:26px;top:196px;height:48px;"></div>
-  <div class="tip" style="top:258px;">
-    <div class="step">Шаг 2 из 4 · Записывай подходы</div>
-    <div class="tt">Тап «＋ Подход» — запись сета</div>
-    <p class="tx">Вес подставится с прошлого раза — просто поправь, если нужно. Тап по записанному подходу — правка.</p>
+  <!-- backbar активной тренировки [UX-T22]: 🗑 Удалить / ✓ Завершить (prime) / ← Назад -->
+  <div class="backbar"><div class="ab-row">
+    <button class="btn sec icbtn bb-del"><svg><use href="#i-trash"/></svg><span>Удалить</span></button>
+    <button class="btn prime">✓ Завершить</button>
+    <button class="btn sec icbtn bb-back"><svg><use href="#i-back"/></svg><span>Назад</span></button>
+  </div></div>
+  <!-- оверлей туториала: спотлайт на .ex-add (тонкий «+») первого упражнения -->
+  <div class="spot" style="left:314px;top:161px;width:56px;height:56px;"></div>
+  <div class="tip" style="top:228px;">
+    <div class="step">Шаг 2 из 4 · Подходы</div>
+    <div class="tt">Тонкий «+» у названия упражнения — запись подхода</div>
+    <p class="tx">Вес подставится с прошлого раза — просто поправьте, если нужно. Тап по записанной строке — правка, чип 🏆 — новый рекорд.</p>
     <div class="tiprow"><button class="btn acc">Дальше</button><button class="tskip">Пропустить</button></div>
   </div>
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 7 · Туториал · подсказки поверх · шаг 3/4 (календарь/настройки)    -->
+<!-- 8 · Туториал · подсказки поверх · шаг 3/4 (календарь/настройки)    -->
 <!-- ================================================================== -->
-<div class="caption">7 · Туториал · подсказки поверх · шаг 3/4 <span>спотлайт на [ 📅 ][ ⚙ ]</span></div>
+<div class="caption">8 · Туториал · подсказки поверх · шаг 3/4 <span>спотлайт на [ 📅 ][ ⚙ ]</span></div>
 <p class="note">Шаг 3 — «где что лежит»: спотлайт на паре кнопок в шапке
-[ 📅 ][ ⚙ ] (календарь — [UX-S6], настройки — [UX-S4]); таб «Статистика» — шаг 4,
-вид тултипа тот же. Тултип можно ставить и сверху (как здесь), и снизу —
-позиция выбирается по месту элемента на экране. После шага 4 туториал
-завершается молча (без финального «поздравляем» — лишний экран).</p>
+[ 📅 ][ ⚙ ] (календарь — [UX-S6], настройки — [UX-S4]). Кольцо подогнано
+под пару (88×44px, отступ от края шапки). Тултип можно ставить и сверху
+(как здесь), и снизу — позиция выбирается по месту элемента на экране.
+Шаг 4 — таб «Статистика» (экран 9). После шага 4 туториал завершается молча
+(без финального «поздравляем» — лишний экран).</p>
 <div class="phone"><div class="p fix">
   <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content" style="padding-bottom:110px;">
@@ -687,82 +854,81 @@ CSS-переменных не нужно. Логотип и CTA остаются
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
   <!-- оверлей туториала: спотлайт на пару [ 📅 ][ ⚙ ] + тултип под шапкой -->
-  <div class="spot rect" style="right:10px;top:10px;width:88px;height:44px;"></div>
+  <div class="spot rect" style="right:6px;top:8px;width:88px;height:44px;"></div>
   <div class="tip" style="top:66px;">
     <div class="step">Шаг 3 из 4 · Календарь и настройки</div>
     <div class="tt">📅 — месяц тренировок, ⚙️ — настройки</div>
-    <p class="tx">В календаре видны все дни с тренировками, в настройках — тема, таймер отдыха и звук.</p>
+    <p class="tx">В календаре видны все дни с тренировками, в настройках — тема, таймер отдыха, звук и «Что нового».</p>
     <div class="tiprow"><button class="btn acc">Дальше</button><button class="tskip">Пропустить</button></div>
   </div>
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 8 · Туториал · карточки · шаг 1/4 (тёмная)                         -->
+<!-- 9 · Туториал · подсказки поверх · шаг 4/4 (Статистика) — НОВЫЙ     -->
 <!-- ================================================================== -->
-<div class="caption">8 · Туториал · карточки · шаг 1/4 <span>механика 2 — последовательные карточки</span></div>
-<p class="note">Механика 2 — <b>последовательные карточки</b> без привязки
-к экранам приложения: та же последовательность 4 шагов, но каждая подсказка —
-отдельная карточка (иконка, заголовок, текст, точки-прогресс, «Дальше» /
-«Пропустить»). Проще в реализации и e2e-тестах (нет расчёта позиций элементов),
-хуже учит навигации — «где что» пользователь ищет сам. Точки внутри карточки —
-дублируют «Шаг N из 4», показываем что-то одно (решение в §9 спеки).
-Карточный туториал может показываться и по кнопке «Как пользоваться» из
-«❓ Помощи» — тогда он вообще не нужен при первом входе.</p>
-<div class="phone"><div class="p">
-  <div class="ob">
-    <div class="ob-center">
-      <div class="tcard glow">
-        <div class="step">Шаг 1 из 4 · Новая тренировка</div>
-        <div class="cic">🏋</div>
-        <div class="tt">Начать — жёлтый «+» внизу</div>
-        <p class="tx">Кнопка «+» на нижней панели открывает пошаговый ввод: упражнение → вес → подходы. В конце — «✓ Завершить», и тренировка появится в Истории.</p>
-        <div class="dots"><i class="on"></i><i></i><i></i><i></i></div>
-      </div>
+<div class="caption">9 · Туториал · подсказки поверх · шаг 4/4 <span>НОВЫЙ · спотлайт на таб «Статистика»</span></div>
+<p class="note">РЕШЕНИЕ ВЛАДЕЛЬЦА 2.3: шаг 4 дорисован отдельным экраном.
+Подложка — верх вкладки <b>Статистики</b>: карточки «Рекорд недели»
+(<code>reccard glow</code> — в проде рекорды недели живут именно здесь,
+[UX-T31]; в Истории — одна сводная карточка). Спотлайт — на табе
+<b>«Статистика»</b> нижней навигации (второй слева): кольцо 56px по центру
+таба (иконка + подпись), тултип выше панели. Текст шага — обзор, что найдёт
+пользователь: рекорды недели, оценка 1ПМ по Эпли, объём и время. На этом шаг
+туториал завершается молча.</p>
+<div class="phone"><div class="p fix">
+  <div class="topbar"><span class="tb-title">GymHelper · Статистика</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="content" style="padding-bottom:110px;">
+    <div class="reccard glow">
+      <div class="rec-l">Рекорд недели · Жим лёжа</div>
+      <div class="rec-num">92,5 <small>кг</small></div>
+      <div class="rec-bar"><i style="width:84%"></i></div>
+      <div class="rec-sub"><span>личный рекорд: 110 кг</span><span>84%</span></div>
     </div>
-    <div class="ob-bottom">
-      <button class="cta">Дальше</button>
-      <button class="wskip">Пропустить</button>
+    <div class="reccard glow">
+      <div class="rec-l">Рекорд недели · Приседания</div>
+      <div class="rec-num">110 <small>кг</small></div>
+      <div class="rec-bar"><i style="width:81%"></i></div>
+      <div class="rec-sub"><span>личный рекорд: 135 кг</span><span>81%</span></div>
+    </div>
+    <div class="glass">
+      <div class="rec-l" style="margin-top:2px;">Оценка 1ПМ · Эпли</div>
+      <p class="meta">Топ упражнений с весом — по рабочим подходам</p>
+      <div class="hr"></div>
+      <p class="meta" style="margin-top:0;"><b style="color:var(--text);">Жим лёжа</b> — 99 кг · <b style="color:var(--text);">Приседания</b> — 132 кг</p>
     </div>
   </div>
-</div></div>
-
-<!-- ================================================================== -->
-<!-- 9 · Туториал · карточки · шаг 4/4 (финал, тёмная)                  -->
-<!-- ================================================================== -->
-<div class="caption">9 · Туториал · карточки · шаг 4/4 <span>финал</span></div>
-<p class="note">Последняя карточка вместо «Дальше» — CTA <b>«Начать
-пользоваться»</b>, «Пропустить» убрана (заканчивать уже нечего). Текст шага 4
-уводит в Статистику и Помощь — два места, куда новички не доходят сами.
-Шаги 2–3 карточек (подходы, календарь/настройки) — те же тексты, что
-в тултипах экранов 6–7, собраны в те же классы <code>.tcard</code>.</p>
-<div class="phone"><div class="p">
-  <div class="ob">
-    <div class="ob-center">
-      <div class="tcard glow">
-        <div class="step">Шаг 4 из 4 · Прогресс под рукой</div>
-        <div class="cic">📊</div>
-        <div class="tt">Всё готово — погнали</div>
-        <p class="tx">Статистика покажет объём, время и оценку 1ПМ; в Истории — рекорд недели. Если что-то забудется — «❓ Помощь» в настройках (⚙️).</p>
-        <div class="dots"><i></i><i></i><i></i><i class="on"></i></div>
-      </div>
-    </div>
-    <div class="ob-bottom">
-      <button class="cta">Начать пользоваться</button>
-    </div>
+  <div class="nav">
+    <button class="nbtn"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+  <!-- оверлей туториала: спотлайт на таб «Статистика» (второй слева) + тултип выше панели -->
+  <div class="spot" style="left:98px;bottom:2px;width:56px;height:56px;"></div>
+  <div class="tip" style="bottom:84px;">
+    <div class="step">Шаг 4 из 4 · Прогресс</div>
+    <div class="tt">Статистика — второй таб слева</div>
+    <p class="tx">Рекорды недели, оценка 1ПМ по Эпли, объём и время — прогресс виден сразу.</p>
+    <div class="tiprow"><button class="btn acc">Дальше</button><button class="tskip">Пропустить</button></div>
   </div>
 </div></div>
 
 <!-- ================================================================== -->
 <!-- 10 · Настройки · точка входа в Помощь (тёмная)                     -->
 <!-- ================================================================== -->
-<div class="caption">10 · Настройки · точка входа <span>«❓ Помощь и FAQ» в «О приложении»</span></div>
-<p class="note">Экран Настроек — прод-состав [UX-S4]: «🎨 Оформление» (тема,
-fullscreen «в разработке», фон), «⏱ Таймер отдыха», «🧑‍🏫 Персональный тренер»
-и «ℹ️ О приложении». Новое — строка <b>«❓ Помощь и FAQ»</b> с пилюлей «новое»
-над «Политикой конфиденциальности» ([ONB-T2], Релиз 1.24): помощь логично живёт
-рядом с политикой, обе строки — про «как это устроено». Пилюля «новое» —
-временная; убирается после первого открытия Помощи (флаг) — вопрос владельцу
-(§9). Строки-ссылки — с шевроном справа, разделитель <code>--nestedbrd</code>.</p>
+<div class="caption">10 · Настройки · точка входа <span>«О приложении»: Помощь · Что нового · тогл · Политика</span></div>
+<p class="note">РЕШЕНИЯ ВЛАДЕЛЬЦА [ONB-update 10.11]: карточка «ℹ️ О приложении» —
+четыре элемента: строка <b>«❓ Помощь и FAQ»</b> с пилюлей «новое» (пилюля
+остаётся — решение 13; строка видима до первого открытия Помощи, [ONB-T2] рядом
+с политикой), строка <b>«Что нового»</b> — открывает модалку последнего релиза
+вручную, даже если автопоказ отключён (решение 13.2), тогл <b>«Сообщать
+об обновлениях»</b> (формулировка утверждена владельцем 10.11, решение 8):
+выключен — модалки после релизов не приходят, ручная строка работает,
+и строка <b>«Политика конфиденциальности»</b> [ONB-T2]. Правка 13.1: у строк —
+<b>разные иконки</b> в стиле набора (вопрос / искра / щит) вместо одинаковых ℹ️.
+Остальное — прод-состав [UX-S4]. Точка входа в Помощь — только отсюда
+(решение 7).</p>
 <div class="phone"><div class="p">
   <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Настройки</span></div>
   <div class="content">
@@ -794,8 +960,11 @@ fullscreen «в разработке», фон), «⏱ Таймер отдыха
     </div>
     <div class="glass">
       <p class="t1">ℹ️ О приложении</p>
-      <button class="arow">❓ Помощь и FAQ<span class="newpill">новое</span><svg class="chevr"><use href="#i-chev-r"/></svg></button>
-      <button class="arow">ℹ️ Политика конфиденциальности<svg class="chevr"><use href="#i-chev-r"/></svg></button>
+      <button class="arow"><svg class="aico"><use href="#i-q"/></svg>Помощь и FAQ<span class="newpill">новое</span><svg class="chevr"><use href="#i-chev-r"/></svg></button>
+      <button class="arow"><svg class="aico"><use href="#i-spark"/></svg>Что нового<svg class="chevr"><use href="#i-chev-r"/></svg></button>
+      <div class="setrow" style="border-top:1px solid var(--nestedbrd);margin-top:0;padding-top:12px;"><span class="lbl">Сообщать об обновлениях</span><span class="sw on"><i></i></span></div>
+      <p class="meta">Окно «Что нового» после значимых релизов</p>
+      <button class="arow"><svg class="aico"><use href="#i-shield"/></svg>Политика конфиденциальности<svg class="chevr"><use href="#i-chev-r"/></svg></button>
     </div>
   </div>
   <div class="nav">
@@ -810,21 +979,23 @@ fullscreen «в разработке», фон), «⏱ Таймер отдыха
 <!-- ================================================================== -->
 <!-- 11 · Помощь · FAQ (тёмная, вопрос 1 раскрыт)                       -->
 <!-- ================================================================== -->
-<div class="caption">11 · Помощь · FAQ <span>тёмная · аккордеон, 8 вопросов</span></div>
-<p class="note">Подэкран «GymHelper · Помощь» — как Настройки: «← Назад»
-возвращает на вкладку-источник. Аккордеон из 8 вопросов по <b>реальным фичам</b>
-(редактирование подхода по тапу, удаление из backbar карточки, 1ПМ по Эпли,
-тема в Настройках, калории MET, шаблоны/«Повторить», общий дневник с ботом,
-<code>/delete_my_data</code>). Открыт первый вопрос; одновременно открыт — один
-(тап по другому сворачивает предыдущий). Внизу — карточка «Не нашёл ответа?»
-с кнопкой в «Сообщить о проблеме» (экран 13). Содержимое — статика в JS,
-без новых API; тексты — черновые, сводка в спеке §3.3.</p>
+<div class="caption">11 · Помощь · FAQ <span>тёмная · аккордеон, 7 вопросов</span></div>
+<p class="note">РЕШЕНИЯ ВЛАДЕЛЬЦА: FAQ и контакты — <b>один экран</b> (5).
+Правки 6: вопрос «Как включить тёмную или светлую тему?» <b>убран</b>,
+«Откуда берутся калории?» переименован в <b>«Как считаются калории?»</b> —
+итого 7 вопросов по реальным фичам (правка подхода по тапу, удаление из
+backbar, 1ПМ по Эпли, калории MET, шаблоны/«Повторить», общий дневник с ботом,
+<code>/delete_my_data</code>). Аккордеон: одновременно открыт один вопрос.
+Внизу — <b>«▶ Повторить подсказки»</b> (повтор туториала по кнопке — решение 3)
+и <b>«💬 Написать разработчику»</b> → экран 13. Тексты — на «Вы» (решение 14),
+черновые (вычитка владельцем — спека §3.3). Показ: автопоказ подсказок —
+новым пользователям; этот экран — точка входа из Настроек (решение 7).</p>
 <div class="phone"><div class="p">
   <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Помощь</span></div>
   <div class="content">
     <div class="faq-it open">
       <button class="faq-q">Как изменить вес или подходы?<svg class="chev"><use href="#i-chev-d"/></svg></button>
-      <div class="faq-a">Открой тренировку в Истории и тапни по подходу — можно поправить вес и повторения или удалить запись. Правки сохраняются сами, работает и для завершённых тренировок.</div>
+      <div class="faq-a">Откройте тренировку в Истории и тапните по строке записи — можно поправить вес и повторения или удалить её. Правки сохраняются сами; работает и для завершённых тренировок.</div>
     </div>
     <div class="faq-it">
       <button class="faq-q">Как удалить тренировку?<svg class="chev"><use href="#i-chev-d"/></svg></button>
@@ -833,24 +1004,22 @@ fullscreen «в разработке», фон), «⏱ Таймер отдыха
       <button class="faq-q">Что такое 1ПМ?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="faq-it">
-      <button class="faq-q">Как включить тёмную или светлую тему?<svg class="chev"><use href="#i-chev-d"/></svg></button>
-    </div>
-    <div class="faq-it">
-      <button class="faq-q">Откуда берутся калории?<svg class="chev"><use href="#i-chev-d"/></svg></button>
+      <button class="faq-q">Как считаются калории?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="faq-it">
       <button class="faq-q">Можно начать тренировку с прошлого раза?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="faq-it">
-      <button class="faq-q">Начал в боте — продолжу в приложении?<svg class="chev"><use href="#i-chev-d"/></svg></button>
+      <button class="faq-q">Начали в боте — продолжите в приложении?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="faq-it">
       <button class="faq-q">Как удалить все свои данные?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="glass">
-      <p class="t1">Не нашёл ответа?</p>
-      <p class="meta">Напиши автору — разберёмся. Обычно отвечаю в течение дня.</p>
-      <div class="btnrow"><button class="btn wide">💬 Написать автору</button></div>
+      <p class="t1">Не нашли ответа?</p>
+      <p class="meta">Напишите разработчику — разберёмся. Обычно отвечаю в течение дня.</p>
+      <div class="btnrow"><button class="btn wide">▶ Повторить подсказки</button></div>
+      <div class="btnrow"><button class="btn wide">💬 Написать разработчику</button></div>
     </div>
   </div>
   <div class="nav">
@@ -863,14 +1032,14 @@ fullscreen «в разработке», фон), «⏱ Таймер отдыха
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 12 · Помощь · светлая тема (вопрос про тему раскрыт)               -->
+<!-- 12 · Помощь · светлая тема (вопрос про калории раскрыт)            -->
 <!-- ================================================================== -->
-<div class="caption">12 · Помощь · светлая тема <span>раскрыт вопрос про тему</span></div>
-<p class="note">Светлая тема на тех же токенах; для наглядности раскрыт вопрос
-«Как включить тёмную или светлую тему?» (вопрос №4) — ответ виден целиком,
-шеврон перевёрнут, рамка карточки подсвечена (<code>--glowbrd</code>). Скролл
-естественный; нижняя навигация остаётся, «← Назад» возвращает на Настройки
-или на вкладку-источник (как у подэкрана Настроек [UX-S4 §3]).</p>
+<div class="caption">12 · Помощь · светлая тема <span>раскрыт вопрос «Как считаются калории?»</span></div>
+<p class="note">Светлая тема на тех же токенах; для наглядности раскрыт
+переименованный вопрос <b>«Как считаются калории?»</b> (№4) — ответ виден
+целиком, шеврон перевёрнут, рамка карточки подсвечена (<code>--glowbrd</code>).
+Скролл естественный; «← Назад» возвращает на Настройки или на
+вкладку-источник (паттерн подэкрана [UX-S4 §3]).</p>
 <div class="phone"><div class="p light">
   <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Помощь</span></div>
   <div class="content">
@@ -884,25 +1053,23 @@ fullscreen «в разработке», фон), «⏱ Таймер отдыха
       <button class="faq-q">Что такое 1ПМ?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="faq-it open">
-      <button class="faq-q">Как включить тёмную или светлую тему?<svg class="chev"><use href="#i-chev-d"/></svg></button>
-      <div class="faq-a">⚙️ Настройки → «🎨 Оформление» → тумблер «Тёмная тема». Пока его не трогать, тема повторяет настройки твоего Telegram.</div>
-    </div>
-    <div class="faq-it">
-      <button class="faq-q">Откуда берутся калории?<svg class="chev"><use href="#i-chev-d"/></svg></button>
+      <button class="faq-q">Как считаются калории?<svg class="chev"><use href="#i-chev-d"/></svg></button>
+      <div class="faq-a">По формуле MET: интенсивность — из тоннажа и времени, плюс Ваш вес из Профиля. Чтобы калории считались, заполните профиль (пол, возраст, рост, вес).</div>
     </div>
     <div class="faq-it">
       <button class="faq-q">Можно начать тренировку с прошлого раза?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="faq-it">
-      <button class="faq-q">Начал в боте — продолжу в приложении?<svg class="chev"><use href="#i-chev-d"/></svg></button>
+      <button class="faq-q">Начали в боте — продолжите в приложении?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="faq-it">
       <button class="faq-q">Как удалить все свои данные?<svg class="chev"><use href="#i-chev-d"/></svg></button>
     </div>
     <div class="glass">
-      <p class="t1">Не нашёл ответа?</p>
-      <p class="meta">Напиши автору — разберёмся. Обычно отвечаю в течение дня.</p>
-      <div class="btnrow"><button class="btn wide">💬 Написать автору</button></div>
+      <p class="t1">Не нашли ответа?</p>
+      <p class="meta">Напишите разработчику — разберёмся. Обычно отвечаю в течение дня.</p>
+      <div class="btnrow"><button class="btn wide">▶ Повторить подсказки</button></div>
+      <div class="btnrow"><button class="btn wide">💬 Написать разработчику</button></div>
     </div>
   </div>
   <div class="nav">
@@ -915,35 +1082,38 @@ fullscreen «в разработке», фон), «⏱ Таймер отдыха
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 13 · Сообщить о проблеме (тёмная)                                  -->
+<!-- 13 · Сообщить о проблеме · сервер работает (тёмная)                -->
 <!-- ================================================================== -->
-<div class="caption">13 · Сообщить о проблеме <span>Telegram + копирование email</span></div>
-<p class="note">Экран «Сообщить о проблеме» — вход из «Помощи» (кнопка «Написать
-автору»); тап по Telegram-кнопке открывает чат с владельцем
-(deep-link <code>https://t.me/…</code>) — состояние «отправлено» не нужно.
-Email копируется в буфер с тостом «Email скопирован». Контакты в макете —
-<b>заглушки</b>: реальный @username и email уточнит владелец (§9 спеки).
-Блок «Сервер отвечает?» — быстрая самодиагностика: <code>/health</code>
-на gym-helper.com уже существует. Внизу — версия и дата сборки (пригодится
-в тексте обращения).</p>
+<div class="caption">13 · Сообщить о проблеме · проверка сервера ✅ <span>экран 1 из 2</span></div>
+<p class="note">РЕШЕНИЯ ВЛАДЕЛЬЦА 11 + 14: адрес из кнопки <b>убран</b> — теперь
+«Проверить сервер», а результат появляется <b>инлайн под кнопкой</b> по тапу.
+Показаны ОБА состояния: здесь — <b>«✅ Сервер работает»</b> (зелёная), на
+экране 14 — «⛔ Сервер не отвечает» (красная, var(--danger)). Связь
+с разработчиком — <b>РЕКОМЕНДОВАННАЯ механика, НА УТВЕРЖДЕНИИ ВЛАДЕЛЬЦА</b>
+(открытый вопрос в спеке §9): кнопка <b>«Написать разработчику»</b> открывает
+чат с ботом GymHelperBot — личные контакты скрыты; второй вариант —
+копируемый email (тап — буфер обмена + тост). Вход на экран — из «Помощи»
+(решение 5: один экран). Тон — на «Вы». Состояние «отправлено» не нужно —
+тап сразу открывает Telegram.</p>
 <div class="phone"><div class="p">
   <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Сообщить о проблеме</span></div>
   <div class="content">
     <div class="glass">
-      <p class="t1">💬 Нашёл баг? Есть идея?</p>
-      <p class="meta">Напиши автору — разберусь и отвечу. Про баг лучше сразу три вещи: что делал, что ожидал, что вышло — так быстрее.</p>
+      <p class="t1">💬 Нашли баг? Есть идея?</p>
+      <p class="meta">Напишите разработчику — разберёмся и ответим. Про баг лучше сразу три вещи: что делали, что ожидали, что вышло — так быстрее.</p>
     </div>
     <div class="glass">
-      <button class="cbtn"><svg><use href="#i-send"/></svg><span><b>Написать в Telegram</b><small>@PolkAlex · автор GymHelper</small></span></button>
+      <button class="cbtn"><svg><use href="#i-send"/></svg><span><b>Написать разработчику</b><small>через бота GymHelperBot</small></span></button>
       <button class="cbtn"><svg><use href="#i-mail"/></svg><span><b>Скопировать email</b><small>support@gym-helper.com</small></span></button>
       <p class="meta">Копирование — в буфер обмена, тост подтвердит</p>
     </div>
     <div class="glass">
       <p class="t1">🩺 Сервер отвечает?</p>
-      <p class="meta">Если приложение не открывается — проверь статус сервера</p>
-      <div class="btnrow"><button class="btn wide">Открыть статус (gym-helper.com/health)</button></div>
+      <p class="meta">Быстрая проверка доступности сервера GymHelper</p>
+      <div class="btnrow"><button class="btn wide">Проверить сервер</button></div>
+      <p class="serline ok">✅ Сервер работает</p>
     </div>
-    <p class="meta" style="text-align:center;margin-top:14px;">GymHelper 1.29 · 10.11.2026</p>
+    <p class="meta" style="text-align:center;margin-top:14px;">GymHelper 1.31 · 10.11.2026</p>
   </div>
   <div class="nav">
     <button class="nbtn"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
@@ -955,18 +1125,61 @@ Email копируется в буфер с тостом «Email скопиро�
 </div></div>
 
 <!-- ================================================================== -->
-<!-- 14 · «Что нового» · модалка после релиза (тёмная, поверх Истории)  -->
+<!-- 14 · Сообщить о проблеме · сервер не отвечает (тёмная)             -->
 <!-- ================================================================== -->
-<div class="caption">14 · «Что нового» после релиза <span>модалка поверх Истории · issue #91</span></div>
-<p class="note">После релиза при первом открытии приложения — модалка
-<b>«Что нового»</b>: заголовок, пилюля с номером релиза, 3–4 пункта с иконками
-и единственная кнопка <b>«Понятно»</b>. Показ — <b>раз на релиз</b>: константа
-версии сверяется с <code>gymWnVer</code> в localStorage. Пункты в примере — по
-свежему календарному релизу (календарь, рекорд недели, шаг веса 0,25 кг,
-Настройки); содержимое каждого релиза пишет владелец (статический массив
-в app.js; пустой массив — модалка не показывается, §9). Фон — затемнение
-поверх текущей вкладки (в примере История); контент под модалкой
-не кликается.</p>
+<div class="caption">14 · Сообщить о проблеме · проверка сервера ⛔ <span>экран 2 из 2</span></div>
+<p class="note">Второе состояние проверки: строка <b>«⛔ Сервер не отвечает»</b>
+— красная (<code>var(--danger)</code>). Появляется на месте результата по тапу
+«Проверить сервер» (повторный тап — перепроверка; крутящийся индикатор —
+в реализации). Остальное — как на экране 13. Email и версия внизу помогают
+составить сообщение о проблеме, если приложение не открывается.</p>
+<div class="phone"><div class="p">
+  <div class="topbar"><button class="tbtn" title="Назад" aria-label="Назад"><svg><use href="#i-back"/></svg></button><span class="tb-title">GymHelper · Сообщить о проблеме</span></div>
+  <div class="content">
+    <div class="glass">
+      <p class="t1">💬 Нашли баг? Есть идея?</p>
+      <p class="meta">Напишите разработчику — разберёмся и ответим. Про баг лучше сразу три вещи: что делали, что ожидали, что вышло — так быстрее.</p>
+    </div>
+    <div class="glass">
+      <button class="cbtn"><svg><use href="#i-send"/></svg><span><b>Написать разработчику</b><small>через бота GymHelperBot</small></span></button>
+      <button class="cbtn"><svg><use href="#i-mail"/></svg><span><b>Скопировать email</b><small>support@gym-helper.com</small></span></button>
+      <p class="meta">Копирование — в буфер обмена, тост подтвердит</p>
+    </div>
+    <div class="glass">
+      <p class="t1">🩺 Сервер отвечает?</p>
+      <p class="meta">Быстрая проверка доступности сервера GymHelper</p>
+      <div class="btnrow"><button class="btn wide">Проверить сервер</button></div>
+      <p class="serline fail">⛔ Сервер не отвечает</p>
+    </div>
+    <p class="meta" style="text-align:center;margin-top:14px;">GymHelper 1.31 · 10.11.2026</p>
+  </div>
+  <div class="nav">
+    <button class="nbtn"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================== -->
+<!-- 15 · «Что нового» · модалка после релиза (тёмная, поверх Истории)  -->
+<!-- ================================================================== -->
+<div class="caption">15 · «Что нового» после релиза <span>«Понятно» + «Больше не показывать» · issue #91</span></div>
+<p class="note">РЕШЕНИЯ ВЛАДЕЛЬЦА [ONB-update 10.11]: модалка показывается
+<b>по умолчанию всем</b> при первом открытии после релиза. Закрытие — кнопка
+<b>«Понятно»</b> <i>или тап по фону</i> (решения 8–9). Под «Понятно» — вторичная
+muted-кнопка <b>«Больше не показывать»</b>: ставит флаг
+<code>gymWnOff</code> (синхронен тоглу «Сообщать об обновлениях» в Настройках,
+экран 10) — автопоказ глушится, ручная строка «Что нового» продолжает
+работать. Правка 12.2: иконки пунктов <b>выровнены</b> — квадрат-подложка
+34px с центрированной иконкой, строка центрируется по вертикали
+(<code>.wni</code> → <code>align-items:center</code>). Процесс контента
+(решение 10): модалка — только для <b>ЗНАЧИМЫХ релизов</b> (технические — без
+модалки); текст предлагает lead, утверждает владелец; <b>первый показ — со
+следующего релиза после 1.30</b> (ретроактивно 1.30 НЕ показываем) — в примере
+«Релиз 1.31». Пункты — на «Вы». Фон — затемнение поверх текущей вкладки;
+контент под модалкой не кликается.</p>
 <div class="phone"><div class="p fix">
   <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content" style="padding-bottom:110px;">
@@ -996,17 +1209,18 @@ Email копируется в буфер с тостом «Email скопиро�
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- модалка «Что нового» поверх затемнения -->
+  <!-- модалка «Что нового» поверх затемнения; закрытие: «Понятно», тап по фону, «Больше не показывать» -->
   <div class="mwrap">
     <div class="wnm">
-      <div class="wnh"><span class="t1">🚀 Что нового</span><span class="relpill">Релиз 1.29</span></div>
+      <div class="wnh"><span class="t1">🚀 Что нового</span><span class="relpill">Релиз 1.31</span></div>
       <div style="margin-top:8px;">
         <div class="wni"><span class="wi">📅</span><span><b>Календарь тренировок</b><span>Месяц целиком: точки по дням, тап — панель дня</span></span></div>
-        <div class="wni"><span class="wi">🏆</span><span><b>Рекорд недели</b><span>Карточка в Истории: насколько ты близко к личному максимуму</span></span></div>
+        <div class="wni"><span class="wi">🏆</span><span><b>Рекорд недели</b><span>Карточка в Статистике: насколько Вы близки к личному максимуму</span></span></div>
         <div class="wni"><span class="wi">🏋</span><span><b>Шаг веса 0,25 кг</b><span>Микродобавки в пикере — когда +2,5 кг это много</span></span></div>
-        <div class="wni"><span class="wi">⚙️</span><span><b>Настройки</b><span>Тема, таймер отдыха и звук — в одном месте (⚙️ в шапке)</span></span></div>
+        <div class="wni"><span class="wi">⚙️</span><span><b>Помощь и «Что нового»</b><span>FAQ, подсказки и настройки обновлений — в ⚙️ шапки</span></span></div>
       </div>
       <button class="cta">Понятно</button>
+      <button class="wnskip">Больше не показывать</button>
     </div>
   </div>
 </div></div>
