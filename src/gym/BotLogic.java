@@ -29,9 +29,9 @@ public final class BotLogic {
     private static final Pattern WEIGHT_PATTERN = Pattern.compile("^[0-9.,\\-\\s]+$");
     private static final Pattern TIME_PATTERN = Pattern.compile("^(\\d{1,2}):(\\d{2})$");
     private static final int KCAL_MAX_MIN = 240;
-    /* шаблоны тренировок [UX-T6/T7]: лимиты из спеки §0.2 */
-    private static final int TPL_LIMIT = 20;
-    private static final int TPL_EX_LIMIT = 20;
+    /* шаблоны тренировок [UX-T6/T7]: лимиты из спеки §0.2 (package-private — фиксируются юнит-тестом) */
+    static final int TPL_LIMIT = 20;
+    static final int TPL_EX_LIMIT = 20;
     /* таймер отдыха [UX-T5]: тик 1 с, обычная фаза — правка раз в 5 с, финальные 15 с — раз в 1 с */
     private static final int REST_BAR_CELLS = 18;
     private static final int REST_FINAL_PHASE = 15;
@@ -48,7 +48,8 @@ public final class BotLogic {
     private final String appLink;
     /* [UX-T16] рассылка владельцем: chat id владельца; 0 — admin-команды недоступны */
     private final long adminChatId;
-    private final Map<Long, UserState> states = new ConcurrentHashMap<>();
+    /* package-private: юнит-тест [TST-T4] инспектирует режим мастера ввода после handle() */
+    final Map<Long, UserState> states = new ConcurrentHashMap<>();
     private final Map<Long, RestSession> rests = new ConcurrentHashMap<>();
     /* [ONB-T2] ожидающие подтверждения удаления: chatId → время запроса, только память процесса
        (после рестарта бота подтверждение просто «истекло» — юзер начинает заново) */
