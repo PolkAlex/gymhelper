@@ -46,3 +46,6 @@ bin/
 ### Playwright ###
 test-results/
 tests/debug-75.spec.js
+
+### EXR-T2: кэш датасета free-exercise-db (инструмент импорта) ###
+tools/.fdb-cache/
