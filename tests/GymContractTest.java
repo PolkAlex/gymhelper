@@ -4,6 +4,7 @@ import gym.GymData;
 import gym.Json;
 import gym.Records;
 import gym.SetEntry;
+import gym.Stats;
 import gym.Storage;
 import gym.Template;
 import gym.TemplateExercise;
@@ -343,7 +344,7 @@ public class GymContractTest {
         try {
             java.nio.file.Path tmpRes = java.nio.file.Files.createTempDirectory("gymres");
             Storage stRes = new Storage(tmpRes);
-            WebServer ws = new WebServer("contract-test-token", stRes, tmpRes);
+            WebServer ws = new WebServer("contract-test-token", stRes, tmpRes, new Stats(tmpRes.resolve("stats.json")));
             java.net.ServerSocket probe = new java.net.ServerSocket(0);
             int port = probe.getLocalPort();
             probe.close();
@@ -385,7 +386,7 @@ public class GymContractTest {
         try {
             java.nio.file.Path tmpB = java.nio.file.Files.createTempDirectory("gymbirth");
             Storage stB = new Storage(tmpB);
-            WebServer wsB = new WebServer("contract-test-token", stB, tmpB);
+            WebServer wsB = new WebServer("contract-test-token", stB, tmpB, new Stats(tmpB.resolve("stats.json")));
             java.net.ServerSocket probeB = new java.net.ServerSocket(0);
             int portB = probeB.getLocalPort();
             probeB.close();
@@ -417,6 +418,97 @@ public class GymContractTest {
                 "birth merge: зеркало обновлено клиентом с датой");
         } catch (Exception birthErr) {
             throw new AssertionError("CONTRACT FAIL: birth merge " + birthErr);
+        }
+
+        /* [ANA-T1] Stats: /stats за токеном (404 без токена/с неверным — не палим существование),
+           инкременты maInit/maSave/workoutsCreated/workoutsCompleted при init/save,
+           недельные агрегаты ISO, файл stats.json и ротация недель.
+           Реальный WebServer на эфемерном порту (env GYM_ADMIN_TOKEN в тестах не задан →
+           действует токен бота). */
+        try {
+            java.nio.file.Path tmpS = java.nio.file.Files.createTempDirectory("gymstats");
+            java.nio.file.Path statsFile = tmpS.resolve("stats.json");
+            Storage stS = new Storage(tmpS);
+            Stats counter = new Stats(statsFile);
+            WebServer wsS = new WebServer("contract-test-token", stS, tmpS, counter);
+            java.net.ServerSocket probeS = new java.net.ServerSocket(0);
+            int portS = probeS.getLocalPort();
+            probeS.close();
+            wsS.start(portS);
+            String idS = tgInitData("contract-test-token", 424244);
+
+            /* токен-гейт: без токена и с неверным — 404, как у несуществующей страницы */
+            check(get(portS, "/stats").statusCode() == 404, "stats: без токена — 404");
+            check(get(portS, "/stats?token=wrong").statusCode() == 404, "stats: неверный токен — 404");
+            check(get(portS, "/stats?token=contract-test-token").statusCode() == 200, "stats: верный токен — 200");
+            check(get(portS, "/stats?token=contract-test-token&x=1").statusCode() == 200, "stats: лишние параметры запроса не мешают");
+
+            /* init + save с новой завершённой тренировкой */
+            check(postInit(portS, idS).statusCode() == 200, "stats: /api/init — 200");
+            String wS = "{\"id\":1,\"date\":\"2026-11-11\",\"finished\":true,\"exercises\":[]}";
+            check(postSave(portS, idS, 0, "{\"rev\":0,\"nextId\":2,\"workouts\":[" + wS + "]}").statusCode() == 200,
+                "stats: /api/save с новой тренировкой — 200");
+            Map<String, Object> snap = Json.map(Json.parse(get(portS, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snap.get("maInit")) == 1, "stats: maInit=1 после init");
+            check(Json.lng(snap.get("maSave")) == 1, "stats: maSave=1 после save");
+            check(Json.lng(snap.get("workoutsCreated")) == 1, "stats: workoutsCreated=1 (новый id)");
+            check(Json.lng(snap.get("workoutsCompleted")) == 1, "stats: workoutsCompleted=1 (прирост finished)");
+            check(Json.lng(snap.get("templatesCreated")) == 0 && Json.lng(snap.get("templatesUsed")) == 0,
+                "stats: шаблонные счётчики с нуля");
+
+            /* повторный save того же workout: maSave растёт, created/completed — нет */
+            check(postSave(portS, idS, 1, "{\"rev\":1,\"nextId\":2,\"workouts\":[" + wS + "]}").statusCode() == 200,
+                "stats: повторный save — 200");
+            snap = Json.map(Json.parse(get(portS, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snap.get("maSave")) == 2, "stats: maSave=2 после второго save");
+            check(Json.lng(snap.get("workoutsCreated")) == 1, "stats: повторный save не растит workoutsCreated");
+            check(Json.lng(snap.get("workoutsCompleted")) == 1, "stats: повторный save не растит workoutsCompleted");
+
+            /* недельный агрегат: текущая ISO-неделя зеркалит события */
+            Map<String, Object> weeks = Json.map(snap.get("weeks"));
+            check(weeks != null && !weeks.isEmpty(), "stats: weeks присутствуют");
+            java.time.LocalDate todayS = java.time.LocalDate.now();
+            String curWeek = String.format("%04d-W%02d",
+                todayS.get(java.time.temporal.WeekFields.ISO.weekBasedYear()),
+                todayS.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear()));
+            Map<String, Object> cur = Json.map(weeks.get(curWeek));
+            check(cur != null && Json.lng(cur.get("maInit")) == 1 && Json.lng(cur.get("maSave")) == 2
+                    && Json.lng(cur.get("workoutsCreated")) == 1 && Json.lng(cur.get("workoutsCompleted")) == 1,
+                "stats: недельный агрегат текущей недели зеркалит события");
+
+            /* файл stats.json записан и перечитывается с теми же данными */
+            check(java.nio.file.Files.exists(statsFile), "stats: файл stats.json создан");
+            Map<String, Object> fileSnap = new Stats(statsFile).snapshot();
+            check(Json.lng(fileSnap.get("maSave")) == 2 && Json.lng(fileSnap.get("workoutsCreated")) == 1,
+                "stats: totals перечитываются из файла");
+            Map<String, Object> fileWeeks = Json.map(fileSnap.get("weeks"));
+            Map<String, Object> fileCur = fileWeeks == null ? null : Json.map(fileWeeks.get(curWeek));
+            check(fileCur != null && Json.lng(fileCur.get("maSave")) == 2, "stats: недели перечитываются из файла");
+
+            /* ротация: 30 недель в файле → остаются последние 26, старейшая вытеснена, totals не тронуты */
+            StringBuilder wkKeys = new StringBuilder();
+            for (int i = 30; i >= 1; i--) {
+                if (wkKeys.length() > 0) wkKeys.append(',');
+                java.time.LocalDate dS = todayS.minusWeeks(i);
+                wkKeys.append('"').append(String.format("%04d-W%02d",
+                        dS.get(java.time.temporal.WeekFields.ISO.weekBasedYear()),
+                        dS.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear())))
+                    .append("\":{\"maInit\":1}");
+            }
+            java.nio.file.Files.writeString(statsFile,
+                "{\"maInit\":30,\"weeks\":{" + wkKeys + "}}", java.nio.charset.StandardCharsets.UTF_8);
+            Map<String, Object> rot = new Stats(statsFile).snapshot();
+            Map<String, Object> rotWeeks = Json.map(rot.get("weeks"));
+            check(rotWeeks.size() == Stats.WEEKS_TO_KEEP,
+                "stats: ротация держит " + Stats.WEEKS_TO_KEEP + " недель, а не " + rotWeeks.size());
+            java.time.LocalDate dOld = todayS.minusWeeks(30);
+            String oldKey = String.format("%04d-W%02d",
+                dOld.get(java.time.temporal.WeekFields.ISO.weekBasedYear()),
+                dOld.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear()));
+            check(!rotWeeks.containsKey(oldKey), "stats: старейшая неделя вытеснена при ротации");
+            check(Json.lng(rot.get("maInit")) == 30, "stats: totals при ротации недель не трогаются");
+        } catch (Exception statsErr) {
+            throw new AssertionError("CONTRACT FAIL: stats " + statsErr);
         }
 
         System.out.println("CONTRACT OK");
@@ -454,6 +546,28 @@ public class GymContractTest {
                 java.net.URI.create("http://127.0.0.1:" + port + "/api/save"))
             .header("Content-Type", "application/json")
             .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload, java.nio.charset.StandardCharsets.UTF_8))
+            .build();
+        return java.net.http.HttpClient.newHttpClient()
+            .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+
+    /* POST /api/init в тестовый WebServer */
+    static java.net.http.HttpResponse<String> postInit(int port, String initData) throws Exception {
+        String payload = "{\"initData\":\"" + initData + "\"}";
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(
+                java.net.URI.create("http://127.0.0.1:" + port + "/api/init"))
+            .header("Content-Type", "application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload, java.nio.charset.StandardCharsets.UTF_8))
+            .build();
+        return java.net.http.HttpClient.newHttpClient()
+            .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+
+    /* GET произвольного пути (для /stats) */
+    static java.net.http.HttpResponse<String> get(int port, String pathAndQuery) throws Exception {
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(
+                java.net.URI.create("http://127.0.0.1:" + port + pathAndQuery))
+            .GET()
             .build();
         return java.net.http.HttpClient.newHttpClient()
             .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());

@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import gym.GymData;
 import gym.Json;
+import gym.Stats;
 import gym.Storage;
 import gym.Workout;
 
@@ -23,9 +24,11 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 
 public final class WebServer {
@@ -35,13 +38,20 @@ public final class WebServer {
     private final String token;
     private final Storage storage;
     private final Path webDir;
+    /* [ANA-T1] агрегаты-счётчики (без ПДн) — общий с ботом экземпляр из Main */
+    private final Stats stats;
+    /* [ANA-T1] токен /stats: env GYM_ADMIN_TOKEN, не задан — токен бота */
+    private final String adminToken;
     private final long startedAt = System.currentTimeMillis();
     private HttpServer server;
 
-    public WebServer(String token, Storage storage, Path webDir) {
+    public WebServer(String token, Storage storage, Path webDir, Stats stats) {
         this.token = token;
         this.storage = storage;
+        this.stats = stats;
         this.webDir = webDir.toAbsolutePath().normalize();
+        String at = System.getenv("GYM_ADMIN_TOKEN");
+        this.adminToken = (at == null || at.isBlank()) ? token : at.trim();
     }
 
     public void start(int port) throws IOException {
@@ -68,6 +78,10 @@ public final class WebServer {
         try {
             if ("/health".equals(path)) {
                 handleHealth(ex);
+                return;
+            }
+            if ("/stats".equals(path)) {
+                handleStats(ex);
                 return;
             }
             if ("/api/init".equals(path)) {
@@ -140,6 +154,42 @@ public final class WebServer {
         }
     }
 
+    /* [ANA-T1] GET /stats?token=X — агрегаты-счётчики (без ПДн) для владельца.
+       Доступ по GYM_ADMIN_TOKEN (fallback: токен бота). Неверный/отсутствующий токен —
+       404 как у несуществующей страницы, чтобы не раскрывать существование эндпоинта. */
+    private void handleStats(HttpExchange ex) throws IOException {
+        if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, Map.of("ok", false));
+            return;
+        }
+        String given = queryParam(ex.getRequestURI().getRawQuery(), "token");
+        boolean ok = adminToken != null && given != null
+            && MessageDigest.isEqual(adminToken.getBytes(StandardCharsets.UTF_8),
+                given.getBytes(StandardCharsets.UTF_8));
+        if (!ok) {
+            send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+            return;
+        }
+        sendJson(ex, 200, stats.snapshot());
+    }
+
+    /* первый параметр name из rawQuery (уже декодированный), null — нет параметра */
+    private static String queryParam(String rawQuery, String name) {
+        if (rawQuery == null || rawQuery.isEmpty()) return null;
+        for (String pair : rawQuery.split("&")) {
+            int i = pair.indexOf('=');
+            if (i <= 0) continue;
+            try {
+                if (name.equals(URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8))) {
+                    return URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8);
+                }
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
     private void handleInit(HttpExchange ex) throws IOException {
         Map<String, Object> body = readJsonBody(ex);
         if (body == null) {
@@ -155,6 +205,7 @@ public final class WebServer {
         }
         GymData data = storage.load(userId);
         System.out.println("[init] user " + userId + " rev " + data.rev + " workouts " + data.workouts.size());
+        stats.inc("maInit");
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("userId", userId);
@@ -196,6 +247,13 @@ public final class WebServer {
         }
         if (data.nextId < 1) data.nextId = 1;
         long incomingNextId = data.nextId;
+        /* [ANA-T1] агрегаты ДО слияния: новые id → workoutsCreated, прирост finished → workoutsCompleted */
+        Set<Long> beforeIds = new HashSet<>();
+        int finishedBefore = 0;
+        for (Workout cw : current.workouts) {
+            beforeIds.add(cw.id);
+            if (cw.finished) finishedBefore++;
+        }
         for (Workout iw : data.workouts) {
             if (iw.id >= incomingNextId) incomingNextId = iw.id + 1;
             System.out.println("[save-data] id " + iw.id + " date " + iw.date + " started " + iw.startedAt + " ended " + iw.endedAt + " finished " + iw.finished + " sets " + iw.exercises.size());
@@ -248,6 +306,17 @@ public final class WebServer {
         data.rev = current.rev + 1;
         storage.save(userId, data);
         System.out.println("[save] user " + userId + " rev " + data.rev + " workouts " + data.workouts.size() + " nextId " + data.nextId);
+        /* [ANA-T1] счётчики успешного save: сам save + прирост новых/завершённых тренировок
+           (отклонённые 401/400/409 сюда не доезжают и не считаются) */
+        stats.inc("maSave");
+        int created = 0;
+        int finishedAfter = 0;
+        for (Workout w : current.workouts) {
+            if (!beforeIds.contains(w.id)) created++;
+            if (w.finished) finishedAfter++;
+        }
+        if (created > 0) stats.add("workoutsCreated", created);
+        if (finishedAfter > finishedBefore) stats.add("workoutsCompleted", finishedAfter - finishedBefore);
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("rev", data.rev);

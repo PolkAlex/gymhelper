@@ -17,6 +17,9 @@ services:
       - GYM_WEBAPP_URL=${GYM_WEBAPP_URL:-}
       # chat id владельца для admin-команды /announce [UX-T16]: перенесите в .env на VPS (GYM_ADMIN_CHAT_ID=...)
       - GYM_ADMIN_CHAT_ID=${GYM_ADMIN_CHAT_ID:-}
+      # токен эндпоинта /stats [ANA-T1]: перенесите в .env на VPS (GYM_ADMIN_TOKEN=...);
+      # не задан — /stats доступен с токеном бота (GYM_BOT_TOKEN)
+      - GYM_ADMIN_TOKEN=${GYM_ADMIN_TOKEN:-}
     volumes:
       - ./data:/app/data
     healthcheck:
