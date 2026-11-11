@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[ONB] Онбординг и помощь · редакция 3 [ONB-update2 10.11] · Amber Glass</title>
+<title>[ONB] Онбординг и помощь · редакция 4 [ONB-update3 10.11] · Amber Glass</title>
 <style>
 /* ============ страница-презентация (как ux-s6-calendar.html) ============ */
 * { box-sizing: border-box; }
@@ -344,10 +344,16 @@ body.page {
     flex: none; width: 34px; height: 34px; border-radius: 10px;
     background: var(--glow); border: 1px solid var(--glowbrd);
     display: flex; align-items: center; justify-content: center;
+    position: relative; /* ред. 4: якорь для абсолютного дублирования центрирования */
 }
-/* ред. 3: иконки пунктов — инлайн SVG набора вместо эмодзи (эмодзи прижимались
-   к верху подложки и плавали по кеглю); svg центрируется flex'ом квадрата */
-.wi svg { width: 18px; height: 18px; color: var(--accent); display: block; }
+/* ред. 4 [ONB-update3]: svg — строчный элемент с baseline-сдвигом, эмодзи-наследие
+   «плавало» вверх-влево. ЖЁСТКОЕ центрирование в два слоя: (1) flex родителя,
+   (2) абсолют + inset:0 + margin:auto (не зависит от line-height/baseline).
+   display:block и фиксированные 18×18 — обязательно */
+.wi svg {
+    position: absolute; inset: 0; margin: auto;
+    display: block; width: 18px; height: 18px; color: var(--accent);
+}
 .wni b { display: block; font-size: 14px; }
 .wni span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .wnm .cta { height: 46px; font-size: 15px; margin-top: 12px; }
@@ -481,7 +487,7 @@ body.page {
 <!-- ================================================================== -->
 <!-- Вводка                                                             -->
 <!-- ================================================================== -->
-<div class="caption">Онбординг и помощь в Mini App · редакция 3 <span>ONB-update2 · 10.11</span></div>
+<div class="caption">Онбординг и помощь в Mini App · редакция 4 <span>ONB-update3 · 10.11</span></div>
 <p class="note">Редакция 2 по ответам владельца на черновик (10.11): <b>приветствие —
 вариант B «Карусель»</b> (дорисованы слайды 2–3, финальный слайд с кнопкой
 «Начать»); <b>туториал — подсказки поверх реальных экранов</b>, 4 шага
@@ -515,6 +521,18 @@ top 173); (3) на фикс-экранах туториала навигация
 «Что нового» — инлайн SVG набора (calendar / trophy / plus-thin / gear)
 вместо эмодзи; (5) email — реальный
 <code>support.gymhelper@gmail.com</code>.</p>
+<p class="note"><b>Редакция 4 [ONB-update3 10.11] — финальные багфиксы:</b>
+(1) на шаге 4 круг 48px обрамлял только иконку — подпись «Статистика» торчала
+из него по горизонтали; вместо кольца — <b>скруглённый прямоугольник 72×56px,
+radius 16</b> (left 90, bottom 5; орантурный border + мягкое свечение вторым
+слоём box-shadow), охватывающий «иконка сверху + подпись снизу» целиком
+(центр x=125.75, центр блока 32.75px от низа); шаги 1–3 не тронуты — там
+круглые кольца вокруг круглых кнопок корректны; (2) SVG-иконки модалки
+«Что нового» всё ещё смещались вверх-влево (baseline строчного svg) —
+<b>жёсткое центрирование в два слоя</b>: flex родителя + абсолют
+(<code>position:absolute; inset:0; margin:auto; display:block</code>,
+фиксированные 18×18, плюс атрибуты width/height на тегах svg) — иконка строго
+по центру квадрата, квадрат строго по центру строки.</p>
 
 <!-- ================================================================== -->
 <!-- 1 · Приветствие · вариант B · слайд 1 из 3 (тёмная)                -->
@@ -912,16 +930,18 @@ muted. Слайды 2–3 в светлой теме собираются тем
 <p class="note">РЕШЕНИЕ ВЛАДЕЛЬЦА 2.3: шаг 4 дорисован отдельным экраном.
 Подложка — верх вкладки <b>Статистики</b>: карточки «Рекорд недели»
 (<code>reccard glow</code> — в проде рекорды недели живут именно здесь,
-[UX-T31]; в Истории — одна сводная карточка). Спотлайт — на табе
-<b>«Статистика»</b> нижней навигации (второй слева): кольцо 56px по центру
-таба (иконка + подпись), тултип выше панели. Текст шага — обзор, что найдёт
-пользователя: рекорды недели, оценка 1ПМ по Эпли, объём и время. На этом шаг
-туториал завершается молча. <b>Фикс ред. 3</b>: на фикс-экранах sticky-nav
-без скролла не прилипал к низу (висел в потоке, под ним было ~50px пустоты —
-кольцо попадало под панель); теперь <code>.p.fix .nav</code> прибит абсолютом
-к нижнему краю, и кольцо 48px стоит точно на табе «Статистика»
-(центр x=125.75, 30.7px от низа → left 102, bottom 7) — блок «иконка +
-подпись» целиком внутри кольца.</p>
+[UX-T31]; в Истории — одна сводная карточка). Подсветка — на табе
+<b>«Статистика»</b> нижней навигации (второй слева), тултип выше панели.
+Текст шага — обзор, что найдёт пользователь: рекорды недели, оценка 1ПМ по
+Эпли, объём и время. На этом шаг туториал завершается молча. <b>Фикс ред. 3</b>:
+на фикс-экранах sticky-nav без скролла не прилипал к низу (висел в потоке,
+под ним было ~50px пустоты — подсветка попадала под панель); теперь
+<code>.p.fix .nav</code> прибит абсолютом к нижнему краю. <b>Фикс ред. 4</b>:
+круг 48px обрамлял только иконку — подпись «Статистика» торчала из него
+по горизонтали; вместо кольца — <b>скруглённый прямоугольник 72×56px,
+radius 16</b> (left 90, bottom 5; центр x=125.75, центр блока 32.75px от
+низа) с орантурным border'ом и мягким свечением, охватывающий «иконка сверху +
+подпись снизу» целиком с полями ~6–9px.</p>
 <div class="phone"><div class="p fix">
   <div class="topbar"><span class="tb-title">GymHelper · Статистика</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content" style="padding-bottom:110px;">
@@ -951,12 +971,17 @@ muted. Слайды 2–3 в светлой теме собираются тем
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- оверлей туториала: спотлайт на таб «Статистика» — РАСЧЁТ ред. 3:
-       nav прибита к низу (.p.fix .nav absolute, высота 72px): табы по 74.5px
-       (внутр. 362 = 390−28, минус FAB-зона 64), таб 2 центр x = 14+74.5+37.25
-       = 125.75; блок иконка[710.5,730.5]+подпись[733.5,748], центр y = 729.3
-       → 30.7px от низа. Кольцо 48px = (125.75; 729.3)±24 → left 102, bottom 7 -->
-  <div class="spot" style="left:102px;bottom:7px;width:48px;height:48px;"></div>
+  <!-- оверлей туториала: подсветка таба «Статистика» — РАСЧЁТ ред. 4:
+       nav прибита к низу (.p.fix .nav absolute, высота 72px, [688,760]):
+       табы по 74.5px (внутр. 362 = 390−28, минус FAB-зона 64), таб 2
+       «Статистика» [88.5,163], центр x = 125.75. nbtn bottom = 748
+       (padding-bottom 12), высота 41.5 → [706.5,748]; иконка [708.5,728.5],
+       подпись [731.5,746] → блок [708.5,746], центр y = 727.25 (32.75 от низа).
+       ПРЯМОУГОЛЬНИК 72×56 (круг 48px обрамлял только иконку — подпись
+       «Статистика» торчала по горизонтали): left = 125.75−36 = 89.75 ≈ 90,
+       bottom = 32.75−28 = 4.75 ≈ 5, radius 16, поля ~6–9px вокруг блока.
+       Мягкое свечение — второй слой box-shadow поверх затемнения -->
+  <div class="spot rect" style="left:90px;bottom:5px;width:72px;height:56px;border-radius:16px;box-shadow:0 0 0 4000px rgba(4,5,7,.66), 0 0 26px var(--glowbrd);"></div>
   <div class="tip" style="bottom:84px;">
     <div class="step">Шаг 4 из 4 · Прогресс</div>
     <div class="tt">Статистика — второй таб слева</div>
@@ -1267,10 +1292,10 @@ flex'ом, строки центрированы по вертикали (<code>
     <div class="wnm">
       <div class="wnh"><span class="t1">🚀 Что нового</span><span class="relpill">Релиз 1.31</span></div>
       <div style="margin-top:8px;">
-        <div class="wni"><span class="wi"><svg><use href="#i-cal"/></svg></span><span><b>Календарь тренировок</b><span>Месяц целиком: точки по дням, тап — панель дня</span></span></div>
-        <div class="wni"><span class="wi"><svg><use href="#i-trophy"/></svg></span><span><b>Рекорд недели</b><span>Карточка в Статистике: насколько Вы близки к личному максимуму</span></span></div>
-        <div class="wni"><span class="wi"><svg><use href="#i-plus-thin"/></svg></span><span><b>Шаг веса 0,25 кг</b><span>Микродобавки в пикере — когда +2,5 кг это много</span></span></div>
-        <div class="wni"><span class="wi"><svg><use href="#i-gear"/></svg></span><span><b>Помощь и «Что нового»</b><span>FAQ, подсказки и настройки обновлений — в ⚙️ шапки</span></span></div>
+        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-cal"/></svg></span><span><b>Календарь тренировок</b><span>Месяц целиком: точки по дням, тап — панель дня</span></span></div>
+        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-trophy"/></svg></span><span><b>Рекорд недели</b><span>Карточка в Статистике: насколько Вы близки к личному максимуму</span></span></div>
+        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-plus-thin"/></svg></span><span><b>Шаг веса 0,25 кг</b><span>Микродобавки в пикере — когда +2,5 кг это много</span></span></div>
+        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-gear"/></svg></span><span><b>Помощь и «Что нового»</b><span>FAQ, подсказки и настройки обновлений — в ⚙️ шапки</span></span></div>
       </div>
       <button class="cta">Понятно</button>
       <button class="wnskip">Больше не показывать</button>
