@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[ONB] Онбординг и помощь · редакция 2 [ONB-update 10.11] · Amber Glass</title>
+<title>[ONB] Онбординг и помощь · редакция 3 [ONB-update2 10.11] · Amber Glass</title>
 <style>
 /* ============ страница-презентация (как ux-s6-calendar.html) ============ */
 * { box-sizing: border-box; }
@@ -72,6 +72,10 @@ body.page {
 /* фикс-экраны (оверлеи туториала, «Что нового»): контент компактный, без скролла —
    спотлайты и модалки позиционируются от верха/низа кадра */
 .p.fix { overflow: hidden; }
+/* ред. 3: на фикс-экранах нет скролла — sticky nav НЕ прилипает к низу
+   (висит в потоке, под ним ~50px пустоты, кольца туториала уезжают вниз).
+   Прибиваем навигацию к нижнему краю абсолютом */
+.p.fix .nav { position: absolute; left: 0; right: 0; bottom: 0; margin: 0; }
 
 /* ============ каркас экрана ============ */
 .topbar {
@@ -203,8 +207,14 @@ body.page {
     box-shadow: 0 10px 30px rgba(255,194,32,.35);
 }
 .wskip { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 13.5px; font-weight: 600; padding: 10px; cursor: pointer; width: 100%; -webkit-tap-highlight-color: transparent; }
-/* карусель преимуществ (вариант B) */
-.car { display: flex; gap: 10px; width: 100%; margin-top: 24px; overflow: hidden; }
+/* карусель преимуществ (вариант B): clip-контейнер НЕПОДВИЖЕН, сдвигается
+   только трек .car-track через transform (ред. 3: прежний margin-left на .car
+   двигал и clip-бокс — слайды 2–3 обрезались/уезжали за край).
+   Геометрия: контент 342px, карточка 82% = 280.4px, шаг 290.4px, центр 171px →
+   слайд 1: 0; слайд 2: −260px; слайд 3: −550px (активная карточка по центру,
+   краешки соседей по ~20px с обеих сторон) */
+.car { width: 100%; margin-top: 24px; overflow: hidden; }
+.car-track { display: flex; gap: 10px; width: 100%; }
 .car-card {
     flex: 0 0 82%; text-align: left;
     background: var(--glass); border: 1px solid var(--glassbrd); border-radius: 20px; padding: 16px;
@@ -333,8 +343,11 @@ body.page {
 .wi {
     flex: none; width: 34px; height: 34px; border-radius: 10px;
     background: var(--glow); border: 1px solid var(--glowbrd);
-    display: flex; align-items: center; justify-content: center; font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
 }
+/* ред. 3: иконки пунктов — инлайн SVG набора вместо эмодзи (эмодзи прижимались
+   к верху подложки и плавали по кеглю); svg центрируется flex'ом квадрата */
+.wi svg { width: 18px; height: 18px; color: var(--accent); display: block; }
 .wni b { display: block; font-size: 14px; }
 .wni span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .wnm .cta { height: 46px; font-size: 15px; margin-top: 12px; }
@@ -456,12 +469,19 @@ body.page {
   <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 3l7 2.8v5.4c0 4.6-3 7.9-7 9.8-4-1.9-7-5.2-7-9.8V5.8L12 3z"/><path d="M9.2 11.8l2 2 3.6-3.8"/>
   </symbol>
+  <symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <!-- кубок — пункт «Рекорд недели» в «Что новом» (ред. 3: SVG вместо эмодзи) -->
+    <path d="M7.5 4.5h9v4.2a4.5 4.5 0 11-9 0V4.5z"/>
+    <path d="M7.5 5.5H5.6a1.9 1.9 0 00-1.9 1.9c0 1.8 1.6 3.2 3.7 3.4"/>
+    <path d="M16.5 5.5h1.9a1.9 1.9 0 011.9 1.9c0 1.8-1.6 3.2-3.7 3.4"/>
+    <path d="M12 13.2v6.3"/><path d="M8.5 19.5h7"/>
+  </symbol>
 </svg>
 
 <!-- ================================================================== -->
 <!-- Вводка                                                             -->
 <!-- ================================================================== -->
-<div class="caption">Онбординг и помощь в Mini App · редакция 2 <span>ONB-update · 10.11</span></div>
+<div class="caption">Онбординг и помощь в Mini App · редакция 3 <span>ONB-update2 · 10.11</span></div>
 <p class="note">Редакция 2 по ответам владельца на черновик (10.11): <b>приветствие —
 вариант B «Карусель»</b> (дорисованы слайды 2–3, финальный слайд с кнопкой
 «Начать»); <b>туториал — подсказки поверх реальных экранов</b>, 4 шага
@@ -478,9 +498,23 @@ FAQ — 7 вопросов (убран вопрос про тему, «Как с
 связь с разработчиком — <b>чат с ботом GymHelperBot</b> (рекомендация,
 <b>на утверждении владельца</b>) + копируемый email; <b>тон — на «Вы»</b>;
 онбординг показывается и существующим пользователям. Спека:
-<code>docs/spec-onb-onboarding.md</code>, ред. 2 (решения — в блок-цитате,
+<code>docs/spec-onb-onboarding.md</code>, ред. 3 (решения — в блок-цитатах,
 открытый вопрос — §9). Данные в примерах: Александр, жим лёжа 92,5 кг
 (личный рекорд 110 кг), тренировки 4–9 ноября.</p>
+<p class="note"><b>Редакция 3 [ONB-update2 10.11] — багфиксы по скринам
+владельца:</b> (1) карусель приветствия — слайды 2–3 обрезались/уезжали
+(отрицательный margin двигал clip-контейнер вместе с треком): теперь сдвигается
+только трек <code>.car-track</code> через <code>translateX</code> (−260px /
+−550px), активная карточка по центру, точки соответствуют слайду;
+(2) спотлайт шага 2 пересчитан по фактической вёрстке: центр тонкого плюсика
+<code>.ex-add</code> — точка (340; 195) → плотное кольцо 44px (left 318,
+top 173); (3) на фикс-экранах туториала навигация прибита к нижнему краю
+(<code>.p.fix .nav</code> — absolute: sticky без скролла не работал, под
+панелью было ~50px пустоты и кольца уезжали вниз) — кольцо шага 4 теперь
+точно на табе «Статистика» (48px, left 102, bottom 7); (4) иконки пунктов
+«Что нового» — инлайн SVG набора (calendar / trophy / plus-thin / gear)
+вместо эмодзи; (5) email — реальный
+<code>support.gymhelper@gmail.com</code>.</p>
 
 <!-- ================================================================== -->
 <!-- 1 · Приветствие · вариант B · слайд 1 из 3 (тёмная)                -->
@@ -502,7 +536,7 @@ FAQ — 7 вопросов (убран вопрос про тему, «Как с
       <div class="wlogo" style="width:72px;height:72px;border-radius:22px;"><svg style="width:38px;height:38px;"><use href="#i-dumb"/></svg></div>
       <div class="wtitle" style="font-size:24px;margin-top:14px;">GymHelper</div>
       <div class="wtag">Дневник тренировок в Telegram</div>
-      <div class="car">
+      <div class="car"><div class="car-track">
         <div class="car-card glow">
           <div class="cic">🏋</div>
           <div class="ch">Дневник за секунды</div>
@@ -513,7 +547,7 @@ FAQ — 7 вопросов (убран вопрос про тему, «Как с
           <div class="ch">Прогресс и рекорды</div>
           <p class="cp">Сравнение с прошлой тренировкой, оценка 1ПМ и живой рекорд — когда побит личный максимум.</p>
         </div>
-      </div>
+      </div></div>
       <div class="dots"><i class="on"></i><i></i><i></i></div>
     </div>
     <div class="ob-bottom">
@@ -529,17 +563,19 @@ FAQ — 7 вопросов (убран вопрос про тему, «Как с
 <div class="caption">2 · Приветствие · вариант B · слайд 2/3 <span>тёмная · рекорды</span></div>
 <p class="note">Слайд 2 — <b>рекорды и прогресс</b>: сравнение с прошлой
 тренировкой, оценка 1ПМ по Эпли и живой рекорд 🏆. Слева виден край слайда 1,
-справа — слайда 3 (трек карусели сдвинут на один шаг — в макете
-<code>margin-left</code>; в реализации — свайп или кнопка «Далее»). Точки:
-активна вторая. Все три слайда собираются одними классами
-<code>.car/.car-card</code> — один массив слайдов и сдвиг трека.</p>
+справа — слайда 3 (трек сдвинут на один шаг: <code>.car-track</code> →
+<code>translateX(-260px)</code>; clip-контейнер <code>.car</code> неподвижен —
+<b>фикс ред. 3</b>: прежний <code>margin-left</code> двигал clip-бокс и слайд
+обрезался). В реализации — свайп или кнопка «Далее». Точки: активна вторая.
+Все три слайда собираются одними классами <code>.car/.car-track/.car-card</code> —
+один массив слайдов и сдвиг трека.</p>
 <div class="phone"><div class="p">
   <div class="ob">
     <div class="ob-center" style="margin-top:6px">
       <div class="wlogo" style="width:72px;height:72px;border-radius:22px;"><svg style="width:38px;height:38px;"><use href="#i-dumb"/></svg></div>
       <div class="wtitle" style="font-size:24px;margin-top:14px;">GymHelper</div>
       <div class="wtag">Дневник тренировок в Telegram</div>
-      <div class="car" style="margin-left:-250px;">
+      <div class="car"><div class="car-track" style="transform:translateX(-260px);">
         <div class="car-card peek">
           <div class="cic">🏋</div>
           <div class="ch">Дневник за секунды</div>
@@ -555,7 +591,7 @@ FAQ — 7 вопросов (убран вопрос про тему, «Как с
           <div class="ch">Календарь и статистика</div>
           <p class="cp">Месяц с отметками тренировок, объём, время и калории — весь прогресс под рукой.</p>
         </div>
-      </div>
+      </div></div>
       <div class="dots"><i></i><i class="on"></i><i></i></div>
     </div>
     <div class="ob-bottom">
@@ -573,15 +609,16 @@ FAQ — 7 вопросов (убран вопрос про тему, «Как с
 ([UX-S6]), объём, время и калории. Кнопка «Далее» становится <b>«Начать»</b>,
 «Пропустить» убрана (заканчивать уже нечего). «Начать» → туториал (автопоказ —
 решение 3) или сразу в приложение. После любого выхода карусель больше
-не показывается (<code>gymOnbDone</code>). Трек сдвинут на два шага — слева
-краешек слайда 2.</p>
+не показывается (<code>gymOnbDone</code>). Трек сдвинут на два шага
+(<code>translateX(-550px)</code> — фикс ред. 3, активная карточка по центру,
+слева краешек слайда 2).</p>
 <div class="phone"><div class="p">
   <div class="ob">
     <div class="ob-center" style="margin-top:6px">
       <div class="wlogo" style="width:72px;height:72px;border-radius:22px;"><svg style="width:38px;height:38px;"><use href="#i-dumb"/></svg></div>
       <div class="wtitle" style="font-size:24px;margin-top:14px;">GymHelper</div>
       <div class="wtag">Дневник тренировок в Telegram</div>
-      <div class="car" style="margin-left:-540px;">
+      <div class="car"><div class="car-track" style="transform:translateX(-550px);">
         <div class="car-card peek">
           <div class="cic">🏋</div>
           <div class="ch">Дневник за секунды</div>
@@ -597,7 +634,7 @@ FAQ — 7 вопросов (убран вопрос про тему, «Как с
           <div class="ch">Календарь и статистика</div>
           <p class="cp">Месяц с отметками тренировок, объём, время и калории — весь прогресс под рукой.</p>
         </div>
-      </div>
+      </div></div>
       <div class="dots"><i></i><i></i><i class="on"></i></div>
     </div>
     <div class="ob-bottom">
@@ -621,7 +658,7 @@ muted. Слайды 2–3 в светлой теме собираются тем
       <div class="wlogo" style="width:72px;height:72px;border-radius:22px;"><svg style="width:38px;height:38px;"><use href="#i-dumb"/></svg></div>
       <div class="wtitle" style="font-size:24px;margin-top:14px;">GymHelper</div>
       <div class="wtag">Дневник тренировок в Telegram</div>
-      <div class="car">
+      <div class="car"><div class="car-track">
         <div class="car-card glow">
           <div class="cic">🏋</div>
           <div class="ch">Дневник за секунды</div>
@@ -632,7 +669,7 @@ muted. Слайды 2–3 в светлой теме собираются тем
           <div class="ch">Прогресс и рекорды</div>
           <p class="cp">Сравнение с прошлой тренировкой, оценка 1ПМ и живой рекорд — когда побит личный максимум.</p>
         </div>
-      </div>
+      </div></div>
       <div class="dots"><i class="on"></i><i></i><i></i></div>
     </div>
     <div class="ob-bottom">
@@ -656,7 +693,7 @@ muted. Слайды 2–3 в светлой теме собираются тем
       <div class="wlogo" style="width:64px;height:64px;border-radius:20px;"><svg style="width:34px;height:34px;"><use href="#i-dumb"/></svg></div>
       <div class="wtitle" style="font-size:21px;margin-top:12px;">GymHelper</div>
       <div class="wtag">Дневник тренировок в Telegram</div>
-      <div class="car">
+      <div class="car"><div class="car-track">
         <div class="car-card glow">
           <div class="cic">🏋</div>
           <div class="ch">Дневник за секунды</div>
@@ -667,7 +704,7 @@ muted. Слайды 2–3 в светлой теме собираются тем
           <div class="ch">Прогресс и рекорды</div>
           <p class="cp">Сравнение с прошлой тренировкой, оценка 1ПМ и живой рекорд — когда побит личный максимум.</p>
         </div>
-      </div>
+      </div></div>
       <div class="dots"><i class="on"></i><i></i><i></i></div>
     </div>
     <div class="ob-bottom">
@@ -804,8 +841,13 @@ muted. Слайды 2–3 в светлой теме собираются тем
     <button class="btn prime">✓ Завершить</button>
     <button class="btn sec icbtn bb-back"><svg><use href="#i-back"/></svg><span>Назад</span></button>
   </div></div>
-  <!-- оверлей туториала: спотлайт на .ex-add (тонкий «+») первого упражнения -->
-  <div class="spot" style="left:314px;top:161px;width:56px;height:56px;"></div>
+  <!-- оверлей туториала: спотлайт на .ex-add — РАСЧЁТ ред. 3:
+       строка exhead x∈[38,352] (контент 12 + карточка 15 + expill 11), справа
+       trash 33px → [287,320], gap 8 → ex-add 24px → [328,352], центр x=340;
+       вертикаль: topbar до 58 +12 → карточка с 70, wchead [85,117], wcpill
+       [125,158], expill top 168 +1+10 → exhead [179,211], центр y=195.
+       Кольцо 44px = (340;195)±22 → left 318, top 173 -->
+  <div class="spot" style="left:318px;top:173px;width:44px;height:44px;"></div>
   <div class="tip" style="top:228px;">
     <div class="step">Шаг 2 из 4 · Подходы</div>
     <div class="tt">Тонкий «+» у названия упражнения — запись подхода</div>
@@ -873,8 +915,13 @@ muted. Слайды 2–3 в светлой теме собираются тем
 [UX-T31]; в Истории — одна сводная карточка). Спотлайт — на табе
 <b>«Статистика»</b> нижней навигации (второй слева): кольцо 56px по центру
 таба (иконка + подпись), тултип выше панели. Текст шага — обзор, что найдёт
-пользователь: рекорды недели, оценка 1ПМ по Эпли, объём и время. На этом шаг
-туториал завершается молча.</p>
+пользователя: рекорды недели, оценка 1ПМ по Эпли, объём и время. На этом шаг
+туториал завершается молча. <b>Фикс ред. 3</b>: на фикс-экранах sticky-nav
+без скролла не прилипал к низу (висел в потоке, под ним было ~50px пустоты —
+кольцо попадало под панель); теперь <code>.p.fix .nav</code> прибит абсолютом
+к нижнему краю, и кольцо 48px стоит точно на табе «Статистика»
+(центр x=125.75, 30.7px от низа → left 102, bottom 7) — блок «иконка +
+подпись» целиком внутри кольца.</p>
 <div class="phone"><div class="p fix">
   <div class="topbar"><span class="tb-title">GymHelper · Статистика</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content" style="padding-bottom:110px;">
@@ -904,8 +951,12 @@ muted. Слайды 2–3 в светлой теме собираются тем
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- оверлей туториала: спотлайт на таб «Статистика» (второй слева) + тултип выше панели -->
-  <div class="spot" style="left:98px;bottom:2px;width:56px;height:56px;"></div>
+  <!-- оверлей туториала: спотлайт на таб «Статистика» — РАСЧЁТ ред. 3:
+       nav прибита к низу (.p.fix .nav absolute, высота 72px): табы по 74.5px
+       (внутр. 362 = 390−28, минус FAB-зона 64), таб 2 центр x = 14+74.5+37.25
+       = 125.75; блок иконка[710.5,730.5]+подпись[733.5,748], центр y = 729.3
+       → 30.7px от низа. Кольцо 48px = (125.75; 729.3)±24 → left 102, bottom 7 -->
+  <div class="spot" style="left:102px;bottom:7px;width:48px;height:48px;"></div>
   <div class="tip" style="bottom:84px;">
     <div class="step">Шаг 4 из 4 · Прогресс</div>
     <div class="tt">Статистика — второй таб слева</div>
@@ -1104,7 +1155,7 @@ backbar, 1ПМ по Эпли, калории MET, шаблоны/«Повтор�
     </div>
     <div class="glass">
       <button class="cbtn"><svg><use href="#i-send"/></svg><span><b>Написать разработчику</b><small>через бота GymHelperBot</small></span></button>
-      <button class="cbtn"><svg><use href="#i-mail"/></svg><span><b>Скопировать email</b><small>support@gym-helper.com</small></span></button>
+      <button class="cbtn"><svg><use href="#i-mail"/></svg><span><b>Скопировать email</b><small>support.gymhelper@gmail.com</small></span></button>
       <p class="meta">Копирование — в буфер обмена, тост подтвердит</p>
     </div>
     <div class="glass">
@@ -1142,7 +1193,7 @@ backbar, 1ПМ по Эпли, калории MET, шаблоны/«Повтор�
     </div>
     <div class="glass">
       <button class="cbtn"><svg><use href="#i-send"/></svg><span><b>Написать разработчику</b><small>через бота GymHelperBot</small></span></button>
-      <button class="cbtn"><svg><use href="#i-mail"/></svg><span><b>Скопировать email</b><small>support@gym-helper.com</small></span></button>
+      <button class="cbtn"><svg><use href="#i-mail"/></svg><span><b>Скопировать email</b><small>support.gymhelper@gmail.com</small></span></button>
       <p class="meta">Копирование — в буфер обмена, тост подтвердит</p>
     </div>
     <div class="glass">
@@ -1172,9 +1223,11 @@ backbar, 1ПМ по Эпли, калории MET, шаблоны/«Повтор�
 muted-кнопка <b>«Больше не показывать»</b>: ставит флаг
 <code>gymWnOff</code> (синхронен тоглу «Сообщать об обновлениях» в Настройках,
 экран 10) — автопоказ глушится, ручная строка «Что нового» продолжает
-работать. Правка 12.2: иконки пунктов <b>выровнены</b> — квадрат-подложка
-34px с центрированной иконкой, строка центрируется по вертикали
-(<code>.wni</code> → <code>align-items:center</code>). Процесс контента
+работать. Правка 12.2 + <b>фикс ред. 3</b>: иконки пунктов — <b>инлайн SVG
+набора</b> (calendar / trophy / plus-thin / gear; кубок — новый символ) вместо
+эмодзи, которые прижимались к верху подложек: квадрат 34px центрирует svg
+flex'ом, строки центрированы по вертикали (<code>.wni</code> →
+<code>align-items:center</code>). Процесс контента
 (решение 10): модалка — только для <b>ЗНАЧИМЫХ релизов</b> (технические — без
 модалки); текст предлагает lead, утверждает владелец; <b>первый показ — со
 следующего релиза после 1.30</b> (ретроактивно 1.30 НЕ показываем) — в примере
@@ -1214,10 +1267,10 @@ muted-кнопка <b>«Больше не показывать»</b>: стави
     <div class="wnm">
       <div class="wnh"><span class="t1">🚀 Что нового</span><span class="relpill">Релиз 1.31</span></div>
       <div style="margin-top:8px;">
-        <div class="wni"><span class="wi">📅</span><span><b>Календарь тренировок</b><span>Месяц целиком: точки по дням, тап — панель дня</span></span></div>
-        <div class="wni"><span class="wi">🏆</span><span><b>Рекорд недели</b><span>Карточка в Статистике: насколько Вы близки к личному максимуму</span></span></div>
-        <div class="wni"><span class="wi">🏋</span><span><b>Шаг веса 0,25 кг</b><span>Микродобавки в пикере — когда +2,5 кг это много</span></span></div>
-        <div class="wni"><span class="wi">⚙️</span><span><b>Помощь и «Что нового»</b><span>FAQ, подсказки и настройки обновлений — в ⚙️ шапки</span></span></div>
+        <div class="wni"><span class="wi"><svg><use href="#i-cal"/></svg></span><span><b>Календарь тренировок</b><span>Месяц целиком: точки по дням, тап — панель дня</span></span></div>
+        <div class="wni"><span class="wi"><svg><use href="#i-trophy"/></svg></span><span><b>Рекорд недели</b><span>Карточка в Статистике: насколько Вы близки к личному максимуму</span></span></div>
+        <div class="wni"><span class="wi"><svg><use href="#i-plus-thin"/></svg></span><span><b>Шаг веса 0,25 кг</b><span>Микродобавки в пикере — когда +2,5 кг это много</span></span></div>
+        <div class="wni"><span class="wi"><svg><use href="#i-gear"/></svg></span><span><b>Помощь и «Что нового»</b><span>FAQ, подсказки и настройки обновлений — в ⚙️ шапки</span></span></div>
       </div>
       <button class="cta">Понятно</button>
       <button class="wnskip">Больше не показывать</button>
