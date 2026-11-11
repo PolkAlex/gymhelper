@@ -42,7 +42,11 @@ public final class Main {
         /* [UX-T16] рассылка владельцем: chat id владельца из env; не задан — admin-команды недоступны */
         long adminChatId = readLng(System.getenv("GYM_ADMIN_CHAT_ID"), 0);
 
-        BotLogic logic = new BotLogic(api, storage, webAppUrl, appLink, adminChatId, stats);
+        /* [ONB-T8] обратная связь «Написать разработчику»: chat id владельца — адресат пересылки;
+           не задан — фича off (deep-link /start feedback отвечает «Канал связи временно недоступен») */
+        long ownerChatId = readLng(System.getenv("GYM_OWNER_CHAT_ID"), 0);
+
+        BotLogic logic = new BotLogic(api, storage, webAppUrl, appLink, adminChatId, stats, ownerChatId);
 
         int port = readInt(System.getenv("GYM_PORT"), 8080);
         Path webDir = Path.of("web");

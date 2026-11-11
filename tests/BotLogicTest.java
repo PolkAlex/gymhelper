@@ -25,7 +25,11 @@ import java.util.Map;
    отмена «готово», запись блока и запуск таймера отдыха; лимит TPL_LIMIT (19→ок «20 из 20»,
    20→отказ во всех трёх точках: tplNew, имя, авто-имя); применение шаблона tpl:start
    (план w/s/r снимается в запись, пустой шаблон/1 упражнение, старт при активной
-   тренировке → wk:discard доустанавливает отложенный шаблон §4.6). */
+   тренировке → wk:discard доустанавливает отложенный шаблон §4.6).
+   Обратная связь [ONB-T8]: deep-link «/start feedback» → режим FEEDBACK → свободный
+   текст уходит владельцу через FakeApi.sendMessageResult (адресат — GYM_OWNER_CHAT_ID,
+   шапка с именем/username/chat_id, HTML-экранирование) → подтверждение, режим сброшен;
+   /cancel и /help отменяют режим без пересылки; GYM_OWNER_CHAT_ID не задан (0) — фича off. */
 public class BotLogicTest {
     static void check(boolean b, String m) {
         if (!b) throw new AssertionError("UNIT FAIL: " + m);
@@ -376,6 +380,9 @@ public class BotLogicTest {
         /* === 14. Счётчики Stats [ANA-T1]: создание/использование шаблонов через handle() === */
         runStatsScenario();
 
+        /* === 15. Обратная связь [ONB-T8]: deep-link → режим → пересылка владельцу === */
+        runFeedbackScenario();
+
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -396,6 +403,8 @@ public class BotLogicTest {
        Наследование возможно, т.к. TelegramApi не final (см. src/gym/TelegramApi.java). */
     static final class FakeApi extends TelegramApi {
         final List<String> texts = new ArrayList<>();
+        /* [ONB-T8] chat_id отправок sendMessageResult — проверка адресата пересылки feedback */
+        final List<Long> sentChats = new ArrayList<>();
 
         FakeApi() {
             super("fake-token-unit-tests");
@@ -404,6 +413,13 @@ public class BotLogicTest {
         @Override
         public void sendMessage(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
             texts.add(text);
+        }
+
+        @Override
+        public String sendMessageResult(long chatId, String text) {
+            sentChats.add(chatId);
+            texts.add(text);
+            return null;
         }
 
         @Override
@@ -449,6 +465,21 @@ public class BotLogicTest {
     static Map<String, Object> msgUpdate(long chatId, String text) {
         return Map.of("message", Map.of(
             "message_id", 77, "chat", Map.of("id", chatId), "text", text));
+    }
+
+    /* то же с отправителем (from) — для сценариев обратной связи [ONB-T8];
+       last/username могут быть null (LinkedHashMap — Map.of nulls не принимает) */
+    static Map<String, Object> msgUpdateFrom(long chatId, String text, String first, String last, String username) {
+        Map<String, Object> from = new java.util.LinkedHashMap<>();
+        if (first != null) from.put("first_name", first);
+        if (last != null) from.put("last_name", last);
+        if (username != null) from.put("username", username);
+        Map<String, Object> msg = new java.util.LinkedHashMap<>();
+        msg.put("message_id", 77);
+        msg.put("chat", Map.of("id", chatId));
+        msg.put("from", from);
+        msg.put("text", text);
+        return Map.of("message", msg);
     }
 
     /* завершённая тренировка с одной записью — источник для «💾 В шаблоны» */
@@ -786,6 +817,95 @@ public class BotLogicTest {
                 "stats: счётчики переживают перечитывание файла");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: stats-сценарий " + e);
+        }
+    }
+
+    /* [ONB-T8] обратная связь: deep-link «/start feedback» включает режим, свободный текст
+       уходит владельцу (chat id 555000111 — FakeApi.sendMessageResult пишет sentChats) с
+       именем/username/chat_id и HTML-экранированием, юзеру — подтверждение, режим сброшен;
+       счётчик feedbackSent растёт; /cancel и /help отменяют режим без пересылки;
+       GYM_OWNER_CHAT_ID не задан (5-арг конструктор, 0) — фича off, режим не включается. */
+    static void runFeedbackScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymfeedback");
+            Storage storage = new Storage(tmp);
+            Stats stats = new Stats(tmp.resolve("stats.json"));
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0, stats, 555000111L);
+            long chat = 9004;
+
+            /* deep-link: Telegram присылает payload текстом «/start feedback» */
+            logic.handle(msgUpdateFrom(chat, "/start feedback", "Иван", "Иванов", "ivan_user"));
+            UserState st = logic.states.get(chat);
+            check(st.mode == UserState.Mode.FEEDBACK, "feedback: deep-link включает режим FEEDBACK");
+            check(api.last().equals("Опишите проблему одним сообщением. Отменить — /cancel"),
+                "feedback: приглашение с подсказкой про /cancel");
+            check(api.sentChats.isEmpty(), "feedback: до ввода текста владельцу ничего не уходит");
+
+            /* свободный текст → пересылка владельцу (HTML-экранирование, паттерн /announce) */
+            logic.handle(msgUpdateFrom(chat, "Падает <b>экран</b> & пропали шаблоны", "Иван", "Иванов", "ivan_user"));
+            check(st.mode == UserState.Mode.MENU, "feedback: после отправки режим сброшен в MENU");
+            check(api.sentChats.equals(List.of(555000111L)),
+                "feedback: пересылка ушла в чат владельца (GYM_OWNER_CHAT_ID), и только туда");
+            String owner = api.texts.get(api.texts.size() - 2); /* предпоследнее — письмо владельцу */
+            check(owner.startsWith("💬 Обратная связь\nОт: Иван Иванов @ivan_user\nchat_id: 9004\n\n"),
+                "feedback: шапка письма — имя + username + chat_id пользователя");
+            check(owner.endsWith("Падает &lt;b&gt;экран&lt;/b&gt; &amp; пропали шаблоны"),
+                "feedback: текст пользователя экранирован (HTML-режим sendMessage)");
+            check(api.last().equals("Сообщение отправлено. Спасибо!"),
+                "feedback: пользователю отправлено подтверждение");
+            check(Json.lng(stats.snapshot().get("feedbackSent")) == 1,
+                "feedback: счётчик feedbackSent=1 (агрегат, без ПДн)");
+
+            /* повторный цикл с неполными данными from (только имя) */
+            logic.handle(msgUpdateFrom(chat, "/start feedback", "Иван", null, null));
+            check(logic.states.get(chat).mode == UserState.Mode.FEEDBACK,
+                "feedback: повторный deep-link снова включает режим");
+            logic.handle(msgUpdateFrom(chat, "Второе сообщение", "Иван", null, null));
+            check(Json.lng(stats.snapshot().get("feedbackSent")) == 2,
+                "feedback: счётчик feedbackSent=2 после второй отправки");
+            String owner2 = api.texts.get(api.texts.size() - 2);
+            check(owner2.equals("💬 Обратная связь\nОт: Иван\nchat_id: 9004\n\nВторое сообщение"),
+                "feedback: без фамилии/username шапка только из имени, текст целиком");
+            check(api.last().equals("Сообщение отправлено. Спасибо!"),
+                "feedback: подтверждение после второй отправки");
+
+            /* /cancel отменяет режим штатно, пересылки нет */
+            logic.handle(msgUpdateFrom(chat, "/start feedback", "Иван", null, null));
+            check(logic.states.get(chat).mode == UserState.Mode.FEEDBACK,
+                "feedback: режим включён перед отменой");
+            logic.handle(msgUpdate(chat, "/cancel"));
+            check(logic.states.get(chat).mode == UserState.Mode.MENU,
+                "feedback: /cancel сбрасывает режим (команды обрабатываются раньше режима)");
+            int ownerMsgs = api.sentChats.size();
+            logic.handle(msgUpdate(chat, "Это сообщение уже не пересылка"));
+            check(api.sentChats.size() == ownerMsgs,
+                "feedback: после /cancel свободный текст владельцу не пересылается");
+
+            /* /help тоже отменяет режим */
+            logic.handle(msgUpdate(chat, "/start feedback"));
+            check(logic.states.get(chat).mode == UserState.Mode.FEEDBACK,
+                "feedback: режим включён перед проверкой /help");
+            logic.handle(msgUpdate(chat, "/help"));
+            check(logic.states.get(chat).mode == UserState.Mode.MENU,
+                "feedback: /help отменяет режим");
+            check(api.sentChats.size() == ownerMsgs,
+                "feedback: /help не порождает пересылку");
+
+            /* фича off: GYM_OWNER_CHAT_ID не задан — режим не включается */
+            java.nio.file.Path tmpOff = java.nio.file.Files.createTempDirectory("gymfeedbackoff");
+            FakeApi apiOff = new FakeApi();
+            BotLogic logicOff = new BotLogic(apiOff, new Storage(tmpOff), null, null, 0);
+            logicOff.handle(msgUpdate(chat, "/start feedback"));
+            check(logicOff.states.get(chat).mode == UserState.Mode.MENU,
+                "feedback off: без GYM_OWNER_CHAT_ID режим не включается");
+            check(apiOff.last().equals("Канал связи временно недоступен"),
+                "feedback off: бот отвечает «Канал связи временно недоступен»");
+            logicOff.handle(msgUpdate(chat, "любой свободный текст"));
+            check(apiOff.sentChats.isEmpty(),
+                "feedback off: никакие сообщения владельцу не уходят");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: feedback-сценарий " + e);
         }
     }
 

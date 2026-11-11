@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class UserState {
-    public enum Mode { MENU, WORKOUT, EX_WEIGHT, EX_SETS, EX_REPS, EDIT_EX, EDIT_ENTRY, EDIT_FIELD, RENAME, TITLE, NUTR, TIME, PROFILE, PROFILE_MONTH, TPL_NAME }
+    public enum Mode { MENU, WORKOUT, EX_WEIGHT, EX_SETS, EX_REPS, EDIT_EX, EDIT_ENTRY, EDIT_FIELD, RENAME, TITLE, NUTR, TIME, PROFILE, PROFILE_MONTH, TPL_NAME, FEEDBACK }
 
     public Mode mode = Mode.MENU;
     public String currentExercise;
