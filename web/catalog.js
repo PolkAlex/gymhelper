@@ -97,48 +97,108 @@ function ico(key, cls) {
     return '<span class="ico' + (cls ? ' ' + cls : '') + '">' + (ICONS[key] || ICONS.custom) + '</span>';
 }
 
-/* ---------- categories ---------- */
+/* ---------- categories пикера ----------
+   [EXR-T4] под схему тегов m:/e:/cat: (контракт EXR-T3): tags айтема — полные теги
+   матчинга (составной «Руки» — OR; legacy-плоские алиасы держат чипы непустыми на
+   старом каталоге до мержа контента). Секция «Вид» (press/pull/squat/fly) отменена
+   владельцем вместе с одноимённым фильтром Техники. */
 const CAT_SECTIONS = [
     { id: 'fav', n: '★ Любимые' },
     { id: 'all', n: 'Все' },
     { id: 'muscle', n: 'Мышцы' },
-    { id: 'type', n: 'Вид' },
-    { id: 'block', n: 'Блок' },
+    { id: 'gear', n: 'Инвентарь' },
     { id: 'coll', n: 'Коллекции' }
 ];
 const CATS = {
     muscle: [
-        { id: 'chest', n: 'Грудь', icon: 'chest' },
-        { id: 'back', n: 'Спина', icon: 'row' },
-        { id: 'shoulders', n: 'Плечи', icon: 'lateral' },
-        { id: 'arms', n: 'Руки', icon: 'curl' },
-        { id: 'legs', n: 'Ноги', icon: 'squat' },
-        { id: 'glutes', n: 'Ягодицы', icon: 'glute' },
-        { id: 'core', n: 'Пресс', icon: 'core' }
+        { id: 'chest', n: 'Грудь', icon: 'chest', tags: ['m:chest'] },
+        { id: 'back', n: 'Спина', icon: 'row', tags: ['m:back'] },
+        { id: 'shoulders', n: 'Плечи', icon: 'lateral', tags: ['m:shoulders'] },
+        { id: 'legs', n: 'Ноги', icon: 'squat', tags: ['m:legs'] },
+        { id: 'core', n: 'Кор и пресс', icon: 'core', tags: ['m:core'] },
+        { id: 'glutes', n: 'Ягодицы', icon: 'glute', tags: ['m:glutes'] },
+        { id: 'arms', n: 'Руки', icon: 'curl', tags: ['m:biceps', 'm:triceps', 'arms'] }
     ],
-    type: [
-        { id: 'press', n: 'Жим', icon: 'chest' },
-        { id: 'pull', n: 'Тяга', icon: 'row' },
-        { id: 'squat', n: 'Присед', icon: 'squat' },
-        { id: 'fly', n: 'Махи', icon: 'fly' },
-        { id: 'cardio', n: 'Кардио', icon: 'run' },
-        { id: 'stretch', n: 'Растяжка', icon: 'stretch' }
-    ],
-    block: [
-        { id: 'barbell', n: 'Штанга', icon: 'barbell' },
-        { id: 'dumbbell', n: 'Гантели', icon: 'dumbbell' },
-        { id: 'smith', n: 'Смит', icon: 'smith' },
-        { id: 'cable', n: 'Блоки', icon: 'cable' },
-        { id: 'machine', n: 'Тренажёр', icon: 'machine' },
-        { id: 'pullup', n: 'Турник', icon: 'pullbar' },
-        { id: 'body', n: 'Свой вес', icon: 'pushup' },
-        { id: 'home', n: 'Дома', icon: 'home' }
+    gear: [
+        { id: 'barbell', n: 'Штанга', icon: 'barbell', tags: ['e:barbell'] },
+        { id: 'dumbbell', n: 'Гантели', icon: 'dumbbell', tags: ['e:dumbbell'] },
+        { id: 'kettlebell', n: 'Гири', icon: 'dumbbell', tags: ['e:kettlebell'] },
+        { id: 'ezbar', n: 'EZ-гриф', icon: 'barbell', tags: ['e:ezbar'] },
+        { id: 'plate', n: 'Блины', icon: 'barbell', tags: ['e:plate'] },
+        { id: 'smith', n: 'Смит', icon: 'smith', tags: ['e:smith'] },
+        { id: 'cable', n: 'Кроссовер', icon: 'cable', tags: ['e:cable'] },
+        { id: 'dipbar', n: 'Брусья', icon: 'dip', tags: ['e:dipbar'] },
+        { id: 'pullupbar', n: 'Турник', icon: 'pullbar', tags: ['e:pullupbar', 'pullup'] },
+        { id: 'bench', n: 'Скамья', icon: 'machine', tags: ['e:bench'] },
+        { id: 'machine', n: 'Тренажёр', icon: 'machine', tags: ['e:machine'] },
+        { id: 'resband', n: 'Резинки', icon: 'custom', tags: ['e:resband'] },
+        { id: 'trx', n: 'TRX', icon: 'custom', tags: ['e:trx'] },
+        { id: 'fitball', n: 'Фитбол', icon: 'pilates', tags: ['e:fitball'] },
+        { id: 'medball', n: 'Медбол', icon: 'custom', tags: ['e:medball'] },
+        { id: 'abwheel', n: 'Ролик', icon: 'custom', tags: ['e:abwheel'] },
+        { id: 'none', n: 'Без инвентаря', icon: 'pushup', tags: ['e:none', 'body', 'home'] }
     ],
     coll: [
-        { id: 'warmup', n: 'Разминка', icon: 'warmup' },
-        { id: 'cooldown', n: 'Заминка', icon: 'stretch' },
-        { id: 'pilates', n: 'Пилатес', icon: 'pilates' },
+        { id: 'warmup', n: 'Разминка', icon: 'warmup', tags: ['cat:warmup'] },
+        { id: 'cooldown', n: 'Заминка', icon: 'stretch', tags: ['cat:cooldown'] },
+        { id: 'stretch', n: 'Растяжка', icon: 'stretch', tags: ['cat:stretch'] },
         { id: 'own', n: 'Свои', icon: 'custom' }
+    ]
+};
+
+/* ---------- [EXR-T4] словарь фильтров «Техники» ----------
+   Контракт тегов [EXR-T3]: m:<мышца>, e:<инвентарь>, cat:<категория> (силовые записи — без cat).
+   id айтема = полный тег-ключ мультивыбора; айтем с несколькими тегами («Брусья и турник»,
+   «Разминка и заминка») матчится по ИЛИ всех своих тегов.
+   Мультивыбор UI: внутри группы ИЛИ, между группами И (см. techFiltered в app.js). */
+const FILTERS = {
+    muscle: { label: 'Группы мышц', items: [
+        { id: 'm:chest', n: 'Грудь' },
+        { id: 'm:back', n: 'Спина' },
+        { id: 'm:shoulders', n: 'Плечи' },
+        { id: 'm:legs', n: 'Ноги' },
+        { id: 'm:core', n: 'Кор и пресс' },
+        { id: 'm:glutes', n: 'Ягодицы' },
+        { id: 'm:biceps', n: 'Бицепс' },
+        { id: 'm:triceps', n: 'Трицепс' }
+    ] },
+    gear: { label: 'Инвентарь', groups: [
+        { n: 'Свободные веса', items: [
+            { id: 'e:barbell', n: 'Штанга' },
+            { id: 'e:dumbbell', n: 'Гантели' },
+            { id: 'e:kettlebell', n: 'Гири' },
+            { id: 'e:ezbar', n: 'EZ-гриф' },
+            { id: 'e:plate', n: 'Диски' }
+        ] },
+        { n: 'Тренажёры', items: [
+            { id: 'e:smith', n: 'Машина Смита' },
+            { id: 'e:cable', n: 'Кроссовер (блочные)' },
+            { id: 'e:leverage', n: 'Хаммеры (рычажные)' },
+            { id: 'e:gravitron', n: 'Гравитрон' },
+            { id: 'e:machine', n: 'Тренажёр (общий)' },
+            { id: 'e:bench', n: 'Скамья (гориз/накл/Скотта)' }
+        ] },
+        { n: 'Мелкий инвентарь', items: [
+            { id: 'e:resband', n: 'Фитнес-резинки' },
+            { id: 'e:trx', n: 'TRX-петли' },
+            { id: 'e:fitball', n: 'Фитбол' },
+            { id: 'e:medball', n: 'Медбол' },
+            { id: 'e:abwheel', n: 'Ролик для пресса' }
+        ] },
+        { n: 'Без инвентаря', items: [
+            { id: 'e:none', n: 'Без инвентаря' }
+        ] },
+        /* [EXR-T4 fix] турник/брусья — не тренажёры: отдельная подгруппа в конце (ревью PR #212) */
+        { n: 'Брусья и турник', items: [
+            { id: 'e:dipbar', n: 'Брусья' },
+            { id: 'e:pullupbar', n: 'Турник' }
+        ] }
+    ] },
+    cats: [
+        { id: 'cardio', n: 'Кардио', tags: ['cat:cardio'] },
+        { id: 'stretch', n: 'Растяжка', tags: ['cat:stretch'] },
+        { id: 'warmcool', n: 'Разминка и заминка', tags: ['cat:warmup', 'cat:cooldown'] },
+        { id: 'stretching', n: 'Стретчинг', tags: ['cat:stretching'] }
     ]
 };
 

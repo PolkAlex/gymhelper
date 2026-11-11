@@ -328,6 +328,94 @@ body.fs .topbar { padding-top: max(56px, var(--fs-inset-top, 56px)); padding-bot
 }
 .chip:active { background: var(--btn-pressed); }
 
+/* ============ [EXR-T4] фильтры «Техники»: счётчик, мини-чипы выбранных, шит-чекбоксы ============ */
+/* счётчик выбранных на чипе группы и в шапке шита (показывается только на янтарном .on) */
+.cnt {
+    display: inline-block;
+    min-width: 17px;
+    margin-left: 5px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .28);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    vertical-align: 1px;
+}
+/* строка выбранных значений группы: мини-чипы с × + «Сбросить группу» */
+.fselrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 6px; }
+.fsellabel { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-right: 2px; }
+.fchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 999px;
+    background: var(--btn);
+    border: 1px solid var(--btn-brd);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+}
+.fchip-x {
+    border: none;
+    background: none;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 4px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.fchip-x:active { color: var(--text); }
+.fclear {
+    border: none;
+    background: none;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 6px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.fclear:active { opacity: .7; }
+/* шит мультивыбора: строки-чекбоксы (выбранная — янтарная) */
+.frow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+    padding: 10px 12px;
+    margin: 4px 0;
+    border-radius: 14px;
+    border: 1px solid var(--btn-brd);
+    background: var(--btn);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+.frow:active { transform: scale(.985); }
+.frow .fbox {
+    flex: none;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    border: 1.5px solid var(--btn-brd);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    background: var(--sheet);
+}
+.frow .fbox svg { width: 14px; height: 14px; }
+.frow.on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.frow.on .fbox { border-color: var(--on-accent); background: rgba(255, 255, 255, .22); color: var(--on-accent); }
+
 /* ============ формы ============ */
 label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
 input, select, textarea {
