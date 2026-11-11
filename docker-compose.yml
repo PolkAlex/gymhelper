@@ -20,6 +20,9 @@ services:
       # токен эндпоинта /stats [ANA-T1]: перенесите в .env на VPS (GYM_ADMIN_TOKEN=...);
       # не задан — /stats доступен с токеном бота (GYM_BOT_TOKEN)
       - GYM_ADMIN_TOKEN=${GYM_ADMIN_TOKEN:-}
+      # chat id владельца для «Написать разработчику» [ONB-T8]: перенесите в .env на VPS
+      # (GYM_OWNER_CHAT_ID=...); не задан — фича off (бот отвечает «Канал связи временно недоступен»)
+      - GYM_OWNER_CHAT_ID=${GYM_OWNER_CHAT_ID:-}
     volumes:
       - ./data:/app/data
     healthcheck:

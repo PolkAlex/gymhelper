@@ -48,6 +48,9 @@ public final class BotLogic {
     private final String appLink;
     /* [UX-T16] рассылка владельцем: chat id владельца; 0 — admin-команды недоступны */
     private final long adminChatId;
+    /* [ONB-T8] обратная связь «Написать разработчику»: chat id владельца — адресат пересылки;
+       0 (env GYM_OWNER_CHAT_ID не задан) — фича off, deep-link отвечает «Канал связи временно недоступен» */
+    private final long ownerChatId;
     /* [ANA-T1] агрегаты-счётчики (без ПДн); null — недоступны (юнит-тесты) */
     private final Stats stats;
     /* package-private: юнит-тест [TST-T4] инспектирует режим мастера ввода после handle() */
@@ -63,12 +66,18 @@ public final class BotLogic {
     }
 
     public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId, Stats stats) {
+        this(api, storage, webAppUrl, appLink, adminChatId, stats, 0);
+    }
+
+    /* ownerChatId — пересылка обратной связи [ONB-T8] (env GYM_OWNER_CHAT_ID); 0 — фича off */
+    public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId, Stats stats, long ownerChatId) {
         this.api = api;
         this.storage = storage;
         this.webAppUrl = webAppUrl;
         this.appLink = appLink;
         this.adminChatId = adminChatId;
         this.stats = stats;
+        this.ownerChatId = ownerChatId;
         /* daemon-поток: фоновые правки не должны мешать long polling и не держат JVM */
         this.restScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "rest-timer");
@@ -278,18 +287,25 @@ public final class BotLogic {
             return;
         }
         try {
-            onMessage(chatId, text.trim());
+            /* from — отправитель (имя/username), нужен только пересылке обратной связи [ONB-T8] */
+            onMessage(chatId, Json.map(msg.get("from")), text.trim());
         } catch (Exception e) {
             api.sendMessage(chatId, "Что-то пошло не так 😕 Попробуй ещё раз или начни с /start", null);
             System.out.println("[warn] message: " + e.getMessage());
         }
     }
 
-    private void onMessage(long chatId, String text) {
+    private void onMessage(long chatId, Map<String, Object> from, String text) {
         UserState st = states.computeIfAbsent(chatId, k -> new UserState());
         GymData data = storage.load(chatId);
         String low = text.toLowerCase();
 
+        /* [ONB-T8] deep-link «Написать разработчику» (?start=feedback): Telegram присылает
+           его текстом «/start feedback»; другие payload (/start <что-то ещё>) едут в меню как раньше */
+        if (low.equals("/start feedback")) {
+            startFeedback(chatId, st);
+            return;
+        }
         if (low.startsWith("/start") || low.startsWith("/menu")) {
             showMenu(chatId, null, data, st);
             return;
@@ -365,6 +381,7 @@ public final class BotLogic {
             case TIME -> handleTimeInput(chatId, null, data, st, text);
             case PROFILE, PROFILE_MONTH -> handleProfileInput(chatId, null, data, st, text);
             case TPL_NAME -> handleTplNameInput(chatId, null, data, st, text);
+            case FEEDBACK -> handleFeedbackInput(chatId, st, text, from);
             case WORKOUT -> renderWorkoutScreen(chatId, null, data, st, data.active() == null ? 0 : data.active().id);
             default -> showMenu(chatId, null, data, st);
         }
@@ -2044,6 +2061,67 @@ public final class BotLogic {
         }
         api.sendMessage(chatId, rep.toString(), null);
         System.out.println("[announce] sent=" + sent + " failed=" + failed);
+    }
+
+    /* ===== обратная связь «Написать разработчику» [ONB-T8] ===== */
+
+    /* /start feedback: владельца нет в настройках (GYM_OWNER_CHAT_ID пуст) — фича off,
+       режим не включается; иначе режим FEEDBACK и приглашение. Отмена — /cancel или
+       любая команда: проверка команд в onMessage идёт раньше switch режима, showMenu
+       сбрасывает mode в MENU штатно. */
+    private void startFeedback(long chatId, UserState st) {
+        if (ownerChatId <= 0) {
+            api.sendMessage(chatId, "Канал связи временно недоступен", null);
+            return;
+        }
+        st.mode = UserState.Mode.FEEDBACK;
+        api.sendMessage(chatId, "Опишите проблему одним сообщением. Отменить — /cancel", null);
+    }
+
+    /* свободный текст в режиме FEEDBACK: пересылка владельцу (текст пользователя +
+       кто написал + его chat_id), пользователю — подтверждение, режим сбрасывается.
+       Ошибка отправки — режим оставлен, юзер может повторить или отменить. */
+    private void handleFeedbackInput(long chatId, UserState st, String text, Map<String, Object> from) {
+        String err = api.sendMessageResult(ownerChatId, feedbackOwnerText(text, chatId, from));
+        if (err != null) {
+            api.sendMessage(chatId, "Не удалось отправить, попробуй позже. Отменить — /cancel", null);
+            System.out.println("[warn] feedback: " + err);
+            return;
+        }
+        st.mode = UserState.Mode.MENU;
+        api.sendMessage(chatId, "Сообщение отправлено. Спасибо!", null);
+        if (stats != null) stats.inc("feedbackSent");
+    }
+
+    /* письмо владельцу: шапка «💬 Обратная связь / От: … / chat_id: …» и текст пользователя
+       целиком (экранированные — sendMessageResult шлёт в HTML-режиме, паттерн /announce:
+       без esc() имя/username с < > & дают инъекцию тегов и 400 can't parse entities);
+       static — для юнит-теста */
+    static String feedbackOwnerText(String text, long chatId, Map<String, Object> from) {
+        StringBuilder b = new StringBuilder("💬 Обратная связь\n");
+        String who = feedbackWho(from);
+        if (!who.isEmpty()) b.append("От: ").append(esc(who)).append('\n');
+        b.append("chat_id: ").append(chatId).append("\n\n").append(esc(text));
+        return b.toString();
+    }
+
+    /* «Имя Фамилия @username» из полей from (что-то может отсутствовать); from == null → пусто */
+    static String feedbackWho(Map<String, Object> from) {
+        if (from == null) return "";
+        String first = Json.str(from, "first_name");
+        String last = Json.str(from, "last_name");
+        String username = Json.str(from, "username");
+        StringBuilder b = new StringBuilder();
+        if (first != null && !first.isBlank()) b.append(first.trim());
+        if (last != null && !last.isBlank()) {
+            if (b.length() > 0) b.append(' ');
+            b.append(last.trim());
+        }
+        if (username != null && !username.isBlank()) {
+            if (b.length() > 0) b.append(' ');
+            b.append('@').append(username.trim());
+        }
+        return b.toString();
     }
 
     /* ===== удаление данных по запросу [ONB-T2] ===== */

@@ -14,7 +14,9 @@ import java.util.Map;
 /* [ANA-T1] агрегаты-счётчики событий сервера и бота: data/stats.json.
    ТОЛЬКО агрегаты — никаких chat_id/имён/весов (privacy.html): maInit/maSave —
    открытия/сохранения Mini App, workoutsCreated/workoutsCompleted — прирост по данным
-   при /save, templatesCreated/templatesUsed — действия с шаблонами в боте; плюс недельные
+   при /save, templatesCreated/templatesUsed — действия с шаблонами в боте,
+   feedbackSent — отправленная обратная связь [ONB-T8] (только счётчик, без текста/ПДн);
+   плюс недельные
    агрегаты ISO (хранятся последние WEEKS_TO_KEEP недель — ротация при записи).
    Формат файла = формат ответа /stats: {"maInit":N,...,"weeks":{"2026-W46":{...}}}.
    Все методы synchronized: веб-сервер отвечает пулом из 4 потоков, бот пишет из основного.
@@ -23,7 +25,7 @@ import java.util.Map;
 public final class Stats {
     /* известные ключи (и порядок в JSON); неизвестные ключи из файла игнорируются */
     static final String[] KEYS = {
-        "maInit", "maSave", "workoutsCreated", "workoutsCompleted", "templatesCreated", "templatesUsed"
+        "maInit", "maSave", "workoutsCreated", "workoutsCompleted", "templatesCreated", "templatesUsed", "feedbackSent"
     };
     /* сколько последних недель (ISO) хранить в weeks */
     public static final int WEEKS_TO_KEEP = 26;
