@@ -14,6 +14,11 @@ e2e-прогон дважды: **528 passed** на коде релиза → д�
 → 516 (UX-S6) → 516×2 (09.11) → 536 (релиз 1.30). cache-busting app.js v=35, style.css v=35,
 catalog.js v=22.
 
+Цикл после merge PR #198 [ANA-T1] (#193, 11.11.2026): статика JS ✅,
+`node tests/check.js` ✅, `gradlew build` — UNIT OK (BotLogicTest 151 check(),
+включая stats-сценарий §14) + CONTRACT OK ✅, e2e все 4 проекта —
+**536 passed, 0 failed** (10.2 мин). Прод-статика web/ не менялась (cache-busting прежний).
+
 Цикл по [TST-T4] (#171, PR #180 замержен в main, 10.11.2026): статика JS ✅,
 `gradlew build` — UNIT OK (BotLogicTest 151 check()) + CONTRACT OK ✅, e2e все
 4 проекта — **536 passed, 0 failed**. Изменения только тестовые (+3 строки
@@ -95,6 +100,7 @@ catalog.js v=22.
 | BotLogic: мастер ввода (шаги, выход посреди) | ✅ `BotLogicTest` [TST-T4] (PR #180, #171) | **закрыто (10.11.2026)**: полный мастер через `handle()` + FakeApi: wk:add → каталог → ex:i_N → EX_WEIGHT → EX_SETS → EX_REPS → запись + таймер отдыха; отказы на каждом шаге (мусорный вес, нечисловые подходы, 99, длинные повторения), «готово» отменяет из EX_WEIGHT и EX_SETS без записи; повторный выбор существующего упражнения — без «добавлено». Непокрыто: PROFILE_MONTH год-режим профиля «м 1990 180 82» → вопрос месяца кнопками bm:1..12 → applyBirthMonth (диалог PROFILE_MONTH) — e2e бота нет; чистая часть диапазонов (yearLow=max(1930, год−100), ageMode 5–100, рост/вес) видна в e2e веба и текстах ошибок |
 | BotLogic: ккал/MET | ✅ `BotLogicTest` [TST-S1] | **закрыто (09.11.2026)**: MET 3.5/5.0/6.0, границы 120/300 кг/мин, лимит 240 мин (KCAL_MAX_MIN), -1-кейсы — см. строку [TST-S1] |
 | BotLogic: шаблоны бота (/templates, tpl:start_/tpl:rep_, pendingTplId, лимит 20) | 🟡 | **закрыто (10.11.2026, #171)**: лимит 20 — все 3 точки отказа + «20 из 20»; tpl:start при активной тренировке (pendingTplId → wk:discard §4.6); применение (план в запись, 2/1/0 упражнений); чистые функции [TST-T4] (templateAutoName/trimName/shortName/templatePlanLine/compactPlan, санитизация GymData.fromJson). Осталось: диалоги /templates (список/переименование/удаление) и tpl:rep_ — instance-методы с TelegramApi (мок Api есть — FakeApi в BotLogicTest, можно дозакрыть там же) или ручная проверка на тестовом боте |
+| Stats [ANA-T1] (#193, PR #198): серверные счётчики data/stats.json + GET /stats за токеном | ✅ `GymContractTest` + `BotLogicTest` | **новое (11.11.2026)**: токен-гейт — без токена и с неверным → 404 (существование эндпоинта не палим), верный → 200, лишние query-параметры не мешают; инкременты maInit (после /api/init) и maSave (после /api/save), workoutsCreated — прирост новых id, workoutsCompleted — прирост флага finished, повторный save ни created ни completed не растит; шаблонные счётчики через `BotLogic.handle()`: tplSaved → templatesCreated, tpl:start и tpl:rep → templatesUsed; недельные агрегаты ISO — текущая неделя зеркалит события (и в /stats, и в BotLogicTest с перечитыванием файла); файл stats.json создаётся и перечитывается (totals совпадают); ротация `Stats.WEEKS_TO_KEEP` = 26 недель — старейшая вытесняется, totals при ротации не трогаются. Юнитом не покрыто: env `GYM_ADMIN_TOKEN` на проде (fallback на токен бота) — проверка при деплое |
 | WebServer: проверка initData (HMAC) | ❌ | неверная подпись отклоняется; merge-политика restSec/templates при /api/save покрыта только заглушкой e2e (tests/server-test.js) |
 
 ### Бот-часть спринта 1 вне e2e (осознанный порог)
