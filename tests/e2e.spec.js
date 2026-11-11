@@ -922,7 +922,9 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
         const card = page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first();
         await card.locator('.star').click();
-        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).locator('.star')).toHaveClass(/fav/, { timeout: 5000 });
+        /* [EXR-T3] в каталоге есть и «Жим штанги лёжа … (Смит)» (подстрока) — берём первую карточку,
+           как и в строке выше: это жим свободной штангой (bench) */
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first().locator('.star')).toHaveClass(/fav/, { timeout: 5000 });
 
         await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
         await expect(page.locator('#pickerList .excard')).toHaveCount(1);
@@ -3994,8 +3996,9 @@ test.describe('EXR-T2: фото упражнений (free-exercise-db) в Те�
         const ct = await request.get('/img/exercises/bench-0.jpg').then(function (r) { return r.headers()['content-type']; });
         if (ct !== 'image/jpeg') throw new Error('content-type фото: ' + ct + ', ожидалось image/jpeg');
 
-        /* «Растяжка грудных мышц» не привязана к базе — прежняя SVG-иконка, без фото */
-        const plainRow = page.locator('#techList .excard', { hasText: 'Растяжка грудных мышц' }).first();
+        /* [EXR-T3] «Растяжка грудных мышц» получила фото из базы (список владельца) —
+           образцом «без привязки» стал «Махи в наклоне (задняя дельта)»: без img и описания */
+        const plainRow = page.locator('#techList .excard', { hasText: 'Махи в наклоне (задняя дельта)' }).first();
         await expect(plainRow.locator('.ico')).toHaveCount(1, { timeout: 5000 });
         await expect(plainRow.locator('img')).toHaveCount(0);
 
@@ -4011,7 +4014,7 @@ test.describe('EXR-T2: фото упражнений (free-exercise-db) в Те�
 
         /* деталь упражнения без привязки: без фото-блока и описания, иконка в шапке */
         await page.locator('[data-act="techBack"]').click();
-        await page.locator('#techList .excard', { hasText: 'Растяжка грудных мышц' }).first().click();
+        await page.locator('#techList .excard', { hasText: 'Махи в наклоне (задняя дельта)' }).first().click();
         await expect(page.locator('.card .exphotos')).toHaveCount(0, { timeout: 5000 });
         await expect(page.locator('.card .exdesc')).toHaveCount(0);
         await expect(page.locator('.card .exhead .ico')).toHaveCount(1);
