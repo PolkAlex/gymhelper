@@ -6,10 +6,18 @@ test.beforeEach(async function ({ request }) {
     await request.post('/api/reset');
 });
 
-/* захват тестового крюка приложения до загрузки app.js */
+/* захват тестового крюка приложения до загрузки app.js.
+   [ONB] флаги онбординга ставятся ДО загрузки: приветствие/туториал/«Что нового»
+   не должны мешать существующим сценариям. Тесты самого онбординга сбрасывают
+   флаги вторым addInitScript (localStorage.clear) в начале каждого */
 test.beforeEach(async function ({ context }) {
     await context.addInitScript(function () {
         window.__gymExpose = function (api) { window.__gym = api; };
+        try {
+            localStorage.setItem('gymOnbDone', '1');
+            localStorage.setItem('gymWnOff', '1');
+            localStorage.setItem('gymHelpSeen', '1');
+        } catch (e) { /* noop */ }
     });
 });
 
@@ -2277,18 +2285,20 @@ test.describe('UX-T19/T23: чипы «Техники», топбар, профи
             await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
             await expect(page.locator('.topbar .tb-back')).toHaveCount(0);
         }
-        /* топбар — ровно три элемента: заголовок, кнопка календаря и шестерёнка
-           [UX-S6 ред. 5: пара [ 📅 ][ ⚙ ] на всех вкладках, календарь слева] */
+        /* топбар — заголовок + пара [ 📅 ][ ⚙ ]: с ред. 5 [ONB] пара обёрнута в носитель
+           .tbpair (спотлайт туториала вкладывается в него, экранных координат нет) */
         const parts = await page.locator('.topbar').evaluate(function (bar) {
             return Array.prototype.slice.call(bar.children).map(function (el) {
-                return (el.classList.contains('tb-title') ? 'title' : '') + (el.classList.contains('tb-user') ? 'user' : '');
+                return (el.classList.contains('tb-title') ? 'title' : '') +
+                    (el.classList.contains('tb-user') ? 'user' : '') +
+                    (el.classList.contains('tbpair') ? 'tbpair' : '');
             }).join(',');
         });
-        if (parts !== 'title,user,user') throw new Error('состав topbar: ' + parts + ', ожидалось title,user,user');
-        const tbLabels = await page.locator('.topbar .tb-user').evaluateAll(function (btns) {
+        if (parts !== 'title,tbpair') throw new Error('состав topbar: ' + parts + ', ожидалось title,tbpair');
+        const pairBtns = await page.locator('.topbar .tbpair .tb-user').evaluateAll(function (btns) {
             return btns.map(function (b) { return b.getAttribute('aria-label'); }).join('|');
         });
-        if (tbLabels !== 'Календарь|Настройки') throw new Error('кнопки topbar: ' + tbLabels);
+        if (pairBtns !== 'Календарь|Настройки') throw new Error('кнопки пары topbar: ' + pairBtns);
         /* [UX-T27] кнопка шестерёнки жива: ведёт в Настройки с любой вкладки */
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
         await expect(page.locator('.topbar [aria-label="Настройки"]')).toHaveCount(1);
@@ -3842,4 +3852,293 @@ test.describe('UX-T32: фото упражнений в Истории и Ста
         await expect.poll(async () => mgimg.evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
     });
 
+});
+
+/* ===== [ONB-T3..T7] онбординг: приветствие, туториал, Помощь, «Что нового», контакты ===== */
+
+/* вторая порция init-скриптов выполняется ПОСЛЕ общей: сброс флагов = чистый localStorage.
+   Гасим повторный сброс через sessionStorage — иначе он сработал бы и на reload,
+   и тест «пропуск навсегда» после перезагрузки снова увидел бы чистые флаги */
+async function cleanOnb(page) {
+    await page.addInitScript(function () {
+        try {
+            if (sessionStorage.getItem('__onbCleaned')) return;
+            sessionStorage.setItem('__onbCleaned', '1');
+            localStorage.clear();
+        } catch (e) { /* noop */ }
+    });
+}
+/* элемент под щитом туториала? (elementFromPoint в центре элемента) */
+function coveredByShield(page, selector) {
+    return page.evaluate(function (sel) {
+        const el = document.querySelector(sel);
+        if (!el) return 'нет элемента: ' + sel;
+        const r = el.getBoundingClientRect();
+        const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return t && t.closest && t.closest('.spot-shield') ? 'shield' : 'доступен';
+    }, selector);
+}
+
+test.describe('[ONB-T3] приветствие', function () {
+    test('чистый localStorage: карусель показывается, слайды и точки, «Пропустить» навсегда', async ({ page }) => {
+        await cleanOnb(page);
+        await page.goto('/');
+        await expect(page.locator('.obwrap')).toBeVisible({ timeout: 10000 });
+        await expect(page.locator('.wtitle')).toHaveText('GymHelper');
+        await expect(page.locator('.wtag')).toContainText('Дневник тренировок в Telegram');
+        await expect(page.locator('.car-card')).toHaveCount(3);
+        await expect(page.locator('.dots i')).toHaveCount(3);
+        await expect(page.locator('[data-act="obNext"]')).toHaveText('Далее');
+        await expect(page.locator('.wskip')).toBeVisible();
+        /* слайд 1 активен */
+        let onIdx = await page.evaluate(function () {
+            return Array.prototype.indexOf.call(document.querySelectorAll('.dots i'), document.querySelector('.dots i.on'));
+        });
+        if (onIdx !== 0) throw new Error('активная точка слайда 1: ' + onIdx);
+        /* «Далее» ×2 → финальный слайд: кнопка «Начать», «Пропустить» убрана */
+        await page.locator('[data-act="obNext"]').click();
+        onIdx = await page.evaluate(function () {
+            return Array.prototype.indexOf.call(document.querySelectorAll('.dots i'), document.querySelector('.dots i.on'));
+        });
+        if (onIdx !== 1) throw new Error('активная точка слайда 2: ' + onIdx);
+        await page.locator('[data-act="obNext"]').click();
+        await expect(page.locator('[data-act="obNext"]')).toHaveText('Начать');
+        await expect(page.locator('.wskip')).toHaveCount(0);
+        onIdx = await page.evaluate(function () {
+            return Array.prototype.indexOf.call(document.querySelectorAll('.dots i'), document.querySelector('.dots i.on'));
+        });
+        if (onIdx !== 2) throw new Error('активная точка слайда 3: ' + onIdx);
+        /* «Начать» → автопоказ туториала; «Пропустить» туториала → приложение */
+        await page.locator('[data-act="obNext"]').click();
+        await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="tutSkip"]').click();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 5000 });
+        const done = await page.evaluate(function () { try { return localStorage.getItem('gymOnbDone'); } catch (e) { return null; } });
+        if (done !== '1') throw new Error('gymOnbDone не установлен: ' + done);
+        /* перезагрузка: приветствие больше не показывается */
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await expect(page.locator('.obwrap')).toHaveCount(0);
+    });
+
+    test('«Пропустить» на слайде 1: тоже навсегда (перезагрузка не показывает)', async ({ page }) => {
+        await cleanOnb(page);
+        await page.goto('/');
+        await expect(page.locator('.obwrap')).toBeVisible({ timeout: 10000 });
+        await page.locator('.wskip').click();
+        /* после приветствия — туториал; пропускаем и его */
+        await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="tutSkip"]').click();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 5000 });
+        await page.reload();
+        await expect(page.locator('.obwrap')).toHaveCount(0);
+        await expect(page.locator('#tutTip')).toHaveCount(0);
+    });
+});
+
+test.describe('[ONB-T4] туториал', function () {
+    test('шаги 1/3/4 поверх реальных экранов; элементы под подсказкой некликабельны; шаг 2 пропущен без активной', async ({ page }) => {
+        await cleanOnb(page);
+        await page.goto('/');
+        await page.locator('.wskip').click();
+        await expect(page.locator('#tutTip .step')).toHaveText('Шаг 1 из 4 · Новая тренировка', { timeout: 5000 });
+        /* подсветка вложена в FAB */
+        await expect(page.locator('.nav .nfab .spot.wrap.round')).toHaveCount(1);
+        /* тултип не перекрывает FAB (виден весь) */
+        expect(await coveredByShield(page, '.nav .nfab')).toBe('shield');
+        /* «Дальше» → шаг 2 пропускается (нет активной тренировки) → шаг 3 на Истории */
+        await page.locator('[data-act="tutNext"]').click();
+        await expect(page.locator('#tutTip .step')).toHaveText('Шаг 3 из 4 · Календарь и настройки', { timeout: 5000 });
+        await expect(page.locator('.tbpair .spot.wrap.pair')).toHaveCount(1);
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · История');
+        expect(await coveredByShield(page, '[aria-label="Настройки"]')).toBe('shield');
+        /* «Дальше» → шаг 4: подложка — вкладка Статистика, подсветка на табе */
+        await page.locator('[data-act="tutNext"]').click();
+        await expect(page.locator('#tutTip .step')).toHaveText('Шаг 4 из 4 · Прогресс', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика');
+        await expect(page.locator('.nav .nbtn .spot.wrap.tab')).toHaveCount(1);
+        /* «Дальше» на последнем шаге завершает молча */
+        await page.locator('[data-act="tutNext"]').click();
+        await expect(page.locator('#tutTip')).toHaveCount(0);
+        await expect(page.locator('.spot-shield')).toHaveCount(0);
+        const done = await page.evaluate(function () { try { return localStorage.getItem('gymOnbDone'); } catch (e) { return null; } });
+        if (done !== '1') throw new Error('gymOnbDone не установлен после туториала');
+    });
+
+    test('шаг 2: спотлайт на реальной кнопке добавления подхода (.ex-add), тап заблокирован', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: today, started: today + 'T18:00:00', ended: '', finished: false, title: '', nutrition: '',
+                exercises: [{ name: EX, st: today + 'T18:01:00', en: '', sets: [{ w: '100', s: 3, r: '8-10', t: today + 'T18:02:00' }] }] }]
+        } } });
+        await cleanOnb(page);
+        await page.goto('/');
+        await page.locator('.wskip').click();
+        await page.locator('[data-act="tutNext"]').click();
+        await expect(page.locator('#tutTip .step')).toHaveText('Шаг 2 из 4 · Подходы', { timeout: 5000 });
+        /* подложка — реальная карточка активной тренировки; подсветка ВЛОЖЕНА в .ex-add */
+        await expect(page.locator('.expill .exhead .ex-add .spot.wrap.box')).toHaveCount(1);
+        expect(await coveredByShield(page, '.expill .exhead .ex-add')).toBe('shield');
+        /* «Дальше» → шаг 3 (История, пара в шапке) */
+        await page.locator('[data-act="tutNext"]').click();
+        await expect(page.locator('#tutTip .step')).toHaveText('Шаг 3 из 4 · Календарь и настройки', { timeout: 5000 });
+        /* «Пропустить» в середине — тоже завершает */
+        await page.locator('[data-act="tutSkip"]').click();
+        await expect(page.locator('#tutTip')).toHaveCount(0);
+    });
+});
+
+test.describe('[ONB-T5] Помощь (FAQ)', function () {
+    test('вход из Настроек → «О приложении», 7 вопросов, аккордеон, пилюля «новое» до первого открытия', async ({ page }) => {
+        await page.addInitScript(function () { try { localStorage.removeItem('gymHelpSeen'); } catch (e) { /* noop */ } });
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const row = page.locator('#app button', { hasText: 'Помощь и FAQ' });
+        await expect(row).toBeVisible();
+        await expect(row.locator('.newpill')).toHaveText('новое');
+        await row.click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Помощь', { timeout: 5000 });
+        await expect(page.locator('.faq-it')).toHaveCount(7);
+        /* вопроса про тему нет (решение владельца) */
+        await expect(page.locator('.faq-q', { hasText: 'тему' })).toHaveCount(0);
+        /* аккордеон: открыт один вопрос; «Как считаются калории?» — MET */
+        await page.locator('.faq-q', { hasText: 'Как считаются калории?' }).click();
+        await expect(page.locator('.faq-it.open')).toHaveCount(1);
+        await expect(page.locator('.faq-a')).toContainText('формуле MET');
+        await page.locator('.faq-q', { hasText: 'Что такое 1ПМ?' }).click();
+        await expect(page.locator('.faq-it.open', { hasText: 'Что такое 1ПМ?' })).toHaveCount(1);
+        await expect(page.locator('.faq-a')).toHaveCount(1);
+        /* «Повторить подсказки» запускает туториал; пропуск возвращает в приложение */
+        await page.locator('#app button', { hasText: 'Повторить подсказки' }).click();
+        await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="tutSkip"]').click();
+        await expect(page.locator('#tutTip')).toHaveCount(0);
+        /* повторный вход в Помощь: пилюля «новое» исчезла; «←» — назад в Настройки */
+        await page.locator('[aria-label="Настройки"]').click();
+        await page.locator('#app button', { hasText: 'Помощь и FAQ' }).click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Помощь', { timeout: 5000 });
+        await page.locator('[aria-label="Назад"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('#app .newpill')).toHaveCount(0);
+    });
+});
+
+test.describe('[ONB-T6] контакты и проверка сервера', function () {
+    test('deep-link на бота (?start=feedback), копирование email, /health ok и fail', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        await page.locator('#app button', { hasText: 'Помощь и FAQ' }).click();
+        await expect(page.locator('.wn-foot')).toContainText('GymHelper 1.31');
+        /* deep-link: вне Telegram tg.openLink — подменяем и ловим URL (fallback window.open тоже) */
+        await page.evaluate(function () {
+            window.__openUrls = [];
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.openLink = function (u) { window.__openUrls.push(String(u)); };
+            }
+            window.open = function (u) { window.__openUrls.push(String(u)); return null; };
+        });
+        await page.locator('.cbtn', { hasText: 'Написать разработчику' }).click();
+        const urls = await page.evaluate(function () { return window.__openUrls; });
+        if (!urls.length || urls[0] !== 'https://t.me/GymHelper_bot?start=feedback') {
+            throw new Error('deep-link неверен: ' + JSON.stringify(urls));
+        }
+        /* email: буфер обмена + тост подтверждения */
+        await page.locator('.cbtn', { hasText: 'Скопировать email' }).click();
+        await expect(page.locator('.toast.show')).toHaveText('Скопировано', { timeout: 5000 });
+        await expect(page.locator('.cbtn', { hasText: 'Скопировать email' })).toContainText('support.gymhelper@gmail.com');
+        /* сервер: мок /health тестового сервера отвечает ok:true */
+        await page.locator('#app button', { hasText: 'Проверить сервер' }).click();
+        await expect(page.locator('.serline.ok')).toHaveText('✅ Сервер работает', { timeout: 5000 });
+        /* /health недоступен → «⛔ Сервер не отвечает» (повторный тап — перепроверка) */
+        await page.route('**/health', function (route) { route.abort(); });
+        await page.locator('#app button', { hasText: 'Проверить сервер' }).click();
+        await expect(page.locator('.serline.fail')).toHaveText('⛔ Сервер не отвечает', { timeout: 5000 });
+    });
+});
+
+test.describe('[ONB-T7] «Что нового»', function () {
+    /* подкладывает фейковый релиз в RELNOTES (const-ссылка мутируема) и снимает флаги */
+    async function fakeRelease(page) {
+        await page.evaluate(function () {
+            window.__gym.RELNOTES.push({ ver: '9.99', items: [
+                { t: 'Тестовая фича', d: 'Описание для e2e-теста' },
+                { t: 'Вторая фича', d: 'Ещё пункт' }
+            ] });
+            try { localStorage.removeItem('gymWnOff'); localStorage.removeItem('gymWnVer'); } catch (e) { /* noop */ }
+            window.__gym.wnAuto();
+            window.__gym.render();
+        });
+    }
+
+    test('пустой RELNOTES — выключатель: автопоказа нет; ручная строка даёт тост', async ({ page }) => {
+        await openApp(page);
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        await page.locator('[aria-label="Настройки"]').click();
+        await page.locator('#app button', { hasText: 'Что нового' }).click();
+        await expect(page.locator('.toast.show')).toHaveText('Новых возможностей пока нет', { timeout: 5000 });
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+    });
+
+    test('автопоказ значимого релиза; «Понятно» — раз на релиз; тап по фону закрывает', async ({ page }) => {
+        await openApp(page);
+        await fakeRelease(page);
+        await expect(page.locator('.mwrap .wnm')).toBeVisible();
+        await expect(page.locator('.relpill')).toHaveText('Релиз 9.99');
+        await expect(page.locator('.wni')).toHaveCount(2);
+        await expect(page.locator('.wni b').first()).toHaveText('Тестовая фича');
+        /* «Понятно» → закрыта, gymWnVer записан, повторный автопоказ молчит */
+        await page.locator('[data-act="wnAck"]').click();
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        const ver = await page.evaluate(function () { try { return localStorage.getItem('gymWnVer'); } catch (e) { return null; } });
+        if (ver !== '9.99') throw new Error('gymWnVer не записан: ' + ver);
+        await page.evaluate(function () { window.__gym.wnAuto(); window.__gym.render(); });
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        /* сброс и повтор: тап по фону тоже закрывает (и пишет флаг) */
+        await page.evaluate(function () {
+            try { localStorage.removeItem('gymWnVer'); } catch (e) { /* noop */ }
+            window.__gym.wnAuto();
+            window.__gym.render();
+        });
+        await expect(page.locator('.mwrap .wnm')).toBeVisible();
+        await page.locator('.mwrap').click({ position: { x: 8, y: 8 } });
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        const ver2 = await page.evaluate(function () { try { return localStorage.getItem('gymWnVer'); } catch (e) { return null; } });
+        if (ver2 !== '9.99') throw new Error('тап по фону не записал gymWnVer: ' + ver2);
+    });
+
+    test('«Больше не показывать» глушит автопоказ; ручная строка работает; тогл синхронен gymWnOff', async ({ page }) => {
+        await openApp(page);
+        await fakeRelease(page);
+        await expect(page.locator('.mwrap .wnm')).toBeVisible();
+        await page.locator('[data-act="wnOff"]').click();
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        const off = await page.evaluate(function () { try { return localStorage.getItem('gymWnOff'); } catch (e) { return null; } });
+        if (off !== '1') throw new Error('gymWnOff не установлен: ' + off);
+        /* автопоказ заглушен даже без gymWnVer */
+        await page.evaluate(function () {
+            try { localStorage.removeItem('gymWnVer'); } catch (e) { /* noop */ }
+            window.__gym.wnAuto();
+            window.__gym.render();
+        });
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        /* ручная строка продолжает работать при заглушенном автопоказе */
+        await page.locator('[aria-label="Настройки"]').click();
+        await page.locator('#app button', { hasText: 'Что нового' }).click();
+        await expect(page.locator('.mwrap .wnm')).toBeVisible();
+        await page.locator('[data-act="wnAck"]').click();
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        /* тогл «Сообщать об обновлениях»: выключен (gymWnOff=1) → клик включает → клик выключает */
+        const sw = page.locator('[role="switch"][aria-label="Сообщать об обновлениях"]');
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'true');
+        const off2 = await page.evaluate(function () { try { return localStorage.getItem('gymWnOff'); } catch (e) { return null; } });
+        if (off2 === '1') throw new Error('включение тогла не сняло gymWnOff');
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'false');
+        const off3 = await page.evaluate(function () { try { return localStorage.getItem('gymWnOff'); } catch (e) { return null; } });
+        if (off3 !== '1') throw new Error('выключение тогла не установило gymWnOff');
+    });
 });

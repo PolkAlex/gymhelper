@@ -42,6 +42,9 @@ public final class WebServer {
     private final Stats stats;
     /* [ANA-T1] токен /stats: env GYM_ADMIN_TOKEN, не задан — токен бота */
     private final String adminToken;
+    /* [ONB-T6] username бота для deep-link «Написать разработчику» (?start=feedback):
+       env GYM_BOT_USERNAME, не задан — GymHelper_bot; отдаётся клиенту в /api/init */
+    private final String botUsername;
     private final long startedAt = System.currentTimeMillis();
     private HttpServer server;
 
@@ -52,6 +55,8 @@ public final class WebServer {
         this.webDir = webDir.toAbsolutePath().normalize();
         String at = System.getenv("GYM_ADMIN_TOKEN");
         this.adminToken = (at == null || at.isBlank()) ? token : at.trim();
+        String bu = System.getenv("GYM_BOT_USERNAME");
+        this.botUsername = (bu == null || bu.isBlank()) ? "GymHelper_bot" : bu.trim();
     }
 
     public void start(int port) throws IOException {
@@ -209,6 +214,7 @@ public final class WebServer {
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("userId", userId);
+        resp.put("botUsername", botUsername);
         resp.put("data", data.toJson());
         sendJson(ex, 200, resp);
     }
