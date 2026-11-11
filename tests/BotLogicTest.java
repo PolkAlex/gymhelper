@@ -373,6 +373,9 @@ public class BotLogicTest {
             пустой шаблон и 1 упражнение, активная тренировка → отложенный шаблон (§4.6) === */
         runApplyScenario();
 
+        /* === 14. Счётчики Stats [ANA-T1]: создание/использование шаблонов через handle() === */
+        runStatsScenario();
+
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -730,6 +733,59 @@ public class BotLogicTest {
                 "применение: 0 упражнений — форма «0 упражнений»");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: применение шаблона " + e);
+        }
+    }
+
+    /* [ANA-T1] счётчики шаблонов: tplSaved → templatesCreated; tpl:start и «Повторить»
+       (оба едут через startFromTemplate) → templatesUsed. Счётчик — Stats во временном
+       каталоге (6-й аргумент конструктора), файл stats.json перечитывается. */
+    static void runStatsScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymtplstats");
+            Storage storage = new Storage(tmp);
+            Stats stats = new Stats(tmp.resolve("stats.json"));
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0, stats);
+            long chat = 9003;
+
+            GymData d = limData(); /* завершённая id=50 (Жим 60×3×10) — источник шаблона */
+            d.templates.add(tpl(1, "Спина"));
+            storage.save(chat, d);
+
+            /* создание шаблона с вводом имени → templatesCreated */
+            logic.handle(cbUpdate(chat, 10, "tpl:new_50"));
+            logic.handle(msgUpdate(chat, "Мой шаблон"));
+            check(storage.load(chat).templates.size() == 2, "stats: шаблон добавлен");
+            check(Json.lng(stats.snapshot().get("templatesCreated")) == 1,
+                "stats: tplSaved → templatesCreated=1");
+            check(Json.lng(stats.snapshot().get("templatesUsed")) == 0,
+                "stats: до старта templatesUsed=0");
+
+            /* старт из сохранённого шаблона → templatesUsed */
+            logic.handle(cbUpdate(chat, 11, "tpl:start_1"));
+            check(Json.lng(stats.snapshot().get("templatesUsed")) == 1,
+                "stats: tpl:start → templatesUsed=1");
+
+            /* «Повторить прошлую» едет через startFromTemplate → тоже templatesUsed */
+            logic.handle(cbUpdate(chat, 12, "wk:cancelok"));
+            logic.handle(cbUpdate(chat, 13, "tpl:rep_50"));
+            check(Json.lng(stats.snapshot().get("templatesUsed")) == 2,
+                "stats: tpl:rep → templatesUsed=2");
+
+            /* недельный агрегат зеркалит события; счётчики переживают перечитывание файла */
+            Map<String, Object> snap = stats.snapshot();
+            Map<String, Object> weeks = Json.map(snap.get("weeks"));
+            check(weeks != null && weeks.size() == 1, "stats: одна текущая неделя в weeks");
+            Map<String, Object> cur = weeks == null ? null : Json.map(weeks.values().iterator().next());
+            check(cur != null && Json.lng(cur.get("templatesCreated")) == 1
+                    && Json.lng(cur.get("templatesUsed")) == 2,
+                "stats: недельный агрегат зеркалит шаблонные события");
+            Stats reloaded = new Stats(tmp.resolve("stats.json"));
+            check(Json.lng(reloaded.snapshot().get("templatesCreated")) == 1
+                    && Json.lng(reloaded.snapshot().get("templatesUsed")) == 2,
+                "stats: счётчики переживают перечитывание файла");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: stats-сценарий " + e);
         }
     }
 

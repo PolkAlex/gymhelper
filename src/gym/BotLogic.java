@@ -48,6 +48,8 @@ public final class BotLogic {
     private final String appLink;
     /* [UX-T16] рассылка владельцем: chat id владельца; 0 — admin-команды недоступны */
     private final long adminChatId;
+    /* [ANA-T1] агрегаты-счётчики (без ПДн); null — недоступны (юнит-тесты) */
+    private final Stats stats;
     /* package-private: юнит-тест [TST-T4] инспектирует режим мастера ввода после handle() */
     final Map<Long, UserState> states = new ConcurrentHashMap<>();
     private final Map<Long, RestSession> rests = new ConcurrentHashMap<>();
@@ -57,11 +59,16 @@ public final class BotLogic {
     private final ScheduledExecutorService restScheduler;
 
     public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId) {
+        this(api, storage, webAppUrl, appLink, adminChatId, null);
+    }
+
+    public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId, Stats stats) {
         this.api = api;
         this.storage = storage;
         this.webAppUrl = webAppUrl;
         this.appLink = appLink;
         this.adminChatId = adminChatId;
+        this.stats = stats;
         /* daemon-поток: фоновые правки не должны мешать long polling и не держат JVM */
         this.restScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "rest-timer");
@@ -1771,6 +1778,7 @@ public final class BotLogic {
     private void tplSaved(long chatId, Long mid, GymData data, UserState st, Template t) {
         data.templates.add(t);
         storage.save(chatId, data);
+        if (stats != null) stats.inc("templatesCreated");
         st.mode = UserState.Mode.MENU;
         send(chatId, mid, "✅ Шаблон «" + esc(t.name) + "» сохранён (" + data.templates.size() + " из " + TPL_LIMIT + ")."
             + "\n\nНачать из него: /templates или кнопка «📋 Шаблоны»."
@@ -1921,6 +1929,8 @@ public final class BotLogic {
         }
         data.workouts.add(w);
         storage.save(chatId, data);
+        /* [ANA-T1] использование шаблона: tpl:start, «Повторить» и отложенный старт едут через этот метод */
+        if (stats != null) stats.inc("templatesUsed");
         st.editWorkoutId = 0;
         st.editing = false;
         st.pendingTplId = 0;

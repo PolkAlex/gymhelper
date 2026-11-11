@@ -20,6 +20,8 @@ public final class Main {
         }
 
         Storage storage = new Storage(Path.of("data"));
+        /* [ANA-T1] агрегаты-счётчики (без ПДн): один экземпляр на бот и веб-сервер */
+        Stats stats = new Stats(Path.of("data").resolve("stats.json"));
         TelegramApi api = new TelegramApi(token);
 
         String webAppUrl = System.getenv("GYM_WEBAPP_URL");
@@ -40,12 +42,12 @@ public final class Main {
         /* [UX-T16] рассылка владельцем: chat id владельца из env; не задан — admin-команды недоступны */
         long adminChatId = readLng(System.getenv("GYM_ADMIN_CHAT_ID"), 0);
 
-        BotLogic logic = new BotLogic(api, storage, webAppUrl, appLink, adminChatId);
+        BotLogic logic = new BotLogic(api, storage, webAppUrl, appLink, adminChatId, stats);
 
         int port = readInt(System.getenv("GYM_PORT"), 8080);
         Path webDir = Path.of("web");
         if (Files.isDirectory(webDir)) {
-            new WebServer(token, storage, webDir).start(port);
+            new WebServer(token, storage, webDir, stats).start(port);
             System.out.println("Web app server: http://" + WebServer.bindAddress() + ":" + port);
         } else {
             System.out.println("[warn] web/ folder not found - Mini App disabled");
