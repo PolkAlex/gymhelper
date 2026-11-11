@@ -1465,8 +1465,10 @@ function workoutCard(w) {
         /* тап по названию упражнения — переименование; корзина — удаление упражнения;
            тап по записи — редактирование (удаление — из окна редактирования);
            [UX-T22] «➕ Запись» — тонкий плюсик справа в exhead (ручка ⠿ и btnrow под
-           сетами убраны); у завершённой плюсика нет — только просмотр [UX-B6] */
-        h += '<div class="expill"><div class="exhead" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '">' + (c ? ico(c.i) : ico('custom')) +
+           сетами убраны); у завершённой плюсика нет — только просмотр [UX-B6];
+           [UX-T32] в шапке упражнения фото-миниатюра из каталога (если есть img,
+           та же .exthumb-логика, что в Технике), «свои»/без img — прежняя иконка */
+        h += '<div class="expill"><div class="exhead" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '">' + (c ? exVisual(c) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
             '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
             (!w.finished ? '<button class="barebtn ex-add" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1" title="Добавить запись" aria-label="Добавить запись">' + ICONS.plusThin + '</button>' : '') +
@@ -1849,6 +1851,23 @@ const MG_STYLE = {
     chest: 'var(--c-bench)', back: 'var(--c-back)', legs: 'var(--c-legs)',
     glutes: 'var(--c-glutes)', shoulders: 'var(--c-shoulders)', arms: 'var(--c-arms)', core: 'var(--c-abs)'
 };
+/* [UX-T32] representative-фото мышечной группы вместо иконки: характерное базовое
+   упражнение каталога с img (маппинг group → catalog id); нет записи/фото —
+   прежняя иконка группы */
+const MG_IMG = {
+    chest: 'bench',        /* Жим штанги лёжа */
+    back: 'pullup',        /* Подтягивания */
+    shoulders: 'ohp',      /* Жим штанги стоя */
+    arms: 'barbellcurl',   /* Подъём штанги на бицепс */
+    legs: 'squat',         /* Приседания со штангой */
+    glutes: 'hipthrust',   /* Ягодичный мост со штангой */
+    core: 'crunch'         /* Скручивания лёжа */
+};
+function mgVisual(g) {
+    const c = CATALOG.find(function (x) { return x.id === MG_IMG[g.id]; });
+    if (c && c.img) return '<img class="mgimg" src="img/exercises/' + c.img + '-0.jpg" alt="" loading="lazy">';
+    return ICONS[g.icon] || ICONS.custom;
+}
 function weekMuscleGroups() {
     const now = new Date();
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
@@ -1873,7 +1892,8 @@ function weekMuscleGroups() {
 function muscleGroupsCardHtml(groups) {
     let h = '<div class="card"><div class="rec-l">Мышечные группы · эта неделя</div><div class="mgroups">';
     for (const g of groups) {
-        h += '<div class="mg"><span class="mgc" style="background:' + MG_STYLE[g.id] + '">' + (ICONS[g.icon] || ICONS.custom) + '</span>' +
+        /* [UX-T32] фото группы в цветном круге (.mgc остаётся подложкой/кольцом); нет фото — иконка */
+        h += '<div class="mg"><span class="mgc" style="background:' + MG_STYLE[g.id] + '">' + mgVisual(g) + '</span>' +
             '<span class="mgn">' + esc(g.n) + '</span><b>' + g.sets + ' подх.</b></div>';
     }
     return h + '</div></div>';
@@ -1956,8 +1976,9 @@ function e1rmCardHtml(byEx) {
     if (!rows.length) return '';
     let h = '<div class="card"><div class="rec-l">Оценка 1ПМ · Эпли</div>';
     for (const r of rows) {
+        /* [UX-T32] фото-миниатюра вместо иконки (если у каталога есть img), fallback прежний */
         const c = findCatalog(r.name);
-        h += '<div class="prmrow">' + ico(c ? c.i : 'custom') +
+        h += '<div class="prmrow">' + (c ? exVisual(c) : ico('custom')) +
             '<span class="prmwho"><b>' + esc(r.name) + '</b>' +
             '<span class="tn">лучший подход: ' + esc(String(r.best.w).replace('.', ',')) + ' кг × ' + esc(r.best.r || '—') + '</span></span>' +
             '<span class="prmval">≈ ' + Math.round(r.val) + ' <small>кг</small></span></div>';
