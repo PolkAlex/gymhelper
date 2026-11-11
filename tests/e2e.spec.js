@@ -2243,37 +2243,224 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
     });
 });
 
-/* ===== [UX-T19] чипы «Техники» с «Все», назад на вкладку-источник, профиль одним рядом ===== */
-test.describe('UX-T19/T23: чипы «Техники», топбар, профиль одним рядом', function () {
+/* ===== [EXR-T4] фильтры-мультивыбор «Техники»: шиты мышц/инвентаря, одиночные категории,
+   «Своё» поверх фильтров, пустой результат + сброс. Матчинг тегов работает в обеих схемах
+   каталога (новая tags с префиксами m:/e:/cat: и legacy плоские t) — через фолбэк exTagMatch ===== */
+test.describe('EXR-T4: фильтры-мультивыбор «Техники»', function () {
 
-    test('чипы «Техники» в порядке: ★ Любимые · Все · Вид · Блок · Мышцы · Коллекции; «Все» активен по умолчанию', async ({ page }) => {
+    test('шит «Группы мышц»: чекбоксы, счётчик, применить закрывает с сохранением', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.waitFor({ state: 'visible', timeout: 5000 });
+        /* 8 групп мышц чекбоксами */
+        const rows = await sheet.locator('.frow').allTextContents();
+        if (rows.length !== 8) throw new Error('в шите мышц ' + rows.length + ' строк, ожидалось 8');
+        await sheet.locator('.frow', { hasText: 'Грудь' }).click();
+        await expect(sheet.locator('.frow', { hasText: 'Грудь' })).toHaveClass(/on/, { timeout: 5000 });
+        /* счётчик в шапке шита растёт без перерисовки модалки */
+        await expect(sheet.locator('#sheetCnt')).toHaveText('1', { timeout: 5000 });
+        await sheet.locator('.frow', { hasText: 'Спина' }).click();
+        await expect(sheet.locator('#sheetCnt')).toHaveText('2', { timeout: 5000 });
+        /* «Применить» закрывает шит, выбор сохраняется: чип подсвечен + счётчик 2 */
+        await sheet.locator('.btnrow .btn', { hasText: 'Применить' }).click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        const chip = page.locator('.card .secrow .chip', { hasText: 'Группы мышц' });
+        await expect(chip).toHaveClass(/on/, { timeout: 5000 });
+        await expect(chip).toContainText('2');
+        /* фильтр применился: только грудь+спина */
+        await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
+    });
+
+    test('мультивыбор мышц: Грудь + Спина → ИЛИ внутри группы', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.locator('.frow', { hasText: 'Грудь' }).click();
+        await sheet.locator('.frow', { hasText: 'Спина' }).click();
+        await sheet.locator('.btnrow .btn', { hasText: 'Применить' }).click();
+        /* ИЛИ: видны и жимы (грудь), и подтягивания (спина); ноги не выбраны — присед скрыт */
+        await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Подтягивания' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
+        /* выбранные значения — строка мини-чипов с × */
+        await expect(page.locator('.fchip', { hasText: 'Грудь' })).toBeVisible();
+        await expect(page.locator('.fchip', { hasText: 'Спина' })).toBeVisible();
+    });
+
+    test('инвентарь + мышца: И между группами; подзаголовки инвентаря в шите', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Инвентарь' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.waitFor({ state: 'visible', timeout: 5000 });
+        /* 4 подзаголовка подгрупп инвентаря [EXR-T4] */
+        const subs = await sheet.locator('.msub').allTextContents();
+        if (JSON.stringify(subs) !== JSON.stringify(['Свободные веса', 'Тренажёры', 'Мелкий инвентарь', 'Без инвентаря'])) {
+            throw new Error('подзаголовки инвентаря: ' + JSON.stringify(subs));
+        }
+        await sheet.locator('.frow', { hasText: 'Штанга' }).click();
+        await sheet.locator('.btnrow .btn', { hasText: 'Применить' }).click();
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Инвентарь' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
+        /* поверх — группа мышц: остаётся только штанга на грудь */
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Грудь' }).click();
+        await page.locator('.modal.open .btnrow .btn', { hasText: 'Применить' }).click();
+        await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Жим в наклоне' }).first()).toBeVisible({ timeout: 5000 });
+        /* гантельный жим тоже на грудь, но инвентарь не штанга — скрыт */
+        await expect(page.locator('#techList .excard', { hasText: 'Жим гантелей лёжа' })).toHaveCount(0);
+        await expect(page.locator('#techList .excard', { hasText: 'Подтягивания' })).toHaveCount(0);
+    });
+
+    test('кардио-чип: одиночная категория вкл/выкл', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        const total = await page.locator('#techList .excard').count();
+        const chip = page.locator('.card .secrow .chip', { hasText: 'Кардио' });
+        await chip.click();
+        await expect(chip).toHaveClass(/on/, { timeout: 5000 });
+        const cardio = await page.locator('#techList .excard').count();
+        if (cardio < 1 || cardio >= total) throw new Error('кардио-чип: ' + cardio + ' из ' + total + ' — фильтр не сработал');
+        await expect(page.locator('#techList .excard', { hasText: 'Кардио-разминка' }).first()).toBeVisible({ timeout: 5000 });
+        /* повторный тап выключает */
+        await chip.click();
+        await expect(chip).not.toHaveClass(/on/, { timeout: 5000 });
+        const restored = await page.locator('#techList .excard').count();
+        if (restored !== total) throw new Error('после выключения список не восстановился: ' + restored + ' из ' + total);
+    });
+
+    test('«Своё» поверх фильтров: свои упражнения без категории', async ({ page }) => {
+        await openApp(page);
+        /* сеем своё упражнение до входа в «Технику» — читается из localStorage при рендере */
+        await page.evaluate(function () {
+            try { localStorage.setItem('gymCustomEx', '["Моё упражнение"]'); } catch (e) { /* noop */ }
+        });
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Своё' }).click();
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Своё' })).toHaveClass(/on/, { timeout: 5000 });
+        const own = page.locator('#techList .excard', { hasText: 'Моё упражнение' });
+        await expect(own).toHaveCount(1, { timeout: 5000 });
+        await expect(own.locator('.extags')).toHaveText('#своё');
+        /* тег-фильтры к «Своим» не применяются — карточка остаётся видимой */
+        await page.locator('.card .secrow .chip', { hasText: 'Кардио' }).click();
+        await expect(page.locator('#techList .excard', { hasText: 'Моё упражнение' })).toHaveCount(1, { timeout: 5000 });
+        /* своя карточка не открывает экран техники (нет каталог-записи) */
+        await own.click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Моё упражнение' })).toHaveCount(1);
+        /* возврат в режим каталога снова применяет фильтры */
+        await page.locator('.card .secrow .chip', { hasText: 'Все' }).click();
+        await expect(page.locator('#techList .excard', { hasText: 'Моё упражнение' })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Кардио-разминка' }).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('пустой результат: Трицепс + Разминка и заминка → «Ничего не найдено» + сброс', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        const total = await page.locator('#techList .excard').count();
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Трицепс' }).click();
+        await page.locator('.modal.open .btnrow .btn', { hasText: 'Применить' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Разминка и заминка' }).click();
+        /* сочетание пустое: сообщение + кнопка сброса */
+        await expect(page.locator('.empty', { hasText: 'Ничего не найдено' })).toBeVisible({ timeout: 5000 });
+        await page.locator('.empty [data-act="techResetFilters"]').click();
+        /* сброс: режим «Все», фильтры и счётчики очищены, список восстановлен */
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Разминка и заминка' })).not.toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Группы мышц' })).not.toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.fchip')).toHaveCount(0);
+        const restored = await page.locator('#techList .excard').count();
+        if (restored !== total) throw new Error('после сброса список не восстановился: ' + restored + ' из ' + total);
+    });
+
+    test('сброс по одному: × на мини-чипе и «Сбросить группу»', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Грудь' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Спина' }).click();
+        await page.locator('.modal.open .btnrow .btn', { hasText: 'Применить' }).click();
+        /* убираем «Грудь» крестиком — остаётся только «Спина» */
+        await page.locator('.fchip', { hasText: 'Грудь' }).locator('.fchip-x').click();
+        await expect(page.locator('.fchip')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Группы мышц' })).toContainText('1');
+        await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Подтягивания' }).first()).toBeVisible({ timeout: 5000 });
+        /* «Сбросить группу» снимает фильтр целиком */
+        await page.locator('.fclear', { hasText: 'Сбросить группу' }).click();
+        await expect(page.locator('.fchip')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Группы мышц' })).not.toHaveClass(/on/);
+        await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('✕ шита закрывает без потери выбора; повторное открытие показывает отмеченное', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Инвентарь' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Гантели' }).click();
+        /* ✕ в шапке шита — тот же techApplyFilters: закрыть и сохранить */
+        await page.locator('.modal.open .mtitle-row .barebtn').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Инвентарь' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.fchip', { hasText: 'Гантели' })).toBeVisible();
+        await page.locator('.card .secrow .chip', { hasText: 'Инвентарь' }).click();
+        await expect(page.locator('.modal.open .frow', { hasText: 'Гантели' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.modal.open #sheetCnt')).toHaveText('1');
+        await page.locator('.modal.open .btnrow .btn', { hasText: 'Применить' }).click();
+        await expect(page.locator('#techList .excard', { hasText: 'Жим гантелей лёжа' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' })).toHaveCount(0);
+    });
+});
+
+/* ===== [UX-T19→EXR-T4] чипы «Техники»: режимы + фильтры-мультивыбор, назад на вкладку-источник, профиль одним рядом ===== */
+test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, профиль одним рядом', function () {
+
+    test('чипы «Техники» [EXR-T4]: режимы ★ Любимые · Своё · Все · Коллекции + ряд фильтров; «Все» активен по умолчанию', async ({ page }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
-        /* порядок чипов секций — ровно как просил владелец [UX-T24] */
+        /* порядок режимов [EXR-T4] (вместо прежних «Вид · Блок · Мышцы») */
         const texts = await page.locator('.card .secrow').first().locator('.chip').allTextContents();
-        const expected = ['★ Любимые', 'Все', 'Вид', 'Блок', 'Мышцы', 'Коллекции'];
+        const expected = ['★ Любимые', 'Своё', 'Все', 'Коллекции'];
         if (JSON.stringify(texts) !== JSON.stringify(expected)) {
-            throw new Error('порядок чипов: ' + JSON.stringify(texts) + ', ожидалось ' + JSON.stringify(expected));
+            throw new Error('порядок режимов: ' + JSON.stringify(texts) + ', ожидалось ' + JSON.stringify(expected));
         }
-        /* «Все» — фильтр по умолчанию: активен, весь каталог на входе, без «Ничего не найдено» */
+        /* ряд фильтров: группы-мультивыбор + одиночные категории [EXR-T4] */
+        const ftexts = await page.locator('.card .secrow').nth(1).locator('.chip').allTextContents();
+        const fexpected = ['Группы мышц', 'Инвентарь', 'Кардио', 'Растяжка', 'Разминка и заминка', 'Стретчинг'];
+        if (JSON.stringify(ftexts) !== JSON.stringify(fexpected)) {
+            throw new Error('порядок фильтров: ' + JSON.stringify(ftexts) + ', ожидалось ' + JSON.stringify(fexpected));
+        }
+        /* «Все» — режим по умолчанию: активен, весь каталог на входе, без «Ничего не найдено» */
         await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
         const total = await page.locator('#techList .excard').count();
         if (total < 60) throw new Error('на входе «Техника» показывает ' + total + ' упражнений, ожидался весь каталог');
         await expect(page.locator('.empty')).toHaveCount(0);
-        /* пустой favourites-набор даёт «Ничего не найдено» только внутри фильтра «★ Любимые» */
+        /* пустой favourites-набор даёт «Ничего не найдено» + кнопку «Сбросить фильтры» [EXR-T4] */
         await page.locator('.card .secrow .chip', { hasText: '★ Любимые' }).click();
         await expect(page.locator('.empty', { hasText: 'Ничего не найдено' })).toHaveCount(1, { timeout: 5000 });
-        /* возврат к «Все» возвращает каталог */
-        await page.locator('.card .secrow .chip', { hasText: 'Все' }).click();
-        await expect(page.locator('.empty')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.empty [data-act="techResetFilters"]')).toBeVisible();
+        await page.locator('.empty [data-act="techResetFilters"]').click();
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.empty')).toHaveCount(0);
         await expect(page.locator('#techList .excard').first()).toBeVisible();
-        /* повторный вход через навигацию снова открывает «Все» (фильтр сброшен) */
-        await page.locator('.card .secrow').first().locator('.chip', { hasText: 'Блок' }).click();
-        await expect(page.locator('.card .secrow').first().locator('.chip', { hasText: 'Блок' })).toHaveClass(/on/, { timeout: 5000 });
+        /* повторный вход через навигацию снова открывает «Все» — фильтры сброшены [EXR-T4] */
+        await page.locator('.card .secrow .chip', { hasText: 'Кардио' }).click();
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Кардио' })).toHaveClass(/on/, { timeout: 5000 });
+        const filtered = await page.locator('#techList .excard').count();
+        if (filtered >= total) throw new Error('кардио-чип не отфильтровал: ' + filtered + ' >= ' + total);
         await page.locator('.nav button', { hasText: 'История' }).click();
         await page.locator('.nav button', { hasText: 'Техника' }).click();
         await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Кардио' })).not.toHaveClass(/on/, { timeout: 5000 });
+        const restored = await page.locator('#techList .excard').count();
+        if (restored !== total) throw new Error('после возврата список не восстановился: ' + restored + ' из ' + total);
     });
 
     test('[UX-T23] topbar без стрелки «←» на всех вкладках: заголовок «GymHelper · <вкладка>» и шестерёнка настроек [UX-T27]', async ({ page }) => {

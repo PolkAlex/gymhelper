@@ -36,24 +36,51 @@ if (!actBlock) {
 
 const ctx = {};
 try {
-    const fn = new Function(cat + '\nreturn {CATALOG: CATALOG, CATS: CATS, CAT_SECTIONS: CAT_SECTIONS, ICONS: ICONS};');
+    const fn = new Function(cat + '\nreturn {CATALOG: CATALOG, CATS: CATS, CAT_SECTIONS: CAT_SECTIONS, ICONS: ICONS, FILTERS: FILTERS};');
     Object.assign(ctx, fn());
 } catch (e) {
     fails.push('catalog.js не выполняется: ' + e.message);
 }
+/* [EXR-T4] FILTERS — словарь фильтров «Техники»: проверяем структуру (лейблы, подгруппы,
+   уникальные id). Контент тегов записей каталога (t/tags) валидирует владелец контента [EXR-T3] */
+if (ctx.FILTERS) {
+    const F = ctx.FILTERS;
+    if (!F.muscle || !Array.isArray(F.muscle.items) || F.muscle.items.length !== 8) {
+        fails.push('FILTERS.muscle: ожидалось 8 групп мышц');
+    }
+    if (!F.gear || !Array.isArray(F.gear.groups) || F.gear.groups.length !== 4) {
+        fails.push('FILTERS.gear: ожидалось 4 подгруппы инвентаря');
+    }
+    if (!Array.isArray(F.cats) || F.cats.length !== 4) {
+        fails.push('FILTERS.cats: ожидалось 4 одиночные категории');
+    }
+    const fids = new Set();
+    const fitems = [];
+    if (F.muscle) fitems.push(...(F.muscle.items || []));
+    if (F.gear) for (const g of (F.gear.groups || [])) fitems.push(...(g.items || []));
+    if (Array.isArray(F.cats)) fitems.push(...F.cats);
+    for (const it of fitems) {
+        if (!it.id || !it.n) fails.push('FILTERS: айтем без id или n: ' + JSON.stringify(it));
+        if (fids.has(it.id)) fails.push('дубликат id в FILTERS: ' + it.id);
+        fids.add(it.id);
+    }
+}
 if (ctx.CATALOG) {
-    const validTags = new Set();
-    for (const sec of Object.values(ctx.CATS)) for (const c of sec) validTags.add(c.id);
     const ids = new Set();
+    const imgDir = path.join(root, 'web', 'img', 'exercises');
     for (const ex of ctx.CATALOG) {
         if (!ex.id) fails.push('упражнение без id: ' + ex.n);
         if (ids.has(ex.id)) fails.push('дубликат id в каталоге: ' + ex.id);
         ids.add(ex.id);
-        for (const k of ['n', 'i', 't', 'met', 'how']) {
+        /* [EXR-T4] поле тегов (t — legacy, tags — новая схема [EXR-T3]) обязательно одно из,
+           но ВАЛИДАЦИЮ СОДЕРЖИМОГО тегов делает владелец контента (параллельная правка check.js) */
+        if (!Array.isArray(ex.t || ex.tags)) fails.push('каталог ' + (ex.id || '?') + ': нет массива тегов t/tags');
+        for (const k of ['n', 'i', 'met', 'how']) {
             if (ex[k] === undefined) fails.push('каталог ' + (ex.id || '?') + ': нет поля ' + k);
         }
-        for (const t of (ex.t || [])) {
-            if (!validTags.has(t)) fails.push('каталог: ' + ex.n + ' — неизвестный тег ' + t);
+        /* фото: файлы отдаются статикой — структурная проверка наличия (EXR-T2/T4) */
+        if (ex.img && !fs.existsSync(path.join(imgDir, ex.img + '-0.jpg'))) {
+            fails.push('каталог: ' + ex.n + ' — нет фото ' + ex.img + '-0.jpg');
         }
         if (!ctx.ICONS[ex.i]) fails.push('каталог: ' + ex.n + ' — нет иконки ' + ex.i);
     }

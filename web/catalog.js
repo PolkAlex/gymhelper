@@ -142,6 +142,58 @@ const CATS = {
     ]
 };
 
+/* ---------- [EXR-T4] словарь фильтров «Техники» ----------
+   Контракт тегов [EXR-T3]: m:<мышца>, e:<инвентарь>, cat:<категория> (силовые записи — без cat).
+   id айтема = полный тег-ключ мультивыбора; айтем с несколькими тегами («Брусья и турник»,
+   «Разминка и заминка») матчится по ИЛИ всех своих тегов.
+   Мультивыбор UI: внутри группы ИЛИ, между группами И (см. techFiltered в app.js). */
+const FILTERS = {
+    muscle: { label: 'Группы мышц', items: [
+        { id: 'm:chest', n: 'Грудь' },
+        { id: 'm:back', n: 'Спина' },
+        { id: 'm:shoulders', n: 'Плечи' },
+        { id: 'm:legs', n: 'Ноги' },
+        { id: 'm:core', n: 'Кор и пресс' },
+        { id: 'm:glutes', n: 'Ягодицы' },
+        { id: 'm:biceps', n: 'Бицепс' },
+        { id: 'm:triceps', n: 'Трицепс' }
+    ] },
+    gear: { label: 'Инвентарь', groups: [
+        { n: 'Свободные веса', items: [
+            { id: 'e:barbell', n: 'Штанга' },
+            { id: 'e:dumbbell', n: 'Гантели' },
+            { id: 'e:kettlebell', n: 'Гири' },
+            { id: 'e:ezbar', n: 'EZ-гриф' },
+            { id: 'e:plate', n: 'Диски' }
+        ] },
+        { n: 'Тренажёры', items: [
+            { id: 'e:smith', n: 'Машина Смита' },
+            { id: 'e:cable', n: 'Кроссовер (блочные)' },
+            { id: 'e:leverage', n: 'Хаммеры (рычажные)' },
+            { id: 'e:gravitron', n: 'Гравитрон' },
+            { id: 'e:machine', n: 'Тренажёр (общий)' },
+            { id: 'e:bench', n: 'Скамья (гориз/накл/Скотта)' },
+            { id: 'e:dipbar', n: 'Брусья и турник', tags: ['e:dipbar', 'e:pullupbar'] }
+        ] },
+        { n: 'Мелкий инвентарь', items: [
+            { id: 'e:resband', n: 'Фитнес-резинки' },
+            { id: 'e:trx', n: 'TRX-петли' },
+            { id: 'e:fitball', n: 'Фитбол' },
+            { id: 'e:medball', n: 'Медбол' },
+            { id: 'e:abwheel', n: 'Ролик для пресса' }
+        ] },
+        { n: 'Без инвентаря', items: [
+            { id: 'e:none', n: 'Без инвентаря' }
+        ] }
+    ] },
+    cats: [
+        { id: 'cardio', n: 'Кардио', tags: ['cat:cardio'] },
+        { id: 'stretch', n: 'Растяжка', tags: ['cat:stretch'] },
+        { id: 'warmcool', n: 'Разминка и заминка', tags: ['cat:warmup', 'cat:cooldown'] },
+        { id: 'stretching', n: 'Стретчинг', tags: ['cat:stretching'] }
+    ]
+};
+
 /* ---------- catalog: n=название, i=иконка, t=теги, met, how=техника, err=ошибки ---------- */
 const CATALOG = [
     { id: 'bench', n: 'Жим штанги лёжа', i: 'chest', t: ['chest', 'press', 'barbell'], met: 3.5, img: 'bench', src: 'fdb',

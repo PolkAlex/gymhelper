@@ -9,7 +9,7 @@ let modalCtx = null;
 let PENDING = null;
 let CUR = null;
 let PICKER = null;
-let TECH = { section: 'all', cat: null, open: null, q: '' };
+let TECH = { section: 'all', cat: null, open: null, q: '', fMuscle: [], fGear: [], fCats: [] };
 let profileSex = 'м';
 let editSnap = null;
 let pendingTab = null;
@@ -366,7 +366,8 @@ function dayPart(w) {
 }
 function isWarmupName(name) {
     const c = findCatalog(name);
-    return c ? c.t.includes('warmup') : /^разминка/i.test(name);
+    /* [EXR-T4] в новой схеме тег cat:warmup (exTagMatch ловит и legacy-плоский «warmup») */
+    return c ? exTagMatch(c, 'cat:warmup') : /^разминка/i.test(name);
 }
 
 /* ============ тайминг и калории ============ */
@@ -947,11 +948,7 @@ function applyFsChrome() {
 const ACTIONS = {
     switchTab: function (a) {
         /* [UX-T20] вход на «Технику» через навигацию: сбрасываем фильтр к «Все» — как при первом входе */
-        if (a === 'tech' && tab !== 'tech') {
-            TECH.section = 'all';
-            TECH.cat = null;
-            TECH.q = '';
-        }
+        if (a === 'tech' && tab !== 'tech') techResetState();
         /* [UX-T22] уход с открытой карточки через нижнее меню — автосейв в фоне
            (без await: смену вкладки сеть не задерживает; ошибку показывает doSave) */
         if (tab === 'history' && viewWid && isDirty()) save();
@@ -1046,11 +1043,31 @@ const ACTIONS = {
     createCustom: function () { createCustom(); },
     openTech: function (a) { TECH.open = a; render(); },
     techBack: function () { TECH.open = null; render(); },
-    techSection: function (a) { TECH.section = a; TECH.cat = null; render(); },
+    /* [EXR-T4] режимы Техники: «Все» = без фильтров (мультивыбор сбрасывается),
+       ★ Любимые/Своё/Коллекции — режимы поверх фильтров (выбор сохраняется) */
+    techSection: function (a) {
+        TECH.section = a;
+        TECH.cat = null;
+        if (a === 'all') techClearFilters();
+        render();
+    },
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
+    /* [EXR-T4] фильтры-мультивыбор: шиты чекбоксов, одиночные категории, мини-чипы */
+    techFiltersMuscle: function () { openModal(techSheetHtml('muscle')); },
+    techFiltersGear: function () { openModal(techSheetHtml('gear')); },
+    techSheetToggle: function (a) { techSheetToggle(a); },
+    techApplyFilters: function () { closeModal(); render(); },
+    techCatToggle: function (a) {
+        const k = TECH.fCats.indexOf(a);
+        if (k === -1) TECH.fCats.push(a); else TECH.fCats.splice(k, 1);
+        render();
+    },
+    techGroupRemove: function (a) { const s = techGroupSel(a); if (s.k !== -1) s.arr.splice(s.k, 1); render(); },
+    techGroupClear: function (a) { if (a === 'muscle') TECH.fMuscle = []; else TECH.fGear = []; render(); },
+    techResetFilters: function () { techResetState(); render(); },
     /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые».
        [UX-T23] lastTab-механика «Назад» убрана вместе с кнопкой tb-back */
-    openFavs: function () { TECH.section = 'fav'; TECH.cat = null; TECH.open = null; TECH.q = ''; tab = 'tech'; viewWid = 0; render(); },
+    openFavs: function () { techResetState(); TECH.section = 'fav'; tab = 'tech'; viewWid = 0; render(); },
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
     wClr: function () { wClr(); },
@@ -1217,7 +1234,8 @@ function render() {
     app.innerHTML = h;
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
-        if (q) q.addEventListener('input', function () { TECH.q = this.value; const list = document.getElementById('techList'); if (list) list.innerHTML = techListHtml(); });
+        /* [EXR-T4] refreshTechList: живой список + пустое состояние (раньше techListHtml была не определена) */
+        if (q) q.addEventListener('input', function () { TECH.q = this.value; refreshTechList(); });
     }
     /* [UX-T29] живая строка возраста: change на select-ах даты рождения */
     if (tab === 'profile') pfBirthBind();
@@ -1878,34 +1896,200 @@ function exVisual(c) {
     if (c.img) return '<img class="exthumb" src="img/exercises/' + c.img + '-0.jpg" alt="" loading="lazy">';
     return ico(c.i);
 }
+
+/* ============ [EXR-T4] миграция тегов и фильтры-мультивыбор ============ */
+/* теги записи в обеих схемах: новый каталог несёт tags (m:/e:/cat:), старый — t (плоские) */
+function exTags(c) { return c.tags || c.t || []; }
+/* матч тега с миграционным фолбэком: «m:chest» ловит и legacy-плоский «chest»,
+   плоский «warmup» — и новый «cat:warmup»; работает до и после переезда каталога */
+function exTagMatch(c, tag) {
+    const tags = exTags(c);
+    if (tags.indexOf(tag) !== -1) return true;
+    const i = tag.indexOf(':');
+    if (i === -1) return tags.indexOf('cat:' + tag) !== -1;
+    return tags.indexOf(tag.slice(i + 1)) !== -1;
+}
+/* «#m:chest» → «#chest»: префиксы схемы — служебные, в карточках не показываем */
+function exTagHashes(c, limit) {
+    const arr = exTags(c).map(function (t) { return '#' + t.replace(/^[a-z]+:/, ''); });
+    return (limit ? arr.slice(0, limit) : arr).join(' ');
+}
+/* выбранные теги группы: muscle/gear → массив состояния */
+function techGroupSel(a) {
+    const i = a.indexOf(':');
+    const fkey = a.slice(0, i), id = a.slice(i + 1);
+    const arr = fkey === 'muscle' ? TECH.fMuscle : TECH.fGear;
+    return { fkey: fkey, id: id, arr: arr, k: arr.indexOf(id) };
+}
+function techClearFilters() { TECH.fMuscle = []; TECH.fGear = []; TECH.fCats = []; }
+function techResetState() {
+    TECH.section = 'all';
+    TECH.cat = null;
+    TECH.open = null;
+    TECH.q = '';
+    techClearFilters();
+}
+/* индекс тегов фильтров: id айтема FILTERS → массив тегов (по умолчанию [id]) */
+const FILTER_ITEMS = (function () {
+    const m = {};
+    const add = function (it) { m[it.id] = it.tags || [it.id]; };
+    for (const it of (FILTERS.muscle.items || [])) add(it);
+    for (const g of (FILTERS.gear.groups || [])) for (const it of (g.items || [])) add(it);
+    return m;
+})();
+function fItemTags(id) { return FILTER_ITEMS[id] || [id]; }
+function catChipTags(id) {
+    const c = (FILTERS.cats || []).find(x => x.id === id);
+    return c ? c.tags : [];
+}
+function filterLabel(fkey, id) {
+    const f = FILTERS[fkey];
+    const pool = (f.items || []).concat(...(f.groups || []).map(g => (g.items || [])));
+    const it = pool.find(x => x.id === id);
+    return it ? it.n : id;
+}
+/* «Своё» и «Коллекции → Свои»: собственные упражнения пользователя.
+   TODO [EXR]: выбор категории при добавлении «Своего» — сейчас у «Своих» тегов нет,
+   поэтому тег-фильтры к ним неприменимы (режим «Своё» фильтры не применяет) */
+function techOwnMode() { return TECH.section === 'own' || (TECH.section === 'coll' && TECH.cat === 'own'); }
+
 function techFiltered() {
     let list = CATALOG.slice();
     /* [UX-T17] секция «★ Любимые»: только упражнения из gymFavs (раньше чип ничего не фильтровал) */
     if (TECH.section === 'fav') list = list.filter(c => isFav(c.n));
-    if (TECH.cat) list = list.filter(c => c.t.includes(TECH.cat));
+    /* [EXR-T4] «Коллекции»: прежняя одиночная категория (Разминка/Заминка/Пилатес) */
+    if (TECH.section === 'coll' && TECH.cat && TECH.cat !== 'own') list = list.filter(c => exTagMatch(c, TECH.cat));
+    /* [EXR-T4] тег-фильтры: внутри группы ИЛИ (матчит любой выбранный тег), между группами И;
+       в режиме «Своё» не применяются — у собственных упражнений тегов нет */
+    if (!techOwnMode()) {
+        if (TECH.fMuscle.length) list = list.filter(c => TECH.fMuscle.some(id => fItemTags(id).some(t => exTagMatch(c, t))));
+        if (TECH.fGear.length) list = list.filter(c => TECH.fGear.some(id => fItemTags(id).some(t => exTagMatch(c, t))));
+        if (TECH.fCats.length) list = list.filter(c => TECH.fCats.some(id => catChipTags(id).some(t => exTagMatch(c, t))));
+    }
     if (TECH.q) list = list.filter(c => c.n.toLowerCase().includes(TECH.q.toLowerCase()));
     return list;
 }
-/* [UX-T24] порядок чипов секций «Техники» — как просил владелец: «★ Любимые · Все ·
-   Вид · Блок · Мышцы · Коллекции»; «Все» — фильтр по умолчанию (весь каталог) */
-const TECH_CHIPS = ['fav', 'all', 'type', 'block', 'muscle', 'coll'];
+/* [UX-T24] порядок чипов «Техники» [EXR-T4]: режимы «★ Любимые · Своё · Все · Коллекции»
+   («Вид»/«Блок»/«Мышцы» заменены фильтрами-мультивыбором и одиночными категориями) */
+const TECH_MODES = [
+    { id: 'fav', n: '★ Любимые' },
+    { id: 'own', n: 'Своё' },
+    { id: 'all', n: 'Все' },
+    { id: 'coll', n: 'Коллекции' }
+];
+function techGroupChipHtml(fkey) {
+    const sel = fkey === 'muscle' ? TECH.fMuscle : TECH.fGear;
+    return '<button class="chip' + (sel.length ? ' on' : '') + '" data-act="' + (fkey === 'muscle' ? 'techFiltersMuscle' : 'techFiltersGear') + '">' +
+        esc(FILTERS[fkey].label) + (sel.length ? ' <span class="cnt">' + sel.length + '</span>' : '') + '</button>';
+}
+/* строка выбранных значений группы: мини-чипы с × (сброс по одному) + «Сбросить группу» */
+function techSelRowHtml(fkey) {
+    const sel = fkey === 'muscle' ? TECH.fMuscle : TECH.fGear;
+    let h = '<div class="fselrow"><span class="fsellabel">' + esc(FILTERS[fkey].label) + ':</span>';
+    for (const id of sel) {
+        h += '<span class="fchip">' + esc(filterLabel(fkey, id)) +
+            '<button class="fchip-x" data-act="techGroupRemove" data-a="' + fkey + ':' + id + '" aria-label="Убрать">×</button></span>';
+    }
+    h += '<button class="fclear" data-act="techGroupClear" data-a="' + fkey + '">Сбросить группу</button></div>';
+    return h;
+}
 function techChipsHtml() {
     let h = '<div class="secrow">';
-    for (const id of TECH_CHIPS) {
-        const s = CAT_SECTIONS.find(x => x.id === id);
-        if (!s) continue;
-        h += '<button class="chip' + (TECH.section === s.id ? ' on' : '') + '" data-act="techSection" data-a="' + s.id + '">' + s.n + '</button>';
+    for (const m of TECH_MODES) {
+        h += '<button class="chip' + (TECH.section === m.id ? ' on' : '') + '" data-act="techSection" data-a="' + m.id + '">' + m.n + '</button>';
     }
     h += '</div>';
-    /* ряд категорий только где есть что показывать («★ Любимые»/«Коллекции» без категорий) */
-    if (TECH.section !== 'all' && (CATS[TECH.section] || []).length) {
+    /* [EXR-T4] фильтры: чипы-группы (открывают шит мультивыбора) + одиночные категории */
+    h += '<div class="secrow">';
+    h += techGroupChipHtml('muscle');
+    h += techGroupChipHtml('gear');
+    for (const c of FILTERS.cats) {
+        h += '<button class="chip' + (TECH.fCats.includes(c.id) ? ' on' : '') + '" data-act="techCatToggle" data-a="' + c.id + '">' + esc(c.n) + '</button>';
+    }
+    h += '</div>';
+    /* выбранные значения групп — под чипами групп */
+    if (TECH.fMuscle.length) h += techSelRowHtml('muscle');
+    if (TECH.fGear.length) h += techSelRowHtml('gear');
+    /* «Коллекции»: прежний ряд одиночных категорий (функциональность сохранена) */
+    if (TECH.section === 'coll' && (CATS.coll || []).length) {
         h += '<div class="secrow">';
-        for (const c of (CATS[TECH.section] || [])) {
+        for (const c of CATS.coll) {
             h += '<button class="chip' + (TECH.cat === c.id ? ' on' : '') + '" data-act="techCat" data-a="' + c.id + '">' + ico(c.icon) + ' ' + c.n + '</button>';
         }
         h += '</div>';
     }
     return h;
+}
+/* шит мультивыбора (модалка с чекбоксами): muscle — плоский список, gear — 4 подгруппы */
+function techSheetHtml(fkey) {
+    const f = FILTERS[fkey];
+    const sel = fkey === 'muscle' ? TECH.fMuscle : TECH.fGear;
+    let h = '<div class="mtitle-row"><p class="mtitle">' + esc(f.label) +
+        ' <span class="cnt" id="sheetCnt"' + (sel.length ? '' : ' style="display:none"') + '>' + sel.length + '</span></p>' +
+        '<button class="barebtn" data-act="techApplyFilters" title="Закрыть" aria-label="Закрыть">' + ICONS.cross + '</button></div>';
+    const row = function (it) {
+        const on = sel.indexOf(it.id) !== -1;
+        return '<button class="frow' + (on ? ' on' : '') + '" data-act="techSheetToggle" data-a="' + fkey + ':' + it.id + '">' +
+            '<span class="fbox">' + ICONS.check + '</span><span class="fn">' + esc(it.n) + '</span></button>';
+    };
+    if (f.items) {
+        for (const it of f.items) h += row(it);
+    } else {
+        for (const g of (f.groups || [])) {
+            h += '<p class="msub" style="margin:10px 0 2px">' + esc(g.n) + '</p>';
+            for (const it of (g.items || [])) h += row(it);
+        }
+    }
+    h += '<div class="btnrow"><button class="btn prime wide" data-act="techApplyFilters">Применить</button></div>';
+    return h;
+}
+/* тап по чекбоксу шита: точечное обновление строки и счётчика — модалка не перерисовывается */
+function techSheetToggle(a) {
+    const s = techGroupSel(a);
+    if (s.k === -1) s.arr.push(s.id); else s.arr.splice(s.k, 1);
+    const btn = document.querySelector('.modal.open .frow[data-a="' + a + '"]');
+    if (btn) btn.classList.toggle('on', s.arr.indexOf(s.id) !== -1);
+    const cnt = document.getElementById('sheetCnt');
+    if (cnt) {
+        cnt.textContent = s.arr.length;
+        cnt.style.display = s.arr.length ? '' : 'none';
+    }
+}
+function techResultsHtml() {
+    /* [EXR-T4] «Своё»: собственные упражнения без категории, тег-фильтры не применяются */
+    if (techOwnMode()) {
+        const q = (TECH.q || '').toLowerCase();
+        const own = ownCustomNames().filter(n => !q || n.toLowerCase().includes(q));
+        let h = '<div class="exgrid">';
+        for (const n of own) {
+            h += '<div class="excard">' + ico('custom') +
+                '<span style="flex:1;min-width:0"><div class="exn">' + esc(n) + '</div><div class="extags">#своё</div></span>' + starHtml(n) + '</div>';
+        }
+        h += '</div>';
+        if (!own.length) h += emptyFiltersHtml('Своих упражнений пока нет — добавь их из тренировки («✍️ Своё упражнение»)');
+        return h;
+    }
+    const list = techFiltered();
+    let h = '<div class="exgrid">';
+    for (const c of list) {
+        /* [UX-T18] ⭐ в строке — тогл любимых; тап мимо звезды открывает упражнение.
+           [UX-T20] span с названием flex:1 — звезда прижата к правому краю строки */
+        h += '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + exVisual(c) +
+            '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div><div class="extags">' + exTagHashes(c) + '</div></span>' + starHtml(c.n) + '</div>';
+    }
+    h += '</div>';
+    if (!list.length) h += emptyFiltersHtml(null);
+    return h;
+}
+/* пустой результат: «Ничего не найдено» + сброс фильтров */
+function emptyFiltersHtml(msg) {
+    return '<div class="empty"><p style="margin:0 0 10px">' + (msg ? esc(msg) : 'Ничего не найдено') + '</p>' +
+        '<button class="btn sec" data-act="techResetFilters">Сбросить фильтры</button></div>';
+}
+/* живое обновление списка при вводе в поиск (контейнер перерисовывается, фокус в поле остаётся) */
+function refreshTechList() {
+    const box = document.getElementById('techList');
+    if (box) box.innerHTML = techResultsHtml();
 }
 function renderTechTab() {
     if (TECH.open) {
@@ -1915,7 +2099,7 @@ function renderTechTab() {
             let h = '<div class="card"><div class="exhead">' + exVisual(c) + '<span class="t1">' + esc(c.n) + '</span><span class="metbadge">MET ' + c.met + '</span>' +
                 starHtml(c.n) +
                 '<button class="barebtn" data-act="techBack" title="К упражнениям" aria-label="К упражнениям">' + ICONS.back + '</button></div>';
-            h += '<p class="meta">' + c.t.map(t => '#' + t).join(' ') + '</p>';
+            h += '<p class="meta">' + exTagHashes(c) + '</p>';
             /* [EXR-T2] фото (2 ракурса) и RU-описание из базы free-exercise-db */
             if (c.img) {
                 h += '<div class="exphotos"><img src="img/exercises/' + c.img + '-0.jpg" alt="Ракурс 1" loading="lazy">' +
@@ -1939,15 +2123,7 @@ function renderTechTab() {
     let h = '<div class="card"><div class="exhead"><p class="t1">📖 Техника упражнений</p></div>' +
         '<div class="searchbox"><input id="techQ" type="text" placeholder="Поиск упражнения..." value="' + esc(TECH.q) + '"></div>' +
         techChipsHtml() + '</div>';
-    h += '<div class="exgrid" id="techList">';
-    for (const c of techFiltered()) {
-        /* [UX-T18] ⭐ в строке — тогл любимых; тап мимо звезды открывает упражнение.
-           [UX-T20] span с названием flex:1 — звезда прижата к правому краю строки */
-        h += '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + exVisual(c) +
-            '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div><div class="extags">' + c.t.map(t => '#' + t).join(' ') + '</div></span>' + starHtml(c.n) + '</div>';
-    }
-    h += '</div>';
-    if (!techFiltered().length) h += '<p class="empty">Ничего не найдено</p>';
+    h += '<div id="techList">' + techResultsHtml() + '</div>';
     return h;
 }
 
@@ -2027,7 +2203,8 @@ function weekMuscleGroups() {
             if (!e.sets.length) continue;
             const c = findCatalog(e.name);
             if (!c) continue;
-            const g = c.t.find(function (t) { return MG_STYLE[t]; });
+            /* [EXR-T4] m:chest → chest: префикс схемы тегов отбрасывается для сопоставления с MG_STYLE */
+            const g = exTags(c).map(function (t) { return t.replace(/^[a-z]+:/, ''); }).find(function (t) { return MG_STYLE[t]; });
             if (g) byGroup[g] = (byGroup[g] || 0) + setsCount(e);
         }
     }
@@ -2713,11 +2890,11 @@ function addCustomBase(n) {
 function exCard(c) {
     return '<div class="excard" data-act="pickCatEx" data-a="' + esc(c.n) + '">' + ico(c.i) +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div>' +
-        '<div class="extags">' + c.t.slice(0, 3).map(t => '#' + t).join(' ') + '</div></span>' + starHtml(c.n) + '</div>';
+        '<div class="extags">' + exTagHashes(c, 3) + '</div></span>' + starHtml(c.n) + '</div>';
 }
 function exCardByName(name) {
     const c = findCatalog(name);
-    const tags = c ? c.t.slice(0, 3).map(t => '#' + t).join(' ') : '#своё';
+    const tags = c ? exTagHashes(c, 3) : '#своё';
     return '<div class="excard" data-act="pickCatEx" data-a="' + esc(name) + '">' + (c ? ico(c.i) : ico('custom')) +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(name) + '</div><div class="extags">' + tags + '</div></span>' + starHtml(name) + '</div>';
 }
@@ -2772,7 +2949,12 @@ function renderPickerList() {
         if (!own.length) h += '<p class="empty">Своих упражнений пока нет</p>';
     } else {
         let list = CATALOG.slice();
-        if (PICKER.cat) list = list.filter(c => c.t.includes(PICKER.cat));
+        /* [EXR-T4] префикс схемы по секции: мышцы m:, блок e:, коллекции/вид cat:
+           (внутри exTagMatch — фолбэк на плоские legacy-теги старого каталога) */
+        if (PICKER.cat) {
+            const pfx = PICKER.section === 'muscle' ? 'm:' : (PICKER.section === 'block' ? 'e:' : 'cat:');
+            list = list.filter(c => exTagMatch(c, pfx + PICKER.cat));
+        }
         if (q) list = list.filter(c => c.n.toLowerCase().includes(q));
         let customs = [];
         if (!PICKER.cat && PICKER.section !== 'coll') {
