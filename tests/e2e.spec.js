@@ -3788,3 +3788,58 @@ test.describe('EXR-T2: фото упражнений (free-exercise-db) в Те�
     });
 
 });
+
+/* ===== [UX-T32] фото вместо иконок: карточки Истории + Статистика (1ПМ, группы) ===== */
+test.describe('UX-T32: фото упражнений в Истории и Статистике', function () {
+
+    test('История: фото в шапке упражнения с img (naturalWidth>0), «своё» — прежняя иконка', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [],
+            workouts: [
+                doneWorkout(1, today, EX, '60', 3),
+                /* «своё» упражнение вне каталога — fallback на иконку */
+                { id: 2, date: today, started: today + 'T11:00:00', ended: today + 'T11:40:00', finished: true, title: '', nutrition: '',
+                    exercises: [{ name: 'Моё упражнение', st: today + 'T11:05:00', en: today + 'T11:30:00',
+                        sets: [{ w: '20', s: 2, r: '10', t: today + 'T11:06:00' }] }] }
+            ] } } });
+        await openApp(page);
+        /* карточка каталог-упражнения: фото-миниатюра (та же .exthumb-логика, что в Технике), без .ico */
+        await page.locator('.pcard', { hasText: EX }).click();
+        const pill = page.locator('.expill', { hasText: EX });
+        const thumb = pill.locator('img.exthumb');
+        await expect(thumb).toHaveAttribute('src', /img\/exercises\/bench-0\.jpg$/, { timeout: 5000 });
+        await expect(pill.locator('.ico')).toHaveCount(0);
+        await thumb.scrollIntoViewIfNeeded();
+        await expect.poll(async () => thumb.evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
+        /* выход к списку, карточка «своего» упражнения: прежняя SVG-иконка, без фото */
+        await page.locator('.bb-back').click();
+        await page.locator('.pcard', { hasText: 'Моё упражнение' }).click();
+        const own = page.locator('.expill', { hasText: 'Моё упражнение' });
+        await expect(own.locator('.ico')).toHaveCount(1, { timeout: 5000 });
+        await expect(own.locator('img')).toHaveCount(0);
+    });
+
+    test('Статистика: фото в «Оценка 1ПМ · Эпли» и в кружках «Мышечных групп»', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)] } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        /* 1ПМ: фото-миниатюра вместо иконки (жим → bench), .ico в строках нет */
+        const card = page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' });
+        const thumb = card.locator('.prmrow img.exthumb');
+        await expect(thumb).toHaveAttribute('src', /img\/exercises\/bench-0\.jpg$/, { timeout: 5000 });
+        await expect(card.locator('.prmrow .ico')).toHaveCount(0);
+        await expect.poll(async () => thumb.evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
+        /* группы: жим = Грудь → representative-фото в цветном круге (.mgimg, круглая обрезка), svg-иконки нет */
+        const mg = page.locator('.mg', { hasText: 'Грудь' });
+        await expect(mg).toBeVisible({ timeout: 5000 });
+        const mgimg = mg.locator('img.mgimg');
+        await expect(mgimg).toHaveAttribute('src', /img\/exercises\/bench-0\.jpg$/);
+        await expect(mg.locator('svg')).toHaveCount(0);
+        await expect.poll(async () => mgimg.evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
+    });
+
+});
