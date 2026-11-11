@@ -47,8 +47,13 @@ http.createServer(function (req, res) {
         sendJson(res, 200, store);
         return;
     }
+    /* [ONB-T6] мок /health: кнопка «Проверить сервер» в Помощи (прод: лёгкий эндпоинт WebServer) */
+    if (req.method === 'GET' && url === '/health') {
+        sendJson(res, 200, { ok: true, uptimeSec: 42, chats: 1 });
+        return;
+    }
     if (req.method === 'POST' && url === '/api/init') {
-        sendJson(res, 200, { ok: true, userId: 1, rev: store.rev, data: store });
+        sendJson(res, 200, { ok: true, userId: 1, rev: store.rev, botUsername: 'GymHelper_bot', data: store });
         return;
     }
     if (req.method === 'POST' && url === '/api/save') {

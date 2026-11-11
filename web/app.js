@@ -38,6 +38,18 @@ let REST = null;          /* {end, dur, paused, left, mini, ex} — см. спе
 let REST_CUSTOM = false;  /* поле «Своё…» в Профиле открыто */
 let __restAudio = null;   /* ленивый AudioContext (мобильные браузеры блокируют звук) */
 let __restExpiredFired = false; /* сигнал «истёк» — один раз на цикл отсчёта */
+/* [ONB-T3..T7] онбординг (docs/spec-onb-onboarding.md ред. 5): флаги в localStorage
+   (формат data/*.json не затрагивается, §8). Всё скипаемое; тон — на «Вы» */
+let obOpen = false;   /* приветствие-карусель поверх приложения */
+let obSlide = 0;      /* текущий слайд 0..2 */
+let tutOpen = false;  /* туториал: спотлайты поверх реальных экранов */
+let tutStep = 0;      /* шаг 0..3: FAB → .ex-add → пара [ 📅 ][ ⚙ ] → таб «Статистика» */
+let helpOpen = false; /* подэкран «Помощь» (паттерн Настроек: поверх вкладки) */
+let helpFaq = 0;      /* открытый вопрос аккордеона (-1 — все закрыты) */
+let srvState = '';    /* проверка сервера: '' | 'checking' | 'ok' | 'fail' */
+let wnOpen = false;   /* модалка «Что нового» */
+let wnRel = null;     /* показываемый релиз {ver, items:[{t, d}]} */
+let BOT_NAME = 'GymHelper_bot'; /* [ONB-T6] deep-link feedback; сервер может прислать свой в /api/init */
 
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -49,6 +61,44 @@ const DOW_FULL = ['Понедельник', 'Вторник', 'Среда', 'Ч�
 /* старые темы из прошлых версий: маппинг на тёмную/светлую (совместимость localStorage) */
 const OLD_THEME_LIGHT = ['sage', 'peach', 'lavender', 'rose', 'mint', 'ice', 'coffee'];
 const OLD_THEME_DARK = ['forest', 'khaki', 'pine', 'graphite', 'midnight', 'stockline'];
+
+/* ============ [ONB] контент онбординга (тексты — макет ред. 5 + спека §3, тон на «Вы») ============ */
+/* версия сборки: подвал Помощи («GymHelper 1.31 · 10.11.2026») */
+const APP_VERSION = '1.31';
+const APP_BUILD = '10.11.2026';
+const SUPPORT_EMAIL = 'support.gymhelper@gmail.com';
+/* слайды приветствия (макет, экраны 1–3, решение 1 — вариант B «Карусель») */
+const OB_SLIDES = [
+    { ico: '🏋', title: 'Дневник за секунды', text: 'Вес, подходы и повторения — в несколько тапов. Кнопки подсказывают значения с прошлой тренировки, ничего не нужно вводить с нуля.' },
+    { ico: '🏆', title: 'Прогресс и рекорды', text: 'Сравнение с прошлой тренировкой, оценка 1ПМ по Эпли и живой рекорд — когда побит личный максимум.' },
+    { ico: '📅', title: 'Календарь и статистика', text: 'Месяц с отметками тренировок, объём, время и калории — весь прогресс под рукой.' }
+];
+/* шаги туториала — подсказки поверх реальных экранов (решение 2) */
+const TUT_STEPS = [
+    { label: 'Шаг 1 из 4 · Новая тренировка', title: 'Начать — жёлтый «+» внизу', text: 'Тап по кнопке открывает пошаговый ввод: упражнение → вес → подходы. В конце — «✓ Завершить».' },
+    { label: 'Шаг 2 из 4 · Подходы', title: 'Тонкий «+» у названия упражнения — запись подхода', text: 'Вес подставится с прошлого раза — просто поправьте, если нужно. Тап по записанной строке — правка, чип 🏆 — новый рекорд.' },
+    { label: 'Шаг 3 из 4 · Календарь и настройки', title: '📅 — месяц тренировок, ⚙️ — настройки', text: 'В календаре видны все дни с тренировками, в настройках — тема, таймер отдыха, звук и «Что нового».' },
+    { label: 'Шаг 4 из 4 · Прогресс', title: 'Статистика — второй таб слева', text: 'Рекорды недели, оценка 1ПМ по Эпли, объём и время — прогресс виден сразу.' }
+];
+/* FAQ — 7 вопросов (решение 6: без вопроса про тему, «Как считаются калории?»), спека §3.3 */
+const FAQ_ITEMS = [
+    { q: 'Как изменить вес или подходы?', a: 'Откройте тренировку в Истории и тапните по строке записи — можно поправить вес и повторения или удалить её. Правки сохраняются сами; работает и для завершённых тренировок.' },
+    { q: 'Как удалить тренировку?', a: 'Откройте карточку тренировки в Истории — внизу кнопка «🗑 Удалить». Приложение спросит подтверждение; восстановить удалённое нельзя.' },
+    { q: 'Что такое 1ПМ?', a: 'Одноповторный максимум — вес, который Вы теоретически можете поднять один раз. Приложение оценивает его по формуле Эпли из рабочих подходов. Побили свою оценку — увидите тост 🏆 и чип у записи; в Статистике — блок «Оценка 1ПМ · Эпли».' },
+    { q: 'Как считаются калории?', a: 'По формуле MET: интенсивность — из тоннажа и времени, плюс Ваш вес из Профиля. Чтобы калории считались, заполните профиль (пол, возраст, рост, вес).' },
+    { q: 'Можно начать тренировку с прошлого раза?', a: 'Да: жёлтый «+» → «🔁 Повторить» прошлую тренировку или шаблон — упражнения уже в списке, останется записать подходы.' },
+    { q: 'Начали в боте — продолжите в приложении?', a: 'Бот и приложение смотрят в один дневник. Начатая в чате тренировка появится в приложении сама — дописывайте подходы и завершайте где удобно.' },
+    { q: 'Как удалить все свои данные?', a: 'Полное удаление — командой /delete_my_data в чате с ботом (бот попросит подтвердить). Условия хранения — «Политика конфиденциальности» в Настройках.' }
+];
+/* [ONB-T7] «Что нового»: значимые релизы. ПУСТОЙ МАССИВ = ВЫКЛЮЧАТЕЛЬ — модалка
+   не показывается. Первый показ — со СЛЕДУЮЩЕГО значимого релиза после онбординга
+   (ретроактивно 1.30/1.31 НЕ показываем — решение владельца, спека §3.4): при
+   релизе добавить запись { ver: '1.32', items: [{ t: 'Заголовок', d: 'Описание' }, …] };
+   технические релизы просто не добавляются. Пропущенные релизы — показывается
+   только последний (последняя запись массива). Текст предлагает lead, утверждает владелец.
+   ⚠️ ЧЕК-ЛИСТ ПРИ РЕЛИЗЕ: добавить запись в RELNOTES и бампнуть APP_VERSION/APP_BUILD
+   (+ cache-версии ?v= в web/index.html). */
+const RELNOTES = [];
 
 /* ============ утилиты ============ */
 function esc(s) {
@@ -488,6 +538,11 @@ function dispatchFromEl(el, ev) {
         if (!ev || ev.target === el) closeModal();
         return;
     }
+    /* [ONB-T7] тап по фону модалки «Что нового» закрывает её (решение 9) */
+    if (act === 'wnBackdrop') {
+        if (!ev || ev.target === el) wnClose();
+        return;
+    }
     const fn = ACTIONS[act];
     if (typeof fn === 'function') {
         fn(el.getAttribute('data-a'), el.getAttribute('data-b'), el.getAttribute('data-c'));
@@ -893,6 +948,8 @@ const ACTIONS = {
         if (tab === 'history' && viewWid && isDirty()) save();
         /* [UX-T27] тап по любому табу закрывает Настройки и переходит на вкладку [UX-S4 §3] */
         settingsOpen = false;
+        /* [ONB-T5] тап по любому табу закрывает и Помощь (тот же паттерн подэкрана) */
+        helpOpen = false;
         /* [UX-S6] тап по любому табу закрывает и календарь [§3.4] */
         calOpen = false;
         tab = a; viewWid = 0; render();
@@ -1036,6 +1093,59 @@ const ACTIONS = {
         if (tg && tg.openLink) tg.openLink(url);
         else window.open(url, '_blank');
     },
+    /* ============ [ONB-T3..T7] онбординг ============ */
+    /* [ONB-T3] приветствие-карусель: «Далее»→…→«Начать» / «Пропустить» (слайды 1–2) */
+    obNext: function () {
+        if (obSlide < OB_SLIDES.length - 1) { obSlide++; render(); obAlignTrack(); }
+        else obFinish();
+    },
+    obSkip: function () { obFinish(); },
+    /* [ONB-T4] туториал: «Дальше»/«Пропустить»; щит перехватывает тапы — ничего не делает */
+    tutNext: function () { tutNext(); },
+    tutSkip: function () { tutFinish(); },
+    tutShield: function () { /* перехват: элементы под подсказкой некликабельны */ },
+    /* [ONB-T5] Помощь: точка входа Настройки → «О приложении» → «Помощь и FAQ» */
+    openHelp: function () {
+        helpOpen = true;
+        helpFaq = 0;
+        srvState = '';
+        lsSet('gymHelpSeen', '1'); /* пилюля «новое» видна до первого открытия (решение 13) */
+        window.scrollTo(0, 0);
+        render();
+    },
+    closeHelp: function () {
+        helpOpen = false;
+        settingsOpen = true; /* «← Назад» — на Настройки (точка входа) */
+        window.scrollTo(0, 0);
+        render();
+    },
+    faqToggle: function (a) { helpFaq = (helpFaq === +a) ? -1 : +a; render(); },
+    /* [ONB-T4] повтор туториала из Помощи (решение 3) */
+    replayTut: function () { tutStart(); },
+    /* [ONB-T6] контакты: deep-link на чат с ботом (?start=feedback), копирование email */
+    openFeedback: function () {
+        const url = 'https://t.me/' + BOT_NAME + '?start=feedback';
+        if (tg && tg.openLink) tg.openLink(url);
+        else window.open(url, '_blank');
+    },
+    copyEmail: function () { copyText(SUPPORT_EMAIL); },
+    checkServer: function () { checkServer(); },
+    /* [ONB-T7] «Что нового»: ручная строка в «О приложении», «Понятно»/«Больше не показывать» */
+    wnRow: function () { wnOpenManual(); },
+    wnAck: function () { wnClose(); },
+    wnBackdrop: function () { wnClose(); }, /* фоновый тап — перехват в dispatchFromEl (как modalBackdrop) */
+    wnOff: function () {
+        lsSet('gymWnOff', '1'); /* автопоказ глушится; ручная строка продолжает работать (решение 8) */
+        if (wnRel) lsSet('gymWnVer', wnRel.ver);
+        wnOpen = false;
+        render();
+    },
+    wnToggle: function () {
+        /* тогл «Сообщать об обновлениях» синхронен gymWnOff: включение снимает флаг (§6) */
+        if (lsGet('gymWnOff') === '1') lsDel('gymWnOff');
+        else lsSet('gymWnOff', '1');
+        render();
+    },
     pickBg: function () { const el = document.getElementById('bgFile'); if (el) el.click(); },
     clearBg: function () {
         try { localStorage.removeItem('gymBg'); } catch (e) { /* noop */ }
@@ -1056,7 +1166,9 @@ function render() {
     /* [UX-S6] Календарь — подэкран как Настройки; открытая карточка (viewWid) приоритетнее:
        openHistory из календаря НЕ сбрасывает calOpen, «← Назад» backbar'а возвращает
        в календарь с сохранённым месяцем и выбором [§6] */
-    if (settingsOpen) h += renderSettings();
+    /* [ONB-T5] Помощь — подэкран в том же паттерне (вход из Настроек) */
+    if (helpOpen) h += renderHelp();
+    else if (settingsOpen) h += renderSettings();
     else if (calVisible()) h += renderCalendar();
     else {
         if (tab === 'history') h += renderHistoryTab();
@@ -1089,6 +1201,10 @@ function render() {
         h += '<div style="height:70px"></div>';
     }
     /* [UX-T13] «К упражнениям» переехала в шапку экрана техники компактной иконкой — backbar внизу больше не нужен */
+    /* [ONB] оверлеи онбординга — поверх всего (приветствие z-60, туториал z-46..48, «Что нового» z-52) */
+    if (obOpen) h += obWelcomeHtml();
+    if (tutOpen) h += tutOverlayHtml();
+    if (wnOpen) h += wnModalHtml();
     app.innerHTML = h;
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
@@ -1097,6 +1213,9 @@ function render() {
     /* [UX-T29] живая строка возраста: change на select-ах даты рождения */
     if (tab === 'profile') pfBirthBind();
     renderRestbar(); /* панель/пилюля таймера переживает навигацию: класс raised и содержимое актуальны */
+    /* [ONB] пост-выравнивание оверлеев: карусель по ширине контейнера, тултип по месту подсветки */
+    if (obOpen) obAlignTrack();
+    if (tutOpen) tutPlaceTip();
     dbgMsg('rev ' + (G ? G.rev : '-'));
 }
 function navHtml() {
@@ -1108,13 +1227,17 @@ function navHtml() {
         ['tech', 'pilates', 'Техника'],
         ['profile', 'user', 'Профиль']
     ];
+    /* [ONB-T4] спотлайты туториала ВЛОЖЕНЫ в целевые элементы (ред. 5):
+       шаг 1 — FAB (.spot.wrap.round), шаг 4 — таб «Статистика» (.spot.wrap.tab) */
     const btn = function (it) {
+        const spot = (tutOpen && tutStep === 3 && it[0] === 'stats') ? '<span class="spot wrap tab" aria-hidden="true"></span>' : '';
         return '<button class="nbtn' + (tab === it[0] ? ' on' : '') + '" data-act="switchTab" data-a="' + it[0] + '">' +
             '<span class="nico">' + (ICONS[it[1]] || '') + '</span>' +
-            '<span class="nlabel">' + it[2] + '</span></button>';
+            '<span class="nlabel">' + it[2] + '</span>' + spot + '</button>';
     };
     return '<div class="nav">' + left.map(btn).join('') +
-        '<button class="nfab" data-act="startWorkout" title="Начать тренировку">' + ICONS.plus + '</button>' +
+        '<button class="nfab" data-act="startWorkout" title="Начать тренировку">' + ICONS.plus +
+        (tutOpen && tutStep === 0 ? '<span class="spot wrap round" aria-hidden="true"></span>' : '') + '</button>' +
         right.map(btn).join('') + '</div>';
 }
 /* [UX-S6] календарь виден как подэкран, если открыт и не перебит карточкой тренировки
@@ -1126,6 +1249,11 @@ function topbarHtml() {
     /* [UX-T27] вкладка profile снова подписывается «Профиль» (артефакт «Настройки» убран);
        точка входа в настройки — шестерёнка на всех вкладках [UX-S4 §3] */
     const names = { history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Профиль' };
+    /* [ONB-T5] экран Помощи: «←» слева — возврат в Настройки (точка входа — только они, решение 7) */
+    if (helpOpen) {
+        return '<div class="topbar"><button class="tb-user" data-act="closeHelp" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
+            '<span class="tb-title">GymHelper · Помощь</span></div>';
+    }
     /* [UX-T27] экран Настроек: «←» слева (возврат на вкладку-источник), справа пусто [UX-S4 §3] */
     if (settingsOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeSettings" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
@@ -1145,8 +1273,14 @@ function topbarHtml() {
        шестерёнка справа — пара [ 📅 ][ ⚙ ] всегда в одном месте [§3.2] */
     const calBtn = !viewWid ?
         '<button class="tb-user" data-act="openCal" title="Календарь" aria-label="Календарь">' + ICONS.calendar + '</button>' : '';
-    return '<div class="topbar"><span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' + calBtn +
-        '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
+    /* [ONB-T4] пара [ 📅 ][ ⚙ ] обёрнута в .tbpair (носитель подсветки, ред. 5);
+       на шаге 3 topbar поднят (tut-lift), чтобы затемнение накрыло нижнюю панель */
+    const tutPairSpot = (tutOpen && tutStep === 2) ? '<span class="spot wrap pair" aria-hidden="true"></span>' : '';
+    return '<div class="topbar' + (tutOpen && tutStep === 2 ? ' tut-lift' : '') + '">' +
+        '<span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' +
+        '<span class="tbpair">' + calBtn +
+        '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button>' +
+        tutPairSpot + '</span></div>';
 }
 
 /* ---------- карточка рекорда недели ---------- */
@@ -1429,7 +1563,9 @@ function renderCalendar() {
 /* ---------- карточка тренировки ---------- */
 function workoutCard(w) {
     const lines = titleLines(w);
-    let h = '<div class="card" id="w' + w.id + '">';
+    /* [ONB-T4] шаг 2: карточка поднята (tut-lift), чтобы затемнение спотлайта
+       накрыло шапку и нижнюю панель (ред. 5) */
+    let h = '<div class="card' + (tutOpen && tutStep === 1 ? ' tut-lift' : '') + '" id="w' + w.id + '">';
     /* [UX-T8]: у завершённых «Повторить» переехала в шапку круглой иконкой;
        [UX-T18]: «💾 В шаблоны» из шапки убрана (сохранение шаблона — только в боте);
        [UX-T20]: иконка времени суток из заголовка убрана;
@@ -1471,7 +1607,9 @@ function workoutCard(w) {
         h += '<div class="expill"><div class="exhead" data-act="renameExercise" data-a="' + w.id + '" data-b="' + ei + '">' + (c ? exVisual(c) : ico('custom')) +
             '<span class="exname">' + esc(e.name) + '</span>' +
             '<button class="barebtn trash-bare" data-act="deleteExercise" data-a="' + w.id + '" data-b="' + ei + '" title="Удалить упражнение">' + ICONS.trash + '</button>' +
-            (!w.finished ? '<button class="barebtn ex-add" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1" title="Добавить запись" aria-label="Добавить запись">' + ICONS.plusThin + '</button>' : '') +
+            (!w.finished ? '<button class="barebtn ex-add" data-act="openEntryModal" data-a="' + w.id + '" data-b="' + ei + '" data-c="-1" title="Добавить запись" aria-label="Добавить запись">' + ICONS.plusThin +
+                /* [ONB-T4] шаг 2: подсветка ВЛОЖЕНА в реальную кнопку добавления подхода (ред. 5) */
+                (tutOpen && tutStep === 1 && ei === 0 ? '<span class="spot wrap box" aria-hidden="true"></span>' : '') + '</button>' : '') +
             '</div>';
         const prSi = prChipSetIdx(w, e);
         e.sets.forEach((s, si) => {
@@ -2062,10 +2200,24 @@ function renderSettings() {
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
-    /* [ONB-T2] «ℹ️ О приложении»: политика конфиденциальности — открывается в браузере
-       (вне Telegram при отсутствии клиента) */
+    /* [ONB-T5/T7] «О приложении»: строка «Помощь и FAQ» с пилюлей «новое» (решение 13,
+        до первого открытия Помощи — gymHelpSeen), строка «Что нового» (модалка вручную,
+        работает и при выключенном автопоказе — решение 13.2), тогл «Сообщать об
+        обновлениях» (синхронен gymWnOff, решение 8) и политика [ONB-T2].
+        Строки — с РАЗНЫМИ иконками набора: вопрос / искра / щит (решение 13.1) */
+    const wnOn = lsGet('gymWnOff') !== '1';
+    const helpNew = lsGet('gymHelpSeen') !== '1';
     h += '<div class="card"><p class="t1">ℹ️ О приложении</p>' +
-        '<div class="btnrow"><button class="btn sec wide" data-act="openPrivacy">ℹ️ Политика конфиденциальности</button></div></div>';
+        '<button class="arow" data-act="openHelp"><span class="aico">' + ICONS.question + '</span>Помощь и FAQ' +
+        (helpNew ? '<span class="newpill">новое</span>' : '') +
+        '<span class="chevr">' + ICONS.chevR + '</span></button>' +
+        '<button class="arow" data-act="wnRow"><span class="aico">' + ICONS.spark + '</span>Что нового' +
+        '<span class="chevr">' + ICONS.chevR + '</span></button>' +
+        '<div class="setrow wnset"><span class="lbl">Сообщать об обновлениях</span>' +
+        swToggleHtml(wnOn, 'wnToggle', null, 'Сообщать об обновлениях') + '</div>' +
+        '<p class="meta">Окно «Что нового» после значимых релизов</p>' +
+        '<button class="arow" data-act="openPrivacy"><span class="aico">' + ICONS.shield + '</span>Политика конфиденциальности' +
+        '<span class="chevr">' + ICONS.chevR + '</span></button></div>';
     return h;
 }
 
@@ -3194,6 +3346,247 @@ function initBgPicker() {
     });
 }
 
+/* ============ [ONB-T3..T7] онбординг: приветствие, туториал, Помощь, «Что нового» ============ */
+/* localStorage-флаги (спека §8): gymOnbDone, gymWnVer, gymWnOff, gymHelpSeen.
+   localStorage недоступен (приватный режим) — онбординг молча пропускаем (fail-open, §6) */
+let LS_OK = null;
+function lsOk() {
+    if (LS_OK !== null) return LS_OK;
+    try { localStorage.setItem('__gymT', '1'); localStorage.removeItem('__gymT'); LS_OK = true; }
+    catch (e) { LS_OK = false; }
+    return LS_OK;
+}
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* noop */ } }
+function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* noop */ } }
+
+/* ---------- ворота онбординга: вызывается один раз из init() после первого render ---------- */
+function onbGate() {
+    if (!lsOk()) return;
+    if (lsGet('gymOnbDone') !== '1') { /* [ONB-T3] приветствие — всем при первом открытии (решение 12) */
+        obOpen = true;
+        obSlide = 0;
+        render();
+        obAlignTrack();
+        return;
+    }
+    wnAuto(); /* [ONB-T7] значимый релиз, который пользователь ещё не видел */
+    if (wnOpen) render();
+}
+
+/* ---------- [ONB-T3] приветствие-карусель (макет, экраны 1–3) ---------- */
+function obWelcomeHtml() {
+    let h = '<div class="obwrap"><div class="ob"><div class="ob-center">' +
+        '<div class="wlogo">' + ICONS.logo + '</div>' +
+        '<div class="wtitle">GymHelper</div>' +
+        '<div class="wtag">Дневник тренировок в Telegram</div>' +
+        '<div class="car"><div class="car-track" id="obTrack">';
+    OB_SLIDES.forEach(function (s, i) {
+        h += '<div class="car-card' + (i === obSlide ? ' glow' : ' peek') + '">' +
+            '<div class="cic">' + s.ico + '</div>' +
+            '<div class="ch">' + esc(s.title) + '</div>' +
+            '<p class="cp">' + esc(s.text) + '</p></div>';
+    });
+    h += '</div></div><div class="dots">';
+    OB_SLIDES.forEach(function (_, i) { h += '<i' + (i === obSlide ? ' class="on"' : '') + '></i>'; });
+    h += '</div></div><div class="ob-bottom">' +
+        '<button class="cta" data-act="obNext">' + (obSlide === OB_SLIDES.length - 1 ? 'Начать' : 'Далее') + '</button>' +
+        (obSlide < OB_SLIDES.length - 1 ? '<button class="wskip" data-act="obSkip">Пропустить</button>' : '') +
+        '</div></div></div>';
+    return h;
+}
+/* центрирование активной карточки: clip-контейнер неподвижен, сдвигается только трек
+   (фикс ред. 3); геометрия считается по фактической ширине — работает и на 320px */
+function obAlignTrack() {
+    const car = document.querySelector('.obwrap .car');
+    const track = document.getElementById('obTrack');
+    const card = car ? car.querySelector('.car-card') : null;
+    if (!car || !track || !card) return;
+    const step = card.offsetWidth + 10; /* ширина карточки + gap */
+    const off = Math.max(0, obSlide * step - (car.offsetWidth - card.offsetWidth) / 2);
+    track.style.transform = 'translateX(' + (-Math.round(off)) + 'px)';
+}
+function obFinish() {
+    lsSet('gymOnbDone', '1'); /* любой выход — навсегда [§8] */
+    obOpen = false;
+    tutStart(); /* [ONB-T4] автопоказ туториала после приветствия (решение 3) */
+}
+
+/* ---------- [ONB-T4] туториал: спотлайты поверх реальных экранов ---------- */
+/* есть ли цель шага 2: реальная активная тренировка с упражнением (элемент .ex-add);
+   нет — шаг пропускается (разрешено задачей: «шаг пропускается или подложка-История») */
+function tutStep2Target() {
+    const w = activeW();
+    return !!(w && !w.finished && (w.exercises || []).length);
+}
+/* каждый шаг рендерит свой «реальный экран» (подложка туториала) */
+function tutApplySurface() {
+    settingsOpen = false;
+    calOpen = false;
+    helpOpen = false;
+    if (tutStep === 1) {
+        const w = activeW();
+        if (w) { editSnap = JSON.stringify(G); viewWid = w.id; } else viewWid = 0;
+        tab = 'history';
+        return;
+    }
+    if (tab === 'history' && viewWid && isDirty()) save(); /* тихий автосейв, как switchTab */
+    viewWid = 0;
+    tab = tutStep === 3 ? 'stats' : 'history';
+}
+function tutStart() {
+    if (tab === 'history' && viewWid && isDirty()) save();
+    viewWid = 0;
+    tab = 'history';
+    settingsOpen = false;
+    calOpen = false;
+    helpOpen = false;
+    tutOpen = true;
+    tutStep = 0; /* всегда с шага 1; шаг 2 пропускается при «Дальше», если цели нет */
+    tutApplySurface();
+    window.scrollTo(0, 0);
+    render();
+    tutPlaceTip();
+}
+function tutNext() {
+    let next = tutStep + 1;
+    if (next === 1 && !tutStep2Target()) next = 2; /* нет активной тренировки — шаг пропускается */
+    if (next >= TUT_STEPS.length) { tutFinish(); return; } /* завершение молча, без финального экрана */
+    tutStep = next;
+    tutApplySurface();
+    window.scrollTo(0, 0);
+    render();
+    tutPlaceTip();
+}
+function tutFinish() {
+    tutOpen = false;
+    lsSet('gymOnbDone', '1');
+    if (tab === 'history' && viewWid && isDirty()) save();
+    viewWid = 0;
+    tab = 'history';
+    window.scrollTo(0, 0);
+    render();
+}
+/* щит + тултип; подсветки (.spot.wrap.*) рендерятся ВНУТРИ целевых элементов
+   (topbarHtml/navHtml/workoutCard) по ред. 5 — экранных координат нет */
+function tutOverlayHtml() {
+    const t = TUT_STEPS[tutStep];
+    return '<div class="spot-shield" data-act="tutShield" aria-hidden="true"></div>' +
+        '<div class="tip" id="tutTip">' +
+        '<div class="step">' + esc(t.label) + '</div>' +
+        '<div class="tt">' + esc(t.title) + '</div>' +
+        '<p class="tx">' + esc(t.text) + '</p>' +
+        '<div class="tiprow"><button class="btn acc" data-act="tutNext">Дальше</button>' +
+        '<button class="tskip" data-act="tutSkip">Пропустить</button></div></div>';
+}
+/* позиция тултипа по месту подсветки: над элементом снизу экрана, под — сверху */
+function tutPlaceTip() {
+    const tip = document.getElementById('tutTip');
+    if (!tip) return;
+    tip.style.top = '';
+    tip.style.bottom = '';
+    const spot = document.querySelector('.spot.wrap');
+    if (!spot) return;
+    const r = spot.getBoundingClientRect();
+    const vh = window.innerHeight;
+    if (r.top > vh * 0.55) tip.style.bottom = (vh - r.top + 12) + 'px';
+    else tip.style.top = (r.bottom + 12) + 'px';
+}
+
+/* ---------- [ONB-T5] Помощь: FAQ-аккордеон + «Не нашли ответа?» + контакты [ONB-T6] ---------- */
+function renderHelp() {
+    let h = '';
+    FAQ_ITEMS.forEach(function (it, i) {
+        h += '<div class="faq-it' + (helpFaq === i ? ' open' : '') + '">' +
+            '<button class="faq-q" data-act="faqToggle" data-a="' + i + '">' + esc(it.q) +
+            '<span class="chev">' + ICONS.chevD + '</span></button>' +
+            (helpFaq === i ? '<div class="faq-a">' + esc(it.a) + '</div>' : '') +
+            '</div>';
+    });
+    h += '<div class="card"><p class="t1">Не нашли ответа?</p>' +
+        '<p class="meta">Напишите разработчику — разберёмся и ответим.</p>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="replayTut">▶ Повторить подсказки</button></div>' +
+        '<button class="cbtn" data-act="openFeedback">' + ICONS.send +
+        '<span><b>Написать разработчику</b><small>через бота ' + esc(BOT_NAME) + '</small></span></button>' +
+        '<button class="cbtn" data-act="copyEmail">' + ICONS.mail +
+        '<span><b>Скопировать email</b><small>' + SUPPORT_EMAIL + '</small></span></button>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="checkServer">🔎 Проверить сервер</button></div>' +
+        (srvState === 'checking' ? '<p class="serline">⏳ Проверяем…</p>' :
+            srvState === 'ok' ? '<p class="serline ok">✅ Сервер работает</p>' :
+                srvState === 'fail' ? '<p class="serline fail">⛔ Сервер не отвечает</p>' : '') +
+        '<p class="meta wn-foot">GymHelper ' + APP_VERSION + ' · ' + APP_BUILD + '</p>' +
+        '</div>';
+    return h;
+}
+function copyText(text) {
+    const done = function () { toast('Скопировано'); };
+    const fallback = function () {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            done();
+        } catch (e) { toast('Не удалось скопировать', true); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+    } else fallback();
+}
+/* [ONB-T6] проверка сервера: GET /health → инлайн-результат под кнопкой, без адресов */
+async function checkServer() {
+    srvState = 'checking';
+    render();
+    let ok = false;
+    try {
+        const r = await fetch('/health', { cache: 'no-store' });
+        if (r.ok) { const j = await r.json(); ok = !!j.ok; }
+    } catch (e) { ok = false; }
+    if (!helpOpen) { srvState = ''; return; } /* экран закрыли, пока шёл запрос */
+    srvState = ok ? 'ok' : 'fail';
+    render();
+}
+
+/* ---------- [ONB-T7] «Что нового»: модалка значимых релизов ---------- */
+/* автопоказ: по умолчанию всем, раз на релиз (решения 8–10); пустой RELNOTES — тишина */
+function wnAuto() {
+    if (!RELNOTES.length) return;
+    if (lsGet('gymWnOff') === '1') return;
+    const rel = RELNOTES[RELNOTES.length - 1];
+    if (lsGet('gymWnVer') === rel.ver) return;
+    wnRel = rel;
+    wnOpen = true;
+}
+function wnOpenManual() {
+    if (!RELNOTES.length) { toast('Новых возможностей пока нет'); return; }
+    wnRel = RELNOTES[RELNOTES.length - 1];
+    wnOpen = true;
+    render();
+}
+function wnClose() {
+    if (wnRel) lsSet('gymWnVer', wnRel.ver); /* «Понятно»/тап по фону — раз на релиз (решение 9) */
+    wnOpen = false;
+    render();
+}
+function wnModalHtml() {
+    const rel = wnRel || RELNOTES[RELNOTES.length - 1];
+    if (!rel) return '';
+    let h = '<div class="mwrap" data-act="wnBackdrop"><div class="wnm">' +
+        '<div class="wnh"><span class="t1">🚀 Что нового</span>' +
+        '<span class="relpill">Релиз ' + esc(rel.ver) + '</span></div><div class="wnlist">';
+    for (const it of rel.items) {
+        h += '<div class="wni"><i class="mark"></i><div class="wtx"><b>' + esc(it.t) + '</b><span>' + esc(it.d) + '</span></div></div>';
+    }
+    h += '</div><button class="cta" data-act="wnAck">Понятно</button>' +
+        '<button class="wnskip" data-act="wnOff">Больше не показывать</button>' +
+        '</div></div>';
+    return h;
+}
+
 /* ---------- init ---------- */
 async function init() {
     loadTheme();
@@ -3259,7 +3652,10 @@ async function init() {
             /* и не должен совпадать с живыми тренировками сервера */
             for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
             if (G.profile) profileSex = G.profile.sex;
+            /* [ONB-T6] username бота для deep-link «Написать разработчику» — из /api/init */
+            if (typeof j.botUsername === 'string' && j.botUsername) BOT_NAME = j.botUsername;
             render();
+            onbGate(); /* [ONB] приветствие/«Что нового» — после первого рендера приложения */
         } else {
             failMsg = 'HTTP ' + r.status;
         }
@@ -3295,6 +3691,10 @@ if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
         ageOf: ageOf,
         ageWord: ageWord,
         isBirthMonth: isBirthMonth,
-        modalCtx: function () { return modalCtx; }
+        modalCtx: function () { return modalCtx; },
+        /* [ONB-T7] e2e: ссылка на RELNOTES (const-массив мутируем push/splice) и wnAuto —
+           тесты подкладывают фейковый релиз без правки прод-кода */
+        RELNOTES: RELNOTES,
+        wnAuto: wnAuto
     });
 }
