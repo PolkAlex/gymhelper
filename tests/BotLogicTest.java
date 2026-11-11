@@ -405,6 +405,9 @@ public class BotLogicTest {
         final List<String> texts = new ArrayList<>();
         /* [ONB-T8] chat_id отправок sendMessageResult — проверка адресата пересылки feedback */
         final List<Long> sentChats = new ArrayList<>();
+        /* [ONB-T8] ненулевое значение — sendMessageResult «падает» с этой ошибкой
+           (тест отказа доставки: режим остаётся, счётчик не растёт) */
+        String failResult;
 
         FakeApi() {
             super("fake-token-unit-tests");
@@ -419,7 +422,7 @@ public class BotLogicTest {
         public String sendMessageResult(long chatId, String text) {
             sentChats.add(chatId);
             texts.add(text);
-            return null;
+            return failResult;
         }
 
         @Override
@@ -822,9 +825,12 @@ public class BotLogicTest {
 
     /* [ONB-T8] обратная связь: deep-link «/start feedback» включает режим, свободный текст
        уходит владельцу (chat id 555000111 — FakeApi.sendMessageResult пишет sentChats) с
-       именем/username/chat_id и HTML-экранированием, юзеру — подтверждение, режим сброшен;
-       счётчик feedbackSent растёт; /cancel и /help отменяют режим без пересылки;
-       GYM_OWNER_CHAT_ID не задан (5-арг конструктор, 0) — фича off, режим не включается. */
+       именем/username/chat_id и HTML-экранированием — и текста, и имени (спецсимволы в
+       from без esc() ломали доставку: 400 can't parse entities); юзеру — подтверждение,
+       режим сброшен; sentChats после двух циклов = [owner, owner]; отказ sendMessageResult —
+       режим остаётся, счётчик feedbackSent не растёт; /cancel и /help отменяют режим без
+       пересылки; GYM_OWNER_CHAT_ID не задан (5-арг конструктор, 0) — фича off, режим не
+       включается. */
     static void runFeedbackScenario() {
         try {
             java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymfeedback");
@@ -869,6 +875,24 @@ public class BotLogicTest {
                 "feedback: без фамилии/username шапка только из имени, текст целиком");
             check(api.last().equals("Сообщение отправлено. Спасибо!"),
                 "feedback: подтверждение после второй отправки");
+            check(api.sentChats.equals(List.of(555000111L, 555000111L)),
+                "feedback: два цикла — ровно две пересылки, обе владельцу (никому больше)");
+
+            /* имя/username со спецсимволами: без esc() ломали HTML-письмо
+               (инъекция тегов → Telegram 400 can't parse entities → недоставка) */
+            logic.handle(msgUpdateFrom(chat, "/start feedback", "Иван <b>хак</b>", null, null));
+            check(logic.states.get(chat).mode == UserState.Mode.FEEDBACK,
+                "feedback: режим включён перед отправкой со спец-именем");
+            logic.handle(msgUpdateFrom(chat, "Сообщение с <незакрытым> тегом", "Иван <b>хак</b>", null, null));
+            String owner3 = api.texts.get(api.texts.size() - 2);
+            check(owner3.startsWith("💬 Обратная связь\nОт: Иван &lt;b&gt;хак&lt;/b&gt;\nchat_id: 9004\n\n"),
+                "feedback: имя со спецсимволами экранировано в письме (esc, паттерн /announce)");
+            check(owner3.endsWith("Сообщение с &lt;незакрытым&gt; тегом"),
+                "feedback: текст с <незакрытым> тегом тоже экранирован");
+            check(api.last().equals("Сообщение отправлено. Спасибо!"),
+                "feedback: подтверждение при спец-имени (доставка не сорвалась)");
+            check(logic.states.get(chat).mode == UserState.Mode.MENU,
+                "feedback: после отправки со спец-именем режим сброшен");
 
             /* /cancel отменяет режим штатно, пересылки нет */
             logic.handle(msgUpdateFrom(chat, "/start feedback", "Иван", null, null));
@@ -891,6 +915,27 @@ public class BotLogicTest {
                 "feedback: /help отменяет режим");
             check(api.sentChats.size() == ownerMsgs,
                 "feedback: /help не порождает пересылку");
+
+            /* отказ доставки: sendMessageResult вернул ошибку — режим оставлен (юзер может
+               повторить или отменить), вместо подтверждения — «Не удалось отправить…»,
+               счётчик feedbackSent не растёт */
+            java.nio.file.Path tmpFail = java.nio.file.Files.createTempDirectory("gymfeedbackfail");
+            Stats statsFail = new Stats(tmpFail.resolve("stats.json"));
+            FakeApi apiFail = new FakeApi();
+            apiFail.failResult = "Bad Request: can't parse entities";
+            BotLogic logicFail = new BotLogic(apiFail, new Storage(tmpFail), null, null, 0, statsFail, 555000111L);
+            logicFail.handle(msgUpdateFrom(chat, "/start feedback", "Иван", null, null));
+            check(logicFail.states.get(chat).mode == UserState.Mode.FEEDBACK,
+                "feedback fail: режим включён перед отказом");
+            logicFail.handle(msgUpdateFrom(chat, "Текст при отказе", "Иван", null, null));
+            check(logicFail.states.get(chat).mode == UserState.Mode.FEEDBACK,
+                "feedback fail: при ошибке отправки режим остался FEEDBACK");
+            check(apiFail.last().equals("Не удалось отправить, попробуй позже. Отменить — /cancel"),
+                "feedback fail: юзер получил «Не удалось отправить…», а не подтверждение");
+            check(Json.lng(statsFail.snapshot().get("feedbackSent")) == 0,
+                "feedback fail: счётчик feedbackSent не растёт при ошибке доставки");
+            check(apiFail.sentChats.equals(List.of(555000111L)),
+                "feedback fail: попытка пересылки была адресована владельцу");
 
             /* фича off: GYM_OWNER_CHAT_ID не задан — режим не включается */
             java.nio.file.Path tmpOff = java.nio.file.Files.createTempDirectory("gymfeedbackoff");

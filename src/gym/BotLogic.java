@@ -2094,12 +2094,13 @@ public final class BotLogic {
     }
 
     /* письмо владельцу: шапка «💬 Обратная связь / От: … / chat_id: …» и текст пользователя
-       целиком (экранированный — sendMessageResult шлёт в HTML-режиме, паттерн /announce);
+       целиком (экранированные — sendMessageResult шлёт в HTML-режиме, паттерн /announce:
+       без esc() имя/username с < > & дают инъекцию тегов и 400 can't parse entities);
        static — для юнит-теста */
     static String feedbackOwnerText(String text, long chatId, Map<String, Object> from) {
         StringBuilder b = new StringBuilder("💬 Обратная связь\n");
         String who = feedbackWho(from);
-        if (!who.isEmpty()) b.append("От: ").append(who).append('\n');
+        if (!who.isEmpty()) b.append("От: ").append(esc(who)).append('\n');
         b.append("chat_id: ").append(chatId).append("\n\n").append(esc(text));
         return b.toString();
     }
