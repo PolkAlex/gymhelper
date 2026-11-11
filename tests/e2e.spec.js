@@ -4030,7 +4030,7 @@ test.describe('[ONB-T6] контакты и проверка сервера', fu
         await openApp(page);
         await page.locator('[aria-label="Настройки"]').click();
         await page.locator('#app button', { hasText: 'Помощь и FAQ' }).click();
-        await expect(page.locator('.wn-foot')).toContainText('GymHelper 1.31');
+        await expect(page.locator('.wn-foot')).toContainText('GymHelper 1.32');
         /* deep-link: вне Telegram tg.openLink — подменяем и ловим URL (fallback window.open тоже) */
         await page.evaluate(function () {
             window.__openUrls = [];
@@ -4074,6 +4074,13 @@ test.describe('[ONB-T7] «Что нового»', function () {
 
     test('пустой RELNOTES — выключатель: автопоказа нет; ручная строка даёт тост', async ({ page }) => {
         await openApp(page);
+        /* изоляция: дефолтный RELNOTES содержит запись актуального релиза — для проверки
+           «пустого» поведения очищаем массив вручную и перерисовываем */
+        await page.evaluate(function () {
+            window.__gym.RELNOTES.length = 0;
+            window.__gym.wnAuto();
+            window.__gym.render();
+        });
         await expect(page.locator('.mwrap')).toHaveCount(0);
         await page.locator('[aria-label="Настройки"]').click();
         await page.locator('#app button', { hasText: 'Что нового' }).click();
