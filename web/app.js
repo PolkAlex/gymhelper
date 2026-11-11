@@ -1723,6 +1723,12 @@ function maxWeightSeries(name) {
 }
 
 /* ---------- техника ---------- */
+/* [EXR-T2] визуал упражнения в Технике: фото из базы free-exercise-db (поле img),
+   если есть, иначе прежняя SVG-иконка; loading="lazy" — в списке ~150 карточек */
+function exVisual(c) {
+    if (c.img) return '<img class="exthumb" src="img/exercises/' + c.img + '-0.jpg" alt="" loading="lazy">';
+    return ico(c.i);
+}
 function techFiltered() {
     let list = CATALOG.slice();
     /* [UX-T17] секция «★ Любимые»: только упражнения из gymFavs (раньше чип ничего не фильтровал) */
@@ -1757,10 +1763,16 @@ function renderTechTab() {
         const c = CATALOG.find(x => x.id === TECH.open);
         if (!c) { TECH.open = null; } else {
             /* [UX-T13] «К упражнениям» — компактная иконка вверху экрана; ⭐ — в/из «Любимых» (как в каталоге) */
-            let h = '<div class="card"><div class="exhead">' + ico(c.i) + '<span class="t1">' + esc(c.n) + '</span><span class="metbadge">MET ' + c.met + '</span>' +
+            let h = '<div class="card"><div class="exhead">' + exVisual(c) + '<span class="t1">' + esc(c.n) + '</span><span class="metbadge">MET ' + c.met + '</span>' +
                 starHtml(c.n) +
                 '<button class="barebtn" data-act="techBack" title="К упражнениям" aria-label="К упражнениям">' + ICONS.back + '</button></div>';
             h += '<p class="meta">' + c.t.map(t => '#' + t).join(' ') + '</p>';
+            /* [EXR-T2] фото (2 ракурса) и RU-описание из базы free-exercise-db */
+            if (c.img) {
+                h += '<div class="exphotos"><img src="img/exercises/' + c.img + '-0.jpg" alt="Ракурс 1" loading="lazy">' +
+                    '<img src="img/exercises/' + c.img + '-1.jpg" alt="Ракурс 2" loading="lazy"></div>';
+            }
+            if (c.desc) h += '<p class="exdesc">' + esc(c.desc) + '</p>';
             h += '<p class="mtitle" style="margin-top:12px">Техника</p>';
             c.how.forEach((s, i) => {
                 h += '<div class="techstep"><span class="num">' + (i + 1) + '.</span><span>' + esc(s) + '</span></div>';
@@ -1782,7 +1794,7 @@ function renderTechTab() {
     for (const c of techFiltered()) {
         /* [UX-T18] ⭐ в строке — тогл любимых; тап мимо звезды открывает упражнение.
            [UX-T20] span с названием flex:1 — звезда прижата к правому краю строки */
-        h += '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + ico(c.i) +
+        h += '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + exVisual(c) +
             '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div><div class="extags">' + c.t.map(t => '#' + t).join(' ') + '</div></span>' + starHtml(c.n) + '</div>';
     }
     h += '</div>';

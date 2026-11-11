@@ -3744,3 +3744,47 @@ test.describe('UX-S6 календарь', function () {
         await expect(cell).toHaveAttribute('aria-label', '15 ' + CAL_MONTHS_GEN[ym.m] + ', идёт тренировка');
     });
 });
+
+/* ===== [EXR-T2] база упражнений free-exercise-db: фото вместо иконок, RU-описание ===== */
+test.describe('EXR-T2: фото упражнений (free-exercise-db) в Технике', function () {
+
+    test('у упражнения с img рендерится фото (список + деталь, 2 ракурса, описание), у упражнения без img — прежняя иконка', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+
+        /* «Жим штанги лёжа» привязан к базе: фото вместо иконки в карточке списка */
+        const row = page.locator('#techList .excard', { hasText: EX }).first();
+        const thumb = row.locator('img.exthumb');
+        await expect(thumb).toHaveAttribute('src', /img\/exercises\/bench-0\.jpg$/, { timeout: 5000 });
+        await expect(row.locator('.ico')).toHaveCount(0);
+        /* фото реально загрузилось и сервер отдаёт его с правильным mime */
+        await thumb.scrollIntoViewIfNeeded();
+        await expect.poll(async () => thumb.evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
+        const ct = await request.get('/img/exercises/bench-0.jpg').then(function (r) { return r.headers()['content-type']; });
+        if (ct !== 'image/jpeg') throw new Error('content-type фото: ' + ct + ', ожидалось image/jpeg');
+
+        /* «Растяжка грудных мышц» не привязана к базе — прежняя SVG-иконка, без фото */
+        const plainRow = page.locator('#techList .excard', { hasText: 'Растяжка грудных мышц' }).first();
+        await expect(plainRow.locator('.ico')).toHaveCount(1, { timeout: 5000 });
+        await expect(plainRow.locator('img')).toHaveCount(0);
+
+        /* деталь привязанного упражнения: мини-фото в шапке, 2 ракурса, RU-описание, шаги техники */
+        await row.click();
+        await expect(page.locator('.card .exhead img.exthumb')).toHaveAttribute('src', /bench-0\.jpg$/, { timeout: 5000 });
+        const photos = page.locator('.card .exphotos img');
+        await expect(photos).toHaveCount(2);
+        await expect(photos.nth(0)).toHaveAttribute('src', /bench-0\.jpg$/);
+        await expect(photos.nth(1)).toHaveAttribute('src', /bench-1\.jpg$/);
+        await expect(page.locator('.card .exdesc')).toContainText('грудн', { timeout: 5000 });
+        await expect(page.locator('.card .techstep').first()).toBeVisible({ timeout: 5000 });
+
+        /* деталь упражнения без привязки: без фото-блока и описания, иконка в шапке */
+        await page.locator('[data-act="techBack"]').click();
+        await page.locator('#techList .excard', { hasText: 'Растяжка грудных мышц' }).first().click();
+        await expect(page.locator('.card .exphotos')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.card .exdesc')).toHaveCount(0);
+        await expect(page.locator('.card .exhead .ico')).toHaveCount(1);
+    });
+
+});

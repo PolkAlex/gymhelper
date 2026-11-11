@@ -340,6 +340,8 @@ public final class WebServer {
         if (p.endsWith(".css")) return "text/css; charset=utf-8";
         if (p.endsWith(".svg")) return "image/svg+xml";
         if (p.endsWith(".png")) return "image/png";
+        /* [EXR-T2] фото упражнений (web/img/exercises) */
+        if (p.endsWith(".jpg") || p.endsWith(".jpeg")) return "image/jpeg";
         if (p.endsWith(".ico")) return "image/x-icon";
         if (p.endsWith(".json")) return "application/json; charset=utf-8";
         return "application/octet-stream";
