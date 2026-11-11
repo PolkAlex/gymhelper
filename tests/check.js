@@ -88,23 +88,51 @@ if (ctx.CATS) {
     }
 }
 if (ctx.CATALOG) {
+    /* [EXR-T3] контракт тегов: строки с префиксами m:/e:/cat: из закрытых словарей.
+       Ключи синхронизированы с FILTERS в шапке catalog.js ([EXR-T4]); структурную
+       часть (id/n/i/met/how, фото) валидируем здесь же — единый проход по каталогу */
+    const MUSCLES = new Set(['m:chest', 'm:back', 'm:shoulders', 'm:legs', 'm:core', 'm:glutes', 'm:biceps', 'm:triceps']);
+    const EQUIP = new Set(['e:barbell', 'e:dumbbell', 'e:kettlebell', 'e:ezbar', 'e:plate', 'e:smith', 'e:cable',
+        'e:leverage', 'e:gravitron', 'e:bench', 'e:dipbar', 'e:pullupbar', 'e:machine', 'e:resband', 'e:trx',
+        'e:fitball', 'e:medball', 'e:abwheel', 'e:none']);
+    const CATS2 = new Set(['cat:cardio', 'cat:stretch', 'cat:warmup', 'cat:cooldown', 'cat:stretching']);
     const ids = new Set();
     const imgDir = path.join(root, 'web', 'img', 'exercises');
     for (const ex of ctx.CATALOG) {
         if (!ex.id) fails.push('упражнение без id: ' + ex.n);
         if (ids.has(ex.id)) fails.push('дубликат id в каталоге: ' + ex.id);
         ids.add(ex.id);
-        /* [EXR-T4] поле тегов (t — legacy, tags — новая схема [EXR-T3]) обязательно одно из,
-           но ВАЛИДАЦИЮ СОДЕРЖИМОГО тегов делает владелец контента (параллельная правка check.js) */
-        if (!Array.isArray(ex.t || ex.tags)) fails.push('каталог ' + (ex.id || '?') + ': нет массива тегов t/tags');
-        for (const k of ['n', 'i', 'met', 'how']) {
+        /* [EXR-T3] контент на tags-схеме: tags обязателен, legacy t запрещён
+           (структурная часть EXR-T4: поля n/i/met/how + фото-файлы — проверяются ниже) */
+        for (const k of ['n', 'i', 'tags', 'met', 'how']) {
             if (ex[k] === undefined) fails.push('каталог ' + (ex.id || '?') + ': нет поля ' + k);
         }
-        /* фото: файлы отдаются статикой — структурная проверка наличия (EXR-T2/T4) */
-        if (ex.img && !fs.existsSync(path.join(imgDir, ex.img + '-0.jpg'))) {
-            fails.push('каталог: ' + ex.n + ' — нет фото ' + ex.img + '-0.jpg');
+        if (ex.t !== undefined) fails.push('каталог ' + (ex.id || '?') + ': устаревшее поле t (должно быть tags)');
+        const tags = ex.tags || [];
+        if (!tags.length) fails.push('каталог ' + (ex.id || '?') + ': пустой tags');
+        for (const t of tags) {
+            if (!MUSCLES.has(t) && !EQUIP.has(t) && !CATS2.has(t)) {
+                fails.push('каталог: ' + ex.n + ' — неизвестный тег ' + t);
+            }
+        }
+        /* силовые без cat:* обязаны иметь мышцу; кардио-категории мышц не требуют */
+        const hasCat = tags.some(t => CATS2.has(t));
+        const hasMuscle = tags.some(t => MUSCLES.has(t));
+        if (!hasCat && !hasMuscle) fails.push('каталог: ' + ex.n + ' — нет ни m:*, ни cat:*');
+        /* e:none не сочетается с другим инвентарём */
+        const eqTags = tags.filter(t => t.startsWith('e:'));
+        if (eqTags.includes('e:none') && eqTags.length > 1) fails.push('каталог: ' + ex.n + ' — e:none вместе с другим e:*');
+        if (tags.filter(t => tags.indexOf(t) !== tags.lastIndexOf(t)).length) {
+            fails.push('каталог: ' + ex.n + ' — дубликат тега внутри записи');
         }
         if (!ctx.ICONS[ex.i]) fails.push('каталог: ' + ex.n + ' — нет иконки ' + ex.i);
+        /* фото: оба ракурса должны существовать (Техника рендерит -0 и -1) */
+        if (ex.img) {
+            for (const a of [0, 1]) {
+                const f = path.join(imgDir, ex.img + '-' + a + '.jpg');
+                if (!fs.existsSync(f)) fails.push('каталог: ' + ex.n + ' — нет фото ' + ex.img + '-' + a + '.jpg');
+            }
+        }
     }
 }
 
