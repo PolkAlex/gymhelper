@@ -545,7 +545,13 @@ function dispatchFromEl(el, ev) {
     if (fav) { toggleFav(fav); return; }
     const act = el.getAttribute('data-act');
     if (act === 'modalBackdrop') {
-        if (!ev || ev.target === el) closeModal();
+        if (!ev || ev.target === el) {
+            /* [EXR-T4 fix] шит фильтров Техники закрыт фоновым тапом — чипы-счётчики
+               и мини-чипы на экране устарели: перерисовываем (прочие модалки — нет) */
+            const sheetOpen = !!document.querySelector('#modal.open .frow');
+            closeModal();
+            if (sheetOpen && tab === 'tech' && !TECH.open) render();
+        }
         return;
     }
     /* [ONB-T7] тап по фону модалки «Что нового» закрывает её (решение 9) */
@@ -1112,6 +1118,8 @@ const ACTIONS = {
         render();
     },
     closeModal: function () { closeModal(); },
+    /* [EXR-T4 fix] фоновый тап перехватывается в dispatchFromEl до ACTIONS —
+       там же перерисовка после закрытия шита фильтров Техники */
     modalBackdrop: function () { closeModal(); },
     /* [ONB-T2] политика конфиденциальности: openLink внутри Telegram, иначе обычная вкладка */
     openPrivacy: function () {
@@ -2191,6 +2199,14 @@ function mgVisual(g) {
     if (c && c.img) return '<img class="mgimg" src="img/exercises/' + c.img + '-0.jpg" alt="" loading="lazy">';
     return ICONS[g.icon] || ICONS.custom;
 }
+/* [EXR-T4 fix] ключ MG_STYLE из тега каталога: префикс схемы снимается,
+   bi/трицепс алиасятся в «Руки» (arms) — у новых тегов m:biceps/m:triceps своего
+   цвета в MG_STYLE нет, и без алиаса подходы на руки пропали бы из карточки */
+function mgTagKey(tag) {
+    const MG_ALIAS = { biceps: 'arms', triceps: 'arms' };
+    const t = tag.replace(/^[a-z]+:/, '');
+    return MG_ALIAS[t] || t;
+}
 function weekMuscleGroups() {
     const now = new Date();
     const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
@@ -2203,8 +2219,8 @@ function weekMuscleGroups() {
             if (!e.sets.length) continue;
             const c = findCatalog(e.name);
             if (!c) continue;
-            /* [EXR-T4] m:chest → chest: префикс схемы тегов отбрасывается для сопоставления с MG_STYLE */
-            const g = exTags(c).map(function (t) { return t.replace(/^[a-z]+:/, ''); }).find(function (t) { return MG_STYLE[t]; });
+            /* [EXR-T4 fix] mgTagKey: префикс схемы снимается, m:biceps/m:triceps → arms */
+            const g = exTags(c).map(mgTagKey).find(function (t) { return MG_STYLE[t]; });
             if (g) byGroup[g] = (byGroup[g] || 0) + setsCount(e);
         }
     }
@@ -2916,6 +2932,12 @@ function pickerCatsHtml() {
     }
     return h;
 }
+/* [EXR-T4 fix] теги чипа категории пикера: явный массив tags айтема CATS
+   (составные — OR: «Руки» = m:biceps ∨ m:triceps), fallback на id для айтемов без tags */
+function pickerCatTags(section, cat) {
+    const it = (CATS[section] || []).find(x => x.id === cat);
+    return it ? (it.tags || [it.id]) : [cat];
+}
 function renderPickerChips() {
     const sec = document.getElementById('pickerSections');
     if (sec) sec.innerHTML = pickerChipsHtml();
@@ -2949,11 +2971,10 @@ function renderPickerList() {
         if (!own.length) h += '<p class="empty">Своих упражнений пока нет</p>';
     } else {
         let list = CATALOG.slice();
-        /* [EXR-T4] префикс схемы по секции: мышцы m:, блок e:, коллекции/вид cat:
-           (внутри exTagMatch — фолбэк на плоские legacy-теги старого каталога) */
+        /* [EXR-T4 fix] теги айтема CATS (составные — OR; внутри exTagMatch — фолбэк legacy) */
         if (PICKER.cat) {
-            const pfx = PICKER.section === 'muscle' ? 'm:' : (PICKER.section === 'block' ? 'e:' : 'cat:');
-            list = list.filter(c => exTagMatch(c, pfx + PICKER.cat));
+            const catTags = pickerCatTags(PICKER.section, PICKER.cat);
+            list = list.filter(c => catTags.some(t => exTagMatch(c, t)));
         }
         if (q) list = list.filter(c => c.n.toLowerCase().includes(q));
         let customs = [];

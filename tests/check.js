@@ -48,8 +48,11 @@ if (ctx.FILTERS) {
     if (!F.muscle || !Array.isArray(F.muscle.items) || F.muscle.items.length !== 8) {
         fails.push('FILTERS.muscle: ожидалось 8 групп мышц');
     }
-    if (!F.gear || !Array.isArray(F.gear.groups) || F.gear.groups.length !== 4) {
-        fails.push('FILTERS.gear: ожидалось 4 подгруппы инвентаря');
+    /* [EXR-T4 fix] 5 подгрупп: «Брусья и турник» вынесена из «Тренажёров» в конец (ревью PR #212) */
+    if (!F.gear || !Array.isArray(F.gear.groups) || F.gear.groups.length !== 5) {
+        fails.push('FILTERS.gear: ожидалось 5 подгрупп инвентаря');
+    } else if (F.gear.groups[F.gear.groups.length - 1].n !== 'Брусья и турник') {
+        fails.push('FILTERS.gear: подгруппа «Брусья и турник» должна быть последней');
     }
     if (!Array.isArray(F.cats) || F.cats.length !== 4) {
         fails.push('FILTERS.cats: ожидалось 4 одиночные категории');
@@ -63,6 +66,25 @@ if (ctx.FILTERS) {
         if (!it.id || !it.n) fails.push('FILTERS: айтем без id или n: ' + JSON.stringify(it));
         if (fids.has(it.id)) fails.push('дубликат id в FILTERS: ' + it.id);
         fids.add(it.id);
+    }
+}
+/* [EXR-T4 fix] CATS пикера — под схему m:/e:/cat:: секция «Вид» удалена, у айтемов
+   (кроме «Своих») есть tags с префиксными тегами, id уникальны */
+if (ctx.CATS) {
+    if (ctx.CATS.type) fails.push('CATS.type: секция «Вид» должна быть удалена');
+    if (!ctx.CATS.muscle || ctx.CATS.muscle.length !== 7) fails.push('CATS.muscle: ожидалось 7 категорий');
+    if (!ctx.CATS.gear || ctx.CATS.gear.length !== 17) fails.push('CATS.gear: ожидалось 17 категорий инвентаря');
+    const cids = new Set();
+    for (const sec of ['muscle', 'gear', 'coll']) {
+        for (const it of (ctx.CATS[sec] || [])) {
+            if (!it.id || !it.n) fails.push('CATS.' + sec + ': айтем без id или n');
+            if (cids.has(it.id)) fails.push('дубликат id в CATS: ' + it.id);
+            cids.add(it.id);
+            if (it.id !== 'own' && (!Array.isArray(it.tags) || !it.tags.some(t => /^(m|e|cat):/.test(t)))) {
+                fails.push('CATS.' + sec + ': ' + it.id + ' — нет префиксных тегов tags');
+            }
+            if (it.icon && !ctx.ICONS[it.icon]) fails.push('CATS.' + sec + ': ' + it.id + ' — нет иконки ' + it.icon);
+        }
     }
 }
 if (ctx.CATALOG) {
@@ -127,6 +149,30 @@ try {
     if (IBM(null, new Date(2026, 10, 9))) fails.push('isBirthMonth: null → false');
 } catch (e) {
     fails.push('юниты даты рождения не выполняются: ' + e.message);
+}
+
+/* [EXR-T4 fix] юниты mgTagKey: алиасы bi/трицепса → «Руки» (arms) — без них подходы
+   на руки молча пропадают из «Мышечных групп · эта неделя» при новой схеме тегов */
+try {
+    const mg = new Function(grabFn(app, 'mgTagKey') + '\nreturn mgTagKey;')();
+    for (const [tag, key] of [['m:biceps', 'arms'], ['m:triceps', 'arms'], ['m:chest', 'chest'],
+        ['m:back', 'back'], ['m:shoulders', 'shoulders'], ['m:legs', 'legs'], ['m:core', 'core'],
+        ['m:glutes', 'glutes'], ['arms', 'arms'], ['chest', 'chest']]) {
+        if (mg(tag) !== key) fails.push('mgTagKey(' + tag + ') = ' + mg(tag) + ', ожидалось ' + key);
+    }
+    /* каждая группа фильтра мышц обязана давать существующий ключ MG_STYLE */
+    const mgBlock = app.match(/const MG_STYLE = \{([\s\S]*?)\};/);
+    if (!mgBlock) {
+        fails.push('app.js: не найден MG_STYLE');
+    } else {
+        const styleKeys = new Set(Array.from(mgBlock[1].matchAll(/([a-z]+)\s*:/g)).map(function (m) { return m[1]; }));
+        const F = ctx.FILTERS;
+        for (const it of ((F && F.muscle && F.muscle.items) || [])) {
+            if (!styleKeys.has(mg(it.id))) fails.push('FILTERS.muscle: ' + it.id + ' → ключ "' + mg(it.id) + '" отсутствует в MG_STYLE');
+        }
+    }
+} catch (e) {
+    fails.push('юниты mgTagKey не выполняются: ' + e.message);
 }
 
 if (fails.length) {

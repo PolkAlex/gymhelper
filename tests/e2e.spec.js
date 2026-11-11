@@ -383,19 +383,20 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('#techList .excard', { hasText: 'Подтягивания' })).toHaveCount(0);
     });
 
-    test('фильтры каталога в пикере', async ({ page }) => {
+    test('фильтры каталога в пикере [EXR-T4 fix]: «Инвентарь» вместо «Блок», «Вид» удалена', async ({ page }) => {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
         await page.locator('[data-act="openPicker"]').click();
-        const logs = [];
-        page.on('console', function (msg) { logs.push(msg.text()); });
         const modal = page.locator('.modal.open');
-        await modal.locator('.secrow .chip', { hasText: 'Вид' }).click();
-        await expect(page.locator('.modal.open .secrow .chip', { hasText: 'Жим' })).toBeVisible({ timeout: 5000 });
-        await modal.locator('.secrow .chip', { hasText: 'Жим' }).click();
-        await expect(page.locator('#pickerList .excard').first()).toBeVisible({ timeout: 5000 });
-        console.log('PICKER LOGS:\n' + logs.join('\n'));
+        /* секции пикера: «Вид» отменена владельцем, вместо «Блок» — «Инвентарь» [EXR-T4] */
+        const sections = await modal.locator('#pickerSections .chip').allTextContents();
+        if (sections.indexOf('Вид') !== -1) throw new Error('секция «Вид» должна быть удалена: ' + JSON.stringify(sections));
+        if (sections.indexOf('Инвентарь') === -1) throw new Error('нет секции «Инвентарь»: ' + JSON.stringify(sections));
+        await modal.locator('#pickerSections .chip', { hasText: 'Инвентарь' }).click();
+        await expect(modal.locator('#pickerCats .chip', { hasText: 'Штанга' })).toBeVisible({ timeout: 5000 });
+        await modal.locator('#pickerCats .chip', { hasText: 'Штанга' }).click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible({ timeout: 5000 });
     });
 
     test('навигация по вкладкам, тренер и настройки', async ({ page }) => {
@@ -893,6 +894,23 @@ test.describe('GymHelper e2e', function () {
         await back.click();
         await expect(back).toHaveClass(/on/, { timeout: 5000 });
         await expect(page.locator('#pickerList .excard', { hasText: 'Подтягивания' }).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('пикер [EXR-T4 fix]: составной «Руки» (OR бицепс/трицепс) и «Без инвентаря» не пустые', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        /* «Руки» — составной айтем CATS: OR m:biceps ∨ m:triceps (+ legacy-алиас arms) */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Мышцы' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Руки' }).click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Подъём штанги на бицепс' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#pickerList .excard', { hasText: 'Отжимания на брусьях' }).first()).toBeVisible({ timeout: 5000 });
+        /* «Без инвентаря»: e:none (+ legacy-алиасы body/home) */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Инвентарь' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Без инвентаря' }).click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Отжимания от пола' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' })).toHaveCount(0);
     });
 
     test('звезда добавляет в любимые', async ({ page }) => {
@@ -2297,9 +2315,9 @@ test.describe('EXR-T4: фильтры-мультивыбор «Техники»'
         await page.locator('.card .secrow .chip', { hasText: 'Инвентарь' }).click();
         const sheet = page.locator('.modal.open');
         await sheet.waitFor({ state: 'visible', timeout: 5000 });
-        /* 4 подзаголовка подгрупп инвентаря [EXR-T4] */
+        /* 5 подзаголовков подгрупп инвентаря [EXR-T4]: «Брусья и турник» — последняя (ревью PR #212) */
         const subs = await sheet.locator('.msub').allTextContents();
-        if (JSON.stringify(subs) !== JSON.stringify(['Свободные веса', 'Тренажёры', 'Мелкий инвентарь', 'Без инвентаря'])) {
+        if (JSON.stringify(subs) !== JSON.stringify(['Свободные веса', 'Тренажёры', 'Мелкий инвентарь', 'Без инвентаря', 'Брусья и турник'])) {
             throw new Error('подзаголовки инвентаря: ' + JSON.stringify(subs));
         }
         await sheet.locator('.frow', { hasText: 'Штанга' }).click();
@@ -2415,6 +2433,21 @@ test.describe('EXR-T4: фильтры-мультивыбор «Техники»'
         await page.locator('.modal.open .btnrow .btn', { hasText: 'Применить' }).click();
         await expect(page.locator('#techList .excard', { hasText: 'Жим гантелей лёжа' }).first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('#techList .excard', { hasText: 'Жим штанги лёжа' })).toHaveCount(0);
+    });
+
+    test('фон-закрытие шита обновляет чипы-счётчики и мини-чипы [EXR-T4 fix]', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Грудь' }).click();
+        /* тап по фону (вне modal-box) закрывает шит — экран должен перерисоваться */
+        await page.locator('#modal').click({ position: { x: 5, y: 5 } });
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        const chip = page.locator('.card .secrow .chip', { hasText: 'Группы мышц' });
+        await expect(chip).toHaveClass(/on/, { timeout: 5000 });
+        await expect(chip).toContainText('1');
+        await expect(page.locator('.fchip', { hasText: 'Грудь' })).toBeVisible();
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
     });
 });
 
