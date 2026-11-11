@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>[ONB] Онбординг и помощь · редакция 4 [ONB-update3 10.11] · Amber Glass</title>
+<title>[ONB] Онбординг и помощь · редакция 5 [ONB-update4 10.11] · Amber Glass</title>
 <style>
 /* ============ страница-презентация (как ux-s6-calendar.html) ============ */
 * { box-sizing: border-box; }
@@ -244,6 +244,20 @@ body.page {
 }
 .p.light .spot { box-shadow: 0 0 0 4000px rgba(22,24,27,.6); }
 .spot.rect { border-radius: 14px; }
+/* ред. 5 [ONB-update4]: подсветки ВЛОЖЕНЫ в целевые элементы — носитель
+   position:relative, ореол absolute с отрицательным inset (-8px/-7px).
+   Любые сдвиги вёрстки двигают элемент и подсветку ВМЕСТЕ — промах
+   координатами невозможен. Тень-затемнение 4000px работает из любой точки.
+   Порядок слоёв на фикс-экранах: content/topbar с инлайн z-index:46 там,
+   где затемнение должно накрыть nav (шаги 2 и 3) */
+.nfab, .nbtn, .ex-add, .tbpair { position: relative; }
+.tbpair { display: inline-flex; gap: 8px; }
+.spot.wrap.round { inset: -8px; border-radius: 50%; }          /* FAB (шаг 1) */
+.spot.wrap.box  { inset: -8px; border-radius: 14px; }          /* .ex-add (шаг 2) */
+.spot.wrap.pair { inset: -7px -6px; border-radius: 14px; }     /* пара [📅][⚙] (шаг 3) */
+.spot.wrap.tab  { inset: -7px -6px; border-radius: 14px;       /* таб «Статистика» (шаг 4) */
+    box-shadow: 0 0 0 4000px rgba(4,5,7,.66), 0 0 26px var(--glowbrd); }
+.p.light .spot.wrap.tab { box-shadow: 0 0 0 4000px rgba(22,24,27,.6), 0 0 26px var(--glowbrd); }
 .tip {
     position: absolute; z-index: 47; left: 12px; right: 12px;
     background: linear-gradient(180deg, rgba(32,33,38,.97), rgba(24,25,29,.97));
@@ -338,24 +352,16 @@ body.page {
     color: var(--accent); background: var(--glow); border: 1px solid var(--glowbrd);
     border-radius: 999px; padding: 4px 10px; white-space: nowrap;
 }
-.wni { display: flex; gap: 10px; align-items: center; padding: 9px 0; }
+.wni { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; }
 .wni + .wni { border-top: 1px solid var(--nestedbrd); }
-.wi {
-    flex: none; width: 34px; height: 34px; border-radius: 10px;
-    background: var(--glow); border: 1px solid var(--glowbrd);
-    display: flex; align-items: center; justify-content: center;
-    position: relative; /* ред. 4: якорь для абсолютного дублирования центрирования */
-}
-/* ред. 4 [ONB-update3]: svg — строчный элемент с baseline-сдвигом, эмодзи-наследие
-   «плавало» вверх-влево. ЖЁСТКОЕ центрирование в два слоя: (1) flex родителя,
-   (2) абсолют + inset:0 + margin:auto (не зависит от line-height/baseline).
-   display:block и фиксированные 18×18 — обязательно */
-.wi svg {
-    position: absolute; inset: 0; margin: auto;
-    display: block; width: 18px; height: 18px; color: var(--accent);
-}
-.wni b { display: block; font-size: 14px; }
-.wni span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+/* ред. 5 [ONB-update4]: подложки-иконки УБРАНЫ ПОЛНОСТЬЮ — решение владельца
+   после двух неудачных попыток центрирования («если не удаётся — пишем текстом
+   без картинок»). Пункт = жёлтая точка-маркер 6px + заголовок (bold) +
+   описание (muted); разделители — hairline. Никаких квадратов/svg в пунктах */
+.wni .mark { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 7px; }
+.wtx { flex: 1; min-width: 0; }
+.wtx b { display: block; font-size: 14px; color: var(--text); }
+.wtx span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .wnm .cta { height: 46px; font-size: 15px; margin-top: 12px; }
 
 /* ============ карточка активной тренировки (экран 7) — по реальной вёрстке web/app.js ============ */
@@ -475,19 +481,13 @@ body.page {
   <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 3l7 2.8v5.4c0 4.6-3 7.9-7 9.8-4-1.9-7-5.2-7-9.8V5.8L12 3z"/><path d="M9.2 11.8l2 2 3.6-3.8"/>
   </symbol>
-  <symbol id="i-trophy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-    <!-- кубок — пункт «Рекорд недели» в «Что новом» (ред. 3: SVG вместо эмодзи) -->
-    <path d="M7.5 4.5h9v4.2a4.5 4.5 0 11-9 0V4.5z"/>
-    <path d="M7.5 5.5H5.6a1.9 1.9 0 00-1.9 1.9c0 1.8 1.6 3.2 3.7 3.4"/>
-    <path d="M16.5 5.5h1.9a1.9 1.9 0 011.9 1.9c0 1.8-1.6 3.2-3.7 3.4"/>
-    <path d="M12 13.2v6.3"/><path d="M8.5 19.5h7"/>
-  </symbol>
+  <!-- i-trophy удалён в ред. 5: пункты «Что нового» — без иконок -->
 </svg>
 
 <!-- ================================================================== -->
 <!-- Вводка                                                             -->
 <!-- ================================================================== -->
-<div class="caption">Онбординг и помощь в Mini App · редакция 4 <span>ONB-update3 · 10.11</span></div>
+<div class="caption">Онбординг и помощь в Mini App · редакция 5 <span>ONB-update4 · 10.11</span></div>
 <p class="note">Редакция 2 по ответам владельца на черновик (10.11): <b>приветствие —
 вариант B «Карусель»</b> (дорисованы слайды 2–3, финальный слайд с кнопкой
 «Начать»); <b>туториал — подсказки поверх реальных экранов</b>, 4 шага
@@ -533,6 +533,22 @@ radius 16</b> (left 90, bottom 5; орантурный border + мягкое с�
 (<code>position:absolute; inset:0; margin:auto; display:block</code>,
 фиксированные 18×18, плюс атрибуты width/height на тегах svg) — иконка строго
 по центру квадрата, квадрат строго по центру строки.</p>
+<p class="note"><b>Редакция 5 [ONB-update4 10.11]:</b> (1) <b>подсветки туториала
+привязаны к целевым элементам</b> — два расчёта «от паддингов» дважды
+промахнулись, поэтому экранных координат больше нет вовсе: носитель получает
+<code>position:relative</code>, подсветка вложена в него с ореолом
+<code>inset:-8px</code> / <code>-7px</code> — элемент и подсветка двигаются
+вместе: шаг 1 — <code>.spot.wrap.round</code> внутри FAB; шаг 2 —
+<code>.spot.wrap.box</code> внутри <code>.ex-add</code>; шаг 3 —
+<code>.spot.wrap.pair</code> внутри обёртки пары кнопок <code>.tbpair</code>;
+шаг 4 — <code>.spot.wrap.tab</code> внутри таба «Статистика» (иконка+подпись
+обнимаются автоматически). Для затемнения панелей: <code>content</code> шага 2
+и <code>topbar</code> шага 3 подняты до z-46; (2) <b>«Что нового» — без
+иконок</b>: подложки-квадраты и SVG убраны полностью (решение владельца после
+двух неудачных попыток центрирования — «пишем текстом без картинок»): пункт =
+жёлтая точка-маркер 6px + заголовок bold + описание muted, hairline-разделители,
+равномерные отступы. Ракета 🚀 в заголовке модалки — текстовый элемент,
+осталась.</p>
 
 <!-- ================================================================== -->
 <!-- 1 · Приветствие · вариант B · слайд 1 из 3 (тёмная)                -->
@@ -739,9 +755,10 @@ muted. Слайды 2–3 в светлой теме собираются тем
 <p class="note">РЕШЕНИЕ ВЛАДЕЛЬЦА [ONB-update 10.11]: механика туториала —
 <b>подсказки поверх реальных экранов</b> (карточная механика не выбрана и из
 макета убрана). Правка 2.1: в ред. 1 кольцо не совпадало с плюсом — теперь
-<b>точно по FAB</b>: кнопка 52px стоит в центре нижней панели, её низ — 12px
-над краем экрана → центр в 38px от низа; кольцо <b>68px = FAB + 8px</b> ореола,
-<code>bottom: 4px</code>, по горизонтали — центр экрана. Поверх — затемнение
+<b>точно по FAB</b>. <b>Ред. 5</b>: подсветка <b>вложена прямо в кнопку</b>
+(<code>.nfab</code> → <code>.spot.wrap.round</code>, ореол
+<code>inset:-8px</code> = 68px вокруг 52px FAB) — экранных координат больше
+нет, элемент и кольцо двигаются вместе при любых сдвигах вёрстки. Поверх — затемнение
 (<code>box-shadow: 0 0 0 4000px</code>) и тултип «Шаг N из 4» с кнопками
 <b>«Дальше»</b> / <b>«Пропустить»</b> (пропуск на каждом шаге — решение 4);
 на время туториала элементы под подсказкой не кликаются. Автопоказ — новым
@@ -780,12 +797,10 @@ muted. Слайды 2–3 в светлой теме собираются тем
   <div class="nav">
     <button class="nbtn on"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
-    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg><span class="spot wrap round" aria-hidden="true"></span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- оверлей туториала: спотлайт 68px = FAB 52px + 8px ореола, центр FAB (низ 12px + 26px = 38px → кольцо bottom 4px) -->
-  <div class="spot" style="left:50%;bottom:4px;width:68px;height:68px;transform:translateX(-50%);"></div>
   <div class="tip" style="bottom:84px;">
     <div class="step">Шаг 1 из 4 · Новая тренировка</div>
     <div class="tt">Начать — жёлтый «+» внизу</div>
@@ -811,12 +826,15 @@ muted. Слайды 2–3 в светлой теме собираются тем
 <code>.entry</code> «80 кг, 2 подхода по 8 повторений», у рекордной — чип
 🏆 с оценкой 1ПМ; под записями — «упражнение активно — время идёт».
 Внизу — фиксированный backbar активной: «🗑 Удалить» / «<b>✓ Завершить</b>»
-(жёлтая prime) / «← Назад» [UX-T22]. Спотлайт — на <code>.ex-add</code>
-первого упражнения (кольцо 56px по центру кнопки), тултип ниже. Экран фикс
-(без скролла) — спотлайт и тултип привязаны к кадру.</p>
+(жёлтая prime) / «← Назад» [UX-T22]. Подсветка — <b>вложена в
+<code>.ex-add</code></b> первого упражнения (<code>.spot.wrap.box</code>,
+ореол <code>inset:-8px</code> — ред. 5; расчётные координаты удалены вовсе,
+т.к. дважды расходились с фактическим рендером), тултип ниже.
+<code>content</code> поднят до z-46, чтобы затемнение накрыло шапку и панель.
+Экран фикс (без скролла) — тултип привязан к кадру.</p>
 <div class="phone"><div class="p fix">
   <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
-  <div class="content" style="padding-bottom:150px;">
+  <div class="content" style="padding-bottom:150px; z-index:46;">
     <div class="glass">
       <div class="wchead act">
         <div class="wctitles"><p class="t1">09-11 ПН</p></div>
@@ -828,7 +846,7 @@ muted. Слайды 2–3 в светлой теме собираются тем
           <span class="ico"><svg><use href="#i-barbell"/></svg></span>
           <span class="exname">Жим лёжа</span>
           <button class="barebtn trash-bare" title="Удалить упражнение"><svg><use href="#i-trash"/></svg></button>
-          <button class="ex-add" title="Добавить запись"><svg><use href="#i-plus-thin"/></svg></button>
+          <button class="ex-add" title="Добавить запись"><svg><use href="#i-plus-thin"/></svg><span class="spot wrap box" aria-hidden="true"></span></button>
         </div>
         <div class="entry"><span class="rectext">80 кг, 2 подхода по 8 повторений</span></div>
         <div class="entry"><span class="rectext">82,5 кг, 1 подход по 6 повторений</span><span class="prtag">🏆 99</span></div>
@@ -859,13 +877,8 @@ muted. Слайды 2–3 в светлой теме собираются тем
     <button class="btn prime">✓ Завершить</button>
     <button class="btn sec icbtn bb-back"><svg><use href="#i-back"/></svg><span>Назад</span></button>
   </div></div>
-  <!-- оверлей туториала: спотлайт на .ex-add — РАСЧЁТ ред. 3:
-       строка exhead x∈[38,352] (контент 12 + карточка 15 + expill 11), справа
-       trash 33px → [287,320], gap 8 → ex-add 24px → [328,352], центр x=340;
-       вертикаль: topbar до 58 +12 → карточка с 70, wchead [85,117], wcpill
-       [125,158], expill top 168 +1+10 → exhead [179,211], центр y=195.
-       Кольцо 44px = (340;195)±22 → left 318, top 173 -->
-  <div class="spot" style="left:318px;top:173px;width:44px;height:44px;"></div>
+  <!-- ред. 5: подсветка шага 2 ВЛОЖЕНА в .ex-add (см. разметку кнопки выше,
+       ореол inset:-8px) — экранные координаты не используются вовсе -->
   <div class="tip" style="top:228px;">
     <div class="step">Шаг 2 из 4 · Подходы</div>
     <div class="tt">Тонкий «+» у названия упражнения — запись подхода</div>
@@ -878,14 +891,17 @@ muted. Слайды 2–3 в светлой теме собираются тем
 <!-- 8 · Туториал · подсказки поверх · шаг 3/4 (календарь/настройки)    -->
 <!-- ================================================================== -->
 <div class="caption">8 · Туториал · подсказки поверх · шаг 3/4 <span>спотлайт на [ 📅 ][ ⚙ ]</span></div>
-<p class="note">Шаг 3 — «где что лежит»: спотлайт на паре кнопок в шапке
-[ 📅 ][ ⚙ ] (календарь — [UX-S6], настройки — [UX-S4]). Кольцо подогнано
-под пару (88×44px, отступ от края шапки). Тултип можно ставить и сверху
-(как здесь), и снизу — позиция выбирается по месту элемента на экране.
+<p class="note">Шаг 3 — «где что лежит»: подсветка на паре кнопок в шапке
+[ 📅 ][ ⚙ ] (календарь — [UX-S6], настройки — [UX-S4]). <b>Ред. 5</b>: пара
+обёрнута в <code>.tbpair</code> (position:relative), подсветка
+<code>.spot.wrap.pair</code> вложена в неё с ореолом
+<code>inset:-7px/-6px</code> — двигается с кнопками; <code>topbar</code>
+поднят до z-46, чтобы затемнение накрыло нижнюю панель. Тултип можно ставить
+и сверху (как здесь), и снизу — позиция выбирается по месту элемента на экране.
 Шаг 4 — таб «Статистика» (экран 9). После шага 4 туториал завершается молча
 (без финального «поздравляем» — лишний экран).</p>
 <div class="phone"><div class="p fix">
-  <div class="topbar"><span class="tb-title">GymHelper · История</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
+  <div class="topbar" style="z-index:46;"><span class="tb-title">GymHelper · История</span><span class="tbpair"><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button><span class="spot wrap pair" aria-hidden="true"></span></span></div>
   <div class="content" style="padding-bottom:110px;">
     <div class="reccard">
       <div class="rec-l">Рекорд недели · Жим лёжа</div>
@@ -913,9 +929,9 @@ muted. Слайды 2–3 в светлой теме собираются тем
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- оверлей туториала: спотлайт на пару [ 📅 ][ ⚙ ] + тултип под шапкой -->
-  <div class="spot rect" style="right:6px;top:8px;width:88px;height:44px;"></div>
-  <div class="tip" style="top:66px;">
+<!-- ред. 5: подсветка шага 3 ВЛОЖЕНА в .tbpair (обёртка пары кнопок в topbar,
+     ореол inset:-7px/-6px); topbar поднят до z-46, чтобы затемнение накрыло nav -->
+<div class="tip" style="top:66px;">
     <div class="step">Шаг 3 из 4 · Календарь и настройки</div>
     <div class="tt">📅 — месяц тренировок, ⚙️ — настройки</div>
     <p class="tx">В календаре видны все дни с тренировками, в настройках — тема, таймер отдыха, звук и «Что нового».</p>
@@ -936,12 +952,12 @@ muted. Слайды 2–3 в светлой теме собираются тем
 Эпли, объём и время. На этом шаг туториал завершается молча. <b>Фикс ред. 3</b>:
 на фикс-экранах sticky-nav без скролла не прилипал к низу (висел в потоке,
 под ним было ~50px пустоты — подсветка попадала под панель); теперь
-<code>.p.fix .nav</code> прибит абсолютом к нижнему краю. <b>Фикс ред. 4</b>:
-круг 48px обрамлял только иконку — подпись «Статистика» торчала из него
-по горизонтали; вместо кольца — <b>скруглённый прямоугольник 72×56px,
-radius 16</b> (left 90, bottom 5; центр x=125.75, центр блока 32.75px от
-низа) с орантурным border'ом и мягким свечением, охватывающий «иконка сверху +
-подпись снизу» целиком с полями ~6–9px.</p>
+<code>.p.fix .nav</code> прибит абсолютом к нижнему краю. <b>Фиксы ред. 4–5</b>:
+круг 48px обрамлял только иконку, прямоугольник 72×56 — считался от экранных
+координат; с <b>ред. 5</b> подсветка <code>.spot.wrap.tab</code> <b>вложена в
+сам таб «Статистика»</b> (ореол <code>inset:-7px/-6px</code>, radius 14,
+мягкое свечение вторым слоем box-shadow) — «иконка + подпись» обнимаются
+автоматически, координаты не нужны.</p>
 <div class="phone"><div class="p fix">
   <div class="topbar"><span class="tb-title">GymHelper · Статистика</span><button class="tbtn" title="Календарь" aria-label="Календарь"><svg><use href="#i-cal"/></svg></button><button class="tbtn" title="Настройки" aria-label="Настройки"><svg><use href="#i-gear"/></svg></button></div>
   <div class="content" style="padding-bottom:110px;">
@@ -966,22 +982,14 @@ radius 16</b> (left 90, bottom 5; центр x=125.75, центр блока 32.
   </div>
   <div class="nav">
     <button class="nbtn"><span class="nic"><svg><use href="#i-history"/></svg></span><span class="nlabel">История</span></button>
-    <button class="nbtn on"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span></button>
+    <button class="nbtn on"><span class="nic"><svg><use href="#i-chart"/></svg></span><span class="nlabel">Статистика</span><span class="spot wrap tab" aria-hidden="true"></span></button>
     <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span class="nlabel">Техника</span></button>
     <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span class="nlabel">Профиль</span></button>
   </div>
-  <!-- оверлей туториала: подсветка таба «Статистика» — РАСЧЁТ ред. 4:
-       nav прибита к низу (.p.fix .nav absolute, высота 72px, [688,760]):
-       табы по 74.5px (внутр. 362 = 390−28, минус FAB-зона 64), таб 2
-       «Статистика» [88.5,163], центр x = 125.75. nbtn bottom = 748
-       (padding-bottom 12), высота 41.5 → [706.5,748]; иконка [708.5,728.5],
-       подпись [731.5,746] → блок [708.5,746], центр y = 727.25 (32.75 от низа).
-       ПРЯМОУГОЛЬНИК 72×56 (круг 48px обрамлял только иконку — подпись
-       «Статистика» торчала по горизонтали): left = 125.75−36 = 89.75 ≈ 90,
-       bottom = 32.75−28 = 4.75 ≈ 5, radius 16, поля ~6–9px вокруг блока.
-       Мягкое свечение — второй слой box-shadow поверх затемнения -->
-  <div class="spot rect" style="left:90px;bottom:5px;width:72px;height:56px;border-radius:16px;box-shadow:0 0 0 4000px rgba(4,5,7,.66), 0 0 26px var(--glowbrd);"></div>
+  <!-- ред. 5: подсветка шага 4 ВЛОЖЕНА в таб «Статистика» (второй .nbtn выше,
+       ореол inset:-7px/-6px, свечение вторым слоем box-shadow) — «иконка +
+       подпись» обнимаются автоматически при любых сдвигах -->
   <div class="tip" style="bottom:84px;">
     <div class="step">Шаг 4 из 4 · Прогресс</div>
     <div class="tt">Статистика — второй таб слева</div>
@@ -1292,10 +1300,10 @@ flex'ом, строки центрированы по вертикали (<code>
     <div class="wnm">
       <div class="wnh"><span class="t1">🚀 Что нового</span><span class="relpill">Релиз 1.31</span></div>
       <div style="margin-top:8px;">
-        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-cal"/></svg></span><span><b>Календарь тренировок</b><span>Месяц целиком: точки по дням, тап — панель дня</span></span></div>
-        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-trophy"/></svg></span><span><b>Рекорд недели</b><span>Карточка в Статистике: насколько Вы близки к личному максимуму</span></span></div>
-        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-plus-thin"/></svg></span><span><b>Шаг веса 0,25 кг</b><span>Микродобавки в пикере — когда +2,5 кг это много</span></span></div>
-        <div class="wni"><span class="wi"><svg width="18" height="18"><use href="#i-gear"/></svg></span><span><b>Помощь и «Что нового»</b><span>FAQ, подсказки и настройки обновлений — в ⚙️ шапки</span></span></div>
+        <div class="wni"><i class="mark"></i><div class="wtx"><b>Календарь тренировок</b><span>Месяц целиком: точки по дням, тап — панель дня</span></div></div>
+        <div class="wni"><i class="mark"></i><div class="wtx"><b>Рекорд недели</b><span>Карточка в Статистике: насколько Вы близки к личному максимуму</span></div></div>
+        <div class="wni"><i class="mark"></i><div class="wtx"><b>Шаг веса 0,25 кг</b><span>Микродобавки в пикере — когда +2,5 кг это много</span></div></div>
+        <div class="wni"><i class="mark"></i><div class="wtx"><b>Помощь и «Что нового»</b><span>FAQ, подсказки и настройки обновлений — в ⚙️ шапки</span></div></div>
       </div>
       <button class="cta">Понятно</button>
       <button class="wnskip">Больше не показывать</button>
