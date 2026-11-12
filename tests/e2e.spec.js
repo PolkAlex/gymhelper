@@ -4125,6 +4125,46 @@ test.describe('UX-T32: фото упражнений в Истории и Ста
 
 });
 
+/* ===== [EXR-T9] пикер: фото вместо иконок в карточках каталога ===== */
+test.describe('EXR-T9: фото упражнений в пикере', function () {
+
+    test('карточка каталога с img — фото (naturalWidth>0), «своё» — прежняя иконка; в «★ Любимых» — тоже фото', async ({ page }) => {
+        await openApp(page);
+        /* сеём своё упражнение до старта — customBase() читается из localStorage при рендере */
+        await page.evaluate(function () {
+            try { localStorage.setItem('gymCustomEx', '["Моё упражнение"]'); } catch (e) { /* noop */ }
+        });
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        /* секция «Все»: карточка каталога с привязкой к базе — фото вместо иконки, .ico нет */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        const card = page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first();
+        const thumb = card.locator('img.exthumb');
+        await expect(thumb).toHaveAttribute('src', /img\/exercises\/bench-0\.jpg$/, { timeout: 5000 });
+        await expect(card.locator('.ico')).toHaveCount(0);
+        await thumb.scrollIntoViewIfNeeded();
+        await expect.poll(async () => thumb.evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
+        /* «своё» упражнение (без img) — прежняя SVG-иконка, без фото */
+        const own = page.locator('#pickerList .excard', { hasText: 'Моё упражнение' });
+        await expect(own.locator('.ico')).toHaveCount(1, { timeout: 5000 });
+        await expect(own.locator('img')).toHaveCount(0);
+        /* секция «★ Любимые»: карточка любимого тоже с фото, фолбэк не вернулся */
+        await card.locator('.star').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
+        const fav = page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first();
+        await expect(fav.locator('img.exthumb')).toHaveAttribute('src', /bench-0\.jpg$/, { timeout: 5000 });
+        await expect(fav.locator('.ico')).toHaveCount(0);
+        /* «Коллекции» → «Свои»: своя карточка через exCardByName — тоже иконка */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        const ownColl = page.locator('#pickerList .excard', { hasText: 'Моё упражнение' });
+        await expect(ownColl.locator('.ico')).toHaveCount(1, { timeout: 5000 });
+        await expect(ownColl.locator('img')).toHaveCount(0);
+    });
+
+});
+
 /* ===== [ONB-T3..T7] онбординг: приветствие, туториал, Помощь, «Что нового», контакты ===== */
 
 /* вторая порция init-скриптов выполняется ПОСЛЕ общей: сброс флагов = чистый localStorage.

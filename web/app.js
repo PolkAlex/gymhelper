@@ -2903,15 +2903,17 @@ function addCustomBase(n) {
     a.push(n);
     try { localStorage.setItem('gymCustomEx', JSON.stringify(a)); } catch (e) { /* noop */ }
 }
+/* [EXR-T9] карточки пикера: фото вместо иконки — тот же exVisual, что в Технике
+   (записи каталога без img и «свои» — прежняя SVG-иконка); чипы категорий не тронуты */
 function exCard(c) {
-    return '<div class="excard" data-act="pickCatEx" data-a="' + esc(c.n) + '">' + ico(c.i) +
+    return '<div class="excard" data-act="pickCatEx" data-a="' + esc(c.n) + '">' + exVisual(c) +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div>' +
         '<div class="extags">' + exTagHashes(c, 3) + '</div></span>' + starHtml(c.n) + '</div>';
 }
 function exCardByName(name) {
     const c = findCatalog(name);
     const tags = c ? exTagHashes(c, 3) : '#своё';
-    return '<div class="excard" data-act="pickCatEx" data-a="' + esc(name) + '">' + (c ? ico(c.i) : ico('custom')) +
+    return '<div class="excard" data-act="pickCatEx" data-a="' + esc(name) + '">' + (c ? exVisual(c) : ico('custom')) +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(name) + '</div><div class="extags">' + tags + '</div></span>' + starHtml(name) + '</div>';
 }
 function starHtml(name) {
