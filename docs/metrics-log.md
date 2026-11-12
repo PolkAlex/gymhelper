@@ -125,6 +125,13 @@ In Dev: 0; Code Review: 0; In Test: 0 — все тикеты дня Done (Ре�
 
 | Дата | Тикеты | Было | Стало | Примечание |
 |---|---|---|---|---|
+### Релиз 1.33-кандидат — EXR ночь + онбординг + фото-везде (11.11.2026, Ready To Deploy, ждёт вечера)
+
+| Дата | Тикеты | Было | Стало | Примечание |
+|---|---|---|---|---|
+| 11.11.2026 | #218 [EXR-T7], #219 [EXR-T8], #220 [EXR-T9], #221 [ANA-T3] | - | In Dev | задания владельца «улучшай, ускоряй, пиши тесты»: [EXR-T7] gzip (PR #224, −75.5% статики: 470KB→115KB, кэш сжатых байтов, Java-тест реального сервера), [EXR-T8] (PR #225: path traversal гвард toRealPath+`..`-запрет — дыра была pre-existing, мок Cache-Control, e2e сырым сокетом), [EXR-T9] (PR #222: пикер-фото через exVisual, fallback иконка у «своих»), [ANA-T3] (PR #223: AbortSignal.timeout 30с, шапка+source, Node 18+ пометка); ревью APPROVE ×4 (#225 rebase на #224 — конфликт GymContractTest сохранены оба блока) |
+| 11.11.2026 | #218 [EXR-T7], #219 [EXR-T8], #220 [EXR-T9], #221 [ANA-T3], #206 [EXR-E1], #207 [EXR-S2], #208 [EXR-S3] | In Dev/Code Review | Ready To Deploy | merges #224→#225(rebase, GymContractTest оба блока)→#222→#223; CI main success (Docker publish); полный цикл tester'а: UNIT 191 + CONTRACT 181 (gzip 18 + traversal 5) + e2e **636 passed (159×4)**, 0 failed; интеграция gzip+гвард+кэш на прод-WebServer probe 25/25; **деплой вечером после проверки владельцем** (EXR-ночь фото/тексты/вычитка, макет фильтров, онбординг-фронт, RELNOTES 1.33 предложить и утвердить, APP_VERSION бамп при релизе) |
+
 ### Релиз 1.32 — Онбординг T3–T7 + фото-везде UX-I3 (11.11.2026, Ready To Deploy → Done)
 
 | Дата | Тикеты | Было | Стало | Примечание |
