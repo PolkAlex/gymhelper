@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[EXR-T4] Фильтры «Техники» · реализовано (PR #212/#213) · Amber Glass</title>
+<style>
+/* ============ страница-презентация (каркас как onb-onboarding.html) ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 760px; margin: 0 auto; }
+.intro { max-width: 560px; margin: 0 auto 6px; font-size: 18px; font-weight: 700; color: #f2f3f5; line-height: 1.4; }
+.intro-note { max-width: 560px; margin: 0 auto 4px; font-size: 13px; color: #7d838e; line-height: 1.6; }
+.intro-note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+.caption { margin: 42px auto 12px; max-width: 520px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px auto 14px; max-width: 520px; font-size: 12.5px; color: #7d838e; line-height: 1.6; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+
+/* ============ телефон 390px (компакт — 320px) ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.phone.small { max-width: 320px; height: 640px; border-radius: 30px; }
+.p {
+    /* тёмная тема (базовая) — значения из web/style.css */
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    --btnpressed: rgba(255,255,255,.12);
+    --field: rgba(0,0,0,.22); --fieldbrd: rgba(255,255,255,.12);
+    --sheet: rgba(30,32,38,.92); --backdrop: rgba(8,9,11,.55);
+    --cardshadow: rgba(0,0,0,.28); --blik: rgba(255,255,255,.06);
+    --navidle: #6d737d;
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    scrollbar-width: none;
+}
+.p.fix { overflow: hidden; }
+.p::before {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+/* ============ topbar (как в web/style.css) ============ */
+.topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 10px 12px; max-width: 536px; margin: 4px 0 12px;
+}
+.tb-title { font-weight: 700; font-size: 17px; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
+.tb-user {
+    width: 32px; height: 32px; border-radius: 9px; border: none; background: var(--btn);
+    color: var(--muted); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex: none;
+}
+.tb-user svg { width: 18px; height: 18px; }
+.tbpair { display: inline-flex; gap: 8px; align-items: center; position: relative; }
+.content { padding: 0 12px 120px; }
+
+/* ============ нижняя навигация ============ */
+.nav {
+    position: sticky; bottom: 0; z-index: 40;
+    margin: 0 -12px; padding: 8px 18px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--navidle); font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn .nlabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nico { color: var(--accent); }
+.nav .nico { display: inline-flex; line-height: 1; }
+.nav .nico svg { width: 20px; height: 20px; color: inherit; stroke: currentColor; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px;
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+.nav .nfab svg { width: 24px; height: 24px; stroke-width: 2.2; }
+
+/* ============ карточки / текст ============ */
+.card {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; padding: 14px; margin-bottom: 10px;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow);
+}
+.t1 { font-size: 18px; font-weight: 700; margin: 0 0 2px; letter-spacing: .2px; }
+.muted { color: var(--muted); font-size: 13px; }
+.empty { text-align: center; color: var(--muted); margin: 34px 12px; }
+
+/* ============ кнопки ============ */
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; margin-bottom: 2px; }
+.btn {
+    border: none; border-radius: 14px; padding: 9px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    background: var(--btn); border: 1px solid var(--btnbrd);
+    color: var(--text); touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    font-family: inherit;
+}
+.btn.sec { background: var(--btn); color: var(--text); }
+.btn.wide { flex: 1 1 100%; }
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent);
+    font-weight: 700; padding: 11px; font-size: 15px;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+
+/* чипы-фильтры и секции (значения из web/style.css) */
+.chip {
+    border: 1px solid var(--btnbrd); color: var(--text); background: var(--btn);
+    border-radius: 999px; padding: 8px 13px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    font-variant-numeric: tabular-nums; touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent; font-family: inherit;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.secrow { display: flex; gap: 6px; margin: 10px 0 6px; flex-wrap: wrap; }
+.searchbox { margin: 8px 0 2px; }
+input {
+    width: 100%; box-sizing: border-box;
+    border: 1px solid var(--fieldbrd); border-radius: 12px;
+    padding: 10px 12px; font-size: 15px;
+    background: var(--field); color: var(--text); outline: none;
+    font-family: inherit;
+}
+input::placeholder { color: var(--muted); }
+
+/* ============ [EXR-T4] счётчик, мини-чипы, шит-чекбоксы (значения из web/style.css) ============ */
+.cnt {
+    display: inline-block; min-width: 17px; margin-left: 5px; padding: 1px 5px;
+    border-radius: 999px; background: rgba(255,255,255,.28);
+    font-size: 11px; font-weight: 700; text-align: center; vertical-align: 1px;
+}
+.fselrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 6px; }
+.fsellabel { font-size: 11.5px; font-weight: 600; color: var(--muted); margin-right: 2px; }
+.fchip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 6px 4px 10px; border-radius: 999px;
+    background: var(--btn); border: 1px solid var(--btnbrd);
+    font-size: 12px; font-weight: 600; color: var(--text);
+}
+.fchip-x {
+    border: none; background: none; color: var(--muted);
+    font-size: 13px; font-weight: 700; line-height: 1;
+    padding: 2px 4px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    font-family: inherit;
+}
+.fclear {
+    border: none; background: none; color: var(--accent);
+    font-size: 12px; font-weight: 600; padding: 4px 6px;
+    cursor: pointer; -webkit-tap-highlight-color: transparent; font-family: inherit;
+}
+.frow {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; text-align: left; padding: 10px 12px; margin: 4px 0;
+    border-radius: 14px; border: 1px solid var(--btnbrd);
+    background: var(--btn); color: var(--text);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+    font-family: inherit;
+}
+.frow .fbox {
+    flex: none; width: 22px; height: 22px; border-radius: 7px;
+    border: 1.5px solid var(--btnbrd);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: transparent; background: var(--sheet);
+}
+.frow .fbox svg { width: 14px; height: 14px; }
+.frow.on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.frow.on .fbox { border-color: var(--on-accent); background: rgba(255,255,255,.22); color: var(--on-accent); }
+
+/* ============ карточки упражнений / каталог ============ */
+.ico {
+    display: inline-flex; width: 40px; height: 40px; flex: none;
+    align-items: center; justify-content: center;
+    border-radius: 12px; background: var(--btn);
+    border: 1px solid var(--glassbrd); color: var(--accent);
+}
+.ico svg { width: 24px; height: 24px; }
+.excard {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 16px; padding: 9px 11px; cursor: pointer;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--blik);
+}
+.excard .exn { font-size: 14px; font-weight: 700; }
+.excard .extags { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.exgrid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.exthumb {
+    width: 40px; height: 40px; flex: none; border-radius: 12px;
+    object-fit: cover; border: 1px solid var(--glassbrd); background: var(--btn);
+}
+/* подменяет <img> в макете: серый градиент + глиф = реальное фото img/exercises/<id>-0.jpg */
+.exthumb.ph {
+    display: inline-flex; align-items: center; justify-content: center;
+    background: linear-gradient(155deg, #43464e, #2a2d33 55%, #353840);
+    color: rgba(242,243,245,.5);
+}
+.exthumb.ph svg { width: 20px; height: 20px; }
+.star { font-size: 17px; line-height: 1; color: var(--navidle); padding: 6px 2px 6px 8px; flex: none; }
+
+/* ============ модалки (bottom sheet) ============ */
+.mabs {
+    position: absolute; inset: 0; z-index: 50;
+    background: var(--backdrop);
+    display: flex; align-items: flex-end; justify-content: center;
+}
+.modal-box {
+    background: var(--sheet); color: var(--text);
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glassbrd); border-bottom: none;
+    width: 100%; max-width: 560px;
+    border-radius: 22px 22px 0 0;
+    padding: 12px 14px 14px;
+    max-height: calc(100% - 64px);
+    overflow-y: auto; scrollbar-width: none;
+}
+.modal-box::-webkit-scrollbar { display: none; }
+.mtitle { font-size: 17px; font-weight: 700; margin: 0 0 6px; }
+.mtitle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mtitle-row .mtitle { flex: 1; min-width: 0; margin: 0; }
+.msub { color: var(--accent); font-size: 12.5px; font-weight: 600; margin: 0 0 2px; }
+.barebtn {
+    background: none; border: none; padding: 7px; cursor: pointer;
+    display: inline-flex; color: var(--muted);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+}
+.barebtn svg { width: 18px; height: 18px; }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+<p class="intro">Макет фильтров Техники — соответствует реализации EXR-T4 (PR #212), владелец проверяет перед выкаткой</p>
+<p class="intro-note">Источники 1-в-1: <code>web/app.js</code> (techChipsHtml / techSheetHtml / techFiltered / techSelRowHtml / emptyFiltersHtml / renderPickerModal), <code>web/catalog.js</code> (FILTERS / CATS / ICONS), <code>web/style.css</code> (блок EXR-T4 и Amber Glass). Геометрия и классы (.chip, .cnt, .fselrow, .fchip, .frow, .fbox, .msub) — фактические значения из прод-стилей. Серый квадрат в карточке = реальное фото <code>img/exercises/&lt;id&gt;-0.jpg</code>. Тексты интерфейса скопированы из кода дословно — обращений «вы» в этой фиче нет.</p>
+
+<!-- ================================================================
+     ЭКРАН 1 · Техника · дефолт (Все)
+================================================================ -->
+<p class="caption">1 · Техника · дефолт «Все» <span>techChipsHtml</span></p>
+<p class="note"><b>Что проверить:</b> topbar «GymHelper · Техника» + пара [📅][⚙] в <code>.tbpair</code>. Два ряда чипов как в коде: режимы «★ Любимые · Своё · Все · Коллекции» и ряд фильтров «Группы мышц · Инвентарь · Кардио · Растяжка · Разминка и заминка · Стретчинг» (порядок e2e UX-T19). «Все» активен. Поиск «Поиск упражнения...». Теги карточек — без служебных префиксов (#chest, не #m:chest). ☆ — тогл любимых. Список обрезан: на входе «Все» показывает весь каталог (100+ карточек).</p>
+<div class="phone"><div class="p">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user" title="Календарь"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+            <div class="searchbox"><input type="text" placeholder="Поиск упражнения..."></div>
+            <div class="secrow">
+                <button class="chip">★ Любимые</button>
+                <button class="chip">Своё</button>
+                <button class="chip on">Все</button>
+                <button class="chip">Коллекции</button>
+            </div>
+            <div class="secrow">
+                <button class="chip">Группы мышц</button>
+                <button class="chip">Инвентарь</button>
+                <button class="chip">Кардио</button>
+                <button class="chip">Растяжка</button>
+                <button class="chip">Разминка и заминка</button>
+                <button class="chip">Стретчинг</button>
+            </div>
+        </div>
+        <div class="exgrid">
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Жим штанги лёжа</div><div class="extags">#chest #barbell #bench</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Жим гантелей лёжа</div><div class="extags">#chest #dumbbell #bench</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Приседания со штангой</div><div class="extags">#legs #glutes #barbell</div></span>
+                <span class="star">☆</span>
+            </div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/></svg></span><span class="nlabel">История</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/></svg></span><span class="nlabel">Статистика</span></button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/></svg></span><span class="nlabel">Техника</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/></svg></span><span class="nlabel">Профиль</span></button>
+    </div>
+</div></div>
+
+<!-- ================================================================
+     ЭКРАН 2 · Sheet «Группы мышц» — 2 выбрано
+================================================================ -->
+<p class="caption">2 · Sheet «Группы мышц» — 2 выбрано <span>techSheetHtml('muscle')</span></p>
+<p class="note"><b>Что проверить:</b> 8 строк <code>.frow</code> (Грудь / Спина / Плечи / Ноги / Кор и пресс / Ягодицы / Бицепс / Трицепс). Выбранные — янтарные <code>.frow.on</code>, галка в ящике <code>.fbox</code>. Счётчик <code>#sheetCnt</code> = 2 растёт без перерисовки модалки. «Применить» (btn prime wide) и ✕ (barebtn) закрывают шит с сохранением выбора; тап по фону — тоже сохраняет [EXR-T4 fix].</p>
+<div class="phone"><div class="p fix">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+            <div class="searchbox"><input type="text" placeholder="Поиск упражнения..."></div>
+            <div class="secrow">
+                <button class="chip">★ Любимые</button>
+                <button class="chip">Своё</button>
+                <button class="chip on">Все</button>
+                <button class="chip">Коллекции</button>
+            </div>
+            <div class="secrow">
+                <button class="chip">Группы мышц</button>
+                <button class="chip">Инвентарь</button>
+                <button class="chip">Кардио</button>
+                <button class="chip">Растяжка</button>
+                <button class="chip">Разминка и заминка</button>
+                <button class="chip">Стретчинг</button>
+            </div>
+        </div>
+    </div>
+    <div class="mabs"><div class="modal-box">
+        <div class="mtitle-row">
+            <p class="mtitle">Группы мышц <span class="cnt" id="sheetCnt">2</span></p>
+            <button class="barebtn" title="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 5.5l-13 13M5.5 5.5l13 13"/></svg></button>
+        </div>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Грудь</span></button>
+        <button class="frow on"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Спина</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Плечи</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Ноги</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Кор и пресс</span></button>
+        <button class="frow on"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Ягодицы</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Бицепс</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Трицепс</span></button>
+        <div class="btnrow"><button class="btn prime wide">Применить</button></div>
+    </div></div>
+</div></div>
+
+<!-- ================================================================
+     ЭКРАН 3 · Результат: Спина + Ягодицы применены
+================================================================ -->
+<p class="caption">3 · Результат: Спина + Ягодицы <span>techSelRowHtml + techFiltered</span></p>
+<p class="note"><b>Что проверить:</b> чип «Группы мышц» янтарный с <code>.cnt</code> = 2. Под чипами строка <code>.fselrow</code>: метка «Группы мышц:», мини-чипы <code>.fchip</code> «Спина ×» «Ягодицы ×» (крестик <code>.fchip-x</code> снимает по одному) и «Сбросить группу» (<code>.fclear</code>). Матчинг — ИЛИ внутри группы: видны и спина, и ягодицы. Порядок карточек = порядок каталога (показаны первые 4 из результата: подтягивания/тяги → тяги на ягодицы). Карточка «Ягодичный мост со штангой» — это hip thrust каталога (id <code>hipthrust</code>).</p>
+<div class="phone"><div class="p">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+            <div class="searchbox"><input type="text" placeholder="Поиск упражнения..."></div>
+            <div class="secrow">
+                <button class="chip">★ Любимые</button>
+                <button class="chip">Своё</button>
+                <button class="chip on">Все</button>
+                <button class="chip">Коллекции</button>
+            </div>
+            <div class="secrow">
+                <button class="chip on">Группы мышц <span class="cnt">2</span></button>
+                <button class="chip">Инвентарь</button>
+                <button class="chip">Кардио</button>
+                <button class="chip">Растяжка</button>
+                <button class="chip">Разминка и заминка</button>
+                <button class="chip">Стретчинг</button>
+            </div>
+            <div class="fselrow">
+                <span class="fsellabel">Группы мышц:</span>
+                <span class="fchip">Спина<button class="fchip-x" title="Убрать">×</button></span>
+                <span class="fchip">Ягодицы<button class="fchip-x" title="Убрать">×</button></span>
+                <button class="fclear">Сбросить группу</button>
+            </div>
+        </div>
+        <div class="exgrid">
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Подтягивания</div><div class="extags">#back #pullupbar</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Тяга верхнего блока</div><div class="extags">#back #cable</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Румынская тяга</div><div class="extags">#back #legs #glutes #barbell</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Ягодичный мост со штангой</div><div class="extags">#glutes #barbell #bench</div></span>
+                <span class="star">☆</span>
+            </div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/></svg></span><span class="nlabel">История</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/></svg></span><span class="nlabel">Статистика</span></button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/></svg></span><span class="nlabel">Техника</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/></svg></span><span class="nlabel">Профиль</span></button>
+    </div>
+</div></div>
+
+<!-- ================================================================
+     ЭКРАН 4 · Sheet «Инвентарь» — 1 выбран
+================================================================ -->
+<p class="caption">4 · Sheet «Инвентарь» — 1 выбран <span>techSheetHtml('gear')</span></p>
+<p class="note"><b>Что проверить:</b> 5 подзаголовков подгрупп <code>.msub</code> ровно в порядке кода: «Свободные веса» → «Тренажёры» → «Мелкий инвентарь» → «Без инвентаря» → «Брусья и турник» (последняя вынесена из «Тренажёров» по ревью PR #212). Итого 19 айтемов; названия с уточнениями в скобках — как в FILTERS. Выбран «Кроссовер (блочные)», счётчик 1. Шит скроллится (max-height 92vh). ⚠ В ТЗ макета было «4 подгруппы / 17 айтемов» — см. отчёт, в коде 5 / 19.</p>
+<div class="phone"><div class="p fix">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+            <div class="searchbox"><input type="text" placeholder="Поиск упражнения..."></div>
+        </div>
+    </div>
+    <div class="mabs"><div class="modal-box">
+        <div class="mtitle-row">
+            <p class="mtitle">Инвентарь <span class="cnt" id="sheetCnt">1</span></p>
+            <button class="barebtn" title="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 5.5l-13 13M5.5 5.5l13 13"/></svg></button>
+        </div>
+        <p class="msub" style="margin:10px 0 2px">Свободные веса</p>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Штанга</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Гантели</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Гири</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">EZ-гриф</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Диски</span></button>
+        <p class="msub" style="margin:10px 0 2px">Тренажёры</p>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Машина Смита</span></button>
+        <button class="frow on"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Кроссовер (блочные)</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Хаммеры (рычажные)</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Гравитрон</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Тренажёр (общий)</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Скамья (гориз/накл/Скотта)</span></button>
+        <p class="msub" style="margin:10px 0 2px">Мелкий инвентарь</p>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Фитнес-резинки</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">TRX-петли</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Фитбол</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Медбол</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Ролик для пресса</span></button>
+        <p class="msub" style="margin:10px 0 2px">Без инвентаря</p>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Без инвентаря</span></button>
+        <p class="msub" style="margin:10px 0 2px">Брусья и турник</p>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Брусья</span></button>
+        <button class="frow"><span class="fbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5L9.5 17 4.5 12"/></svg></span><span class="fn">Турник</span></button>
+        <div class="btnrow"><button class="btn prime wide">Применить</button></div>
+    </div></div>
+</div></div>
+
+<!-- ================================================================
+     ЭКРАН 5 · Кардио-чип активен
+================================================================ -->
+<p class="caption">5 · Кардио-чип активен <span>techCatToggle</span></p>
+<p class="note"><b>Что проверить:</b> одиночная категория — без шита, тап включает/выключает. Список = все <code>cat:cardio</code>: «Беговая дорожка», «Велотренажёр», «Эллипсоид», «Скакалка» (фото есть — карточки с квадратами), «Берпи» без img → SVG-иконка <code>.ico</code>. ⚠ В ТЗ было «фото у кардио нет» — в main фото у большинства кардио ЕСТЬ (см. отчёт); карточка без фото — честный fallback кода (exVisual). Мышечных тегов у кардио действительно нет (#cardio #machine / #cardio #none).</p>
+<div class="phone"><div class="p">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+            <div class="searchbox"><input type="text" placeholder="Поиск упражнения..."></div>
+            <div class="secrow">
+                <button class="chip">★ Любимые</button>
+                <button class="chip">Своё</button>
+                <button class="chip on">Все</button>
+                <button class="chip">Коллекции</button>
+            </div>
+            <div class="secrow">
+                <button class="chip">Группы мышц</button>
+                <button class="chip">Инвентарь</button>
+                <button class="chip on">Кардио</button>
+                <button class="chip">Растяжка</button>
+                <button class="chip">Разминка и заминка</button>
+                <button class="chip">Стретчинг</button>
+            </div>
+        </div>
+        <div class="exgrid">
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Беговая дорожка</div><div class="extags">#cardio #machine</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Велотренажёр</div><div class="extags">#cardio #cooldown #machine</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Эллипсоид</div><div class="extags">#cardio #cooldown #machine</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Скакалка</div><div class="extags">#cardio #none</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5v15"/><path d="M9.5 7L12 4.5 14.5 7"/><path d="M9.5 17L12 19.5l2.5-2.5"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Берпи</div><div class="extags">#cardio #none</div></span>
+                <span class="star">☆</span>
+            </div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/></svg></span><span class="nlabel">История</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/></svg></span><span class="nlabel">Статистика</span></button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/></svg></span><span class="nlabel">Техника</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/></svg></span><span class="nlabel">Профиль</span></button>
+    </div>
+</div></div>
+
+<!-- ================================================================
+     ЭКРАН 6 · Пустой результат
+================================================================ -->
+<p class="caption">6 · Пустой результат — «Ничего не найдено» <span>emptyFiltersHtml</span></p>
+<p class="note"><b>Что проверить:</b> «Группы мышц: Трицепс» + «Кардио» — нулевое пересечение (И между группами: у кардио нет m:triceps). Сообщение «Ничего не найдено» в <code>.empty</code> + кнопка «Сбросить фильтры» (btn sec, <code>techResetFilters</code>) → возврат к режиму «Все», очистка всех фильтров, счётчиков и мини-чипов, восстановление списка. Режим «Все» при этом остаётся активным — фильтры применяются поверх него.</p>
+<div class="phone"><div class="p">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+            <div class="searchbox"><input type="text" placeholder="Поиск упражнения..."></div>
+            <div class="secrow">
+                <button class="chip">★ Любимые</button>
+                <button class="chip">Своё</button>
+                <button class="chip on">Все</button>
+                <button class="chip">Коллекции</button>
+            </div>
+            <div class="secrow">
+                <button class="chip on">Группы мышц <span class="cnt">1</span></button>
+                <button class="chip">Инвентарь</button>
+                <button class="chip on">Кардио</button>
+                <button class="chip">Растяжка</button>
+                <button class="chip">Разминка и заминка</button>
+                <button class="chip">Стретчинг</button>
+            </div>
+            <div class="fselrow">
+                <span class="fsellabel">Группы мышц:</span>
+                <span class="fchip">Трицепс<button class="fchip-x" title="Убрать">×</button></span>
+                <button class="fclear">Сбросить группу</button>
+            </div>
+        </div>
+        <div class="empty">
+            <p style="margin:0 0 10px">Ничего не найдено</p>
+            <button class="btn sec">Сбросить фильтры</button>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/></svg></span><span class="nlabel">История</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/></svg></span><span class="nlabel">Статистика</span></button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/></svg></span><span class="nlabel">Техника</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/></svg></span><span class="nlabel">Профиль</span></button>
+    </div>
+</div></div>
+
+<!-- ================================================================
+     ЭКРАН 7 · Пикер «+ Добавить упражнение»
+================================================================ -->
+<p class="caption">7 · Пикер: ➕ Добавить упражнение <span>renderPickerModal</span></p>
+<p class="note"><b>Что проверить:</b> секции CAT_SECTIONS — «★ Любимые · Все · Мышцы · Инвентарь · Коллекции»; секции «Вид» НЕТ (удалена вместе с фильтром Техники). Показана секция «Мышцы»: под секциями появляется ряд чипов категорий с иконками (7 групп CATS.muscle; «Руки» — составной: ИЛИ бицепс/трицепс). Выбрана «Спина». Секции «★ Любимые»/«Все» ряд категорий скрывают; пустые Любимые дают «★ Избранных пока нет — отмечай ☆ на карточках упражнений». Карточки пикера — иконки без фото (exCard). Ниже — «✍️ Своё упражнение» и «Закрыть». Иконка в чипе — полноценный тайл .ico 40×40, как рендерит прод (отдельного CSS для .chip .ico нет).</p>
+<div class="phone"><div class="p fix">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+        </div>
+    </div>
+    <div class="mabs"><div class="modal-box">
+        <div class="mtitle-row">
+            <p class="mtitle">➕ Добавить упражнение</p>
+            <button class="barebtn" title="Закрыть"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18.5 5.5l-13 13M5.5 5.5l13 13"/></svg></button>
+        </div>
+        <div class="searchbox"><input type="text" placeholder="Поиск..."></div>
+        <div class="secrow">
+            <button class="chip">★ Любимые</button>
+            <button class="chip">Все</button>
+            <button class="chip on">Мышцы</button>
+            <button class="chip">Инвентарь</button>
+            <button class="chip">Коллекции</button>
+        </div>
+        <div class="secrow">
+            <button class="chip"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 18v-5.5c0-3.3 2.1-6 4.8-6 1.3 0 2.2.6 2.7 1.7.5-1.1 1.4-1.7 2.7-1.7 2.7 0 4.8 2.7 4.8 6V18"/><path d="M4.5 18h15"/></svg></span> Грудь</button>
+            <button class="chip on"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5h14"/><path d="M8.5 6.5c0 5.5 1.4 9.3 3.5 11.5 2.1-2.2 3.5-6 3.5-11.5"/></svg></span> Спина</button>
+            <button class="chip"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v2.5"/><path d="M5 12.5c0-3.3 3.1-6 7-6s7 2.7 7 6"/><path d="M5 12.5c0 2.3 1.1 4 3 4.6"/><path d="M19 12.5c0 2.3-1.1 4-3 4.6"/></svg></span> Плечи</button>
+            <button class="chip"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 8.5H10V19"/><path d="M19.5 8.5H14V19"/></svg></span> Ноги</button>
+            <button class="chip"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="5" width="10" height="14" rx="4.5"/><path d="M9.3 10.2h5.4"/><path d="M9.3 13.8h5.4"/></svg></span> Кор и пресс</button>
+            <button class="chip"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13.5" r="6"/><path d="M12 7.5v5.5"/><path d="M7.2 10h9.6"/></svg></span> Ягодицы</button>
+            <button class="chip"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 4.3-12.5 9.5-12.5"/><circle cx="16.7" cy="6.3" r="2.4"/><path d="M13.7 13.7c2.7-.6 4.4-2.5 4.6-4.9"/></svg></span> Руки</button>
+        </div>
+        <div class="excard" style="margin:6px 0">
+            <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/></svg></span>
+            <span><div class="exn">✍️ Своё упражнение</div><div class="extags">добавь то, чего нет в каталоге</div></span>
+        </div>
+        <div class="exgrid">
+            <div class="excard">
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5h16"/><path d="M8.5 5.5v2.7a3.5 3.5 0 007 0V5.5"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Подтягивания</div><div class="extags">#back #pullupbar</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="5" height="16" rx="1.5"/><path d="M9 6.5c5 0 8 2.2 8 5.5v5"/><path d="M16.5 17h4"/><path d="M18.5 14.5v5"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Тяга верхнего блока</div><div class="extags">#back #cable</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5h14"/><path d="M8.5 6.5c0 5.5 1.4 9.3 3.5 11.5 2.1-2.2 3.5-6 3.5-11.5"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Тяга штанги в наклоне</div><div class="extags">#back #barbell</div></span>
+                <span class="star">☆</span>
+            </div>
+        </div>
+        <div class="btnrow"><button class="btn sec wide">Закрыть</button></div>
+    </div></div>
+</div></div>
+
+<!-- ================================================================
+     ЭКРАН 8 · 320px — перенос чипов
+================================================================ -->
+<p class="caption">8 · 320px — перенос чипов без обрезки <span>compact</span></p>
+<p class="note"><b>Что проверить:</b> <code>.secrow</code> — flex-wrap: чипы режимов и фильтров переносятся по строкам, ничего не обрезается и не сжимается в многоточие. Topbar не ломается (заголовок + пара кнопок). Список остаётся в 1 колонку (2 колонки — от 420px, внутрь 320px телефона не попадает). Геометрия чипов/полей не меняется — только перенос.</p>
+<div class="phone small"><div class="p">
+    <div class="topbar"><span class="tb-title">GymHelper · Техника</span>
+        <span class="tbpair">
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.5h17"/><path d="M8 3v3.5M16 3v3.5"/></svg></button>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/><path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/></svg></button>
+        </span></div>
+    <div class="content">
+        <div class="card">
+            <p class="t1">📖 Техника упражнений</p>
+            <div class="searchbox"><input type="text" placeholder="Поиск упражнения..."></div>
+            <div class="secrow">
+                <button class="chip">★ Любимые</button>
+                <button class="chip">Своё</button>
+                <button class="chip on">Все</button>
+                <button class="chip">Коллекции</button>
+            </div>
+            <div class="secrow">
+                <button class="chip">Группы мышц</button>
+                <button class="chip">Инвентарь</button>
+                <button class="chip">Кардио</button>
+                <button class="chip">Растяжка</button>
+                <button class="chip">Разминка и заминка</button>
+                <button class="chip">Стретчинг</button>
+            </div>
+        </div>
+        <div class="exgrid">
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Жим штанги лёжа</div><div class="extags">#chest #barbell #bench</div></span>
+                <span class="star">☆</span>
+            </div>
+            <div class="excard">
+                <span class="exthumb ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 12h9"/><path d="M4.5 8.5v7"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 8.5v7"/></svg></span>
+                <span style="flex:1;min-width:0"><div class="exn">Приседания со штангой</div><div class="extags">#legs #glutes #barbell</div></span>
+                <span class="star">☆</span>
+            </div>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/></svg></span><span class="nlabel">История</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/></svg></span><span class="nlabel">Статистика</span></button>
+        <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/></svg></span><span class="nlabel">Техника</span></button>
+        <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/></svg></span><span class="nlabel">Профиль</span></button>
+    </div>
+</div></div>
+
+</div>
+</body>
+</html>
