@@ -81,7 +81,10 @@ http.createServer(function (req, res) {
         });
         return;
     }
-    const rel = url === '/' || url === '/app' ? 'index.html' : url.slice(1);
+    /* [EXR-T6] прод декодирует percent-encoding пути (кириллические id каталога типа «pliе»),
+       мок должен так же; битый encoding — оставляем как есть → 404 */
+    let rel = url === '/' || url === '/app' ? 'index.html' : url.slice(1);
+    try { rel = decodeURIComponent(rel); } catch (e) { /* URIError — сырой путь */ }
     const file = path.normalize(path.join(root, rel));
     if (!file.startsWith(root) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
