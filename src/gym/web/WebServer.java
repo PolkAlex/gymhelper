@@ -336,7 +336,11 @@ public final class WebServer {
             send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
             return;
         }
-        send(ex, 200, Files.readAllBytes(file), contentType(path));
+        /* [EXR-T6] фото упражнений (/img/) неизменяемы и именуются стабильно — кэш на неделю;
+           остальная статика (JS/CSS с ?v=-бампом) по-прежнему no-store */
+        boolean img = path.startsWith("/img/") && "GET".equalsIgnoreCase(ex.getRequestMethod());
+        send(ex, 200, Files.readAllBytes(file), contentType(path),
+            img ? "public, max-age=604800" : "no-store");
     }
 
     private static String contentType(String path) {
@@ -377,8 +381,13 @@ public final class WebServer {
     }
 
     private void send(HttpExchange ex, int code, byte[] body, String contentType) throws IOException {
+        send(ex, code, body, contentType, "no-store");
+    }
+
+    /* [EXR-T6] cacheControl: /img/ — public, max-age=604800; все остальные ответы — no-store, как раньше */
+    private void send(HttpExchange ex, int code, byte[] body, String contentType, String cacheControl) throws IOException {
         ex.getResponseHeaders().set("Content-Type", contentType);
-        ex.getResponseHeaders().set("Cache-Control", "no-store");
+        ex.getResponseHeaders().set("Cache-Control", cacheControl);
         ex.sendResponseHeaders(code, body.length);
         try (OutputStream os = ex.getResponseBody()) {
             os.write(body);

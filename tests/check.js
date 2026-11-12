@@ -128,6 +128,8 @@ if (ctx.CATALOG) {
         if (!ctx.ICONS[ex.i]) fails.push('каталог: ' + ex.n + ' — нет иконки ' + ex.i);
         /* фото: оба ракурса должны существовать (Техника рендерит -0 и -1) */
         if (ex.img) {
+            /* [EXR-T6] при наличии фото нужно и текстовое описание (ловим рассинхрон данные↔файлы) */
+            if (!ex.desc || !String(ex.desc).trim()) fails.push('каталог: ' + ex.n + ' — есть img, нет desc');
             for (const a of [0, 1]) {
                 const f = path.join(imgDir, ex.img + '-' + a + '.jpg');
                 if (!fs.existsSync(f)) fails.push('каталог: ' + ex.n + ' — нет фото ' + ex.img + '-' + a + '.jpg');
