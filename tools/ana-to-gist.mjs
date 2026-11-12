@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /* ana-to-gist.mjs — выгружает продуктовые агрегаты /stats [ANA-T2] в компактный JSON
-   для Grafana Cloud (Infinity): { generatedAt, totals, weeks[] }. Только счётчики —
+   для Grafana Cloud (Infinity): { generatedAt, source, totals, weeks[] }. Только счётчики —
    без ПДн (privacy.html). Зависимостей нет (чистый node, по образцу metrics-to-json.mjs).
-   Источник — первый доступный:
+   Требуется Node 18+ (глобальный fetch). Источник — первый доступный:
      1) env GYM_STATS_URL + GYM_ADMIN_TOKEN   → GET <GYM_STATS_URL>/stats?token=…
+        (fetch с AbortSignal.timeout(30000): зависший URL не вешает скрипт — [ANA-T3])
      2) путь к stats.json: аргумент → env GYM_STATS_FILE → data/stats.json
    Запуск:  node tools/ana-to-gist.mjs [stats.json] [файл-выхода]
    По умолчанию выход: %TEMP%/opencode/ana-stats.json.
@@ -39,13 +40,15 @@ if (baseUrl && adminToken) {
   /* базовый адрес (домен) → /stats?token=…; задан уже полный путь …/stats — используем как есть */
   const u = baseUrl.replace(/\/+$/, "") + (baseUrl.endsWith("/stats") ? "" : "/stats");
   try {
-    const resp = await fetch(u + "?token=" + encodeURIComponent(adminToken));
+    /* [ANA-T3] таймаут 30 с: зависший прод-URL не вешает скрипт */
+    const resp = await fetch(u + "?token=" + encodeURIComponent(adminToken), { signal: AbortSignal.timeout(30000) });
     if (!resp.ok) fail("HTTP " + resp.status + " от " + u + (resp.status === 404 ? " (неверный GYM_ADMIN_TOKEN?)" : ""));
     raw = await resp.json();
     source = "GYM_STATS_URL";
     console.log("источник: " + u + " (env GYM_STATS_URL)");
   } catch (e) {
-    fail("не удалось получить " + u + ": " + e.message);
+    const isTimeout = e && (e.name === "TimeoutError" || e.name === "AbortError");
+    fail("не удалось получить " + u + ": " + (isTimeout ? "таймаут 30 с (AbortSignal.timeout)" : e.message));
   }
 } else {
   if (baseUrl || adminToken) {
