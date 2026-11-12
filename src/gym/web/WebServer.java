@@ -29,7 +29,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
+import java.util.zip.GZIPOutputStream;
 
 public final class WebServer {
     private static final int MAX_BODY = 2 * 1024 * 1024;
@@ -46,6 +48,10 @@ public final class WebServer {
        env GYM_BOT_USERNAME, не задан — GymHelper_bot; отдаётся клиенту в /api/init */
     private final String botUsername;
     private final long startedAt = System.currentTimeMillis();
+    /* [EXR-T7] кэш сжатых gzip-байтов крупной статики (app/catalog/style/index ~600 KB):
+       сжимаем при первом gzip-запросе и держим в памяти. Инвалидация — рестарт процесса:
+       статика меняется только вместе с релизом, между релизами файлы неизменны */
+    private final Map<Path, byte[]> gzipCache = new ConcurrentHashMap<>();
     private HttpServer server;
 
     public WebServer(String token, Storage storage, Path webDir, Stats stats) {
@@ -336,11 +342,15 @@ public final class WebServer {
             send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
             return;
         }
+        String ct = contentType(path);
         /* [EXR-T6] фото упражнений (/img/) неизменяемы и именуются стабильно — кэш на неделю;
            остальная статика (JS/CSS с ?v=-бампом) по-прежнему no-store */
         boolean img = path.startsWith("/img/") && "GET".equalsIgnoreCase(ex.getRequestMethod());
-        send(ex, 200, Files.readAllBytes(file), contentType(path),
-            img ? "public, max-age=604800" : "no-store");
+        /* [EXR-T7] gzip-клиенту текстовая статика отдаётся сжатой — из кэша байтов (precompressed:
+           send не жмёт повторно); клиенту без gzip — чтение с диска как раньше */
+        boolean gzStatic = acceptsGzip(ex) && compressible(ct);
+        byte[] body = gzStatic ? gzippedStatic(file) : Files.readAllBytes(file);
+        send(ex, 200, body, ct, img ? "public, max-age=604800" : "no-store", gzStatic);
     }
 
     private static String contentType(String path) {
@@ -384,14 +394,67 @@ public final class WebServer {
         send(ex, code, body, contentType, "no-store");
     }
 
-    /* [EXR-T6] cacheControl: /img/ — public, max-age=604800; все остальные ответы — no-store, как раньше */
     private void send(HttpExchange ex, int code, byte[] body, String contentType, String cacheControl) throws IOException {
+        send(ex, code, body, contentType, cacheControl, false);
+    }
+
+    /* [EXR-T6] cacheControl: /img/ — public, max-age=604800; все остальные ответы — no-store, как раньше.
+       [EXR-T7] Клиенту с Accept-Encoding: gzip текстовые ответы (text/*, JS, JSON: /api/init,
+       /api/save, /stats) сжимаются: Content-Encoding: gzip + Vary: Accept-Encoding, длина —
+       сжатого размера. Бинарное (img) и клиенты без gzip — байт-в-байт как раньше.
+       precompressed: байты тела уже сжаты (кэш gzip-статики) — ставим только заголовок,
+       повторно не жмём. */
+    private void send(HttpExchange ex, int code, byte[] body, String contentType, String cacheControl,
+                      boolean precompressed) throws IOException {
+        boolean gz = !precompressed && acceptsGzip(ex) && compressible(contentType);
+        byte[] out = gz ? gzip(body) : body;
         ex.getResponseHeaders().set("Content-Type", contentType);
         ex.getResponseHeaders().set("Cache-Control", cacheControl);
-        ex.sendResponseHeaders(code, body.length);
+        if (gz || precompressed) ex.getResponseHeaders().set("Content-Encoding", "gzip");
+        /* Vary у обоих вариантов: кэши обязаны различать ответы по Accept-Encoding */
+        ex.getResponseHeaders().set("Vary", "Accept-Encoding");
+        ex.sendResponseHeaders(code, out.length);
         try (OutputStream os = ex.getResponseBody()) {
-            os.write(body);
+            os.write(out);
         }
+    }
+
+    /* [EXR-T7] клиент явно допускает gzip в Accept-Encoding (достаточно подстроки:
+       q-значения и x-gzip не различаем — браузеры и curl посылают ровно «gzip») */
+    private static boolean acceptsGzip(HttpExchange ex) {
+        List<String> ae = ex.getRequestHeaders().get("Accept-Encoding");
+        if (ae == null) return false;
+        for (String h : ae) {
+            if (h != null && h.toLowerCase().contains("gzip")) return true;
+        }
+        return false;
+    }
+
+    /* [EXR-T7] сжимаем только текст: HTML/CSS/JS/JSON (API-ответы и /stats идут через тот же
+       send); изображения и прочий бинар уже сжаты или не текст — отдаём как есть */
+    private static boolean compressible(String contentType) {
+        return contentType.startsWith("text/")
+            || contentType.startsWith("application/javascript")
+            || contentType.startsWith("application/json");
+    }
+
+    private static byte[] gzip(byte[] body) throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream(Math.max(64, body.length / 4));
+        try (GZIPOutputStream gz = new GZIPOutputStream(buf)) {
+            gz.write(body);
+        }
+        return buf.toByteArray();
+    }
+
+    /* [EXR-T7] сжатая статика из кэша (инвалидация — рестарт: файлы меняются только с релизом);
+       гонка двух потоков на первом запросе безвредна — оба сжимают один и тот же файл,
+       в кэш атомарно попадает один результат */
+    private byte[] gzippedStatic(Path file) throws IOException {
+        byte[] hit = gzipCache.get(file);
+        if (hit != null) return hit;
+        byte[] gz = gzip(Files.readAllBytes(file));
+        gzipCache.putIfAbsent(file, gz);
+        return gz;
     }
 
     public static long validateInitData(String initData, String botToken) {

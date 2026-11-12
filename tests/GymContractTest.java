@@ -511,6 +511,76 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: stats " + statsErr);
         }
 
+        /* [EXR-T7] gzip: текстовые ответы (статика + JSON) сжимаются ТОЛЬКО при
+           Accept-Encoding: gzip (Content-Encoding: gzip, Vary: Accept-Encoding,
+           Content-Length — сжатого размера); без заголовка — байт-в-байт как раньше;
+           бинарное (img) не сжимается. Реальный WebServer на эфемерном порту,
+           статика кладётся во временный webDir. */
+        try {
+            java.nio.file.Path tmpG = java.nio.file.Files.createTempDirectory("gymgzip");
+            Storage stG = new Storage(tmpG);
+            WebServer wsG = new WebServer("contract-test-token", stG, tmpG, new Stats(tmpG.resolve("stats.json")));
+            java.net.ServerSocket probeG = new java.net.ServerSocket(0);
+            int portG = probeG.getLocalPort();
+            probeG.close();
+            wsG.start(portG);
+            String jsSource = "function f(){return 'жим штанги лёжа, 3 подхода по 8-10';}\n".repeat(400);
+            byte[] jsBytes = jsSource.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            java.nio.file.Files.write(tmpG.resolve("app.js"), jsBytes);
+            byte[] jpgBytes = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0, 0x00, 0x10, 0x00, 0x01};
+            java.nio.file.Files.createDirectories(tmpG.resolve("img"));
+            java.nio.file.Files.write(tmpG.resolve("img").resolve("x.jpg"), jpgBytes);
+
+            /* без Accept-Encoding — прежний несжатый ответ */
+            java.net.http.HttpResponse<byte[]> plain = getRaw(portG, "/app.js");
+            check(plain.statusCode() == 200, "gzip: GET /app.js без Accept-Encoding — 200, а не " + plain.statusCode());
+            check(plain.headers().firstValue("Content-Encoding").isEmpty(),
+                "gzip: без Accept-Encoding нет Content-Encoding");
+            check(java.util.Arrays.equals(plain.body(), jsBytes), "gzip: без gzip тело байт-в-байт равно файлу");
+            check(plain.headers().firstValue("Vary").orElse("").contains("Accept-Encoding"),
+                "gzip: Vary: Accept-Encoding стоит и на несжатом варианте");
+
+            /* с Accept-Encoding: gzip — сжатие, валидный поток, Content-Length пересчитан */
+            java.net.http.HttpResponse<byte[]> packed = getRaw(portG, "/app.js", "Accept-Encoding", "gzip");
+            check(packed.statusCode() == 200, "gzip: GET /app.js с gzip — 200, а не " + packed.statusCode());
+            check("gzip".equals(packed.headers().firstValue("Content-Encoding").orElse(null)),
+                "gzip: Content-Encoding: gzip при Accept-Encoding: gzip");
+            check(packed.headers().firstValue("Vary").orElse("").contains("Accept-Encoding"), "gzip: Vary: Accept-Encoding");
+            check(packed.headers().firstValue("Content-Length").orElse("").equals(String.valueOf(packed.body().length)),
+                "gzip: Content-Length пересчитан на сжатый размер");
+            check(packed.body().length < jsBytes.length / 2, "gzip: сжатие текста хотя бы вдвое");
+            java.io.ByteArrayInputStream bin = new java.io.ByteArrayInputStream(packed.body());
+            java.io.ByteArrayOutputStream unpacked = new java.io.ByteArrayOutputStream();
+            try (java.util.zip.GZIPInputStream gzIn = new java.util.zip.GZIPInputStream(bin)) {
+                byte[] b = new byte[4096];
+                int n;
+                while ((n = gzIn.read(b)) > 0) unpacked.write(b, 0, n);
+            }
+            check(java.util.Arrays.equals(unpacked.toByteArray(), jsBytes), "gzip: распакованный поток равен исходному файлу");
+
+            /* второй gzip-запрос — тот же ответ из кэша сжатых байтов */
+            java.net.http.HttpResponse<byte[]> cached = getRaw(portG, "/app.js", "Accept-Encoding", "gzip");
+            check(java.util.Arrays.equals(cached.body(), packed.body()), "gzip: повторный запрос отдаёт те же сжатые байты (кэш)");
+
+            /* бинарное (img) не сжимается даже с gzip-заголовком */
+            java.net.http.HttpResponse<byte[]> img = getRaw(portG, "/img/x.jpg", "Accept-Encoding", "gzip");
+            check(img.statusCode() == 200, "gzip: GET /img/x.jpg — 200, а не " + img.statusCode());
+            check(img.headers().firstValue("Content-Encoding").isEmpty(), "gzip: бинарное img не сжимается");
+            check(java.util.Arrays.equals(img.body(), jpgBytes), "gzip: img тело не тронуто");
+
+            /* JSON API (/stats) тоже сжимается при gzip и распаковывается в валидный JSON */
+            java.net.http.HttpResponse<byte[]> statsGz = getRaw(portG, "/stats?token=contract-test-token", "Accept-Encoding", "gzip");
+            check(statsGz.statusCode() == 200, "gzip: GET /stats с gzip — 200, а не " + statsGz.statusCode());
+            check("gzip".equals(statsGz.headers().firstValue("Content-Encoding").orElse(null)), "gzip: JSON API сжат");
+            Map<String, Object> statsJson = Json.map(Json.parse(
+                new String(unpack(statsGz.body()), java.nio.charset.StandardCharsets.UTF_8)));
+            check(statsJson != null, "gzip: распакованный /stats — валидный JSON");
+            java.net.http.HttpResponse<byte[]> statsPlain = getRaw(portG, "/stats?token=contract-test-token");
+            check(statsPlain.headers().firstValue("Content-Encoding").isEmpty(), "gzip: /stats без gzip — несжатый");
+        } catch (Exception gzipErr) {
+            throw new AssertionError("CONTRACT FAIL: gzip " + gzipErr);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }
@@ -571,5 +641,26 @@ public class GymContractTest {
             .build();
         return java.net.http.HttpClient.newHttpClient()
             .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+
+    /* GET с произвольными заголовками и сырым телом (для gzip [EXR-T7]: java.net.http
+       не декомпрессирует сам — приходят ровно те байты, что послал сервер) */
+    static java.net.http.HttpResponse<byte[]> getRaw(int port, String pathAndQuery, String... headers) throws Exception {
+        java.net.http.HttpRequest.Builder b = java.net.http.HttpRequest.newBuilder(
+                java.net.URI.create("http://127.0.0.1:" + port + pathAndQuery));
+        for (int i = 0; i + 1 < headers.length; i += 2) b.header(headers[i], headers[i + 1]);
+        return java.net.http.HttpClient.newHttpClient()
+            .send(b.GET().build(), java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+    }
+
+    /* распаковка gzip-тела ответа */
+    static byte[] unpack(byte[] packed) throws Exception {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        try (java.util.zip.GZIPInputStream gzIn = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(packed))) {
+            byte[] b = new byte[4096];
+            int n;
+            while ((n = gzIn.read(b)) > 0) out.write(b, 0, n);
+        }
+        return out.toByteArray();
     }
 }
