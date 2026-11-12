@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const http = require('http');
 
 const EX = 'Жим штанги лёжа';
 
@@ -4020,6 +4021,53 @@ test.describe('EXR-T2: фото упражнений (free-exercise-db) в Те�
         await expect(page.locator('.card .exhead .ico')).toHaveCount(1);
     });
 
+});
+
+/* ===== [EXR-T8] фото-инфра: Cache-Control на GET /img/ + path traversal гвард ===== */
+test.describe('EXR-T8: Cache-Control на img и path traversal', function () {
+
+    test('GET img (из «Техники») отдаёт Cache-Control: public, max-age=604800, не-img статика — no-store', async ({ page }) => {
+        /* перехват реального ответа по фото из UI (page.on('response')) */
+        let imgCacheControl = null;
+        page.on('response', function (r) {
+            if (/\/img\/exercises\/bench-0\.jpg$/.test(r.url()) && r.status() === 200) {
+                imgCacheControl = r.headers()['cache-control'] || '';
+            }
+        });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await expect.poll(function () { return imgCacheControl; }, { timeout: 5000 })
+            .toBe('public, max-age=604800');
+        /* прямой GET того же файла — та же прод-логика */
+        const direct = await page.request.get('/img/exercises/bench-0.jpg');
+        if (direct.headers()['cache-control'] !== 'public, max-age=604800') {
+            throw new Error('прямой GET img cache-control: ' + JSON.stringify(direct.headers()['cache-control']));
+        }
+        /* остальная статика по-прежнему no-store */
+        const js = await page.request.get('/app.js');
+        if (js.headers()['cache-control'] !== 'no-store') {
+            throw new Error('app.js cache-control: ' + JSON.stringify(js.headers()['cache-control']) + ', ожидалось no-store');
+        }
+    });
+
+    test('path traversal: /img/%2e%2e/app.js → 404, легитимные пути работают (сырой запрос)', async ({ baseURL }) => {
+        const base = new URL(baseURL || 'http://127.0.0.1:8099');
+        /* WHATWG-клиенты (fetch, Playwright request) схлопывают %2e%2e в «..» до отправки —
+           гвард проверяем сырым http-запросом ровно на traversal-пути */
+        function rawStatus(p) {
+            return new Promise(function (resolve, reject) {
+                const rq = http.request({ host: base.hostname, port: base.port, path: p, method: 'GET' }, function (rs) {
+                    rs.resume();
+                    rs.on('end', function () { resolve(rs.statusCode); });
+                });
+                rq.on('error', reject);
+                rq.end();
+            });
+        }
+        if (await rawStatus('/img/%2e%2e/app.js') !== 404) throw new Error('/img/%2e%2e/app.js: ожидался 404 (раньше отдавал соседний файл)');
+        if (await rawStatus('/img/%2e%2e/%2e%2e/build.gradle') !== 404) throw new Error('траверс за пределы web/: ожидался 404');
+        if (await rawStatus('/app.js') !== 200) throw new Error('легитимный /app.js сломан');
+    });
 });
 
 /* ===== [UX-T32] фото вместо иконок: карточки Истории + Статистика (1ПМ, группы) ===== */

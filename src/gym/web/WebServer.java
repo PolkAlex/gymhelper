@@ -337,8 +337,30 @@ public final class WebServer {
 
     private void serveStatic(HttpExchange ex, String path) throws IOException {
         if (path == null || path.equals("/") || path.equals("/app")) path = "/index.html";
-        Path file = webDir.resolve(path.substring(1)).normalize();
-        if (!file.startsWith(webDir) || !Files.isRegularFile(file)) {
+        /* [EXR-T8] гвард path traversal: путь приходит уже декодированным (%2e%2e → ..),
+           сегменты «..» запрещены; канонический путь (toRealPath, с симлинками) обязан
+           остаться внутри webDir — иначе 404. Раньше /img/%2e%2e/app.js отдавал соседний
+           файл с 200. Легитимные запросы (без «..» и симлинков) не меняются. */
+        boolean traversal = false;
+        for (String seg : path.split("/")) {
+            if ("..".equals(seg)) {
+                traversal = true;
+                break;
+            }
+        }
+        Path file = null;
+        try {
+            file = webDir.resolve(path.substring(1)).normalize().toRealPath();
+        } catch (IOException e) {
+            /* файла нет / битый путь — ниже уйдёт в 404 */
+        }
+        boolean inside = false;
+        try {
+            inside = file != null && file.startsWith(webDir.toRealPath());
+        } catch (IOException e) {
+            /* webDir недоступен — считаем цель снаружи */
+        }
+        if (traversal || !inside || !Files.isRegularFile(file)) {
             send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
             return;
         }

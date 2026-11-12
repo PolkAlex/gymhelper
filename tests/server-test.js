@@ -85,15 +85,22 @@ http.createServer(function (req, res) {
        мок должен так же; битый encoding — оставляем как есть → 404 */
     let rel = url === '/' || url === '/app' ? 'index.html' : url.slice(1);
     try { rel = decodeURIComponent(rel); } catch (e) { /* URIError — сырой путь */ }
+    /* [EXR-T8] path traversal гвард — как в проде [WebServer]: декодированный путь не содержит
+       «..» и канонически остаётся внутри web/; раньше /img/%2e%2e/app.js отдавал соседний файл */
     const file = path.normalize(path.join(root, rel));
-    if (!file.startsWith(root) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    if (rel.split(/[\\/]/).indexOf('..') >= 0
+        || path.relative(root, file).startsWith('..')
+        || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         res.writeHead(404, { 'Content-Type': 'text/plain' });
         res.end('not found');
         return;
     }
+    /* [EXR-T8] прод-логика Cache-Control [EXR-T6]: GET /img/ — public, max-age=604800
+       (фото неизменяемы), остальная статика — no-store; раньше мок отдавал всегда no-store */
+    const img = ('/' + rel).startsWith('/img/') && req.method === 'GET';
     res.writeHead(200, {
         'Content-Type': types[path.extname(file).toLowerCase()] || 'application/octet-stream',
-        'Cache-Control': 'no-store'
+        'Cache-Control': img ? 'public, max-age=604800' : 'no-store'
     });
     res.end(fs.readFileSync(file));
 }).listen(8099, '127.0.0.1', function () {

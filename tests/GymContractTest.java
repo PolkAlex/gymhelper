@@ -581,6 +581,37 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: gzip " + gzipErr);
         }
 
+        /* [EXR-T8] path traversal гвард: путь приходит декодированным (%2e%2e → ..), сегменты
+           «..» запрещены, канонический путь обязан остаться внутри webDir. Раньше
+           /img/%2e%2e/app.js отдавал соседний файл с 200. Сырой сокет — java.net.http и
+           браузеры нормализуют «..» в URL до отправки, до сервера traversal-путь бы не доехал.
+           Реальный WebServer на эфемерном порту, статика кладётся во временный webDir. */
+        try {
+            java.nio.file.Path baseT = java.nio.file.Files.createTempDirectory("gymtrav");
+            java.nio.file.Path tmpT = baseT.resolve("web");
+            java.nio.file.Files.createDirectories(tmpT.resolve("img"));
+            Storage stT = new Storage(tmpT);
+            WebServer wsT = new WebServer("contract-test-token", stT, tmpT, new Stats(tmpT.resolve("stats.json")));
+            java.net.ServerSocket probeT = new java.net.ServerSocket(0);
+            int portT = probeT.getLocalPort();
+            probeT.close();
+            wsT.start(portT);
+            java.nio.file.Files.writeString(tmpT.resolve("app.js"), "static", java.nio.charset.StandardCharsets.UTF_8);
+            java.nio.file.Files.writeString(tmpT.resolve("img").resolve("x.jpg"), "fake-jpeg", java.nio.charset.StandardCharsets.UTF_8);
+            java.nio.file.Files.writeString(baseT.resolve("secret-outside.txt"), "секрет", java.nio.charset.StandardCharsets.UTF_8);
+
+            /* легитимные запросы не изменились */
+            check(rawStatus(portT, "/img/x.jpg") == 200, "traversal: легитимный /img/x.jpg — 200");
+            check(rawStatus(portT, "/app.js") == 200, "traversal: легитимный /app.js — 200");
+            /* раньше: 200 на соседний файл */
+            check(rawStatus(portT, "/img/%2e%2e/app.js") == 404, "traversal: /img/%2e%2e/app.js → 404, а не " + rawStatus(portT, "/img/%2e%2e/app.js"));
+            /* выход за пределы webDir (двойной «..») и сырой «../» — тоже 404 */
+            check(rawStatus(portT, "/img/%2e%2e/%2e%2e/secret-outside.txt") == 404, "traversal: /img/../../secret → 404");
+            check(rawStatus(portT, "/../secret-outside.txt") == 404, "traversal: /../secret → 404");
+        } catch (Exception travErr) {
+            throw new AssertionError("CONTRACT FAIL: traversal " + travErr);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }
@@ -662,5 +693,22 @@ public class GymContractTest {
             while ((n = gzIn.read(b)) > 0) out.write(b, 0, n);
         }
         return out.toByteArray();
+    }
+
+    /* GET «сырым» сокетом, статус ответа [EXR-T8]: HTTP-клиенты (java.net.http, браузеры,
+       WHATWG-URL) схлопывают %2e%2e в «..» до отправки — traversal-гвард проверяем ровно
+       на том пути, что реально придёт на сервер */
+    static int rawStatus(int port, String pathAndQuery) throws Exception {
+        try (java.net.Socket s = new java.net.Socket("127.0.0.1", port)) {
+            s.setSoTimeout(5000);
+            java.io.OutputStream out = s.getOutputStream();
+            out.write(("GET " + pathAndQuery + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            out.flush();
+            java.io.BufferedReader in = new java.io.BufferedReader(
+                new java.io.InputStreamReader(s.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+            String line = in.readLine();
+            return Integer.parseInt(line.split(" ")[1]);
+        }
     }
 }
