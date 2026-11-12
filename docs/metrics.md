@@ -112,12 +112,14 @@ templates*, feedbackSent — только агрегаты, без ПДн). Сх
 
 ```
 data/stats.json (или GET /stats?token=)  →  tools/ana-to-gist.mjs  →  ana-stats.json  →  secret gist  →  Grafana Cloud (Infinity)
-   (env GYM_STATS_URL + GYM_ADMIN_TOKEN        (node, без зависимостей;     (компактный      (raw-URL         (подключает
+   (env GYM_STATS_URL + GYM_ADMIN_TOKEN        (node 18+, без зависимостей; (компактный      (raw-URL         (подключает
     или локальный файл)                         выгрузка ниже)               JSON)            анонимно)         владелец, веб-UI)
 ```
 
 Формат ana-stats.json: `{generatedAt, source, totals: {7 счётчиков}, weeks: [{week: "2026-W46",
 maInit, …}]}` — weeks массив по возрастанию ISO-недели.
+
+Требуется Node 18+ ([ANA-T3]: глобальный fetch и AbortSignal.timeout — полифиллов нет).
 
 Выгрузка (локально, после каждого «посмотреть цифры» / перед обзором спринта):
 
