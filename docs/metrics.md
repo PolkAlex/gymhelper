@@ -105,6 +105,45 @@ node tools/metrics-to-json.mjs
 4. Готово: дашборд «GymHelper — метрики качества» читает gist, автообновление 5 мин.
    Если панель пуста — открыть панель, проверить datasource и root_selector.
 
+## ANA-дашборд — продуктовые агрегаты /stats [ANA-T2]
+
+Отдельный gist для продуктовых счётчиков ([ANA-T1] `/stats`: maInit/maSave, workouts*,
+templates*, feedbackSent — только агрегаты, без ПДн). Схема:
+
+```
+data/stats.json (или GET /stats?token=)  →  tools/ana-to-gist.mjs  →  ana-stats.json  →  secret gist  →  Grafana Cloud (Infinity)
+   (env GYM_STATS_URL + GYM_ADMIN_TOKEN        (node, без зависимостей;     (компактный      (raw-URL         (подключает
+    или локальный файл)                         выгрузка ниже)               JSON)            анонимно)         владелец, веб-UI)
+```
+
+Формат ana-stats.json: `{generatedAt, source, totals: {7 счётчиков}, weeks: [{week: "2026-W46",
+maInit, …}]}` — weeks массив по возрастанию ISO-недели.
+
+Выгрузка (локально, после каждого «посмотреть цифры» / перед обзором спринта):
+
+```powershell
+# источник: заданы env GYM_STATS_URL+GYM_ADMIN_TOKEN → /stats с прода;
+# иначе локальный файл (env GYM_STATS_FILE или 1-й аргумент — путь, по умолчанию data/stats.json)
+node tools/ana-to-gist.mjs
+& "C:\Program Files\GitHub CLI\gh.exe" gist edit <GIST_ID> --filename ana-stats.json "$env:TEMP\opencode\ana-stats.json"
+```
+
+**GIST_ID: <вписать после создания>**, raw-URL: `https://gist.githubusercontent.com/PolkAlex/<GIST_ID>/raw/ana-stats.json`
+
+Одноразовое создание (владелец; скрипт гист сам не создаёт и токены не печатает):
+1. `node tools/ana-to-gist.mjs` → `%TEMP%\opencode\ana-stats.json`
+2. `gh gist create --secret --desc "GymHelper ANA stats (Grafana Infinity)" "$env:TEMP\opencode\ana-stats.json"`
+3. Полученный gist id вписать в этот раздел (GIST_ID выше).
+
+Настройка Infinity datasource (владелец, веб; отдельный datasource или тот же — URL другой):
+- Type: **JSON**; URL: raw-URL из этого раздела; Format: JSON.
+- root_selector: для totals-панелей — `totals`; для недельных — `weeks` (подбирается по
+  структуре: totals — плоский объект из 7 счётчиков, weeks — массив объектов с полем `week`).
+
+Пример панели «Открытия Mini App по неделям»: визуализация **timeseries**, datasource —
+Infinity (URL выше), root_selector `weeks`, X = `week`, Y = `maInit` (аналогично maSave,
+workoutsCreated/Completed — по одной панели на счётчик).
+
 ## Ограничения
 
 - История до 06.11.2026 не восстановима (доска не хранит переходы) — метрики считаются
