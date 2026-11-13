@@ -132,11 +132,16 @@ In Dev: 0; Code Review: 0; In Test: 0 — все тикеты дня Done (Ре�
 | 11.11.2026 | #218 [EXR-T7], #219 [EXR-T8], #220 [EXR-T9], #221 [ANA-T3] | - | In Dev | задания владельца «улучшай, ускоряй, пиши тесты»: [EXR-T7] gzip (PR #224, −75.5% статики: 470KB→115KB, кэш сжатых байтов, Java-тест реального сервера), [EXR-T8] (PR #225: path traversal гвард toRealPath+`..`-запрет — дыра была pre-existing, мок Cache-Control, e2e сырым сокетом), [EXR-T9] (PR #222: пикер-фото через exVisual, fallback иконка у «своих»), [ANA-T3] (PR #223: AbortSignal.timeout 30с, шапка+source, Node 18+ пометка); ревью APPROVE ×4 (#225 rebase на #224 — конфликт GymContractTest сохранены оба блока) |
 | 11.11.2026 | #218 [EXR-T7], #219 [EXR-T8], #220 [EXR-T9], #221 [ANA-T3], #206 [EXR-E1], #207 [EXR-S2], #208 [EXR-S3] | In Dev/Code Review | Ready To Deploy | merges #224→#225(rebase, GymContractTest оба блока)→#222→#223; CI main success (Docker publish); полный цикл tester'а: UNIT 191 + CONTRACT 181 (gzip 18 + traversal 5) + e2e **636 passed (159×4)**, 0 failed; интеграция gzip+гвард+кэш на прод-WebServer probe 25/25; **деплой вечером после проверки владельцем** (EXR-ночь фото/тексты/вычитка, макет фильтров, онбординг-фронт, RELNOTES 1.33 предложить и утвердить, APP_VERSION бамп при релизе) |
 
-### Релиз 1.32 — Онбординг T3–T7 + фото-везде UX-I3 (11.11.2026, Ready To Deploy → Done)
+### Скоуп 5 направлений — дизайн-проработка (12.11.2026, мандат владельца «только дизайн и аналитика, кодить не надо»)
+
+| Дата | Тикеты | Было | Стало | Примечание |
+|---|---|---|---|---|
+| 12.11.2026 | #226 [MON-S1], #227 [GOA-S1], #228 [ANA-S2], #229 [TRN-S1], #230 [FIT-S1] | - | In Design | скоуп-Story созданы (sub-issue к #1 MON-E1, #13 GOA-I1, #191 ANA-I1, #111 TRN-I4, #45 FIT-I1); 5 дизайн-агентов параллельно; артefакты: spec-mon-e1-monetization.md + mon-premium.html (6 экр.), spec-goa-s1-goals.md + goa-goals.html (8 экр., MVP силовая e1RM+частота, R1–R4), spec-ana-s2-scope.md + ana-weekly-digest.html (Telegram-сводка; приоритет: сводка→онбординг-события→панели), spec-trn-s1-trainer.md (~800 строк, social.json хранилище, MVP-срез §16, 14 вопросов, риски ПДн) + trn-trainer.html (9 экр.), spec-fit-s1-calories.md + fit-calories.html (MET-таблица, главный факт: поле met у 243 записей уже есть и не используется, ккал не хранятся — пересчёт авто) — все ждут решений владельца вечером |
 
 | Дата | Тикеты | Было | Стало | Примечание |
 |---|---|---|---|---|
 | 11.11.2026 | #25 [UX-I3] reopen | Closed | In Dev → RtD | владелец: старые иконки в Статистике/Истории — заменить фото; [UX-T32] #202 создан (sub-issue #25), PR #203 (worktree) |
+### Релиз 1.32 — Онбординг T3–T7 + фото-везде UX-I3 (11.11.2026, Ready To Deploy → Done)
 | 11.11.2026 | #186 [ONB-T3]–#190 [ONB-T7], #181 [ONB-S1]–#185 [ONB-S5] | Backlog | In Dev | «Макеты онбординга мне нравятся, можно его дальше пускать в работу» (владелец, одобрение ред. 4); PR #204 — онбординг T3–T7 одним батчем (worktree), бот-username в init-ответе, 576 e2e |
 | 11.11.2026 | #199 [ONB-T8], #196 [EXR-T2] | In Test | Ready To Deploy→Done | см. Релиз 1.31 выше |
 | 11.11.2026 | #202 [UX-T32], #199-задача | In Dev | Code Review | PR #203 APPROVE (блокер-координация: коллизия v=37 с PR #204 — решена порядком merge: #203 первым, #204 перебамп v=38); PR #204 APPROVE (9 non-blocking: APP_VERSION бамп при релизе, tutPlaceTip sticky-нюанс, тост «Скопировано» и др.) |
