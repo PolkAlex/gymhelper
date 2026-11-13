@@ -4341,7 +4341,7 @@ test.describe('[ONB-T6] контакты и проверка сервера', fu
         await openApp(page);
         await page.locator('[aria-label="Настройки"]').click();
         await page.locator('#app button', { hasText: 'Помощь и FAQ' }).click();
-        await expect(page.locator('.wn-foot')).toContainText('GymHelper 1.32');
+        await expect(page.locator('.wn-foot')).toContainText('GymHelper 1.33');
         /* deep-link: вне Telegram tg.openLink — подменяем и ловим URL (fallback window.open тоже) */
         await page.evaluate(function () {
             window.__openUrls = [];
