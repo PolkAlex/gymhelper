@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[ANA-S2] #191 · Еженедельная сводка ботом — Telegram-чат, тёмная тема</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.mhead { margin: 0 2px 6px; font-size: 17px; font-weight: 700; color: #f2f3f5; }
+.mhead span { color: #ffc220; }
+.msub { margin: 0 2px 6px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.caption { margin: 46px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.55; }
+.note b { color: #a8adb6; }
+.footblock {
+    margin: 40px 2px 0; padding: 14px 16px; border: 1px solid #23262c; border-radius: 14px;
+    background: rgba(255,255,255,.03); font-size: 12.5px; color: #8f95a0; line-height: 1.6;
+}
+.footblock b { color: #c9ccd2; }
+.footblock .t { font-size: 13px; font-weight: 700; color: #f2f3f5; margin-bottom: 6px; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 720px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #0e1621; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+    display: flex; flex-direction: column;
+}
+
+/* ---- статус-бар и шапка чата (Telegram dark) ---- */
+.tg-top { background: #17212b; flex: none; }
+.statusrow {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 18px 4px; font-size: 12px; font-weight: 600; color: #e9eef3;
+}
+.statusrow .sig { font-size: 10px; letter-spacing: 1px; color: #a8adb6; }
+.chhead { display: flex; align-items: center; gap: 10px; padding: 8px 12px 10px; }
+.chhead .back { font-size: 22px; color: #a8adb6; line-height: 1; padding: 0 2px; }
+.avatar {
+    width: 40px; height: 40px; border-radius: 50%; flex: none;
+    background: linear-gradient(135deg, #ffb000, #ffc220);
+    display: flex; align-items: center; justify-content: center; font-size: 19px;
+    box-shadow: 0 4px 14px rgba(255,194,32,.25);
+}
+.chwho { flex: 1; min-width: 0; }
+.chwho .nm { font-size: 15px; font-weight: 700; color: #f2f5f8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chwho .st { font-size: 12px; color: #7d8794; margin-top: 1px; }
+.chact { display: flex; gap: 18px; color: #a8adb6; font-size: 17px; padding-right: 4px; }
+
+/* ---- область чата ---- */
+.chat {
+    flex: 1; overflow-y: auto; background: #0e1621;
+    padding: 12px 10px 14px;
+    scrollbar-width: none;
+}
+.chat::-webkit-scrollbar { display: none; }
+.datechip {
+    width: max-content; margin: 4px auto 12px; padding: 4px 12px;
+    background: rgba(12,20,30,.72); border-radius: 999px;
+    font-size: 12px; font-weight: 600; color: #cfd8e1;
+}
+
+/* ---- сообщение бота ---- */
+.msgrow { display: flex; margin: 0 0 10px; }
+.bubble {
+    position: relative; max-width: 84%;
+    background: #182533; border-radius: 14px; border-bottom-left-radius: 4px;
+    padding: 10px 13px 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.35);
+    font-size: 14.5px; line-height: 1.5; color: #e9eef3;
+}
+.bubble .b { font-weight: 700; }
+.bubble .dim { color: #8d99a6; }
+.bubble .sec { margin-top: 9px; }
+.bubble .tail {
+    position: absolute; left: -5px; bottom: 0;
+    width: 0; height: 0; border-style: solid;
+    border-width: 0 0 14px 14px; border-color: transparent transparent #182533 transparent;
+}
+.bmeta {
+    display: flex; justify-content: flex-end; align-items: center; gap: 4px;
+    margin-top: 3px; font-size: 11px; color: #6d7887; height: 14px;
+}
+
+/* ---- inline-клавиатура под сообщением ---- */
+.ikb { margin: 8px 2px 0 12px; max-width: 84%; }
+.ikb .irow { display: flex; margin-top: 6px; }
+.ikb .ibtn {
+    flex: 1; text-align: center; padding: 10px 8px; border-radius: 9px;
+    background: rgba(43,82,120,.92); color: #fff; font-size: 14px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ikb .ibtn.ghost { background: rgba(43,82,120,.45); color: #c6d3e1; font-size: 13px; }
+
+/* ---- поле ввода внизу ---- */
+.tg-input {
+    flex: none; background: #17212b; padding: 8px 10px 12px;
+    display: flex; align-items: center; gap: 8px;
+}
+.tg-input .clip { font-size: 20px; color: #a8adb6; padding: 0 2px; }
+.tg-input .field {
+    flex: 1; background: #2b3742; border-radius: 18px;
+    padding: 9px 14px; font-size: 14px; color: #6d7887;
+}
+.tg-input .mic { font-size: 19px; color: #a8adb6; padding: 0 4px; }
+
+/* ---- пометки-выноски на макете ---- */
+.mark {
+    display: inline-block; margin: 0 0 8px 12px; padding: 3px 10px;
+    border-radius: 999px; border: 1px dashed rgba(255,194,32,.4);
+    font-size: 11px; font-weight: 600; color: #ffc220; letter-spacing: .3px;
+}
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <p class="mhead">[ANA-S2] Еженедельная сводка ботом · <span>«📊 Итоги недели»</span></p>
+    <p class="msub">Тёмный Telegram-чат (не Mini App). Кнопка «📱 Открыть приложение» — URL-кнопка в Mini App;
+        «🔕 Не присылать сводки» — callback. В реальном Telegram цветного текста в сообщениях нет —
+        акценты только жирным (&lt;b&gt;), жирный в макете усилен. Полные тексты и edge cases —
+        <b>docs/spec-ana-s2-scope.md §2в</b>.</p>
+
+    <!-- ================= ЭКРАН 1 ================= -->
+    <div class="caption">Экран 1 — сводка приходит сама <span>понедельник 09:00</span></div>
+    <div class="note">Пользователь ничего не открывал — бот сам прислал снимок прошедшей недели (Пн–Вс).
+        Секции без данных (ккал без профиля, тоннаж без весов, рекордов нет) — опускаются целиком.
+        Пустая неделя (0 тренировок) — сводка <b>не отправляется</b>.</div>
+
+    <div class="phone">
+        <div class="tg-top">
+            <div class="statusrow"><span>9:00</span><span class="sig">•••&nbsp;ᯤ&nbsp;▮▮▮</span></div>
+            <div class="chhead">
+                <span class="back">‹</span>
+                <div class="avatar">💪</div>
+                <div class="chwho">
+                    <div class="nm">GymHelperBot</div>
+                    <div class="st">бот</div>
+                </div>
+                <div class="chact"><span>🔍</span><span>⋮</span></div>
+            </div>
+        </div>
+
+        <div class="chat">
+            <div class="datechip">16 ноября</div>
+
+            <div class="msgrow">
+                <div class="bubble">
+                    <span class="tail"></span>
+                    📊 <span class="b">Итоги недели</span> · 9–15 ноября
+
+                    <div class="sec">🏋️ Тренировки: <span class="b">4</span> · в зале 3 ч 40 мин</div>
+                    <div>⚖️ Тоннаж: <span class="b">6,2 т</span> · <span class="dim">▲ +0,8 т к прошлой</span></div>
+                    <div>🔥 Ккал: <span class="b">≈ 2 400</span></div>
+
+                    <div class="sec">🏆 <span class="b">Рекорды недели:</span></div>
+                    <div>• Жим лёжа — 1ПМ ≈ <span class="b">82 кг</span> (▲ +2)</div>
+                    <div>• Приседания — <span class="b">100 кг × 5</span> — новый максимум</div>
+
+                    <div class="sec">Хорошая неделя. Так держать 💪</div>
+                    <div class="bmeta"><span>9:00</span></div>
+                </div>
+            </div>
+
+            <div class="ikb">
+                <div class="irow"><span class="ibtn">📱 Открыть приложение</span></div>
+                <div class="irow"><span class="ibtn ghost">🔕 Не присылать сводки</span></div>
+            </div>
+        </div>
+
+        <div class="tg-input">
+            <span class="clip">📎</span>
+            <span class="field">Сообщение</span>
+            <span class="mic">🎤</span>
+        </div>
+    </div>
+
+    <!-- ================= ЭКРАН 2 ================= -->
+    <div class="caption">Экран 2 — «🔕 Не присылать сводки» <span>настройка — текст</span></div>
+    <div class="note">Тап по «🔕» — бот отвечает подтверждением; сама сводка остаётся в чате, кнопки под ней
+        исчезают (сообщение редактируется). Возврат — командой <b>/digest</b>: показывает последнюю сводку
+        и возвращает отправку. Отписка — только под сообщением и через /digest; отдельного меню настроек
+        в боте нет (минимум механики).</div>
+
+    <div class="phone">
+        <div class="tg-top">
+            <div class="statusrow"><span>9:01</span><span class="sig">•••&nbsp;ᯤ&nbsp;▮▮▮</span></div>
+            <div class="chhead">
+                <span class="back">‹</span>
+                <div class="avatar">💪</div>
+                <div class="chwho">
+                    <div class="nm">GymHelperBot</div>
+                    <div class="st">бот</div>
+                </div>
+                <div class="chact"><span>🔍</span><span>⋮</span></div>
+            </div>
+        </div>
+
+        <div class="chat">
+            <div class="datechip">16 ноября</div>
+
+            <div class="mark">после тапа «🔕» кнопки под сводкой удалены</div>
+
+            <div class="msgrow">
+                <div class="bubble">
+                    <span class="tail"></span>
+                    📊 <span class="b">Итоги недели</span> · 9–15 ноября
+
+                    <div class="sec">🏋️ Тренировки: <span class="b">4</span> · в зале 3 ч 40 мин</div>
+                    <div>⚖️ Тоннаж: <span class="b">6,2 т</span> · <span class="dim">▲ +0,8 т к прошлой</span></div>
+                    <div>🔥 Ккал: <span class="b">≈ 2 400</span></div>
+
+                    <div class="sec">🏆 <span class="b">Рекорды недели:</span></div>
+                    <div>• Жим лёжа — 1ПМ ≈ <span class="b">82 кг</span> (▲ +2)</div>
+                    <div>• Приседания — <span class="b">100 кг × 5</span> — новый максимум</div>
+
+                    <div class="sec">Хорошая неделя. Так держать 💪</div>
+                    <div class="bmeta"><span>9:00</span></div>
+                </div>
+            </div>
+
+            <div class="msgrow">
+                <div class="bubble">
+                    <span class="tail"></span>
+                    Хорошо, итоги недели больше не приходят 👌
+                    <div class="sec">Вернуть: <span class="b">/digest</span> — покажу последнюю сводку
+                        и включу отправку.</div>
+                    <div class="bmeta"><span>9:01</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tg-input">
+            <span class="clip">📎</span>
+            <span class="field">Сообщение</span>
+            <span class="mic">🎤</span>
+        </div>
+    </div>
+
+    <!-- ================= примечания ================= -->
+    <div class="footblock">
+        <div class="t">Что за кадром (решения — в спеке §2в, §5)</div>
+        • <b>Пустая неделя</b> (0 завершённых тренировок) — экрана нет, потому что отправки нет: молчим.<br>
+        • <b>/digest</b> по запросу показывает сводку за прошлую неделю с кнопками
+        «🔕 Выключить / 🔔 Включить сводки» — отдельный экран не рисуем, механика из тех же блоков.<br>
+        • Секция <b>«🎯 Цель»</b> появится в сводке только вместе с фичей целей
+        ([GOA-I1], направление в бэклоге) — в макет не включена.<br>
+        • Часовой пояс отправки (09:00 сервер/UTC) — вопрос В2 владельцу в спеке.
+    </div>
+
+</div>
+</body>
+</html>

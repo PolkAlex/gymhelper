@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[FIT-I1] Прозрачный расчёт ккал · макет · Amber Glass</title>
+<style>
+/* ============ страница-презентация (каркас как exr-filters.html) ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 760px; margin: 0 auto; }
+.intro { max-width: 560px; margin: 0 auto 6px; font-size: 18px; font-weight: 700; color: #f2f3f5; line-height: 1.4; }
+.intro-note { max-width: 560px; margin: 0 auto 4px; font-size: 13px; color: #7d838e; line-height: 1.6; }
+.intro-note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+.caption { margin: 42px auto 12px; max-width: 520px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px auto 14px; max-width: 520px; font-size: 12.5px; color: #7d838e; line-height: 1.6; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+
+/* ============ телефон 390px (компакт — 320px) ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.phone.small { max-width: 320px; height: 640px; border-radius: 30px; }
+.p {
+    /* тёмная тема (базовая) — значения из web/style.css */
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    --btnpressed: rgba(255,255,255,.12);
+    --field: rgba(0,0,0,.22); --fieldbrd: rgba(255,255,255,.12);
+    --sheet: rgba(30,32,38,.92); --backdrop: rgba(8,9,11,.55);
+    --cardshadow: rgba(0,0,0,.28); --blik: rgba(255,255,255,.06);
+    --navidle: #6d737d;
+    --chrome-a: rgba(16,17,20,.8); --chrome-b: rgba(16,17,20,.96);
+    --nav-a: rgba(16,17,20,.2); --nav-b: rgba(16,17,20,.94);
+    --amb1: rgba(255,178,32,.15); --amb2: rgba(255,138,60,.09); --amb3: rgba(150,92,25,.18);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.45;
+    font-variant-numeric: tabular-nums;
+    scrollbar-width: none;
+}
+.p.light {
+    /* светлая тема — значения из web/style.css [data-theme="light"] */
+    --bg: #f6f6f4; --text: #16181b; --muted: #8a9099;
+    --accent: #ffb000; --accent-deep: #e09000; --on-accent: #14120a;
+    --glass: rgba(255,255,255,.6); --glassbrd: rgba(22,24,27,.08);
+    --btn: rgba(255,255,255,.70); --btnbrd: rgba(22,24,27,.08);
+    --btnpressed: rgba(22,24,27,.06);
+    --field: rgba(255,255,255,.72); --fieldbrd: rgba(22,24,27,.12);
+    --sheet: rgba(250,250,248,.92); --backdrop: rgba(22,24,27,.35);
+    --cardshadow: rgba(22,24,27,.10); --blik: rgba(255,255,255,.60);
+    --navidle: rgba(22,24,27,.42);
+    --chrome-a: rgba(246,246,244,.8); --chrome-b: rgba(246,246,244,.96);
+    --nav-a: rgba(246,246,244,.2); --nav-b: rgba(246,246,244,.94);
+    --amb1: rgba(255,176,0,.10); --amb2: rgba(255,138,60,.06); --amb3: rgba(150,92,25,.08);
+}
+.p.fix { overflow: hidden; }
+.p::before {
+    content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, var(--amb1), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, var(--amb2), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, var(--amb3), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+/* ============ topbar (как в web/style.css) ============ */
+.topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: linear-gradient(180deg, var(--chrome-b) 62%, var(--chrome-a));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 10px 12px; max-width: 536px; margin: 4px 0 12px;
+}
+.tb-back {
+    width: 32px; height: 32px; border-radius: 9px; border: none; background: var(--btn);
+    color: var(--text); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex: none;
+}
+.tb-back svg { width: 18px; height: 18px; }
+.tb-title { font-weight: 700; font-size: 17px; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
+.tb-user {
+    width: 32px; height: 32px; border-radius: 9px; border: none; background: var(--btn);
+    color: var(--muted); display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex: none;
+}
+.tb-user svg { width: 18px; height: 18px; }
+.content { padding: 0 12px 120px; }
+
+/* ============ нижняя навигация ============ */
+.nav {
+    position: sticky; bottom: 0; z-index: 40;
+    margin: 0 -12px; padding: 8px 18px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, var(--nav-a), var(--nav-b) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--navidle); font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn .nlabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nico { color: var(--accent); }
+.nav .nico { display: inline-flex; line-height: 1; }
+.nav .nico svg { width: 20px; height: 20px; color: inherit; stroke: currentColor; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px;
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+.nav .nfab svg { width: 24px; height: 24px; stroke-width: 2.2; }
+
+/* ============ карточки / текст / кнопки (значения из web/style.css) ============ */
+.card {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; padding: 14px; margin-bottom: 10px;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow);
+}
+.t1 { font-size: 18px; font-weight: 700; margin: 0 0 2px; letter-spacing: .2px; }
+.muted { color: var(--muted); font-size: 13px; }
+.meta { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; margin-bottom: 2px; }
+.btn {
+    border: 1px solid var(--btnbrd); border-radius: 14px; padding: 9px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    background: var(--btn); color: var(--text);
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent; font-family: inherit;
+}
+.btn.sec { background: var(--btn); color: var(--text); }
+.btn.wide { flex: 1 1 100%; }
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent);
+    font-weight: 700; padding: 11px; font-size: 15px;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.chip {
+    border: 1px solid var(--btnbrd); color: var(--text); background: var(--btn);
+    border-radius: 999px; padding: 8px 13px; font-size: 13px; font-weight: 600; cursor: pointer;
+    font-variant-numeric: tabular-nums; font-family: inherit;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chiprow { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+input {
+    width: 100%; box-sizing: border-box;
+    border: 1px solid var(--fieldbrd); border-radius: 12px;
+    padding: 10px 12px; font-size: 15px;
+    background: var(--field); color: var(--text); outline: none; font-family: inherit;
+}
+label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+
+/* ============ пилюли карточки (wpill — значения из web/style.css) ============ */
+.wcpill { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+.wpill {
+    display: inline-flex; align-items: center; gap: 4px;
+    border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600;
+    background: var(--btn); border: 1px solid var(--btnbrd); color: var(--muted);
+}
+.wpill.wp-k { color: var(--accent); border-color: rgba(255,194,32,.28); }
+
+/* ============ упражнения карточки ============ */
+.expill {
+    background: var(--btn); border: 1px solid var(--btnbrd);
+    border-radius: 14px; padding: 8px 12px; margin-bottom: 6px;
+}
+.exhead { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.exico {
+    width: 30px; height: 30px; border-radius: 9px; flex: none;
+    background: rgba(255,194,32,.12); color: var(--accent);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 14px;
+}
+.exsets { margin: 3px 0 0 38px; font-size: 13px; color: var(--muted); }
+
+/* ============ [FIT-I1] разбор ккал ============ */
+details.kcal { margin-top: 10px; }
+details.kcal summary {
+    list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px;
+    font-weight: 700; font-size: 14px; padding: 4px 0;
+}
+details.kcal summary::-webkit-details-marker { display: none; }
+details.kcal summary .chev { margin-left: auto; color: var(--muted); display: inline-flex; }
+details.kcal summary .chev svg { width: 16px; height: 16px; transition: transform .2s; }
+details.kcal[open] summary .chev svg { transform: rotate(180deg); }
+details.kcal summary .kc { color: var(--accent); }
+.kbox { border-top: 1px solid var(--btnbrd); margin-top: 6px; padding-top: 6px; }
+.krow { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--btnbrd); }
+.krow:last-of-type { border-bottom: none; }
+.kname { flex: 1; min-width: 0; font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ksub { display: block; font-size: 11px; color: var(--muted); font-weight: 500; margin-top: 1px; }
+.kbadge {
+    flex: none; font-size: 11px; color: var(--muted); background: var(--btn);
+    border: 1px solid var(--btnbrd); border-radius: 8px; padding: 2px 7px;
+}
+.kkcal { flex: none; font-size: 13.5px; font-weight: 700; color: var(--accent); min-width: 64px; text-align: right; }
+.ktotal { display: flex; align-items: center; gap: 8px; padding: 9px 0 2px; font-weight: 700; font-size: 14px; }
+.ktotal .kkcal { font-size: 15px; }
+.kwhy {
+    display: inline-flex; align-items: center; gap: 4px; margin-top: 6px;
+    font-size: 12.5px; font-weight: 600; color: var(--accent); cursor: pointer;
+}
+.kwhy svg { width: 12px; height: 12px; }
+
+/* ============ [FIT-I1] экран «Как считаются калории» ============ */
+.formula {
+    background: var(--glass); border: 1px solid rgba(255,194,32,.28); border-radius: 16px;
+    padding: 14px; text-align: center; margin-bottom: 10px;
+    box-shadow: inset 0 1px 0 var(--blik);
+}
+.formula .f { font-size: 16.5px; font-weight: 700; letter-spacing: .2px; }
+.formula .f b { color: var(--accent); }
+.inrow { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; }
+.inrow .inline_ {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+    background: var(--btn); border: 1px solid var(--btnbrd); border-radius: 12px; padding: 8px 12px;
+}
+.inrow .inline_ b { font-weight: 700; }
+.mettable { margin-top: 4px; }
+.mtr {
+    display: grid; grid-template-columns: 108px 1fr 62px; gap: 8px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--btnbrd); font-size: 12.5px;
+}
+.mtr:last-child { border-bottom: none; }
+.mtr .mt { font-weight: 700; font-size: 13px; }
+.mtr .me { color: var(--muted); }
+.mtr .mv { font-weight: 700; color: var(--accent); text-align: right; }
+.disc {
+    font-size: 12px; color: var(--muted); line-height: 1.55;
+    border-top: 1px dashed var(--btnbrd); margin-top: 12px; padding-top: 10px;
+}
+
+/* ============ [FIT-I1] шит «Своё упражнение» ============ */
+.backdrop {
+    position: absolute; inset: 0; z-index: 50;
+    background: var(--backdrop); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+}
+.sheet {
+    position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 60;
+    background: var(--sheet); border: 1px solid var(--glassbrd); border-radius: 20px;
+    padding: 14px; box-shadow: 0 18px 50px rgba(0,0,0,.45);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+}
+.mtitle { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+.methint {
+    display: flex; align-items: center; gap: 8px; margin-top: 10px;
+    background: var(--btn); border: 1px solid var(--btnbrd); border-radius: 12px; padding: 9px 12px;
+    font-size: 13px;
+}
+.methint .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.methint b { color: var(--accent); }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+    <p class="intro">[FIT-I1] Прозрачный расчёт калорий — MET по типу упражнения</p>
+    <p class="intro-note">Спека: <code>docs/spec-fit-s1-calories.md</code>. Источники стиля 1-в-1: <code>web/style.css</code> (Amber Glass, 2 темы). Суть фичи: поле <code>met</code> из каталога (243 записи, уже в проде) подключается к калькулятору, минуты — из времени каждого упражнения; экран «Как считаются калории» и разбор по упражнениям. Все числа на макете — реальный пример расчёта: вес 78 кг, присед 6.0 MET × 15 мин ≈ 123 ккал и т.д. Итого ≈ 255 ккал (по текущей формуле было бы ≈ 310).</p>
+
+    <!-- ================= Экран A ================= -->
+    <p class="caption">A · Разбор ккал в карточке тренировки <span>390 · тёмная</span></p>
+    <p class="note">Вход: <b>История → карточка завершённой тренировки</b>. Разворот «🔥 Ккал по упражнениям» заменяет черновик «(в разработке)» (<code>app.js:1676</code>): строки — MET из каталога + реальные минуты упражнения, итог — сумма. В разбор попадают только упражнения с записями. «Своё» без типа показывается бейджем «3.3 MET · тип не задан» (в этом примере все упражнения из каталога — случай показан на экранах C/D). Ссылка «Почему так?» ведёт на экран B.</p>
+    <div class="phone"><div class="p">
+        <div class="topbar">
+            <div class="tb-title">История</div>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.6-3.2 4-4.5 7-4.5s5.4 1.3 7 4.5"/></svg></button>
+        </div>
+        <div class="content">
+            <div class="card">
+                <div class="t1">12-11 ЧТ. Приседания, Жим лёжа, Тяга блока</div>
+                <div class="wcpill">
+                    <span class="wpill">🕐 19:05–20:10</span>
+                    <span class="wpill wp-k">🔥 255 ккал</span>
+                    <span class="wpill">🏋 13 подх.</span>
+                </div>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🦵</span>Приседания со штангой</div>
+                    <div class="exsets">80 кг × 4 × 8</div>
+                </div>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🏋️</span>Жим штанги лёжа</div>
+                    <div class="exsets">60 кг × 4 × 10</div>
+                </div>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🧷</span>Тяга верхнего блока</div>
+                    <div class="exsets">50 кг × 3 × 12</div>
+                </div>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🤸</span>Растяжка квадрицепса</div>
+                    <div class="exsets">2 × 40 сек</div>
+                </div>
+                <details class="kcal" open>
+                    <summary>🔥 Ккал по упражнениям <span class="kc">255</span><span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6.5 9.5l5.5 5.5 5.5-5.5"/></svg></span></summary>
+                    <div class="kbox">
+                        <div class="krow">
+                            <span class="kname">Приседания со штангой<span class="ksub">6.0 MET · 15 мин</span></span>
+                            <span class="kkcal">≈ 123</span>
+                        </div>
+                        <div class="krow">
+                            <span class="kname">Жим штанги лёжа<span class="ksub">3.5 MET · 12 мин</span></span>
+                            <span class="kkcal">≈ 57</span>
+                        </div>
+                        <div class="krow">
+                            <span class="kname">Тяга верхнего блока<span class="ksub">3.5 MET · 10 мин</span></span>
+                            <span class="kkcal">≈ 48</span>
+                        </div>
+                        <div class="krow">
+                            <span class="kname">Растяжка квадрицепса<span class="ksub">2.5 MET · 8 мин</span></span>
+                            <span class="kkcal">≈ 27</span>
+                        </div>
+                        <div class="ktotal">🔥 Итого ≈ <span class="kkcal">255 ккал</span></div>
+                        <span class="kwhy">Почему так? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9.5 6l6 6-6 6"/></svg></span>
+                    </div>
+                </details>
+            </div>
+            <p class="meta">Паузы между упражнениями (20 мин) в расчёт не входят — ккал считается по времени каждого упражнения.</p>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M2.5 12h3M18.5 12h3M6.5 7.5v9M17.5 7.5v9M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg></span><span class="nlabel">Тренировка</span></button>
+            <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5"/></svg></span><span class="nlabel">История</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 4.5v15h16"/><path d="M8.5 15.5v-4M13 15.5V8M17.5 15.5v-6.5"/></svg></span><span class="nlabel">Статистика</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6"/><path d="M12 16.8h.01"/></svg></span><span class="nlabel">Помощь</span></button>
+            <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+        </div>
+    </div></div>
+
+    <!-- ================= Экран B ================= -->
+    <p class="caption">B · «Как считаются калории» — формула и Ваши данные <span>390 · тёмная</span></p>
+    <p class="note">Вход: <b>FAQ → «Как считаются калории?» → «Показать на моих данных»</b> или ссылка <b>«Почему так?»</b> из разбора (экран A). Формула, три входа, разбор последней тренировки, таблица MET, дисклеймер ±20%. Состояния в спеке §6.3: без профиля — вместо примера подсказка + кнопка «Перейти в Профиль»; без тренировок — типовой пример с пометкой.</p>
+    <div class="phone"><div class="p">
+        <div class="topbar">
+            <button class="tb-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+            <div class="tb-title">Как считаются калории</div>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.6-3.2 4-4.5 7-4.5s5.4 1.3 7 4.5"/></svg></button>
+        </div>
+        <div class="content">
+            <div class="formula">
+                <div class="f">ккал = <b>MET</b> × 3.5 × <b>вес</b> ÷ 200 × <b>минуты</b></div>
+                <p class="meta">по каждому упражнению; итог — сумма</p>
+            </div>
+            <div class="inrow">
+                <div class="inline_">⚖️ <span><b>Вес — 78 кг</b> · из Вашего Профиля</span></div>
+                <div class="inline_">📊 <span><b>MET — по типу упражнения</b> · присед 6.0, жим 3.5</span></div>
+                <div class="inline_">⏱ <span><b>Минуты — время упражнения</b> · из записей дневника</span></div>
+            </div>
+            <div class="card">
+                <p class="t1" style="font-size:15px">На Ваших данных · 12-11 ЧТ</p>
+                <div class="kbox" style="border-top:none;padding-top:2px">
+                    <div class="krow"><span class="kname">Приседания со штангой<span class="ksub">6.0 MET · 15 мин</span></span><span class="kkcal">≈ 123</span></div>
+                    <div class="krow"><span class="kname">Жим штанги лёжа<span class="ksub">3.5 MET · 12 мин</span></span><span class="kkcal">≈ 57</span></div>
+                    <div class="krow"><span class="kname">Тяга верхнего блока<span class="ksub">3.5 MET · 10 мин</span></span><span class="kkcal">≈ 48</span></div>
+                    <div class="krow"><span class="kname">Растяжка квадрицепса<span class="ksub">2.5 MET · 8 мин</span></span><span class="kkcal">≈ 27</span></div>
+                    <div class="ktotal">🔥 Итого ≈ <span class="kkcal">255 ккал</span></div>
+                </div>
+                <div class="btnrow"><button class="btn sec wide">Открыть тренировку</button></div>
+            </div>
+            <div class="card">
+                <p class="t1" style="font-size:15px">Сколько MET у какого типа</p>
+                <div class="mettable">
+                    <div class="mtr"><span class="mt">Компаунд · низ</span><span class="me">присед, становая, жим ногами</span><span class="mv">4.3–6.0</span></div>
+                    <div class="mtr"><span class="mt">Компаунд · верх</span><span class="me">жимы, тяги, подтягивания</span><span class="mv">3.5–4.3</span></div>
+                    <div class="mtr"><span class="mt">Изоляция</span><span class="me">махи, сгибания, кроссовер</span><span class="mv">3.0–3.3</span></div>
+                    <div class="mtr"><span class="mt">Пресс и кор</span><span class="me">планка, скручивания</span><span class="mv">3.3–3.8</span></div>
+                    <div class="mtr"><span class="mt">Кардио</span><span class="me">вел, дорожка, скакалка</span><span class="mv">5.0–8.0</span></div>
+                    <div class="mtr"><span class="mt">Растяжка</span><span class="me">стретчинг, заминка</span><span class="mv">2.3–2.5</span></div>
+                    <div class="mtr"><span class="mt">Разминка</span><span class="me">лёгкая работа до занятия</span><span class="mv">2.5–3.8</span></div>
+                </div>
+            </div>
+            <div class="card">
+                <p class="disc">≈ Это оценка: реальный расход зависит от темпа, пауз и техники. Точность ±20% — для дневника и сравнения тренировок этого достаточно.</p>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M2.5 12h3M18.5 12h3M6.5 7.5v9M17.5 7.5v9M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg></span><span class="nlabel">Тренировка</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5"/></svg></span><span class="nlabel">История</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 4.5v15h16"/><path d="M8.5 15.5v-4M13 15.5V8M17.5 15.5v-6.5"/></svg></span><span class="nlabel">Статистика</span></button>
+            <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6"/><path d="M12 16.8h.01"/></svg></span><span class="nlabel">Помощь</span></button>
+            <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+        </div>
+    </div></div>
+
+    <!-- ================= Экран C ================= -->
+    <p class="caption">C · «Своё упражнение»: выбор типа — влияет на MET <span>390 · тёмная</span></p>
+    <p class="note">Новое состояние модалки добавления «Своего» (<code>app.js:3032</code>). Под полем названия — чипы типа; подсказка показывает, каким MET посчитается упражнение, и меняется при выборе. По умолчанию выбрана <b>«Изоляция» (3.3 MET)</b> — самый частый случай «того, чего нет в базе». Тип хранится в GymData (вопрос 5 спеки), позже меняется в списке «Своё».</p>
+    <div class="phone"><div class="p fix">
+        <div class="topbar">
+            <div class="tb-title">Тренировка</div>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.6-3.2 4-4.5 7-4.5s5.4 1.3 7 4.5"/></svg></button>
+        </div>
+        <div class="content">
+            <div class="card">
+                <div class="t1">13-11 ПТ · активная</div>
+                <div class="wcpill">
+                    <span class="wpill">⚫ идёт</span>
+                    <span class="wpill">🕐 с 19:32</span>
+                </div>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🏋️</span>Жим штанги лёжа</div>
+                    <div class="exsets">60 кг × 2 × 10</div>
+                </div>
+            </div>
+        </div>
+        <div class="backdrop"></div>
+        <div class="sheet">
+            <p class="mtitle">✍️ Своё упражнение</p>
+            <label>Название (до 60 символов)</label>
+            <input type="text" value="Прогулка фермера">
+            <label>Тип — влияет на расчёт калорий</label>
+            <div class="chiprow">
+                <button class="chip on">Компаунд</button>
+                <button class="chip">Изоляция</button>
+                <button class="chip">Кардио</button>
+                <button class="chip">Растяжка</button>
+                <button class="chip">Разминка</button>
+            </div>
+            <div class="methint"><span class="dot"></span><span>Посчитаем как <b>5.0 MET</b> — базовые движения: присед, тяга, жим стоя</span></div>
+            <div class="btnrow">
+                <button class="btn prime wide">➕ Добавить</button>
+                <button class="btn sec wide">Отмена</button>
+            </div>
+        </div>
+    </div></div>
+
+    <!-- ================= Экран D ================= -->
+    <p class="caption">D · «Как считаются калории» — таблица MET <span>390 · светлая</span></p>
+    <p class="note">Тот же экран B в <b>светлой теме</b> (тогл в Настройках). Показан нижний блок: таблица типов из <code>cat:/m:/e:</code>-тегов каталога и дисклеймер. Плюс карточка про «Свои»: считаются по выбранному типу, без типа — 3.3 MET.</p>
+    <div class="phone"><div class="p light">
+        <div class="topbar">
+            <button class="tb-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+            <div class="tb-title">Как считаются калории</div>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.6-3.2 4-4.5 7-4.5s5.4 1.3 7 4.5"/></svg></button>
+        </div>
+        <div class="content">
+            <div class="formula">
+                <div class="f">ккал = <b>MET</b> × 3.5 × <b>вес</b> ÷ 200 × <b>минуты</b></div>
+                <p class="meta">MET — по типу упражнения, вес — из Профиля (78 кг)</p>
+            </div>
+            <div class="card">
+                <p class="t1" style="font-size:15px">Сколько MET у какого типа</p>
+                <div class="mettable">
+                    <div class="mtr"><span class="mt">Компаунд · низ</span><span class="me">присед, становая, жим ногами</span><span class="mv">4.3–6.0</span></div>
+                    <div class="mtr"><span class="mt">Компаунд · верх</span><span class="me">жимы, тяги, подтягивания</span><span class="mv">3.5–4.3</span></div>
+                    <div class="mtr"><span class="mt">Изоляция</span><span class="me">махи, сгибания, кроссовер</span><span class="mv">3.0–3.3</span></div>
+                    <div class="mtr"><span class="mt">Пресс и кор</span><span class="me">планка, скручивания</span><span class="mv">3.3–3.8</span></div>
+                    <div class="mtr"><span class="mt">Кардио</span><span class="me">вел, дорожка, скакалка</span><span class="mv">5.0–8.0</span></div>
+                    <div class="mtr"><span class="mt">Растяжка</span><span class="me">стретчинг, заминка</span><span class="mv">2.3–2.5</span></div>
+                    <div class="mtr"><span class="mt">Разминка</span><span class="me">лёгкая работа до занятия</span><span class="mv">2.5–3.8</span></div>
+                </div>
+            </div>
+            <div class="card">
+                <p class="t1" style="font-size:15px">Свои упражнения</p>
+                <p class="meta" style="margin-top:2px">Считаются по выбранному при добавлении типу; тип можно поменять в списке «Своё». Без типа — умеренные 3.3 MET.</p>
+            </div>
+            <div class="card">
+                <p class="disc">≈ Это оценка: реальный расход зависит от темпа, пауз и техники. Точность ±20% — для дневника и сравнения тренировок этого достаточно.</p>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M2.5 12h3M18.5 12h3M6.5 7.5v9M17.5 7.5v9M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg></span><span class="nlabel">Тренировка</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5"/></svg></span><span class="nlabel">История</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 4.5v15h16"/><path d="M8.5 15.5v-4M13 15.5V8M17.5 15.5v-6.5"/></svg></span><span class="nlabel">Статистика</span></button>
+            <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6"/><path d="M12 16.8h.01"/></svg></span><span class="nlabel">Помощь</span></button>
+            <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+        </div>
+    </div></div>
+
+    <!-- ================= Экран E ================= -->
+    <p class="caption">E · Разбор ккал — компактный телефон <span>320 · светлая</span></p>
+    <p class="note">Проверка <b>320px</b>: строки разбора переносятся в две строки (имя + подпись MET/минуты слева, ккал справа), пилюли карточки переносятся на новую строку — ничего не обрезается.</p>
+    <div class="phone small"><div class="p light">
+        <div class="topbar">
+            <div class="tb-title">История</div>
+            <button class="tb-user"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.5"/><path d="M5 19.5c1.6-3.2 4-4.5 7-4.5s5.4 1.3 7 4.5"/></svg></button>
+        </div>
+        <div class="content">
+            <div class="card">
+                <div class="t1" style="font-size:16px">12-11 ЧТ. Приседания, Жим, Тяга</div>
+                <div class="wcpill">
+                    <span class="wpill">🕐 19:05–20:10</span>
+                    <span class="wpill wp-k">🔥 255 ккал</span>
+                    <span class="wpill">🏋 13 подх.</span>
+                </div>
+                <details class="kcal" open>
+                    <summary>🔥 Ккал по упражнениям <span class="kc">255</span><span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6.5 9.5l5.5 5.5 5.5-5.5"/></svg></span></summary>
+                    <div class="kbox">
+                        <div class="krow">
+                            <span class="kname">Приседания со штангой<span class="ksub">6.0 MET · 15 мин</span></span>
+                            <span class="kkcal">≈ 123</span>
+                        </div>
+                        <div class="krow">
+                            <span class="kname">Жим штанги лёжа<span class="ksub">3.5 MET · 12 мин</span></span>
+                            <span class="kkcal">≈ 57</span>
+                        </div>
+                        <div class="krow">
+                            <span class="kname">Тяга верхнего блока<span class="ksub">3.5 MET · 10 мин</span></span>
+                            <span class="kkcal">≈ 48</span>
+                        </div>
+                        <div class="krow">
+                            <span class="kname">Растяжка квадрицепса<span class="ksub">2.5 MET · 8 мин</span></span>
+                            <span class="kkcal">≈ 27</span>
+                        </div>
+                        <div class="ktotal">🔥 Итого ≈ <span class="kkcal">255 ккал</span></div>
+                        <span class="kwhy">Почему так? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9.5 6l6 6-6 6"/></svg></span>
+                    </div>
+                </details>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M2.5 12h3M18.5 12h3M6.5 7.5v9M17.5 7.5v9M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/></svg></span><span class="nlabel">Тренировка</span></button>
+            <button class="nbtn on"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 9.5h17M8 3v3.5M16 3v3.5"/></svg></span><span class="nlabel">История</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M4 4.5v15h16"/><path d="M8.5 15.5v-4M13 15.5V8M17.5 15.5v-6.5"/></svg></span><span class="nlabel">Статистика</span></button>
+            <button class="nbtn"><span class="nico"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.6a2.4 2.4 0 1 1 3.3 2.2c-.7.3-.9.8-.9 1.6"/><path d="M12 16.8h.01"/></svg></span><span class="nlabel">Помощь</span></button>
+            <button class="nfab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M12 5.5v13M5.5 12h13"/></svg></button>
+        </div>
+    </div></div>
+
+    <p class="note" style="margin-top:26px">Числа примера: вес 78 кг; ккал/мин = MET × 3.5 × 78 ÷ 200 (6.0 → 8.19, 3.5 → 4.78, 2.5 → 3.41). По текущей формуле (кг/мин на всю тренировку) этот же день дал бы ≈ 310 ккал — минуты пауз засчитаны, типы не учтены. «Своё» без типа — бейдж «3.3 MET · тип не задан», тап по нему открывает выбор типа (спека §5.4, §7).</p>
+</div>
+</body>
+</html>
