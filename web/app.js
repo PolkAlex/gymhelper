@@ -3592,7 +3592,7 @@ function trackOnb(name) {
     if (!lsOk() || lsGet('gymOnbEv' + name) === '1') return;
     lsSet('gymOnbEv' + name, '1');
     try {
-        fetch('/api/track', { method: 'POST', body: JSON.stringify({ initData: INIT, events: [name] }) })
+        fetch('/api/track', { method: 'POST', body: JSON.stringify({ initData: INIT, events: [name] }), keepalive: true })
             .catch(function () { /* noop: аналитика не должна ронять онбординг */ });
     } catch (e) { /* noop */ }
 }
