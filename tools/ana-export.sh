@@ -7,8 +7,9 @@
 #
 # Что делает: читает GYM_ADMIN_TOKEN из /opt/gym/.env (НЕ печатает его),
 # забирает http://localhost:8080/stats?token=… и кладёт ответ в
-# /tmp/ana-stats.json (chmod 600 — читать может только root). В JSON только
-# агрегаты счётчиков, без ПДн (privacy.html).
+# /tmp/ana-stats.json (запись атомарная: сперва временный файл, затем mv —
+# частичный файл параллельный ssh cat не увидит; chmod 600 — читать может
+# только root). В JSON только агрегаты счётчиков, без ПДн (privacy.html).
 #
 # Fail-safe: ошибка curl / пустой ответ / не-JSON → файл не пишется,
 # exit 1 с сообщением. Дальше файл забирает tools/ana-pull.ps1 (с локальной
@@ -16,8 +17,10 @@
 # =============================================================================
 
 set -u
+umask 077        # файл с агрегатами приватен (600) с момента создания, до chmod ниже
 APP_DIR=/opt/gym
 OUT=/tmp/ana-stats.json
+TMP="$OUT.tmp"
 
 cd "$APP_DIR" 2>/dev/null || { echo "ОШИБКА: нет каталога $APP_DIR" >&2; exit 1; }
 
@@ -29,30 +32,33 @@ if [ -z "${TOKEN:-}" ]; then
     exit 1
 fi
 
-rm -f "$OUT"
 # -s тихо; -f: HTTP >= 400 (неверный токен → 404) = ненулевой код, тело не пишем;
 # --max-time 30: зависший порт не вешает скрипт. Сообщение об ошибке — своё,
 # без URL (токен в query, в консоль его не печатаем).
+# Пишем во временный файл и mv (эталон — deploy/backup.sh): параллельный ssh cat
+# не увидит частичный $OUT, старый файл живёт до атомарной замены.
+rm -f "$TMP"
 CURL_CODE=0
-curl -s -f --max-time 30 "http://localhost:8080/stats?token=$TOKEN" -o "$OUT" || CURL_CODE=$?
+curl -s -f --max-time 30 "http://localhost:8080/stats?token=$TOKEN" -o "$TMP" || CURL_CODE=$?
 if [ "$CURL_CODE" -ne 0 ]; then
     echo "ОШИБКА: curl /stats завершился с кодом $CURL_CODE (контейнер на 8080 не отвечает или токен неверен) — файл не пишу" >&2
-    rm -f "$OUT"
+    rm -f "$TMP"
     exit 1
 fi
 
-if [ ! -s "$OUT" ]; then
+if [ ! -s "$TMP" ]; then
     echo "ОШИБКА: /stats вернул пустой ответ — файл не пишу" >&2
-    rm -f "$OUT"
+    rm -f "$TMP"
     exit 1
 fi
 
-FIRST=$(head -c 1 "$OUT" 2>/dev/null)
+FIRST=$(head -c 1 "$TMP" 2>/dev/null)
 if [ "$FIRST" != "{" ]; then
     echo "ОШИБКА: ответ /stats не похож на JSON — файл не пишу" >&2
-    rm -f "$OUT"
+    rm -f "$TMP"
     exit 1
 fi
 
-chmod 600 "$OUT"
+mv -f "$TMP" "$OUT"
+chmod 600 "$OUT"   # страховка: права mv наследует от tmp (600 из umask), но не полагаемся
 echo "OK: $OUT ($(wc -c < "$OUT") байт)"
