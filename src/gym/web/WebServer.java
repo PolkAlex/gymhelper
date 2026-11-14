@@ -111,6 +111,14 @@ public final class WebServer {
                 handleSave(ex);
                 return;
             }
+            if ("/api/track".equals(path)) {
+                if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+                    sendJson(ex, 405, Map.of("ok", false));
+                    return;
+                }
+                handleTrack(ex);
+                return;
+            }
             serveStatic(ex, path);
         } catch (Exception e) {
             System.out.println("[warn] web " + path + ": " + e.getMessage());
@@ -214,9 +222,13 @@ public final class WebServer {
             sendJson(ex, 401, Map.of("ok", false));
             return;
         }
+        /* [ANA-T5] сегмент init (спека ANA-S2 г1) считается ДО load по факту существования
+           файла данных и его mtime — содержимое не читается */
+        long dataMtime = storage.dataFileMtime(userId);
         GymData data = storage.load(userId);
         System.out.println("[init] user " + userId + " rev " + data.rev + " workouts " + data.workouts.size());
         stats.inc("maInit");
+        stats.inc(initSegment(dataMtime));
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("userId", userId);
@@ -333,6 +345,59 @@ public final class WebServer {
         resp.put("ok", true);
         resp.put("rev", data.rev);
         sendJson(ex, 200, resp);
+    }
+
+    /* [ANA-T5] события онбординга (спека ANA-S2 §2г2): белый список имён — неизвестные
+       игнорируются. Только счётчики Stats, БЕЗ персистенции в GymData: формат
+       chat_*.json не меняется (принцип [ONB] §7 — онбординг не пишет в данные). */
+    private static final Set<String> TRACK_EVENTS = Set.of(
+        "onboardingStarted", "onboardingCompleted", "onboardingTutorialSkipped");
+
+    /* [ANA-T5] POST /api/track {initData, events:[имя,...]} — события онбординга в Stats.
+       Онбординг завершается без изменений данных, /api/save при нём не вызывается, а
+       события completed/skipped наступают после /api/init — поэтому отдельный эндпоинт.
+       Валидация initData та же, что у /api/init; максимум 16 событий за запрос. */
+    private void handleTrack(HttpExchange ex) throws IOException {
+        Map<String, Object> body = readJsonBody(ex);
+        if (body == null) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        String initData = (String) body.get("initData");
+        long userId = validateInitData(initData == null ? "" : initData, token);
+        if (userId <= 0) {
+            System.out.println("[warn] track rejected: initDataLen=" + (initData == null ? -1 : initData.length()));
+            sendJson(ex, 401, Map.of("ok", false));
+            return;
+        }
+        List<Object> events = Json.list(body.get("events"));
+        if (events == null) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        int counted = 0;
+        for (Object o : events) {
+            if (counted >= 16) break;
+            String name = o instanceof String ? (String) o : null;
+            if (name != null && TRACK_EVENTS.contains(name)) {
+                stats.inc(name);
+                counted++;
+            }
+        }
+        System.out.println("[track] user " + userId + " events " + counted);
+        sendJson(ex, 200, Map.of("ok", true));
+    }
+
+    /* [ANA-T5] сегмент init (спека ANA-S2 §2г1): файла данных нет → maInitNew; есть, но
+       последняя активность (mtime = время последнего /api/save) старше 7 суток →
+       maInitReturn; иначе → maInitRepeat. Privacy: только существование файла и его
+       mtime — содержимое не читается (спека §3.2). */
+    private static final long INIT_RETURN_AFTER_MS = 7L * 24 * 60 * 60 * 1000;
+
+    private static String initSegment(long dataMtime) {
+        if (dataMtime < 0) return "maInitNew";
+        if (System.currentTimeMillis() - dataMtime > INIT_RETURN_AFTER_MS) return "maInitReturn";
+        return "maInitRepeat";
     }
 
     private void serveStatic(HttpExchange ex, String path) throws IOException {

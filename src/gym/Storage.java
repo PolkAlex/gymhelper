@@ -110,6 +110,19 @@ public final class Storage {
         }
     }
 
+    /* [ANA-T5] mtime файла данных пользователя (сегментация init, спека ANA-S2 г1):
+       -1, если файла нет. Только факт существования и время изменения — содержимое
+       не читается (privacy: спека ANA-S2 §3.2). */
+    public synchronized long dataFileMtime(long chatId) {
+        try {
+            Path f = dir.resolve("chat_" + chatId + ".json");
+            if (Files.exists(f)) return Files.getLastModifiedTime(f).toMillis();
+        } catch (Exception e) {
+            System.out.println("[warn] dataFileMtime: " + e.getMessage());
+        }
+        return -1L;
+    }
+
     /* [UX-T16] рассылка владельцем: все активные чаты — id из имён chat_<id>.json в data/ */
     public synchronized List<Long> chatIds() {
         List<Long> out = new ArrayList<>();

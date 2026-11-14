@@ -42,6 +42,7 @@ let __restExpiredFired = false; /* сигнал «истёк» — один ра
    (формат data/*.json не затрагивается, §8). Всё скипаемое; тон — на «Вы» */
 let obOpen = false;   /* приветствие-карусель поверх приложения */
 let obSlide = 0;      /* текущий слайд 0..2 */
+let obTracked = false; /* [ANA-T5] идёт настоящий онбординг (не «Повторить подсказки» из Помощи): события шлём только в нём */
 let tutOpen = false;  /* туториал: спотлайты поверх реальных экранов */
 let tutStep = 0;      /* шаг 0..3: FAB → .ex-add → пара [ 📅 ][ ⚙ ] → таб «Статистика» */
 let helpOpen = false; /* подэкран «Помощь» (паттерн Настроек: поверх вкладки) */
@@ -1145,7 +1146,7 @@ const ACTIONS = {
     obSkip: function () { obFinish(); },
     /* [ONB-T4] туториал: «Дальше»/«Пропустить»; щит перехватывает тапы — ничего не делает */
     tutNext: function () { tutNext(); },
-    tutSkip: function () { tutFinish(); },
+    tutSkip: function () { if (obTracked) trackOnb('onboardingTutorialSkipped'); tutFinish(); }, /* [ANA-T5] пропуск туториала */
     tutShield: function () { /* перехват: элементы под подсказкой некликабельны */ },
     /* [ONB-T5] Помощь: точка входа Настройки → «О приложении» → «Помощь и FAQ» */
     openHelp: function () {
@@ -3583,10 +3584,25 @@ function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return n
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* noop */ } }
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* noop */ } }
 
+/* [ANA-T5] события онбординга (спека ANA-S2 г2): имена — белый список сервера, доставка —
+   fire-and-forget POST /api/track (онбординг завершается без изменений данных, /api/save
+   при нём не зовётся, а completed/skipped наступают после /api/init). Дедуп — флаг в
+   localStorage: каждое событие 1 раз за жизнь онбординга (спека г2). */
+function trackOnb(name) {
+    if (!lsOk() || lsGet('gymOnbEv' + name) === '1') return;
+    lsSet('gymOnbEv' + name, '1');
+    try {
+        fetch('/api/track', { method: 'POST', body: JSON.stringify({ initData: INIT, events: [name] }) })
+            .catch(function () { /* noop: аналитика не должна ронять онбординг */ });
+    } catch (e) { /* noop */ }
+}
+
 /* ---------- ворота онбординга: вызывается один раз из init() после первого render ---------- */
 function onbGate() {
     if (!lsOk()) return;
     if (lsGet('gymOnbDone') !== '1') { /* [ONB-T3] приветствие — всем при первом открытии (решение 12) */
+        obTracked = true;
+        trackOnb('onboardingStarted'); /* [ANA-T5] */
         obOpen = true;
         obSlide = 0;
         render();
@@ -3674,7 +3690,10 @@ function tutStart() {
 function tutNext() {
     let next = tutStep + 1;
     if (next === 1 && !tutStep2Target()) next = 2; /* нет активной тренировки — шаг пропускается */
-    if (next >= TUT_STEPS.length) { tutFinish(); return; } /* завершение молча, без финального экрана */
+    if (next >= TUT_STEPS.length) {
+        if (obTracked) trackOnb('onboardingCompleted'); /* [ANA-T5] прошёл онбординг до конца */
+        tutFinish(); return;
+    } /* завершение молча, без финального экрана */
     tutStep = next;
     tutApplySurface();
     window.scrollTo(0, 0);
@@ -3682,6 +3701,7 @@ function tutNext() {
     tutPlaceTip();
 }
 function tutFinish() {
+    obTracked = false; /* [ANA-T5] дальше — только повторы из Помощи, без событий */
     tutOpen = false;
     lsSet('gymOnbDone', '1');
     if (tab === 'history' && viewWid && isDirty()) save();
