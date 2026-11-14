@@ -141,6 +141,15 @@ In Dev: 0; Code Review: 0; In Test: 0 — все тикеты дня Done (Ре�
 | Дата | Тикеты | Было | Стало | Примечание |
 |---|---|---|---|---|
 | 11.11.2026 | #25 [UX-I3] reopen | Closed | In Dev → RtD | владелец: старые иконки в Статистике/Истории — заменить фото; [UX-T32] #202 создан (sub-issue #25), PR #203 (worktree) |
+### Тех-батч дня: ANA-T4 автоматизация + гигиена репо + SQL-E1 вопрос (11.11.2026, мандат «техничка/тесты/ускорения без владельца»)
+
+| Дата | Тикеты | Было | Стало | Примечание |
+|---|---|---|---|---|
+| 11.11.2026 | #231 [ANA-T4], #232 [EXR-T10] | - | In Dev | тикеты созданы (под #191 ANA-I1, #206 EXR-E1) |
+| 11.11.2026 | #231 [ANA-T4] | In Dev | Code Review | PR #233: tools/ana-export.sh (VPS, curl /stats за токеном из .env, umask 077, атомарная запись) + tools/ana-pull.ps1 (ssh gym-vps → ana-to-gist → gh gist edit, полные пути node/gh, WhatIf, лог) + docs; ревью APPROVE + фиксы non-blocking (umask/атомарность/stderr-диагностика/алиас gym-vps/полные пути) применены |
+| 11.11.2026 | #231 [ANA-T4], #232 [EXR-T10] | Code Review/In Dev | Done | PR #233 merged; ana-export.sh установлен на VPS (прогон OK: /tmp/ana-stats.json 266B); secret-gist создан (c5b743a9d997e9921fba9cb36c65130f), id в tools/ana-gist-id.txt (.gitignore); полный прогон ana-pull.ps1 — gist обновлён валидным JSON (maInit=32, W46); Task Scheduler «GymHelper ANA stats pull» зарегистрирован (ежечасно, Ready); гигиена: 44 merged-ветки удалены с origin, локальные merged -d (68-sprint1 не merged — оставлена), worktree'ы удалены, gc |
+| 11.11.2026 | SQL-E1 (вопрос владельцу) | — | — | НЕ взят в работу: SQLite требует JDBC-драйвер (~9MB зависимость) — конфликт с принципом «чистая Java без внешних зависимостей». Решение за владельцем: разрешить зависимость / отложить до реального роста / альтернатива |
+
 ### Релиз 1.32 — Онбординг T3–T7 + фото-везде UX-I3 (11.11.2026, Ready To Deploy → Done)
 | 11.11.2026 | #186 [ONB-T3]–#190 [ONB-T7], #181 [ONB-S1]–#185 [ONB-S5] | Backlog | In Dev | «Макеты онбординга мне нравятся, можно его дальше пускать в работу» (владелец, одобрение ред. 4); PR #204 — онбординг T3–T7 одним батчем (worktree), бот-username в init-ответе, 576 e2e |
 | 11.11.2026 | #199 [ONB-T8], #196 [EXR-T2] | In Test | Ready To Deploy→Done | см. Релиз 1.31 выше |
