@@ -49,3 +49,6 @@ tests/debug-75.spec.js
 
 ### EXR-T2: кэш датасета free-exercise-db (инструмент импорта) ###
 tools/.fdb-cache/
+
+### ANA-T4: id секретного гиста ANA-дашборда (локальный секрет, не коммитить) ###
+tools/ana-gist-id.txt
