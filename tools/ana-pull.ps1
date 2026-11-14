@@ -111,7 +111,7 @@ try {
     # --- 4. Обновить secret-gist: id из tools\ana-gist-id.txt (в .gitignore).
     if (-not (Test-Path -LiteralPath $GistIdFile)) {
         Write-Log 'Гист ещё не настроен — останавливаюсь перед gh gist edit. Настройка ОДНОРАЗОВАЯ:'
-        Write-Log ("  & ""{0}"" gist create --secret --desc ""GymHelper ANA stats (Grafana Infinity)"" ""{1}""" -f $GhExe, $GistJson)
+        Write-Log ("  & ""{0}"" gist create -d ""GymHelper ANA stats (Grafana Infinity)"" ""{1}""" -f $GhExe, $GistJson)
         Write-Log ("  полученный id (одной строкой) сохранить в {0} (файл в .gitignore), затем перезапустить скрипт" -f $GistIdFile)
         exit 2
     }

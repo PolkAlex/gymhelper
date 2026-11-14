@@ -84,4 +84,4 @@ console.log("");
 console.log("Обновление секретного гиста (после каждой выгрузки):");
 console.log('  gh gist edit <GIST_ID> --filename ana-stats.json "' + outArg + '"');
 console.log("Гиста ещё нет — создать ОДНОРАЗОВО (id вписать в docs/metrics.md, раздел «ANA-дашборд»):");
-console.log('  gh gist create --secret --desc "GymHelper ANA stats (Grafana Infinity)" "' + outArg + '"');
+console.log('  gh gist create -d "GymHelper ANA stats (Grafana Infinity)" "' + outArg + '"');

@@ -134,7 +134,7 @@ node tools/ana-to-gist.mjs
 
 Одноразовое создание (владелец; скрипт гист сам не создаёт и токены не печатает):
 1. `node tools/ana-to-gist.mjs` → `%TEMP%\opencode\ana-stats.json`
-2. `gh gist create --secret --desc "GymHelper ANA stats (Grafana Infinity)" "$env:TEMP\opencode\ana-stats.json"`
+2. `gh gist create -d "GymHelper ANA stats (Grafana Infinity)" "$env:TEMP\opencode\ana-stats.json"`
 3. Полученный gist id вписать в этот раздел (GIST_ID выше).
 
 Автоматизация ([ANA-T4]): `tools/ana-export.sh` на VPS (lead кладёт в
