@@ -1,3 +1,4 @@
 # Файлы, живущие на Linux VPS: жёстко LF (при core.autocrlf=true на Windows
 # чекаут превратил бы их в CRLF и bash/systemd-юниты сломались при scp на сервер)
 deploy/** text eol=lf
+tools/ana-export.sh text eol=lf

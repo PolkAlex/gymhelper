@@ -137,6 +137,15 @@ node tools/ana-to-gist.mjs
 2. `gh gist create --secret --desc "GymHelper ANA stats (Grafana Infinity)" "$env:TEMP\opencode\ana-stats.json"`
 3. Полученный gist id вписать в этот раздел (GIST_ID выше).
 
+Автоматизация ([ANA-T4]): `tools/ana-export.sh` на VPS (lead кладёт в
+`/opt/gym/ana-export.sh`; читает GYM_ADMIN_TOKEN из .env, `curl /stats` →
+`/tmp/ana-stats.json`, chmod 600) + `tools/ana-pull.ps1` на локальной машине
+по расписанию (Task Scheduler, ежечасно — как backup-pull.ps1): ssh забирает
+JSON с VPS → `ana-to-gist.mjs` → `gh gist edit`. Токен остаётся на VPS, на
+локаль попадают только агрегаты. Настройка: создать secret-gist (шаги выше),
+сохранить его id одной строкой в `tools/ana-gist-id.txt` (в .gitignore);
+проверка без выполнения: `powershell -File tools\ana-pull.ps1 -WhatIf`.
+
 Настройка Infinity datasource (владелец, веб; отдельный datasource или тот же — URL другой):
 - Type: **JSON**; URL: raw-URL из этого раздела; Format: JSON.
 - root_selector: для totals-панелей — `totals`; для недельных — `weeks` (подбирается по
