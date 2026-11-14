@@ -4301,6 +4301,58 @@ test.describe('[ONB-T4] туториал', function () {
     });
 });
 
+/* ===== [ANA-T5] онбординг-события: клиент шлёт /api/track, мок собирает (/api/track-events) ===== */
+
+/* список собранных моком событий (после /api/reset он пуст) */
+async function trackedEvents(request) {
+    const r = await request.get('/api/track-events');
+    return await r.json();
+}
+
+test.describe('[ANA-T5] онбординг-события (/api/track)', function () {
+    test('полное прохождение: onboardingStarted + onboardingCompleted по 1 разу, перезагрузка без дублей', async ({ page, request }) => {
+        await cleanOnb(page);
+        await page.goto('/');
+        await expect(page.locator('.obwrap')).toBeVisible({ timeout: 10000 });
+        /* started уходит сразу при открытии приветствия */
+        await expect.poll(async () => (await trackedEvents(request)).join(',')).toContain('onboardingStarted');
+        /* приветствие до конца: «Далее» ×2 → «Начать» → туториал автопоказом */
+        await page.locator('[data-act="obNext"]').click();
+        await page.locator('[data-act="obNext"]').click();
+        await page.locator('[data-act="obNext"]').click();
+        await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
+        /* туториал до конца: шаг 1 → (шаг 2 пропущен, нет активной) → шаг 3 → шаг 4 → финал */
+        await page.locator('[data-act="tutNext"]').click();
+        await page.locator('[data-act="tutNext"]').click();
+        await page.locator('[data-act="tutNext"]').click();
+        await expect(page.locator('#tutTip')).toHaveCount(0);
+        await expect.poll(async () => (await trackedEvents(request)).join(',')).toContain('onboardingCompleted');
+        /* перезагрузка: онбординг пройден — новых событий нет (дедуп в localStorage) */
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        const events = await trackedEvents(request);
+        const count = function (name) { return events.filter(function (e) { return e === name; }).length; };
+        if (count('onboardingStarted') !== 1) throw new Error('onboardingStarted не ровно 1: ' + JSON.stringify(events));
+        if (count('onboardingCompleted') !== 1) throw new Error('onboardingCompleted не ровно 1: ' + JSON.stringify(events));
+        if (count('onboardingTutorialSkipped') !== 0) throw new Error('onboardingTutorialSkipped лишний: ' + JSON.stringify(events));
+    });
+
+    test('пропуск туториала: onboardingStarted + onboardingTutorialSkipped, completed не уходит', async ({ page, request }) => {
+        await cleanOnb(page);
+        await page.goto('/');
+        await expect(page.locator('.obwrap')).toBeVisible({ timeout: 10000 });
+        await page.locator('.wskip').click();
+        await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="tutSkip"]').click();
+        await expect(page.locator('#tutTip')).toHaveCount(0);
+        await expect.poll(async () => (await trackedEvents(request)).join(',')).toContain('onboardingTutorialSkipped');
+        const events = await trackedEvents(request);
+        if (events.indexOf('onboardingCompleted') >= 0) throw new Error('completed не должен был уйти: ' + JSON.stringify(events));
+        const started = events.filter(function (e) { return e === 'onboardingStarted'; }).length;
+        if (started !== 1) throw new Error('onboardingStarted не ровно 1: ' + JSON.stringify(events));
+    });
+});
+
 test.describe('[ONB-T5] Помощь (FAQ)', function () {
     test('вход из Настроек → «О приложении», 7 вопросов, аккордеон, пилюля «новое» до первого открытия', async ({ page }) => {
         await page.addInitScript(function () { try { localStorage.removeItem('gymHelpSeen'); } catch (e) { /* noop */ } });

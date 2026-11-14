@@ -511,6 +511,85 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: stats " + statsErr);
         }
 
+        /* [ANA-T5] события онбординга /api/track + сегментация init (спека ANA-S2 г1/г2):
+           события и сегменты считаются в Stats (totals + недельные агрегаты), неизвестные
+           имена игнорируются, GymData НЕ расширяется (chat_<id>.json при track не
+           создаётся/не меняется); init-сегменты — по факту существования файла данных и
+           его mtime, без чтения содержимого. Реальный WebServer на эфемерном порту. */
+        try {
+            java.nio.file.Path tmpT5 = java.nio.file.Files.createTempDirectory("gymt5");
+            Storage stT5 = new Storage(tmpT5);
+            Stats counterT5 = new Stats(tmpT5.resolve("stats.json"));
+            WebServer wsT5 = new WebServer("contract-test-token", stT5, tmpT5, counterT5);
+            java.net.ServerSocket probeT5 = new java.net.ServerSocket(0);
+            int portT5 = probeT5.getLocalPort();
+            probeT5.close();
+            wsT5.start(portT5);
+            String idT5 = tgInitData("contract-test-token", 424245);
+
+            /* валидация: неверная подпись — 401; тело без events — 400 */
+            check(postTrack(portT5, "garbage", "[\"onboardingStarted\"]").statusCode() == 401,
+                "t5: /api/track с неверной подписью — 401");
+            check(postJson(portT5, "/api/track", "{\"initData\":\"" + idT5 + "\"}").statusCode() == 400,
+                "t5: /api/track без events — 400");
+
+            /* новый пользователь: файла данных нет → maInitNew */
+            check(postInit(portT5, idT5).statusCode() == 200, "t5: init нового пользователя — 200");
+            /* события онбординга считаются; неизвестные имена игнорируются */
+            check(postTrack(portT5, idT5,
+                "[\"onboardingStarted\",\"onboardingCompleted\",\"notAnEvent\"]").statusCode() == 200,
+                "t5: /api/track — 200");
+            /* [ONB] §7: онбординг не пишет в данные — track не создаёт chat_<id>.json */
+            check(!java.nio.file.Files.exists(tmpT5.resolve("chat_424245.json")),
+                "t5: track не создаёт chat_<id>.json (GymData не расширяется)");
+
+            /* init после save (свежий mtime файла) → maInitRepeat */
+            check(postSave(portT5, idT5, 0, "{\"rev\":0,\"nextId\":1,\"workouts\":[]}").statusCode() == 200,
+                "t5: save создаёт файл данных");
+            check(postInit(portT5, idT5).statusCode() == 200, "t5: init после save — 200");
+
+            /* «вернувшийся»: файл есть, mtime 8 суток назад → maInitReturn */
+            stT5.save(424246, GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":1,\"workouts\":[]}")));
+            java.nio.file.Files.setLastModifiedTime(tmpT5.resolve("chat_424246.json"),
+                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 8L * 24 * 60 * 60 * 1000));
+            String idRet = tgInitData("contract-test-token", 424246);
+            check(postInit(portT5, idRet).statusCode() == 200, "t5: init вернувшегося — 200");
+
+            Map<String, Object> snapT5 = Json.map(Json.parse(get(portT5, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapT5.get("maInit")) == 3, "t5: maInit=3 после трёх init");
+            check(Json.lng(snapT5.get("maInitNew")) == 1, "t5: maInitNew=1 (файла данных не было)");
+            check(Json.lng(snapT5.get("maInitRepeat")) == 1, "t5: maInitRepeat=1 (init после свежего save)");
+            check(Json.lng(snapT5.get("maInitReturn")) == 1, "t5: maInitReturn=1 (mtime старше 7 суток)");
+            check(Json.lng(snapT5.get("onboardingStarted")) == 1, "t5: onboardingStarted=1");
+            check(Json.lng(snapT5.get("onboardingCompleted")) == 1, "t5: onboardingCompleted=1");
+            check(Json.lng(snapT5.get("onboardingTutorialSkipped")) == 0, "t5: onboardingTutorialSkipped=0");
+            check(Json.lng(snapT5.get("maSave")) == 1, "t5: maSave не задвоен (track на save не влияет)");
+            /* недельный агрегат: текущая неделя зеркалит сегменты и события */
+            Map<String, Object> weeksT5 = Json.map(snapT5.get("weeks"));
+            java.time.LocalDate todayT5 = java.time.LocalDate.now();
+            String curWeekT5 = String.format("%04d-W%02d",
+                todayT5.get(java.time.temporal.WeekFields.ISO.weekBasedYear()),
+                todayT5.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear()));
+            Map<String, Object> curT5 = Json.map(weeksT5.get(curWeekT5));
+            check(curT5 != null && Json.lng(curT5.get("maInitNew")) == 1 && Json.lng(curT5.get("maInitRepeat")) == 1
+                    && Json.lng(curT5.get("maInitReturn")) == 1 && Json.lng(curT5.get("onboardingStarted")) == 1,
+                "t5: недельный агрегат текущей недели зеркалит сегменты и события");
+            /* новые ключи перечитываются из файла */
+            Map<String, Object> fileT5 = new Stats(tmpT5.resolve("stats.json")).snapshot();
+            check(Json.lng(fileT5.get("onboardingStarted")) == 1 && Json.lng(fileT5.get("maInitReturn")) == 1,
+                "t5: новые ключи перечитываются из stats.json");
+            /* обратная совместимость: stats.json без новых ключей (старый прод) читается — недостающее = 0 */
+            java.nio.file.Path legacyStatsFile = tmpT5.resolve("stats-legacy.json");
+            java.nio.file.Files.writeString(legacyStatsFile, "{\"maInit\":5,\"weeks\":{\"2026-W01\":{\"maInit\":5}}}",
+                java.nio.charset.StandardCharsets.UTF_8);
+            Map<String, Object> legacySnap = new Stats(legacyStatsFile).snapshot();
+            check(Json.lng(legacySnap.get("maInit")) == 5 && Json.lng(legacySnap.get("maInitNew")) == 0
+                    && Json.lng(legacySnap.get("onboardingStarted")) == 0,
+                "t5: старый stats.json без новых ключей читается (недостающее = 0)");
+        } catch (Exception t5Err) {
+            throw new AssertionError("CONTRACT FAIL: t5 " + t5Err);
+        }
+
         /* [EXR-T7] gzip: текстовые ответы (статика + JSON) сжимаются ТОЛЬКО при
            Accept-Encoding: gzip (Content-Encoding: gzip, Vary: Accept-Encoding,
            Content-Length — сжатого размера); без заголовка — байт-в-байт как раньше;
@@ -662,6 +741,22 @@ public class GymContractTest {
             .build();
         return java.net.http.HttpClient.newHttpClient()
             .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+
+    /* POST произвольного тела в произвольный api-путь (для /api/track [ANA-T5], в т.ч. негативных кейсов) */
+    static java.net.http.HttpResponse<String> postJson(int port, String path, String payload) throws Exception {
+        java.net.http.HttpRequest req = java.net.http.HttpRequest.newBuilder(
+                java.net.URI.create("http://127.0.0.1:" + port + path))
+            .header("Content-Type", "application/json")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(payload, java.nio.charset.StandardCharsets.UTF_8))
+            .build();
+        return java.net.http.HttpClient.newHttpClient()
+            .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+
+    /* POST /api/track в тестовый WebServer [ANA-T5]: eventsJson — JSON-массив имён событий */
+    static java.net.http.HttpResponse<String> postTrack(int port, String initData, String eventsJson) throws Exception {
+        return postJson(port, "/api/track", "{\"initData\":\"" + initData + "\",\"events\":" + eventsJson + "}");
     }
 
     /* GET произвольного пути (для /stats) */

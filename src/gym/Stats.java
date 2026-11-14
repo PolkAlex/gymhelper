@@ -16,6 +16,10 @@ import java.util.Map;
    открытия/сохранения Mini App, workoutsCreated/workoutsCompleted — прирост по данным
    при /save, templatesCreated/templatesUsed — действия с шаблонами в боте,
    feedbackSent — отправленная обратная связь [ONB-T8] (только счётчик, без текста/ПДн);
+   [ANA-T5] maInitNew/maInitRepeat/maInitReturn — сегменты init по факту существования
+   файла данных и его mtime (спека ANA-S2 г1, без чтения содержимого),
+   onboardingStarted/onboardingCompleted/onboardingTutorialSkipped — события онбординга
+   из /api/track (спека ANA-S2 г2, только счётчики — в GymData не персистятся);
    плюс недельные
    агрегаты ISO (хранятся последние WEEKS_TO_KEEP недель — ротация при записи).
    Формат файла = формат ответа /stats: {"maInit":N,...,"weeks":{"2026-W46":{...}}}.
@@ -25,7 +29,9 @@ import java.util.Map;
 public final class Stats {
     /* известные ключи (и порядок в JSON); неизвестные ключи из файла игнорируются */
     static final String[] KEYS = {
-        "maInit", "maSave", "workoutsCreated", "workoutsCompleted", "templatesCreated", "templatesUsed", "feedbackSent"
+        "maInit", "maInitNew", "maInitRepeat", "maInitReturn",
+        "maSave", "workoutsCreated", "workoutsCompleted", "templatesCreated", "templatesUsed", "feedbackSent",
+        "onboardingStarted", "onboardingCompleted", "onboardingTutorialSkipped"
     };
     /* сколько последних недель (ISO) хранить в weeks */
     public static final int WEEKS_TO_KEEP = 26;

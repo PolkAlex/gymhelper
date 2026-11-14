@@ -16,6 +16,8 @@ function initialStore() {
     };
 }
 let store = initialStore();
+/* [ANA-T5] собранные события онбординга (прод: Stats.inc; здесь список для e2e-проверок) */
+let trackedEvents = [];
 
 const types = {
     '.html': 'text/html; charset=utf-8',
@@ -37,10 +39,32 @@ http.createServer(function (req, res) {
     const url = raw.split('?')[0];
     if (req.method === 'POST' && url === '/api/reset') {
         store = initialStore();
+        trackedEvents = [];
         /* [UX-T29] /api/reset?noprofile=1 — сброс без профиля: сценарий новичка
            (в initialStore по умолчанию legacy-профиль age-only для kcal-тестов) */
         if ((raw.split('?')[1] || '').indexOf('noprofile') >= 0) delete store.profile;
         sendJson(res, 200, { ok: true });
+        return;
+    }
+    /* [ANA-T5] мок /api/track: события онбординга (прод: белой список имён + Stats.inc
+       за валидацией initData; здесь подпись не проверяем, только собираем) */
+    if (req.method === 'POST' && url === '/api/track') {
+        let body = '';
+        req.on('data', function (ch) { body += ch; });
+        req.on('end', function () {
+            try {
+                const j = JSON.parse(body);
+                if (Array.isArray(j.events)) trackedEvents.push(...j.events);
+                sendJson(res, 200, { ok: true });
+            } catch (e) {
+                sendJson(res, 400, { ok: false });
+            }
+        });
+        return;
+    }
+    /* [ANA-T5] просмотр собранных событий в e2e */
+    if (req.method === 'GET' && url === '/api/track-events') {
+        sendJson(res, 200, trackedEvents);
         return;
     }
     if (req.method === 'GET' && url === '/api/state') {
