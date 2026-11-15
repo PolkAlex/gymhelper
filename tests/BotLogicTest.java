@@ -29,7 +29,12 @@ import java.util.Map;
    Обратная связь [ONB-T8]: deep-link «/start feedback» → режим FEEDBACK → свободный
    текст уходит владельцу через FakeApi.sendMessageResult (адресат — GYM_OWNER_CHAT_ID,
    шапка с именем/username/chat_id, HTML-экранирование) → подтверждение, режим сброшен;
-   /cancel и /help отменяют режим без пересылки; GYM_OWNER_CHAT_ID не задан (0) — фича off. */
+   /cancel и /help отменяют режим без пересылки; GYM_OWNER_CHAT_ID не задан (0) — фича off.
+   [UX-T33]: persistent reply-клавиатура «Открыть приложение» убрана — на /start при
+   webAppUrl != null перед меню уходит разовое сообщение с reply_keyboard_remove
+   ({remove_keyboard: true}, текст про кнопку ☰ «🏋️ Дневник»); на /menu снимающего
+   сообщения нет; deep-link «/start feedback» обрабатывается раньше и тоже не снимает;
+   при webAppUrl == null (регрессия всех прежних сценариев) снимающего вызова нет. */
 public class BotLogicTest {
     static void check(boolean b, String m) {
         if (!b) throw new AssertionError("UNIT FAIL: " + m);
@@ -383,6 +388,10 @@ public class BotLogicTest {
         /* === 15. Обратная связь [ONB-T8]: deep-link → режим → пересылка владельцу === */
         runFeedbackScenario();
 
+        /* === 16. Снятие reply-клавиатуры [UX-T33]: /start webapp → remove_keyboard + меню,
+            /menu и /start feedback без снятия, webAppUrl == null — регрессия === */
+        runKeyboardRemoveScenario();
+
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -408,6 +417,11 @@ public class BotLogicTest {
         /* [ONB-T8] ненулевое значение — sendMessageResult «падает» с этой ошибкой
            (тест отказа доставки: режим остаётся, счётчик не растёт) */
         String failResult;
+        /* [UX-T33] вызовы sendMessageWithKeyboard: унаследованная реализация ходит в сеть
+           (postSilent), поэтому переопределяем — фиксируем chat_id/текст/reply_markup */
+        final List<Long> kbChats = new ArrayList<>();
+        final List<String> kbTexts = new ArrayList<>();
+        final List<Map<String, Object>> kbMarkups = new ArrayList<>();
 
         FakeApi() {
             super("fake-token-unit-tests");
@@ -416,6 +430,14 @@ public class BotLogicTest {
         @Override
         public void sendMessage(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
             texts.add(text);
+        }
+
+        @Override
+        public void sendMessageWithKeyboard(long chatId, String text, Map<String, Object> replyMarkup) {
+            kbChats.add(chatId);
+            kbTexts.add(text);
+            kbMarkups.add(replyMarkup);
+            texts.add(text); /* это тоже исходящее сообщение — порядок в texts проверяем */
         }
 
         @Override
@@ -951,6 +973,79 @@ public class BotLogicTest {
                 "feedback off: никакие сообщения владельцу не уходят");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: feedback-сценарий " + e);
+        }
+    }
+
+    /* [UX-T33] клавиатура «Открыть приложение» убрана: при webAppUrl != null /start перед
+       меню шлёт разовое сообщение с reply_keyboard_remove (снятие приклеенной у существующих
+       пользователей клавиатуры); /menu ничего не снимает; deep-link «/start feedback»
+       обрабатывается раньше /start и тоже не снимает; при webAppUrl == null (конфигурация
+       всех прежних сценариев этого файла) снимающего вызова нет. Заодно проверяется новая
+       подсказка меню («кнопка ☰ «🏋️ Дневник» … или команда /app») вместо старой
+       «кнопка «🏋️ Открыть приложение» внизу». */
+    static void runKeyboardRemoveScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymkbremove");
+            Storage storage = new Storage(tmp);
+            Stats stats = new Stats(tmp.resolve("stats.json"));
+            long chat = 9005;
+
+            /* a) /start при webAppUrl != null: сначала снятие клавиатуры, затем меню */
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, "https://example.org", null, 0, stats, 555000111L);
+            logic.handle(msgUpdate(chat, "/start"));
+            check(api.kbChats.equals(List.of(chat)),
+                "клавиатура /start: снимающий вызов адресован чату пользователя");
+            check(api.kbTexts.size() == 1,
+                "клавиатура /start: ровно один вызов sendMessageWithKeyboard");
+            check(api.kbTexts.get(0).contains("«🏋️ Дневник»") && api.kbTexts.get(0).contains("поля ввода"),
+                "клавиатура /start: текст отсылает к кнопке ☰ «🏋️ Дневник» у поля ввода");
+            check(Map.of("remove_keyboard", true).equals(api.kbMarkups.get(0)),
+                "клавиатура /start: reply_markup = {remove_keyboard: true} (reply_keyboard_remove)");
+            check(api.texts.size() == 2 && api.texts.get(0).equals(api.kbTexts.get(0))
+                    && api.texts.get(1).startsWith("💪 Мой дневник тренировок"),
+                "клавиатура /start: ровно два сообщения — сначала снятие, затем меню");
+            String menu = api.texts.get(1);
+            check(menu.contains("кнопка ☰ «🏋️ Дневник» у поля ввода или команда /app"),
+                "клавиатура /start: в меню новая подсказка про приложение (команда /app)");
+            check(!menu.contains("Открыть приложение"),
+                "клавиатура /start: старая подсказка «Открыть приложение» из меню убрана");
+            check(logic.states.get(chat).mode == UserState.Mode.MENU,
+                "клавиатура /start: режим пользователя MENU");
+
+            /* b) /menu при webAppUrl != null: только меню, ничего не снимается */
+            FakeApi apiMenu = new FakeApi();
+            BotLogic logicMenu = new BotLogic(apiMenu, storage, "https://example.org", null, 0, stats, 555000111L);
+            logicMenu.handle(msgUpdate(chat, "/menu"));
+            check(apiMenu.kbChats.isEmpty() && apiMenu.kbMarkups.isEmpty(),
+                "клавиатура /menu: снимающего вызова sendMessageWithKeyboard нет");
+            check(apiMenu.texts.size() == 1 && apiMenu.texts.get(0).startsWith("💪 Мой дневник тренировок"),
+                "клавиатура /menu: отправлено только меню");
+
+            /* c) /start при webAppUrl == null: снимающего вызова нет (регрессия прежних сценариев) */
+            FakeApi apiNull = new FakeApi();
+            BotLogic logicNull = new BotLogic(apiNull, storage, null, null, 0, stats, 555000111L);
+            logicNull.handle(msgUpdate(chat, "/start"));
+            check(apiNull.kbChats.isEmpty() && apiNull.kbMarkups.isEmpty(),
+                "клавиатура null-ветка: снимающего вызова нет");
+            check(apiNull.texts.size() == 1 && apiNull.texts.get(0).startsWith("💪 Мой дневник тренировок"),
+                "клавиатура null-ветка: отправлено сразу меню");
+            check(!apiNull.texts.get(0).contains("команда /app") && !apiNull.texts.get(0).contains("Дневник» у поля"),
+                "клавиатура null-ветка: в меню нет подсказки про приложение");
+
+            /* d) deep-link «/start feedback» при webAppUrl != null: deep-link обрабатывается
+               раньше /start — снимающего сообщения нет, режим feedback включён */
+            FakeApi apiFb = new FakeApi();
+            BotLogic logicFb = new BotLogic(apiFb, storage, "https://example.org", null, 0, stats, 555000111L);
+            logicFb.handle(msgUpdateFrom(chat, "/start feedback", "Иван", null, null));
+            check(apiFb.kbChats.isEmpty() && apiFb.kbMarkups.isEmpty(),
+                "клавиатура feedback: снимающего вызова нет (deep-link раньше /start)");
+            check(logicFb.states.get(chat).mode == UserState.Mode.FEEDBACK,
+                "клавиатура feedback: режим FEEDBACK включён");
+            check(apiFb.last().equals("Опишите проблему одним сообщением. Отменить — /cancel"),
+                "клавиатура feedback: приглашение без снятия клавиатуры");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: снятие клавиатуры " + e);
         }
     }
 
