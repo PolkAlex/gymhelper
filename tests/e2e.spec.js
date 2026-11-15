@@ -2295,6 +2295,55 @@ test.describe('EXR-T4: фильтры-мультивыбор «Техники»'
         await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
     });
 
+    /* [EXR] гибрид B→A: живой счётчик результатов на «Применить» шита — обновляется при
+       каждом тапе чекбокса до закрытия. Фактические числа каталога: Спина = 24,
+       Спина+Ягодицы (ИЛИ внутри группы) = 56 из 243 */
+    test('гибрид фильтров: счётчик на «Применить» шита мышц (Спина → +Ягодицы)', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        const total = await page.locator('#techList .excard').count();
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.waitFor({ state: 'visible', timeout: 5000 });
+        const applyBtn = sheet.locator('#sheetApply');
+        /* при открытии (ничего не выбрано) счётчик = весь каталог */
+        await expect(applyBtn).toHaveText('Применить · ' + total, { timeout: 5000 });
+        /* тап «Спина» → «Применить · N», N — спинные записи каталога */
+        await sheet.locator('.frow', { hasText: 'Спина' }).click();
+        await expect(applyBtn).toHaveText(/^Применить · \d+$/, { timeout: 5000 });
+        const nBack = parseInt((await applyBtn.textContent()).replace(/\D+/g, ''), 10);
+        if (!(nBack > 0 && nBack < total)) throw new Error('счётчик «Спина» = ' + nBack + ' из ' + total);
+        /* обещанное число = фактический список после применения */
+        await applyBtn.click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        const visible = await page.locator('#techList .excard').count();
+        if (visible !== nBack) throw new Error('после применения ' + visible + ' карточек, счётчик обещал ' + nBack);
+        /* повторное открытие шита: Спина ещё выбрана; тап «Ягодицы» → число выросло (ИЛИ внутри группы) */
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        await expect(applyBtn).toHaveText('Применить · ' + nBack, { timeout: 5000 });
+        await sheet.locator('.frow', { hasText: 'Ягодицы' }).click();
+        await expect(applyBtn).toHaveText(/^Применить · \d+$/, { timeout: 5000 });
+        const nGl = parseInt((await applyBtn.textContent()).replace(/\D+/g, ''), 10);
+        if (nGl <= nBack) throw new Error('счётчик не вырос после «Ягодицы»: ' + nGl + ' (Спина была ' + nBack + ')');
+        if (nGl > total) throw new Error('счётчик «Спина+Ягодицы» = ' + nGl + ' больше каталога ' + total);
+    });
+
+    test('гибрид фильтров: 0 результатов → «Применить» без числа', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: 'Разминка и заминка' }).click();
+        const warm = await page.locator('#techList .excard').count();
+        if (warm < 1) throw new Error('разминка пуста');
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.waitFor({ state: 'visible', timeout: 5000 });
+        /* открытие шита поверх активного фильтра: счётчик = разминка/заминка */
+        await expect(sheet.locator('#sheetApply')).toHaveText('Применить · ' + warm, { timeout: 5000 });
+        /* И между группами: у разминки нет мышц (chest∩warm = 0) → 0 → «Применить» без числа */
+        await sheet.locator('.frow', { hasText: 'Грудь' }).click();
+        await expect(sheet.locator('#sheetApply')).toHaveText('Применить', { timeout: 5000 });
+    });
+
     test('мультивыбор мышц: Грудь + Спина → ИЛИ внутри группы', async ({ page }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
