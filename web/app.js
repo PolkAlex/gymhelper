@@ -2058,10 +2058,17 @@ function techSheetHtml(fkey) {
             for (const it of (g.items || [])) h += row(it);
         }
     }
-    h += '<div class="btnrow"><button class="btn prime wide" data-act="techApplyFilters">Применить</button></div>';
+    h += '<div class="btnrow"><button class="btn prime wide" id="sheetApply" data-act="techApplyFilters">' + techApplyLabel(techFiltered().length) + '</button></div>';
     return h;
 }
-/* тап по чекбоксу шита: точечное обновление строки и счётчика — модалка не перерисовывается */
+/* [EXR] гибрид B→A: живой счётчик результатов на «Применить» шита фильтров —
+   пересчёт techFiltered() с промежуточным состоянием чекбоксов; 0 → «Применить» без числа */
+function techApplyLabel(n) { return n ? 'Применить · ' + n : 'Применить'; }
+function techSheetApplySync() {
+    const btn = document.getElementById('sheetApply');
+    if (btn) btn.textContent = techApplyLabel(techFiltered().length);
+}
+/* тап по чекбоксу шита: точечное обновление строки, счётчика и кнопки «Применить · N» — модалка не перерисовывается */
 function techSheetToggle(a) {
     const s = techGroupSel(a);
     if (s.k === -1) s.arr.push(s.id); else s.arr.splice(s.k, 1);
@@ -2072,6 +2079,7 @@ function techSheetToggle(a) {
         cnt.textContent = s.arr.length;
         cnt.style.display = s.arr.length ? '' : 'none';
     }
+    techSheetApplySync();
 }
 function techResultsHtml() {
     /* [EXR-T4] «Своё»: собственные упражнения без категории, тег-фильтры не применяются */
