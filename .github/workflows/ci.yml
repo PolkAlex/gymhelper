@@ -1,9 +1,16 @@
 # Лёгкий CI: Java-сборка с контрактным тестом + статические проверки JS и e2e (desktop).
+# Прогоны — только на push в main и на PR в main (промежуточные коммиты feature-веток
+# не гоняем — каждый PR проверяется один раз); docs-only правки (docs/**, *.md) CI
+# не запускают — экономия минут Actions.
 run-name: "CI: ${{ github.ref_name }}"
 
 on:
   push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
   pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**', '**/*.md']
 
 # Новые прогоны отменяют устаревшие на той же ветке (экономия минут Actions)
 concurrency:
