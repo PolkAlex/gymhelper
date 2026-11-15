@@ -4214,6 +4214,64 @@ test.describe('EXR-T9: фото упражнений в пикере', function 
 
 });
 
+/* ===== [EXR-T11/T12] контент: вариации тяг для спины (каталог 243→254) + фото/фолбэк ===== */
+test.describe('EXR-T11/T12: вариации тяг для спины (контент + фото)', function () {
+
+    test('«Спина» показывает новые вариации тяг (11 id); с img — фото (naturalWidth>0), без img — иконка-fallback и карточка с текстами', async ({ page }) => {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        /* контент-рост 243→254 виден пользователю: «Все» — весь каталог [EXR-T11] */
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
+        const total = await page.locator('#techList .excard').count();
+        if (total !== 254) throw new Error('каталог в «Технике»: ' + total + ' карточек, ожидалось 254 (243 + 11 вариаций тяг [EXR-T11])');
+        /* фильтр «Группы мышц» → «Спина»: прежние 24 + 11 новых = 35 */
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Спина' }).click();
+        await page.locator('.modal.open .btnrow .btn', { hasText: 'Применить' }).click();
+        await expect(page.locator('.card .secrow .chip', { hasText: 'Группы мышц' })).toHaveClass(/on/, { timeout: 5000 });
+        const back = await page.locator('#techList .excard').count();
+        if (back !== 35) throw new Error('фильтр «Спина»: ' + back + ' карточек, ожидалось 35 (24 + 11 новых)');
+        /* ID-уровень: новые вариации обеих семей в отфильтрованном списке */
+        for (const id of ['latpullneutral', 'latpullparallelclose', 'latpullwide',
+            'horizrowneutral', 'horizrowparallelclose', 'horizrowwide', 'horizrowrev', 'pullupparallel']) {
+            await expect(page.locator('#techList .excard[data-a="' + id + '"]')).toBeVisible({ timeout: 5000 });
+        }
+        /* [EXR-T12] у записей с img — фото, и не перепутаны: src = <id>-0.jpg, реально декодируется */
+        for (const id of ['latpullneutral', 'latpullrev', 'latpullparallelclose', 'horizrowneutral', 'pullupparallel']) {
+            const card = page.locator('#techList .excard[data-a="' + id + '"]');
+            const thumb = card.locator('img.exthumb');
+            await expect(thumb).toHaveAttribute('src', new RegExp('img\\/exercises\\/' + id + '-0\\.jpg$'), { timeout: 5000 });
+            await expect(card.locator('.ico')).toHaveCount(0);
+            await thumb.scrollIntoViewIfNeeded();
+            await expect.poll(async () => thumb.evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
+        }
+        /* записи без img не деградировали: прежняя SVG-иконка, тега img нет */
+        for (const id of ['latpullwide', 'latpullparallelmid', 'horizrowparallelclose', 'horizrowparallelmid', 'horizrowwide', 'horizrowrev']) {
+            const card = page.locator('#techList .excard[data-a="' + id + '"]');
+            await expect(card.locator('.ico')).toHaveCount(1, { timeout: 5000 });
+            await expect(card.locator('img')).toHaveCount(0);
+        }
+        /* карточка без фото (horizrowwide) НЕ падает: открывается с описанием, шагами и ошибками */
+        await page.locator('#techList .excard[data-a="horizrowwide"]').click();
+        await expect(page.locator('.card .exhead .ico')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.card .exphotos')).toHaveCount(0);
+        await expect(page.locator('.card .exdesc')).toContainText('верх спины и трапеции');
+        await expect(page.locator('.card .techstep')).toHaveCount(3);
+        await expect(page.locator('.card .techerr', { hasText: 'Не раскачивайся корпусом' })).toHaveCount(1);
+        await page.locator('[data-act="techBack"]').click();
+        /* деталь вариации с фото (latpullneutral): 2 ракурса из новых файлов + RU-описание */
+        await expect(page.locator('#techList .excard[data-a="latpullneutral"]')).toBeVisible({ timeout: 5000 });
+        await page.locator('#techList .excard[data-a="latpullneutral"]').click();
+        const photos = page.locator('.card .exphotos img');
+        await expect(photos).toHaveCount(2, { timeout: 5000 });
+        await expect(photos.nth(0)).toHaveAttribute('src', /latpullneutral-0\.jpg$/);
+        await expect(photos.nth(1)).toHaveAttribute('src', /latpullneutral-1\.jpg$/);
+        await expect.poll(async () => photos.nth(0).evaluate(function (el) { return el.naturalWidth; }), { timeout: 5000 }).toBeGreaterThan(0);
+        await expect(page.locator('.card .exdesc')).toContainText('тянуть глубже');
+    });
+
+});
+
 /* ===== [ONB-T3..T7] онбординг: приветствие, туториал, Помощь, «Что нового», контакты ===== */
 
 /* вторая порция init-скриптов выполняется ПОСЛЕ общей: сброс флагов = чистый localStorage.
