@@ -691,6 +691,46 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: traversal " + travErr);
         }
 
+        /* [CNT-T1] лендинг: GET /landing/ (= /landing/index.html) отдаёт web/landing/index.html,
+           просмотры считаются анонимным счётчиком landingViews (агрегат без ПДн, /stats);
+           HEAD-пробы и 404 не считаются, другие пути счётчик не трогают.
+           Реальный WebServer на эфемерном порту, статика во временном webDir. */
+        try {
+            java.nio.file.Path tmpL = java.nio.file.Files.createTempDirectory("gymland");
+            java.nio.file.Files.createDirectories(tmpL.resolve("landing"));
+            java.nio.file.Files.writeString(tmpL.resolve("landing").resolve("index.html"),
+                "<!doctype html><html lang=\"ru\"><title>GymHelper лендинг</title></html>",
+                java.nio.charset.StandardCharsets.UTF_8);
+            Storage stL = new Storage(tmpL);
+            Stats counterL = new Stats(tmpL.resolve("stats.json"));
+            WebServer wsL = new WebServer("contract-test-token", stL, tmpL, counterL);
+            java.net.ServerSocket probeL = new java.net.ServerSocket(0);
+            int portL = probeL.getLocalPort();
+            probeL.close();
+            wsL.start(portL);
+
+            java.net.http.HttpResponse<String> land1 = get(portL, "/landing/");
+            check(land1.statusCode() == 200, "landing: GET /landing/ — 200, а не " + land1.statusCode());
+            check(land1.body().contains("GymHelper лендинг"), "landing: /landing/ отдаёт index.html из web/landing/");
+            check(land1.headers().firstValue("Content-Type").orElse("").contains("text/html"),
+                "landing: Content-Type text/html");
+            java.net.http.HttpResponse<String> land2 = get(portL, "/landing/index.html");
+            check(land2.statusCode() == 200, "landing: GET /landing/index.html — 200, а не " + land2.statusCode());
+
+            /* 404 и HEAD просмотрами не считаются */
+            check(get(portL, "/landing/nope.html").statusCode() == 404, "landing: отсутствующий файл — 404");
+            check(headStatus(portL, "/landing/") == 200, "landing: HEAD /landing/ — 200");
+            check(headStatus(portL, "/landing/") == 200, "landing: повторный HEAD /landing/ — 200");
+
+            /* сторонний путь не растит счётчик: 2 GET лендинга = landingViews 2 */
+            Map<String, Object> snapL = Json.map(Json.parse(get(portL, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapL.get("landingViews")) == 2,
+                "landing: landingViews=2 после двух GET (HEAD и 404 не считались), а не "
+                    + Json.lng(snapL.get("landingViews")));
+        } catch (Exception landErr) {
+            throw new AssertionError("CONTRACT FAIL: landing " + landErr);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }
@@ -794,10 +834,20 @@ public class GymContractTest {
        WHATWG-URL) схлопывают %2e%2e в «..» до отправки — traversal-гвард проверяем ровно
        на том пути, что реально придёт на сервер */
     static int rawStatus(int port, String pathAndQuery) throws Exception {
+        return requestStatus("GET", port, pathAndQuery);
+    }
+
+    /* HEAD «сырым» сокетом, статус ответа [CNT-T1]: java.net.http с BodyHandlers на HEAD
+       бросает исключение — читаем строку статуса вручную */
+    static int headStatus(int port, String pathAndQuery) throws Exception {
+        return requestStatus("HEAD", port, pathAndQuery);
+    }
+
+    static int requestStatus(String method, int port, String pathAndQuery) throws Exception {
         try (java.net.Socket s = new java.net.Socket("127.0.0.1", port)) {
             s.setSoTimeout(5000);
             java.io.OutputStream out = s.getOutputStream();
-            out.write(("GET " + pathAndQuery + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+            out.write((method + " " + pathAndQuery + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
                 .getBytes(java.nio.charset.StandardCharsets.UTF_8));
             out.flush();
             java.io.BufferedReader in = new java.io.BufferedReader(

@@ -98,6 +98,13 @@ async function waitServer() {
             await prev.click();
             await p.waitForTimeout(600);
             await p.screenshot({ path: path.join(OUT, '02-workout-card.png') });
+            /* [CNT-T1] кнопка календаря в топбаре скрыта при открытой карточке (viewWid) —
+               сначала «← Назад» backbar'а (closeHistory), потом топбар снова с [📅] */
+            const closeCard = p.locator('.backbar [data-act="closeHistory"]').first();
+            if (await closeCard.isVisible().catch(() => false)) {
+                await closeCard.click();
+                await p.waitForTimeout(400);
+            }
         }
 
         /* 3. Календарь */
@@ -106,7 +113,7 @@ async function waitServer() {
             await cal.click();
             await p.waitForTimeout(600);
             await p.screenshot({ path: path.join(OUT, '03-calendar.png') });
-            const back = p.locator('.backbar [data-act], [data-act="closeCal"], .cal-x').first();
+            const back = p.locator('[data-act="closeCal"]').first();
             if (await back.isVisible().catch(() => false)) { await back.click(); await p.waitForTimeout(300); }
         }
 

@@ -402,6 +402,8 @@ public final class WebServer {
 
     private void serveStatic(HttpExchange ex, String path) throws IOException {
         if (path == null || path.equals("/") || path.equals("/app")) path = "/index.html";
+        /* [CNT-T1] лендинг: /landing/ — index.html из web/landing/ */
+        if (path.equals("/landing/")) path = "/landing/index.html";
         /* [EXR-T8] гвард path traversal: путь приходит уже декодированным (%2e%2e → ..),
            сегменты «..» запрещены; канонический путь (toRealPath, с симлинками) обязан
            остаться внутри webDir — иначе 404. Раньше /img/%2e%2e/app.js отдавал соседний
@@ -429,6 +431,12 @@ public final class WebServer {
             send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
             return;
         }
+        /* [CNT-T1] просмотры лендинга — свой анонимный счётчик по образцу maInit (решение
+           владельца: агрегат без ПДн, попадает в /stats). Считаем только успешные GET
+           /landing/ и /landing/index.html; HEAD-пробы мониторов и 404 не считаются */
+        if (path.equals("/landing/index.html") && "GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            stats.inc("landingViews");
+        }
         String ct = contentType(path);
         /* [EXR-T6] фото упражнений (/img/) неизменяемы и именуются стабильно — кэш на неделю;
            остальная статика (JS/CSS с ?v=-бампом) по-прежнему no-store */
@@ -437,6 +445,15 @@ public final class WebServer {
            send не жмёт повторно); клиенту без gzip — чтение с диска как раньше */
         boolean gzStatic = acceptsGzip(ex) && compressible(ct);
         byte[] body = gzStatic ? gzippedStatic(file) : Files.readAllBytes(file);
+        /* [CNT-T1] HEAD на статике (линк-чекеры, мониторы): только заголовки, без тела —
+           как /health; иначе JDK-сервер предупреждает о Content-Length при HEAD в лог */
+        if ("HEAD".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.getResponseHeaders().set("Content-Type", ct);
+            ex.getResponseHeaders().set("Cache-Control", img ? "public, max-age=604800" : "no-store");
+            ex.getResponseHeaders().set("Vary", "Accept-Encoding");
+            ex.sendResponseHeaders(200, -1);
+            return;
+        }
         send(ex, 200, body, ct, img ? "public, max-age=604800" : "no-store", gzStatic);
     }
 

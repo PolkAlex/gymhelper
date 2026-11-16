@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GymHelper — дневник тренировок в Telegram · без установки, бесплатно</title>
+<meta name="description" content="Записывай силовые тренировки в чате или мини-приложении Telegram: 254 упражнения с техникой, календарь, оценка 1ПМ по Эпли, рекорды и калории. Без установки и регистрации.">
+<link rel="canonical" href="https://gym-helper.com/">
+<meta property="og:title" content="GymHelper — дневник тренировок в Telegram · без установки, бесплатно">
+<meta property="og:description" content="Записывай силовые тренировки в чате или мини-приложении Telegram: 254 упражнения с техникой, календарь, оценка 1ПМ по Эпли, рекорды и калории. Без установки и регистрации.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://gym-helper.com/">
+<meta property="og:image" content="https://gym-helper.com/landing/assets/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="ru_RU">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#101114">
+<link rel="icon" type="image/png" sizes="64x64" href="assets/favicon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch.png">
+<style>
+/* ============================================================
+   Лендинг GymHelper [CNT-T1] — Amber Glass из web/style.css:
+   bg #101114 · текст #f2f3f5 · muted #9aa0aa · янтарь #ffc220
+   стекло rgba(255,255,255,.055) + бордер .10 · тёплые градиенты.
+   Ноль JavaScript, ноль внешних зависимостей, системные шрифты.
+   ============================================================ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.lp {
+    background-color: #101114;
+    background-image:
+        radial-gradient(620px 420px at 82% -80px, rgba(255,178,32,.16), transparent 70%),
+        radial-gradient(560px 480px at -100px 18%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(900px 640px at 108% 78%, rgba(150,92,25,.16), transparent 72%);
+    color: #f2f3f5;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+.lp a { color: inherit; text-decoration: none; }
+.lp a:focus-visible { outline: 2px solid #ffc220; outline-offset: 3px; border-radius: 6px; }
+.lp .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+
+/* стекло-карточка (как .card продукта) */
+.lp .g {
+    background: rgba(255,255,255,.055);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 20px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+/* вложенная поверхность (как --nested продукта) */
+.lp .nest {
+    background: rgba(0,0,0,.18);
+    border: 1px solid rgba(255,255,255,.05);
+    border-radius: 16px;
+}
+
+/* ---------- шапка ---------- */
+.lp-head {
+    position: sticky; top: 0; z-index: 30;
+    background: linear-gradient(180deg, rgba(16,17,20,.96), rgba(16,17,20,.82));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(255,255,255,.10);
+}
+.lp-head .row { display: flex; align-items: center; gap: 24px; max-width: 1100px; margin: 0 auto; padding: 11px 24px; }
+.lp-logo { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 17px; letter-spacing: .2px; }
+.lp-logo .tile {
+    width: 36px; height: 36px; border-radius: 11px; flex: none;
+    background: linear-gradient(135deg, #ffb000, #ffc220);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 18px;
+    box-shadow: 0 4px 14px rgba(255,194,32,.25);
+}
+.lp-nav { display: flex; gap: 22px; margin-left: auto; }
+.lp-nav a { color: #9aa0aa; font-size: 14px; font-weight: 600; }
+.lp-nav a:hover { color: #f2f3f5; }
+.lp-run {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 18px; border-radius: 13px;
+    background: linear-gradient(135deg, #ffb000, #ffc220);
+    color: #14120a; font-weight: 700; font-size: 14px;
+    box-shadow: 0 6px 20px rgba(255,194,32,.22);
+}
+.lp-run:hover { filter: brightness(1.05); }
+
+/* ---------- hero ---------- */
+.lp-hero .wrap { display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: center; padding-top: 68px; padding-bottom: 60px; }
+.lp-h1 { font-size: clamp(30px, 4.2vw, 46px); line-height: 1.12; font-weight: 800; letter-spacing: -.6px; margin: 0 0 18px; }
+.lp-h1 .amb { color: #ffc220; }
+.lp-sub { font-size: 18px; color: #b9bdc6; line-height: 1.55; margin: 0 0 26px; max-width: 520px; }
+.lp-cta-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.lp-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 15px 28px; border-radius: 16px;
+    background: linear-gradient(135deg, #ffb000, #ffc220);
+    color: #14120a; font-weight: 800; font-size: 17px;
+    box-shadow: 0 10px 30px rgba(255,194,32,.22);
+}
+.lp-btn:hover { filter: brightness(1.05); }
+.lp-btn svg { flex: none; }
+.lp-btn-sec {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 22px; border-radius: 16px;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10);
+    color: #f2f3f5; font-weight: 600; font-size: 15.5px;
+}
+.lp-btn-sec:hover { filter: brightness(1.08); }
+.lp-trust { margin: 16px 0 0; color: #9aa0aa; font-size: 13px; font-weight: 600; }
+.lp-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 1100px; margin: 30px auto 0; padding: 0 24px; }
+.lp-chip {
+    padding: 8px 14px; border-radius: 999px;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10);
+    font-size: 13px; font-weight: 600; color: #e6e8ec;
+}
+
+/* hero-визуал: телефон со скриншотом + плавающие пилюли продукта */
+.lp-hero-vis { position: relative; display: flex; justify-content: center; padding: 10px 0; }
+.lp-hero-vis::before {
+    content: ''; position: absolute; top: 8%; left: 50%; transform: translateX(-50%);
+    width: min(420px, 90vw); height: min(420px, 90vw); border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,194,32,.12), transparent 68%);
+    pointer-events: none;
+}
+.lp-phone {
+    position: relative; width: 250px; aspect-ratio: 9 / 18;
+    border-radius: 38px; border: 1px solid rgba(255,255,255,.13);
+    background: rgba(255,255,255,.03); padding: 10px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 60px rgba(255,194,32,.08);
+}
+.lp-phone img { width: 100%; height: 100%; border-radius: 28px; display: block; object-fit: cover; }
+/* пилюли позиционируются от телефонной рамки (позиция и проценты — от её ширины) */
+.lp-float {
+    position: absolute; z-index: 2;
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 14px; border-radius: 14px;
+    background: rgba(30,32,38,.92); border: 1px solid rgba(255,255,255,.10);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 10px 30px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06);
+    font-size: 12.5px; font-weight: 700; color: #f2f3f5; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.lp-float .a { color: #ffc220; }
+.lp-float.pr { top: 12%; right: -10%; }
+.lp-float.rest { bottom: 14%; left: -12%; }
+
+/* ---------- секции ---------- */
+.lp-sec { padding: 60px 0; }
+.lp-h2 { font-size: clamp(24px, 3vw, 31px); font-weight: 800; letter-spacing: -.4px; margin: 0 0 10px; text-align: center; }
+.lp-lead { text-align: center; color: #9aa0aa; max-width: 660px; margin: 0 auto 34px; font-size: 16px; line-height: 1.55; }
+
+/* шаги */
+.lp-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.lp-step { padding: 22px; }
+.lp-step .num {
+    width: 34px; height: 34px; border-radius: 12px; margin-bottom: 14px;
+    background: rgba(255,194,32,.12); border: 1px solid rgba(255,194,32,.28);
+    color: #ffc220; font-weight: 800; font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+}
+.lp-step b { font-size: 16.5px; font-weight: 700; display: block; }
+.lp-step p { color: #9aa0aa; margin: 7px 0 0; font-size: 14px; line-height: 1.55; }
+
+/* фичи */
+.lp-feats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.lp-feat { padding: 22px; }
+.lp-feat .ftile {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10);
+    color: #ffc220; font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+}
+.lp-feat b { display: block; font-size: 16.5px; font-weight: 700; margin: 14px 0 6px; }
+.lp-feat p { margin: 0; color: #9aa0aa; font-size: 14px; line-height: 1.55; }
+.lp-feat code {
+    background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 6px; padding: 0 6px; font-size: 12.5px; color: #ffc220; white-space: nowrap;
+}
+
+/* скриншоты */
+.lp-shots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+.lp-shot { margin: 0; }
+.lp-shot .frame {
+    position: relative; border-radius: 22px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,.13); background: rgba(255,255,255,.03);
+    box-shadow: 0 18px 50px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.06);
+}
+.lp-shot img { width: 100%; height: auto; display: block; }
+.lp-shot .kind {
+    position: absolute; top: 12px; left: 12px;
+    padding: 3px 10px; border-radius: 999px;
+    background: rgba(255,194,32,.10); border: 1px solid rgba(255,194,32,.30);
+    color: #ffc220; font-size: 10.5px; font-weight: 700; letter-spacing: .5px;
+    text-transform: uppercase;
+}
+.lp-shot figcaption { margin-top: 10px; text-align: center; color: #9aa0aa; font-size: 13px; font-weight: 600; line-height: 1.45; }
+
+/* приватность */
+.lp-priv {
+    padding: 28px; border-radius: 24px;
+    background: rgba(255,255,255,.055);
+    border: 1px solid rgba(255,194,32,.28);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28), 0 0 46px rgba(255,194,32,.08);
+}
+.lp-priv .phead { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.lp-priv .shield {
+    width: 46px; height: 46px; border-radius: 14px; flex: none; font-size: 22px;
+    background: linear-gradient(135deg, #ffb000, #ffc220);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 18px rgba(255,194,32,.25);
+}
+.lp-priv h2 { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -.2px; }
+.lp-priv .plead { color: #b9bdc6; font-size: 15px; line-height: 1.6; margin: 0 0 20px; max-width: 900px; }
+.lp-priv .plead code {
+    background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.08);
+    border-radius: 6px; padding: 1px 7px; font-size: 13px; color: #ffc220; white-space: nowrap;
+}
+.lp-priv .points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.lp-priv .pt { padding: 16px; }
+.lp-priv .pt .em { font-size: 18px; line-height: 1; }
+.lp-priv .pt b { display: block; margin: 9px 0 5px; font-size: 14.5px; }
+.lp-priv .pt p { margin: 0; color: #9aa0aa; font-size: 13px; line-height: 1.5; }
+.lp-priv .plink { display: inline-block; margin-top: 18px; color: #ffc220; font-weight: 600; font-size: 14px; }
+.lp-priv .plink:hover { filter: brightness(1.1); }
+
+/* открытый код */
+.lp-oss { margin-top: 14px; padding: 24px 28px; display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.lp-oss .badge {
+    padding: 5px 13px; border-radius: 999px; flex: none;
+    background: rgba(255,194,32,.12); border: 1px solid rgba(255,194,32,.30);
+    color: #ffc220; font-size: 11.5px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+}
+.lp-oss .txt { flex: 1; min-width: 260px; }
+.lp-oss .txt b { display: block; font-size: 17px; font-weight: 700; margin-bottom: 5px; }
+.lp-oss .txt p { margin: 0; color: #9aa0aa; font-size: 14px; line-height: 1.55; }
+.lp-gh {
+    display: inline-flex; align-items: center; gap: 9px; flex: none;
+    padding: 12px 20px; border-radius: 14px;
+    background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.10);
+    color: #f2f3f5; font-weight: 600; font-size: 14.5px;
+}
+.lp-gh:hover { filter: brightness(1.08); }
+.lp-gh .ghdot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid #f2f3f5; display: inline-block; position: relative; }
+.lp-gh .ghdot::after {
+    content: ''; position: absolute; left: 4px; top: 1.5px; width: 6px; height: 6px;
+    border: 1.5px solid #f2f3f5; border-bottom: none; border-right: none;
+    border-radius: 50% 50% 0 0; transform: rotate(-45deg);
+}
+
+/* финальный CTA */
+.lp-cta { position: relative; text-align: center; padding: 84px 0 92px; }
+.lp-cta::before {
+    content: ''; position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%);
+    width: min(640px, 96vw); height: min(420px, 96vw); border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,194,32,.10), transparent 68%);
+    pointer-events: none;
+}
+.lp-cta .lp-h2 { font-size: clamp(26px, 3.4vw, 36px); margin-bottom: 12px; }
+.lp-cta .sub { color: #b9bdc6; font-size: 17px; margin: 0 auto 30px; max-width: 480px; line-height: 1.5; }
+.lp-cta .who { margin: 16px 0 0; color: #9aa0aa; font-size: 13px; font-weight: 600; }
+
+/* футер */
+.lp-foot { border-top: 1px solid rgba(255,255,255,.08); padding: 28px 0 36px; color: #9aa0aa; font-size: 13.5px; }
+.lp-foot .tagline { font-weight: 600; }
+.lp-foot .links { display: flex; gap: 20px; flex-wrap: wrap; margin: 10px 0 12px; }
+.lp-foot .links a { color: #9aa0aa; font-weight: 600; font-size: 13px; }
+.lp-foot .links a:hover { color: #f2f3f5; }
+.lp-foot .fine { font-size: 12px; color: #7d838e; }
+
+/* ============================================================
+   АДАПТИВ: правила мобильного макета (.mob) переложены в media
+   ============================================================ */
+@media (max-width: 860px) {
+    .lp-head .row { gap: 14px; }
+    .lp-nav { gap: 14px; }
+    .lp-nav a { font-size: 13px; }
+    .lp-hero .wrap { grid-template-columns: 1fr; gap: 30px; padding-top: 40px; padding-bottom: 44px; }
+    .lp-feats { grid-template-columns: repeat(2, 1fr); }
+    .lp-shots { grid-template-columns: 1fr; max-width: 380px; margin: 0 auto; }
+}
+@media (max-width: 560px) {
+    .lp .wrap { padding: 0 16px; }
+    .lp-head .row { padding: 10px 16px; }
+    .lp-nav { display: none; }
+    .lp-head .lp-run { margin-left: auto; }
+    .lp-h1 { font-size: 29px; }
+    .lp-sub { font-size: 15.5px; margin-bottom: 22px; }
+    .lp-cta-row { flex-direction: column; align-items: stretch; }
+    .lp-btn, .lp-btn-sec { width: 100%; justify-content: center; padding: 14px 18px; font-size: 16px; }
+    .lp-chips { gap: 7px; padding: 0 16px; }
+    .lp-chip { padding: 7px 12px; font-size: 12.5px; }
+    .lp-hero-vis { padding-bottom: 14px; }
+    .lp-phone { width: 216px; }
+    .lp-float.pr { right: -2%; top: 10%; }
+    .lp-float.rest { left: -2%; bottom: 12%; }
+    .lp-float { padding: 8px 11px; font-size: 11.5px; }
+    .lp-sec { padding: 44px 0; }
+    .lp-h2 { font-size: 23px; }
+    .lp-lead { font-size: 14.5px; margin-bottom: 24px; }
+    .lp-steps, .lp-feats, .lp-priv .points { grid-template-columns: 1fr; }
+    .lp-step, .lp-feat { padding: 18px; }
+    .lp-feat b { margin-top: 12px; }
+    .lp-priv { padding: 20px; }
+    .lp-priv .plead { font-size: 14px; }
+    .lp-oss { padding: 20px; }
+    .lp-oss .txt { min-width: 0; }
+    .lp-gh { width: 100%; justify-content: center; }
+    .lp-cta { padding: 56px 0 64px; }
+    .lp-cta .sub { font-size: 15px; }
+    .lp-foot { padding: 24px 0 30px; }
+    .lp-foot .links { gap: 14px 18px; }
+}
+</style>
+</head>
+<body class="lp">
+
+    <!-- шапка -->
+    <header class="lp-head">
+        <div class="row">
+            <a class="lp-logo" href="#top">
+                <span class="tile">💪</span>GymHelper
+            </a>
+            <nav class="lp-nav">
+                <a href="#how">Как работает</a>
+                <a href="#features">Возможности</a>
+                <a href="#privacy">Приватность</a>
+                <a href="#oss">Код</a>
+            </nav>
+            <a class="lp-run" href="https://t.me/MyHelperGymBot" target="_blank" rel="noopener">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true"><path d="M21.5 3.4 2.9 10.7c-.9.4-.9 1.6.1 1.9l4.7 1.5 1.8 5.5c.3.9 1.4 1.1 2 .4l2.5-3 4.8 3.5c.7.5 1.7.1 1.9-.8l3.2-14.6c.2-1-.9-1.9-1.9-1.5l-.5.2-2.2 8.3L8.6 13.6l9.5-7c.5-.4 0-1.2-.6-.9l-11 6-4.4-1.4c-.6-.2-.6-.7.1-.9L20.4 3c.6-.2 1.2.2 1.1.4z"/></svg>
+                Запустить
+            </a>
+        </div>
+    </header>
+
+    <main>
+        <!-- hero -->
+        <section class="lp-hero" id="top">
+            <div class="wrap">
+                <div>
+                    <h1 class="lp-h1">Силовой дневник, который живёт <span class="amb">в Telegram</span></h1>
+                    <p class="lp-sub">Никаких установок и регистраций: нажми кнопку — записывай подходы.
+                        GymHelper сам посчитает рекорды, объёмы и калории.</p>
+                    <div class="lp-cta-row">
+                        <a class="lp-btn" href="https://t.me/MyHelperGymBot" target="_blank" rel="noopener">
+                            <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor" aria-hidden="true"><path d="M21.5 3.4 2.9 10.7c-.9.4-.9 1.6.1 1.9l4.7 1.5 1.8 5.5c.3.9 1.4 1.1 2 .4l2.5-3 4.8 3.5c.7.5 1.7.1 1.9-.8l3.2-14.6c.2-1-.9-1.9-1.9-1.5l-.5.2-2.2 8.3L8.6 13.6l9.5-7c.5-.4 0-1.2-.6-.9l-11 6-4.4-1.4c-.6-.2-.6-.7.1-.9L20.4 3c.6-.2 1.2.2 1.1.4z"/></svg>
+                            Запустить в Telegram
+                        </a>
+                        <a class="lp-btn-sec" href="#features">Что умеет ↓</a>
+                    </div>
+                    <p class="lp-trust">Бесплатно · Без регистрации · По-русски</p>
+                </div>
+                <div class="lp-hero-vis">
+                    <div class="lp-phone">
+                        <img src="assets/shots/workout.png" alt="Mini App GymHelper: экран активной тренировки с подходами" width="390" height="780" decoding="async">
+                        <div class="lp-float pr">🏆 <span>Рекорд! 1ПМ ≈ <span class="a">102,5 кг</span></span></div>
+                        <div class="lp-float rest">⏱ <span>Отдых <span class="a">1:30</span></span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="lp-chips">
+                <span class="lp-chip">Ноль установки</span>
+                <span class="lp-chip">254 упражнения</span>
+                <span class="lp-chip">1ПМ и рекорды</span>
+                <span class="lp-chip">Открытый код</span>
+            </div>
+        </section>
+
+        <!-- как работает -->
+        <section class="lp-sec" id="how">
+            <div class="wrap">
+                <h2 class="lp-h2">Запуск — минута, привычка — надолго</h2>
+                <p class="lp-lead">Три шага от «увидел ссылку» до «дневник ведётся сам».</p>
+                <div class="lp-steps">
+                    <div class="lp-step g">
+                        <div class="num">1</div>
+                        <b>Нажми «Запустить»</b>
+                        <p>Откроется диалог с ботом в Telegram. Короткое знакомство с дневником — около минуты.</p>
+                    </div>
+                    <div class="lp-step g">
+                        <div class="num">2</div>
+                        <b>Запиши тренировку</b>
+                        <p>Выбери упражнение из каталога, укажи вес и подходы. Подсказки подставятся с прошлых
+                            разов, таймер отдыха запустится сам.</p>
+                    </div>
+                    <div class="lp-step g">
+                        <div class="num">3</div>
+                        <b>Смотри, как растёшь</b>
+                        <p>Календарь, личные рекорды и оценка 1ПМ собираются без твоего участия. Дневник ведёт
+                            себя сам.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- возможности -->
+        <section class="lp-sec" id="features" style="padding-top:20px;">
+            <div class="wrap">
+                <h2 class="lp-h2">Всё, что нужно в зале — и ничего лишнего</h2>
+                <p class="lp-lead">Дневник, каталог, календарь и статистика — уже внутри Telegram, бесплатно.</p>
+                <div class="lp-feats">
+                    <div class="lp-feat g">
+                        <div class="ftile">🏋️</div>
+                        <b>Запись подхода за секунды</b>
+                        <p>Пошаговый ввод: упражнение → вес → подходы → повторения. Значения с прошлой тренировки
+                            подставляются сами. В чате можно и одной строкой: <code>80 кг, 4 по 10</code>.</p>
+                    </div>
+                    <div class="lp-feat g">
+                        <div class="ftile">🤖</div>
+                        <b>Бот и приложение — одни данные</b>
+                        <p>Любишь чат — пиши боту кнопками и командами. Любишь экраны — открой
+                            мини-приложение с каталогом, календарём и статистикой. Начал в чате, закончил
+                            в приложении.</p>
+                    </div>
+                    <div class="lp-feat g">
+                        <div class="ftile">📚</div>
+                        <b>Каталог: 254 упражнения</b>
+                        <p>Фото, техника выполнения и фильтры по мышцам и инвентарю — от штанги до резинок, плюс
+                            кардио и растяжка. Своё упражнение — тоже можно.</p>
+                    </div>
+                    <div class="lp-feat g">
+                        <div class="ftile">📅</div>
+                        <b>Календарь и история</b>
+                        <p>Месячная сетка с отметками тренировок: регулярность видна с одного взгляда. Вся
+                            история — под рукой, выгрузка в CSV в один клик.</p>
+                    </div>
+                    <div class="lp-feat g">
+                        <div class="ftile">📈</div>
+                        <b>Статистика, которая мотивирует</b>
+                        <p>Оценка 1ПМ по формуле Эпли, живые рекорды с поздравлениями, прогресс по каждому
+                            упражнению и калории по MET.</p>
+                    </div>
+                    <div class="lp-feat g">
+                        <div class="ftile">⏱️</div>
+                        <b>Таймер и шаблоны</b>
+                        <p>Таймер отдыха запускается после каждого подхода. Типовые тренировки сохраняются
+                            шаблонами — повторить в один тап.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- скриншоты -->
+        <section class="lp-sec" id="screens" style="padding-top:20px;">
+            <div class="wrap">
+                <h2 class="lp-h2">Как это выглядит</h2>
+                <p class="lp-lead">Тёмная тема по умолчанию, светлая — одной настройкой внутри приложения.</p>
+                <div class="lp-shots">
+                    <figure class="lp-shot">
+                        <div class="frame">
+                            <span class="kind">Mini App</span>
+                            <img src="assets/shots/today.png" alt="Экран «Сегодня»: карточка активной тренировки поверх истории" width="390" height="780" loading="lazy" decoding="async">
+                        </div>
+                        <figcaption>Экран «Сегодня» — активная тренировка</figcaption>
+                    </figure>
+                    <figure class="lp-shot">
+                        <div class="frame">
+                            <span class="kind">Mini App</span>
+                            <img src="assets/shots/calendar.png" alt="Календарь месяца: сетка с отметками тренировок" width="390" height="780" loading="lazy" decoding="async">
+                        </div>
+                        <figcaption>Календарь месяца с отметками тренировок</figcaption>
+                    </figure>
+                    <figure class="lp-shot">
+                        <div class="frame">
+                            <span class="kind">Mini App</span>
+                            <img src="assets/shots/stats.png" alt="Статистика: оценка 1ПМ, личные рекорды и прогресс" width="390" height="780" loading="lazy" decoding="async">
+                        </div>
+                        <figcaption>Статистика: 1ПМ, рекорды и прогресс</figcaption>
+                    </figure>
+                </div>
+            </div>
+        </section>
+
+        <!-- приватность -->
+        <section class="lp-sec" id="privacy" style="padding-top:20px;">
+            <div class="wrap">
+                <div class="lp-priv">
+                    <div class="phead">
+                        <div class="shield">🔒</div>
+                        <h2>Приватность — не обещание, а архитектура</h2>
+                    </div>
+                    <p class="plead">GymHelper живёт на собственном сервере, а не в облаке платформы. Без
+                        рекламных трекеров, без аналитики твоих тренировок на стороне, без передачи данных
+                        третьим лицам. Решил забыть нас — команда <code>/delete_my_data</code> удалит дневник
+                        целиком и сразу.</p>
+                    <div class="points">
+                        <div class="pt nest">
+                            <span class="em">🖥️</span>
+                            <b>Свой сервер</b>
+                            <p>Данные — в одном месте, у оператора продукта. Один файл на пользователя, ничего
+                                лишнего.</p>
+                        </div>
+                        <div class="pt nest">
+                            <span class="em">🚫</span>
+                            <b>Ноль трекеров</b>
+                            <p>Ни рекламы, ни слежки — ни в боте, ни в приложении, ни на этой странице.</p>
+                        </div>
+                        <div class="pt nest">
+                            <span class="em">🗑️</span>
+                            <b>Право на забвение</b>
+                            <p>Одна команда — и файла с твоими тренировками больше нет. Подтверждение защищает
+                                от случайного удаления.</p>
+                        </div>
+                    </div>
+                    <a class="plink" href="https://gym-helper.com/privacy.html">Политика конфиденциальности →</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- открытый код -->
+        <section class="lp-sec" id="oss" style="padding-bottom:0;">
+            <div class="wrap">
+                <div class="lp-oss g">
+                    <span class="badge">open source</span>
+                    <div class="txt">
+                        <b>Код открыт</b>
+                        <p>GymHelper написан на Java без внешних зависимостей; фронтенд — ванильные HTML/CSS/JS,
+                            без фреймворков и сборщиков. Код, тесты и дизайн-спекции — всё в репозитории.</p>
+                    </div>
+                    <a class="lp-gh" href="https://github.com/PolkAlex/gymhelper" target="_blank" rel="noopener">
+                        <span class="ghdot" aria-hidden="true"></span>Открыть на GitHub ↗
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <!-- финальный CTA -->
+        <section class="lp-cta">
+            <div class="wrap">
+                <h2 class="lp-h2">Первая тренировка — через минуту</h2>
+                <p class="sub">Нажми кнопку — и дневник уже в твоём Telegram.</p>
+                <a class="lp-btn" href="https://t.me/MyHelperGymBot" target="_blank" rel="noopener">
+                    <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor" aria-hidden="true"><path d="M21.5 3.4 2.9 10.7c-.9.4-.9 1.6.1 1.9l4.7 1.5 1.8 5.5c.3.9 1.4 1.1 2 .4l2.5-3 4.8 3.5c.7.5 1.7.1 1.9-.8l3.2-14.6c.2-1-.9-1.9-1.9-1.5l-.5.2-2.2 8.3L8.6 13.6l9.5-7c.5-.4 0-1.2-.6-.9l-11 6-4.4-1.4c-.6-.2-.6-.7.1-.9L20.4 3c.6-.2 1.2.2 1.1.4z"/></svg>
+                    Запустить в Telegram
+                </a>
+                <p class="who">@MyHelperGymBot · бесплатно · без регистрации</p>
+            </div>
+        </section>
+    </main>
+
+    <!-- футер -->
+    <footer class="lp-foot">
+        <div class="wrap">
+            <div class="tagline">GymHelper — дневник тренировок в Telegram</div>
+            <div class="links">
+                <a href="#features">Возможности</a>
+                <a href="#privacy">Приватность</a>
+                <a href="https://gym-helper.com/privacy.html">Политика конфиденциальности</a>
+                <a href="https://github.com/PolkAlex/gymhelper" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://t.me/MyHelperGymBot?start=feedback" target="_blank" rel="noopener">Поддержка</a>
+            </div>
+            <div class="fine">© 2026 GymHelper · Сделано без фреймворков и трекеров</div>
+        </div>
+    </footer>
+
+</body>
+</html>
