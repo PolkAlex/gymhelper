@@ -18,6 +18,7 @@ deploy_key*
 node_modules/
 .gradle/
 build/
+gradle.properties
 
 ### Eclipse ###
 .apt_generated

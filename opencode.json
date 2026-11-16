@@ -13,5 +13,12 @@
         "baseURL": "https://api.z.ai/api/coding/paas/v4"
       }
     }
+  },
+  "mcp_servers": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@0.0.85", "--headless"],
+      "enable": ["lead", "design", "coder", "reviewer", "tester"]
+    }
   }
 }

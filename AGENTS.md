@@ -14,6 +14,7 @@ web/                       — фронтенд Mini App (app.js, catalog.js, st
 tests/                     — e2e.spec.js (Playwright), GymContractTest.java, check.js, server-test.js
 .github/                   — CI-воркфлоу, шаблоны issue/PR
 docs/                      — спецификации и макеты дизайнера, карта покрытия тестами
+.opencode/skill/           — процессные скиллы агентов (deploy, board, triage, new-ticket)
 data/                      — данные пользователей (JSON на чат) — НЕ коммитить
 build.gradle, gradlew      — сборка Gradle (код остаётся чистой Java без зависимостей)
 Dockerfile, docker-compose.yml — контейнер для VPS (прод работает в Docker: образ ghcr.io собирает CI на push в main; systemd-юнит gymbot остановлен 08.11.2026 — порт 8080 занят контейнером)
@@ -36,6 +37,9 @@ node --check web/app.js
 node --check web/catalog.js
 node tests/check.js
 
+# единая быстрая проверка перед передачей на ревью (JS-статика + compileJava)
+npm run verify
+
 # e2e: тестовый сервер поднимется сам (порт 8099)
 npx playwright test                        # все проекты устройств
 npx playwright test --project=desktop      # только десктоп (быстрый прогон)
@@ -56,6 +60,18 @@ ssh root@45.91.169.125 "cd /opt/gym; docker compose pull gymbot && docker compos
 ранний pull тихо вытянет старый образ («Already exists»).
 ⚠️ `test.bat` — то же самое для человека, но с `pause` в конце: агентам НЕ использовать
 (зависнет в ожидании Enter).
+
+## Инструменты агентов (16.11.2026)
+
+- **Процессные скиллы** `.opencode/skill/`: `deploy` (выкатка с гейтом отмашки),
+  `board` (движение тикетов + метрики), `triage` (старт сессии: inbox, комментарии,
+  CI, доска), `new-ticket` (создание семей тикетов). Подгружать по описанию задачи;
+  id полей/опций доски брать из этого файла (единый источник правды).
+- **`npm run verify`** — обязательная быстрая проверка кодера перед передачей на
+  ревью и ревьюера перед вердиктом (JS-статика + compileJava).
+- **Playwright MCP** (opencode.json, headless, npx @playwright/mcp@0.0.85) — живой
+  браузер для проверки вёрстки Mini App и воспроизведения багов (агенты lead/design/
+  coder/reviewer/tester). Браузерные команды — только по делу: каждая сессия ест токены.
 
 ## GitHub (gh CLI установлен и авторизован)
 

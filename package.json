@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "verify": "node --check web/app.js && node --check web/catalog.js && node tests/check.js && gradlew.bat --no-daemon compileJava",
     "test:e2e": "playwright test",
     "server:test": "node tests/server-test.js"
   },
