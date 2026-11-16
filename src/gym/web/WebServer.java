@@ -402,6 +402,9 @@ public final class WebServer {
 
     private void serveStatic(HttpExchange ex, String path) throws IOException {
         if (path == null || path.equals("/") || path.equals("/app")) path = "/index.html";
+        /* [CNT-T1] лендинг: /landing и /landing/ — index.html из web/landing/
+           (без редиректа, по аналогии с / и /app; счётчик ниже срабатывает одинаково) */
+        if (path.equals("/landing") || path.equals("/landing/")) path = "/landing/index.html";
         /* [EXR-T8] гвард path traversal: путь приходит уже декодированным (%2e%2e → ..),
            сегменты «..» запрещены; канонический путь (toRealPath, с симлинками) обязан
            остаться внутри webDir — иначе 404. Раньше /img/%2e%2e/app.js отдавал соседний
@@ -429,15 +432,32 @@ public final class WebServer {
             send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
             return;
         }
+        /* [CNT-T1] просмотры лендинга — свой анонимный счётчик по образцу maInit (решение
+           владельца: агрегат без ПДн, попадает в /stats). Считаем только успешные GET
+           /landing/ и /landing/index.html; HEAD-пробы мониторов и 404 не считаются */
+        if (path.equals("/landing/index.html") && "GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            stats.inc("landingViews");
+        }
         String ct = contentType(path);
         /* [EXR-T6] фото упражнений (/img/) неизменяемы и именуются стабильно — кэш на неделю;
+           [CNT-T1] ассеты лендинга (/landing/assets/: og/favicon/скриншоты PNG) — тоже;
            остальная статика (JS/CSS с ?v=-бампом) по-прежнему no-store */
-        boolean img = path.startsWith("/img/") && "GET".equalsIgnoreCase(ex.getRequestMethod());
+        boolean longCache = "GET".equalsIgnoreCase(ex.getRequestMethod())
+            && (path.startsWith("/img/") || path.startsWith("/landing/assets/"));
         /* [EXR-T7] gzip-клиенту текстовая статика отдаётся сжатой — из кэша байтов (precompressed:
            send не жмёт повторно); клиенту без gzip — чтение с диска как раньше */
         boolean gzStatic = acceptsGzip(ex) && compressible(ct);
         byte[] body = gzStatic ? gzippedStatic(file) : Files.readAllBytes(file);
-        send(ex, 200, body, ct, img ? "public, max-age=604800" : "no-store", gzStatic);
+        /* [CNT-T1] HEAD на статике (линк-чекеры, мониторы): только заголовки, без тела —
+           как /health; иначе JDK-сервер предупреждает о Content-Length при HEAD в лог */
+        if ("HEAD".equalsIgnoreCase(ex.getRequestMethod())) {
+            ex.getResponseHeaders().set("Content-Type", ct);
+            ex.getResponseHeaders().set("Cache-Control", longCache ? "public, max-age=604800" : "no-store");
+            ex.getResponseHeaders().set("Vary", "Accept-Encoding");
+            ex.sendResponseHeaders(200, -1);
+            return;
+        }
+        send(ex, 200, body, ct, longCache ? "public, max-age=604800" : "no-store", gzStatic);
     }
 
     private static String contentType(String path) {
@@ -485,7 +505,8 @@ public final class WebServer {
         send(ex, code, body, contentType, cacheControl, false);
     }
 
-    /* [EXR-T6] cacheControl: /img/ — public, max-age=604800; все остальные ответы — no-store, как раньше.
+    /* [EXR-T6] cacheControl: /img/ и /landing/assets/ [CNT-T1] — public, max-age=604800;
+        все остальные ответы — no-store, как раньше.
        [EXR-T7] Клиенту с Accept-Encoding: gzip текстовые ответы (text/*, JS, JSON: /api/init,
        /api/save, /stats) сжимаются: Content-Encoding: gzip + Vary: Accept-Encoding, длина —
        сжатого размера. Бинарное (img) и клиенты без gzip — байт-в-байт как раньше.

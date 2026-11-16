@@ -20,6 +20,7 @@ import java.util.Map;
    файла данных и его mtime (спека ANA-S2 г1, без чтения содержимого),
    onboardingStarted/onboardingCompleted/onboardingTutorialSkipped — события онбординга
    из /api/track (спека ANA-S2 г2, только счётчики — в GymData не персистятся);
+   [CNT-T1] landingViews — просмотры лендинга (GET /landing/ в WebServer);
    плюс недельные
    агрегаты ISO (хранятся последние WEEKS_TO_KEEP недель — ротация при записи).
    Формат файла = формат ответа /stats: {"maInit":N,...,"weeks":{"2026-W46":{...}}}.
@@ -31,7 +32,8 @@ public final class Stats {
     static final String[] KEYS = {
         "maInit", "maInitNew", "maInitRepeat", "maInitReturn",
         "maSave", "workoutsCreated", "workoutsCompleted", "templatesCreated", "templatesUsed", "feedbackSent",
-        "onboardingStarted", "onboardingCompleted", "onboardingTutorialSkipped"
+        "onboardingStarted", "onboardingCompleted", "onboardingTutorialSkipped",
+        "landingViews"
     };
     /* сколько последних недель (ISO) хранить в weeks */
     public static final int WEEKS_TO_KEEP = 26;
