@@ -1,12 +1,26 @@
-# 💪 MyHelper — Telegram-бот: дневник тренировок
+# 💪 GymHelper — дневник тренировок в Telegram
 
 [![CI](https://github.com/PolkAlex/gymhelper/actions/workflows/ci.yml/badge.svg)](https://github.com/PolkAlex/gymhelper/actions/workflows/ci.yml)
+[![Telegram](https://img.shields.io/badge/Telegram-%40MyHelperGymBot-2AABEE?logo=telegram&logoColor=white)](https://t.me/MyHelperGymBot)
 
-Бот для записи занятий в тренажёрном зале, по аналогии с мобильными приложениями
-(Strong, Hevy): пошаговый ввод упражнений с подсказками, история, статистика,
-расчёт калорий и прогресс от тренировки к тренировке.
+**Записывай силовые тренировки за секунды — без установки приложения и регистрации.**
+Бот + Mini App на чистой Java 17 без единой внешней зависимости.
 
-Написан на чистой Java 17 без внешних зависимостей.
+👉 **[Запустить в Telegram](https://t.me/MyHelperGymBot)** — хватит одного тапа.
+
+| | | |
+|---|---|---|
+| ![Главная](docs/screenshots/01-home.png) | ![Карточка тренировки](docs/screenshots/02-workout-card.png) | ![Каталог](docs/screenshots/04-catalog.png) |
+| ![Статистика](docs/screenshots/05-stats.png) | ![История](docs/screenshots/06-history.png) | ![Настройки](docs/screenshots/07-settings.png) |
+
+## Почему в Telegram, а не очередное приложение
+
+- **Ноль трения**: никакой установки из стора, аккаунтов и онбординга на 10 экранов — тапнул ссылку и работаешь
+- **Два интерфейса**: быстрый лог через чат-бота *и* полноценное приложение с каталогом, календарём и статистикой
+- **Приватность в ДНК**: данные на своём сервере, без трекеров и телеметрии; удалить всё — одной командой `/delete_my_data`
+- **Русский язык нативно** — сегмент, который западные трекеры (Strong, Hevy, JEFIT) обслуживают формально
+
+Подробнее — сравнение с конкурентами в [стратегическом анализе](docs/analysis-strategy-2026-11.md).
 
 ## Возможности
 
@@ -118,8 +132,9 @@ chat_id пользователя), пользователю приходит п�
 ## 📊 Продуктовые агрегаты (/stats)
 
 `GET /stats?token=` (токен — `GYM_ADMIN_TOKEN`, не задан — токен бота) отдаёт агрегаты-счётчики
-событий без ПДн; выгрузка в Grafana Cloud: `node tools/ana-to-gist.mjs` (инструкция —
-`docs/metrics.md`, раздел «ANA-дашборд»).
+событий без ПДн; просмотр — локальный дашборд `docs/dashboard.html` (конфиг —
+`docs/dashboard-config.js` по образцу example), выгрузка: `node tools/ana-to-gist.mjs`
+(инструкция — `docs/metrics.md`, раздел «ANA-дашборд»).
 
 ## 📱 Telegram Mini App (приложение)
 
