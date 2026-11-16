@@ -108,6 +108,9 @@ http.createServer(function (req, res) {
     /* [EXR-T6] прод декодирует percent-encoding пути (кириллические id каталога типа «pliе»),
        мок должен так же; битый encoding — оставляем как есть → 404 */
     let rel = url === '/' || url === '/app' ? 'index.html' : url.slice(1);
+    /* [CNT-T1] рерайт /landing и /landing/ — зеркало прод-WebServer (безредиректно, как
+       у / и /app); счётчик landingViews живёт только в проде (Stats.java) — контракт GymContractTest */
+    if (rel === 'landing' || rel === 'landing/') rel = 'landing/index.html';
     try { rel = decodeURIComponent(rel); } catch (e) { /* URIError — сырой путь */ }
     /* [EXR-T8] path traversal гвард — как в проде [WebServer]: декодированный путь не содержит
        «..» и канонически остаётся внутри web/; раньше /img/%2e%2e/app.js отдавал соседний файл */
@@ -120,8 +123,9 @@ http.createServer(function (req, res) {
         return;
     }
     /* [EXR-T8] прод-логика Cache-Control [EXR-T6]: GET /img/ — public, max-age=604800
-       (фото неизменяемы), остальная статика — no-store; раньше мок отдавал всегда no-store */
-    const img = ('/' + rel).startsWith('/img/') && req.method === 'GET';
+       (фото неизменяемы), остальная статика — no-store; раньше мок отдавал всегда no-store.
+       [CNT-T1] ассеты лендинга /landing/assets/ — тоже неделя (зеркало прод-WebServer) */
+    const img = req.method === 'GET' && (('/' + rel).startsWith('/img/') || ('/' + rel).startsWith('/landing/assets/'));
     res.writeHead(200, {
         'Content-Type': types[path.extname(file).toLowerCase()] || 'application/octet-stream',
         'Cache-Control': img ? 'public, max-age=604800' : 'no-store'
