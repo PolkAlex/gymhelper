@@ -56,3 +56,6 @@ tools/ana-gist-id.txt
 
 ### Локальный конфиг дашборда (URL secret-gist'ов — не в публичный репо) ###
 docs/dashboard-config.js
+
+### Исходники кадров от владельца (обработанные лежат в web/landing/assets/shots) ###
+docs/screen for landing/

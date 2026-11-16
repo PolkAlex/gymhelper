@@ -82,6 +82,7 @@ async function waitServer() {
                 localStorage.setItem('gymOnbDone', '1');
                 localStorage.setItem('gymWnOff', '1');
                 localStorage.setItem('gymHelpSeen', '1');
+                localStorage.setItem('gymTheme', 'dark'); /* [CNT-T1] кадры лендинга — тёмная тема (как обещает подпись секции) */
             } catch (e) { /* noop */ }
         });
         const p = await ctx.newPage();
