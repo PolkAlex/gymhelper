@@ -53,3 +53,6 @@ tools/.fdb-cache/
 
 ### ANA-T4: id секретного гиста ANA-дашборда (локальный секрет, не коммитить) ###
 tools/ana-gist-id.txt
+
+### Локальный конфиг дашборда (URL secret-gist'ов — не в публичный репо) ###
+docs/dashboard-config.js
