@@ -119,15 +119,11 @@ public class TelegramApi {
         buf.write("\r\n".getBytes(StandardCharsets.UTF_8));
     }
 
-    public static Map<String, Object> appKeyboard(String webAppUrl) {
-        Map<String, Object> webApp = new LinkedHashMap<>();
-        webApp.put("url", webAppUrl);
-        Map<String, Object> btn = new LinkedHashMap<>();
-        btn.put("text", "🏋️ Открыть приложение");
-        btn.put("web_app", webApp);
+    /* [UX-T33] снятие persistent reply-клавиатуры (reply_keyboard_remove) —
+       клавиатура «Открыть приложение» убрана, старую снимаем на /start */
+    public static Map<String, Object> keyboardRemove() {
         Map<String, Object> kb = new LinkedHashMap<>();
-        kb.put("keyboard", List.of(List.of(btn)));
-        kb.put("resize_keyboard", true);
+        kb.put("remove_keyboard", true);
         return kb;
     }
 

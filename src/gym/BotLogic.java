@@ -306,7 +306,16 @@ public final class BotLogic {
             startFeedback(chatId, st);
             return;
         }
-        if (low.startsWith("/start") || low.startsWith("/menu")) {
+        if (low.startsWith("/start")) {
+            /* [UX-T33] reply-клавиатура «Открыть приложение» убрана: на /start снимаем
+               приклеенную у существующих пользователей (клавиатура раньше выдавалась только с Mini App) */
+            if (webAppUrl != null) {
+                api.sendMessageWithKeyboard(chatId, "Приложение открывается кнопкой ☰ «🏋️ Дневник» у поля ввода", TelegramApi.keyboardRemove());
+            }
+            showMenu(chatId, null, data, st);
+            return;
+        }
+        if (low.startsWith("/menu")) {
             showMenu(chatId, null, data, st);
             return;
         }
@@ -647,16 +656,12 @@ public final class BotLogic {
             b.append("\n⚠️ Есть незавершённая тренировка от ").append(fmtDate(active.date));
         }
         if (webAppUrl != null) {
-            b.append("\n\n📱 Все возможности — в приложении: кнопка «🏋️ Открыть приложение» внизу или ☰ у поля ввода");
+            b.append("\n\n📱 Все возможности — в приложении: кнопка ☰ «🏋️ Дневник» у поля ввода или команда /app");
         }
         /* [ONB-T2] ссылка на политику данных в приветствии */
         b.append("\n\n📜 Политика данных: ").append(PRIVACY_URL);
         b.append("\n\nВыбери действие 👇");
-        if (mid == null && webAppUrl != null) {
-            api.sendMessageWithKeyboard(chatId, b.toString(), TelegramApi.appKeyboard(webAppUrl));
-        } else {
-            send(chatId, mid, b.toString(), mainKb());
-        }
+        send(chatId, mid, b.toString(), mainKb());
     }
 
     private List<List<Map<String, Object>>> mainKb() {
