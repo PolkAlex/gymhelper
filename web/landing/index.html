@@ -128,20 +128,6 @@ body.lp {
     box-shadow: 0 30px 80px rgba(0,0,0,.5), 0 0 60px rgba(255,194,32,.08);
 }
 .lp-phone img { width: 100%; height: 100%; border-radius: 28px; display: block; object-fit: cover; }
-/* пилюли позиционируются от телефонной рамки (позиция и проценты — от её ширины) */
-.lp-float {
-    position: absolute; z-index: 2;
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 10px 14px; border-radius: 14px;
-    background: rgba(30,32,38,.92); border: 1px solid rgba(255,255,255,.10);
-    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    box-shadow: 0 10px 30px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06);
-    font-size: 12.5px; font-weight: 700; color: #f2f3f5; white-space: nowrap;
-    font-variant-numeric: tabular-nums;
-}
-.lp-float .a { color: #ffc220; }
-.lp-float.pr { top: 12%; right: -10%; }
-.lp-float.rest { bottom: 14%; left: -12%; }
 
 /* ---------- секции ---------- */
 .lp-sec { padding: 60px 0; }
@@ -242,9 +228,6 @@ body.lp {
     .lp-chip { padding: 7px 12px; font-size: 12.5px; }
     .lp-hero-vis { padding-bottom: 14px; }
     .lp-phone { width: 216px; }
-    .lp-float.pr { right: -2%; top: 10%; }
-    .lp-float.rest { left: -2%; bottom: 12%; }
-    .lp-float { padding: 8px 11px; font-size: 11.5px; }
     .lp-sec { padding: 44px 0; }
     .lp-h2 { font-size: 23px; }
     .lp-lead { font-size: 14.5px; margin-bottom: 24px; }
@@ -298,9 +281,7 @@ body.lp {
                 </div>
                 <div class="lp-hero-vis">
                     <div class="lp-phone">
-                        <img src="assets/shots/workout.png" alt="Mini App GymHelper: экран активной тренировки с подходами" width="390" height="780" decoding="async">
-                        <div class="lp-float pr">🏆 <span>Рекорд! 1ПМ ≈ <span class="a">102,5 кг</span></span></div>
-                        <div class="lp-float rest">⏱ <span>Отдых <span class="a">1:30</span></span></div>
+                        <img src="assets/shots/workout.png" alt="Mini App GymHelper: экран активной тренировки с подходами и таймером отдыха" width="390" height="780" decoding="async">
                     </div>
                 </div>
             </div>
