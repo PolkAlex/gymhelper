@@ -691,16 +691,20 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: traversal " + travErr);
         }
 
-        /* [CNT-T1] лендинг: GET /landing/ (= /landing/index.html) отдаёт web/landing/index.html,
-           просмотры считаются анонимным счётчиком landingViews (агрегат без ПДн, /stats);
-           HEAD-пробы и 404 не считаются, другие пути счётчик не трогают.
-           Реальный WebServer на эфемерном порту, статика во временном webDir. */
+        /* [CNT-T1] лендинг: GET /landing, /landing/ и /landing/index.html отдают
+           web/landing/index.html (безредиректный рерайт, как у / и /app), просмотры
+           считаются анонимным счётчиком landingViews (агрегат без ПДн, /stats) — ровно
+           по одному на запрос, без задвоений; HEAD-пробы и 404 не считаются.
+           Ассеты /landing/assets/ кэшируются неделю (по образцу /img/ [EXR-T6]),
+           сама страница — no-store. Реальный WebServer на эфемерном порту. */
         try {
             java.nio.file.Path tmpL = java.nio.file.Files.createTempDirectory("gymland");
-            java.nio.file.Files.createDirectories(tmpL.resolve("landing"));
+            java.nio.file.Files.createDirectories(tmpL.resolve("landing").resolve("assets"));
             java.nio.file.Files.writeString(tmpL.resolve("landing").resolve("index.html"),
                 "<!doctype html><html lang=\"ru\"><title>GymHelper лендинг</title></html>",
                 java.nio.charset.StandardCharsets.UTF_8);
+            byte[] pngBytes = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+            java.nio.file.Files.write(tmpL.resolve("landing").resolve("assets").resolve("og.png"), pngBytes);
             Storage stL = new Storage(tmpL);
             Stats counterL = new Stats(tmpL.resolve("stats.json"));
             WebServer wsL = new WebServer("contract-test-token", stL, tmpL, counterL);
@@ -709,6 +713,9 @@ public class GymContractTest {
             probeL.close();
             wsL.start(portL);
 
+            java.net.http.HttpResponse<String> land0 = get(portL, "/landing");
+            check(land0.statusCode() == 200, "landing: GET /landing (без слэша) — 200, а не " + land0.statusCode());
+            check(land0.body().contains("GymHelper лендинг"), "landing: /landing отдаёт index.html без редиректа");
             java.net.http.HttpResponse<String> land1 = get(portL, "/landing/");
             check(land1.statusCode() == 200, "landing: GET /landing/ — 200, а не " + land1.statusCode());
             check(land1.body().contains("GymHelper лендинг"), "landing: /landing/ отдаёт index.html из web/landing/");
@@ -717,15 +724,24 @@ public class GymContractTest {
             java.net.http.HttpResponse<String> land2 = get(portL, "/landing/index.html");
             check(land2.statusCode() == 200, "landing: GET /landing/index.html — 200, а не " + land2.statusCode());
 
+            /* кэш: ассеты лендинга — неделя (как /img/), страница — no-store */
+            java.net.http.HttpResponse<String> asset = get(portL, "/landing/assets/og.png");
+            check(asset.statusCode() == 200, "landing: GET /landing/assets/og.png — 200, а не " + asset.statusCode());
+            check("public, max-age=604800".equals(asset.headers().firstValue("Cache-Control").orElse(null)),
+                "landing: ассеты /landing/assets/ кэшируются неделю, а не "
+                    + asset.headers().firstValue("Cache-Control").orElse("—"));
+            check("no-store".equals(land1.headers().firstValue("Cache-Control").orElse(null)),
+                "landing: страница лендинга — no-store");
+
             /* 404 и HEAD просмотрами не считаются */
             check(get(portL, "/landing/nope.html").statusCode() == 404, "landing: отсутствующий файл — 404");
             check(headStatus(portL, "/landing/") == 200, "landing: HEAD /landing/ — 200");
             check(headStatus(portL, "/landing/") == 200, "landing: повторный HEAD /landing/ — 200");
 
-            /* сторонний путь не растит счётчик: 2 GET лендинга = landingViews 2 */
+            /* три GET (без слэша, со слэшем, прямой) = landingViews 3, ровно по одному */
             Map<String, Object> snapL = Json.map(Json.parse(get(portL, "/stats?token=contract-test-token").body()));
-            check(Json.lng(snapL.get("landingViews")) == 2,
-                "landing: landingViews=2 после двух GET (HEAD и 404 не считались), а не "
+            check(Json.lng(snapL.get("landingViews")) == 3,
+                "landing: landingViews=3 после трёх GET (HEAD и 404 не считались), а не "
                     + Json.lng(snapL.get("landingViews")));
         } catch (Exception landErr) {
             throw new AssertionError("CONTRACT FAIL: landing " + landErr);
