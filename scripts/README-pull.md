@@ -1,5 +1,12 @@
 # Доставка бэкапов с VPS на ПК ([BAK-T2], «Вариант 2»: pull по расписанию)
 
+> ⚠️ **Скрытый запуск (16.11.2026):** задача планировщика `GymBackupPull` запускает
+> `scripts/backup-pull-hidden.vbs` через `wscript.exe` — окно PowerShell не мелькает.
+> `-WindowStyle Hidden` НЕ спасает от мелькания (консоль создаётся и потом скрывается);
+> при пересоздании задачи указывай действие
+> `wscript.exe C:\Users\Lenovo\IdeaProjects\MyHelper\scripts\backup-pull-hidden.vbs`.
+> Аналогично настроена задача `GymHelper ANA stats pull` → `tools/ana-pull-hidden.vbs`.
+
 `scripts/backup-pull.ps1` раз в час (и при каждом входе в Windows) проверяет на VPS
 свежий архив `/opt/gym/backups/gym-data-*.tar.gz` (его создаёт `deploy/backup.sh`, см.
 `deploy/README-backup.md`) и, если он новее скачанного ранее (маркер `last-pulled.txt`),
