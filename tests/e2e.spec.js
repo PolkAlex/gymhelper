@@ -4619,3 +4619,139 @@ test.describe('[ONB-T7] «Что нового»', function () {
         if (off3 !== '1') throw new Error('выключение тогла не установило gymWnOff');
     });
 });
+
+/* ============ [GOA-S1] цели тренировок (docs/spec-goa-s1-goals.md) ============ */
+test.describe('GOA-S1 цели', function () {
+    const EXG = 'Жим штанги лёжа';
+
+    /* силовая цель через мастер: упражнение из истории → значение → срок квартал */
+    async function createStrengthGoalUi(page, target) {
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await page.locator('[data-act="openGoals"]').click();
+        await page.locator('[data-act="goalNew"]').click();
+        await page.locator('[data-act="gwType"][data-a="1"]').click();
+        await page.locator('#gwList .frow', { hasText: EXG }).first().click();
+        await page.locator('#gwTarget').fill(String(target));
+        await page.locator('[data-act="gwTargetNext"]').click();
+        await page.locator('[data-act="gwPeriod"][data-a="quarter"]').click();
+        await page.locator('[data-act="gwCreate"]').click();
+        await expect(page.locator('.gcard', { hasText: EXG })).toBeVisible();
+    }
+    /* частотная цель: значение → срок неделя */
+    async function createFreqGoalUi(page, target) {
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await page.locator('[data-act="openGoals"]').click();
+        await page.locator('[data-act="goalNew"]').click();
+        await page.locator('[data-act="gwType"][data-a="2"]').click();
+        await page.locator('#gwTarget').fill(String(target));
+        await page.locator('[data-act="gwTargetNext"]').click();
+        await page.locator('[data-act="gwPeriod"][data-a="week"]').click();
+        await page.locator('[data-act="gwCreate"]').click();
+        /* карточка цели на экране «Цели» (мастер закрылся, создание сохранено) */
+        await page.waitForSelector('.gcard', { state: 'visible', timeout: 8000 });
+    }
+    /* повтор прошлой тренировки + новый подход (сначала закрываем подэкран «Цели» —
+       тап по табу, иначе подэкран перебивает карточку тренировки) */
+    async function recordSet(page, weight, reps) {
+        await page.locator('[data-act="switchTab"][data-a="history"]').click();
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="newRepeat"]').click();
+        await page.locator('.ex-add').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill(weight);
+        await page.locator('#mReps').fill(reps);
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+    }
+
+    test('силовая цель: переживает reload и save, достижение — тост цели вместо PR-тоста, архив', async function ({ page, request }) {
+        test.setTimeout(60000);
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: { rev: 1, nextId: 2, workouts: [doneWorkout(1, day, EXG, '100', 1)] } } });
+        await openApp(page);
+        await createStrengthGoalUi(page, '140');
+        /* переживает reload: серверный протокол «ex» нормализуется на границе — цель не «зомби» */
+        await page.reload();
+        await openApp(page);
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await expect(page.locator('.goalsw .wrow', { hasText: EXG })).toBeVisible();
+        /* переживает save: при отправке exercise→ex, merge сервера цель не теряет */
+        await recordSet(page, '110', '9'); /* e1RM 143 ≥ 140: PR и цель одновременно */
+        const st = await request.get('/api/state');
+        const state = await st.json();
+        expect(state.goals.length).toBe(1);
+        expect(state.goals[0].ex).toBe(EXG);
+        /* тост ТОЛЬКО цели (§11) — PR-тост подавлен */
+        await expect(page.locator('#toast')).toHaveText(/Цель достигнута/);
+        const toastText = await page.locator('#toast').textContent();
+        expect(toastText).not.toContain('Новый рекорд');
+        /* после reload цель в архиве: строка из doneDate/doneValue, без пересчётов */
+        await page.reload();
+        await openApp(page);
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await page.locator('[data-act="openGoals"]').click();
+        await expect(page.locator('#app')).toContainText('Активные · 0 из 5');
+        const row = page.locator('.garow', { hasText: EXG });
+        await expect(row).toBeVisible();
+        await expect(row).toContainText('e1RM 143');
+    });
+
+    test('частотная цель закрывается при завершении тренировки; без горизонтального скролла', async function ({ page, request }) {
+        test.setTimeout(60000);
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: { rev: 1, nextId: 2, workouts: [doneWorkout(1, day, EXG, '100', 1)] } } });
+        await openApp(page);
+        await createFreqGoalUi(page, '1');
+        await recordSet(page, '80', '10');
+        await page.locator('[data-act="finishWorkout"]').click();
+        await expect(page.locator('#toast')).toHaveText(/Цель достигнута! 1 тренировка/);
+        /* экраны без горизонтального скролла (реальная проверка — проект android360) */
+        const sw = await page.evaluate(function () { return document.documentElement.scrollWidth; });
+        expect(sw).toBeLessThanOrEqual(page.viewportSize().width + 1);
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await page.locator('[data-act="openGoals"]').click();
+        await expect(page.locator('.garow', { hasText: 'выполнено 2 из 1' })).toBeVisible(); /* seed-тренировка тоже в окне недели */
+    });
+
+    test('лимит активных целей: 5 создаются, 6-я — плашка и disabled-карточки', async function ({ page, request }) {
+        test.setTimeout(60000);
+        const day = isoDate(new Date());
+        const goals = [];
+        for (let i = 0; i < 4; i++) {
+            goals.push({ id: i + 2, type: 2, target: 8 + i, start: day, end: '2030-01-07', status: 1, doneDate: '', doneValue: 0 });
+        }
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: { rev: 1, nextId: 6, workouts: [doneWorkout(1, day, EXG, '100', 1)], goals: goals } } });
+        await openApp(page);
+        /* 5-я — через UI (мастер работает при 4 активных) */
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await page.locator('[data-act="openGoals"]').click();
+        await createFreqGoalUi(page, 12);
+        await expect(page.locator('#app')).toContainText('Активные · 5 из 5');
+        /* 6-я: мастер открывается, но шаг 1 — плашка и disabled-карточки (§8.4) */
+        await page.locator('[data-act="goalNew"]').click();
+        await expect(page.locator('.gwlimit')).toContainText('отмените одну');
+        await expect(page.locator('.frow.off').first()).toBeVisible();
+    });
+
+    test('архив: ✕ удаляет без подтверждения, «Повторить» открывает мастер с предзаполнением', async function ({ page, request }) {
+        test.setTimeout(60000);
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: { rev: 1, nextId: 2, workouts: [doneWorkout(1, day, EXG, '100', 1)] } } });
+        await openApp(page);
+        await createStrengthGoalUi(page, '135'); /* > e1RM 130 — без предупреждения §4.3 */
+        await recordSet(page, '110', '9'); /* 143 ≥ 135 → в архив */
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await page.locator('[data-act="openGoals"]').click();
+        const row = page.locator('.garow', { hasText: EXG });
+        await expect(row).toBeVisible();
+        /* «Повторить» — мастер сразу на шаге срока с предзаполнением (§8.3) */
+        await row.locator('[data-act="goalRepeat"]').click();
+        await expect(page.locator('.stepcap')).toHaveText('Шаг 4 из 4 · Срок');
+        await page.locator('[data-act="gwCancel"]').click();
+        await expect(page.locator('.garow', { hasText: EXG })).toBeVisible();
+        /* ✕ — удаление из архива безвозвратно и без confirm (§4.3) */
+        await page.locator('.garow', { hasText: EXG }).locator('.gdel').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible();
+        await expect(page.locator('.garow', { hasText: EXG })).toHaveCount(0);
+    });
+});
