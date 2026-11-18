@@ -45,4 +45,13 @@ public final class Goal {
         g.doneValue = Json.dbl(m.get("doneValue"));
         return g;
     }
+
+    /* переименование упражнения обновляет ex активных целей с этим названием (§4.3):
+       сравнение без регистра (как в расчёте прогресса), архив и отменённые не трогаем */
+    public static void renameExercise(GymData data, String from, String to) {
+        if (from == null || to == null || from.equalsIgnoreCase(to)) return;
+        for (Goal g : data.goals) {
+            if (g.status == 1 && g.type == 1 && from.equalsIgnoreCase(g.exercise)) g.exercise = to;
+        }
+    }
 }

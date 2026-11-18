@@ -2467,6 +2467,17 @@ function goalCountIn(g) {
 function goalCur(g) { return g.type === 1 ? goalMaxE1rm(g.exercise) : goalCountIn(g); }
 /* % достижения, cap 100 — перевыполнение не рисуем (§4.1) */
 function goalPct(g) { return g.target > 0 ? Math.min(100, Math.round(goalCur(g) / g.target * 100)) : 0; }
+/* активные силовые цели упражнения — для проверки в точке записи подхода (§4.2) */
+function goalActiveForEx(name) {
+    const nl = String(name || '').toLowerCase();
+    return goalActiveList().filter(g => g.type === 1 && (g.exercise || '').toLowerCase() === nl);
+}
+/* закрытие цели: статус/дата/результат фиксируются на момент события (§4.3, §11) */
+function goalClose(g, val) {
+    g.status = 2;
+    g.doneDate = todayISO();
+    g.doneValue = val;
+}
 
 /* конец календарного периода (§3): 'week'|'month'|'quarter', next=1 — следующий;
    ISO-строка. «Без срока» — не период (end=null), обрабатывается на уровне цели */
@@ -3466,8 +3477,24 @@ function finishWorkout(id) {
     if (!w.exercises.length) { toast('Сначала добавь хотя бы одно упражнение 💪', true); return; }
     w.finished = true;
     if (!w.ended) w.ended = nowLocalISO();
-    /* [UX-T13] после завершения — сразу список истории, экран карточки закрывается */
-    save().then(function (r) { if (r === 'ok') toast('✅ Тренировка завершена'); viewWid = 0; render(); });
+    /* [GOA-S1] частотные цели проверяются в точке завершения тренировки (§14 R1):
+       окно [start..end] наполнилось — цель в архив достижений с doneValue */
+    let goalHit = null;
+    for (const g of goalActiveList()) {
+        if (g.type !== 2) continue;
+        const val = goalCur(g);
+        if (val >= g.target) {
+            goalClose(g, val);
+            if (!goalHit) goalHit = g;
+        }
+    }
+    /* [UX-T13] после завершения — сразу список истории, экран карточки закрывается;
+       тост цели важнее обычного «Тренировка завершена» (аналог приоритета §11) */
+    save().then(function (r) {
+        if (r === 'ok') toast(goalHit ? '🏆 Цель достигнута! ' + goalNameFull(goalHit) : '✅ Тренировка завершена');
+        viewWid = 0;
+        render();
+    });
 }
 function deleteWorkout(id) {
     if (!G.del) G.del = [];
@@ -3857,12 +3884,26 @@ async function saveEntry() {
     /* живой рекорд — только для НОВОГО блока, проверяем до добавления в e.sets:
        база — прошлые тренировки, редактирование задним числом не празднуется [UX-T2] */
     const pr = setIdx < 0 ? prCheck(w, name, { w: weight, s: sets, r: reps }) : null;
+    /* [GOA-S1] проверка силовых целей в той же точке (§4.2): значения ДО блока — база,
+       после добавления блока пересчитываются; достижение фиксируется doneValue (§4.3) */
+    const goalCands = setIdx < 0 ? goalActiveForEx(name) : [];
+    const goalPrev = goalCands.map(g => goalCur(g));
     if (setIdx < 0) {
         e.sets.push({ w: weight, s: sets, r: reps, t: nowLocalISO() });
     } else {
         const old = e.sets[setIdx];
         e.sets[setIdx] = { w: weight, s: sets, r: reps, t: old ? (old.t || nowLocalISO()) : nowLocalISO() };
     }
+    /* закрытие достигнутых целей: правка задним числом (setIdx >= 0) не празднуется;
+       «проскочившая» по правкам история закрывается молча — doneValue честный (§4.3) */
+    let goalHit = null;
+    goalCands.forEach(function (g, i) {
+        const val = goalCur(g);
+        if (g.status === 1 && val >= g.target) {
+            goalClose(g, val);
+            if (!goalHit && goalPrev[i] < g.target) goalHit = g;
+        }
+    });
     const r = await save();
     /* таймер отдыха: автозапуск только для НОВОГО блока незавершённой тренировки [UX-T4];
        «выкл» (restSec=0) отсчёт не запускает [UX-T13] */
@@ -3870,7 +3911,11 @@ async function saveEntry() {
     /* [UX-B9] тосты успеха (включая рекорд) — только при реальном сохранении:
        при сбое сети ошибку уже показал doSave, «✓ Сохранено» поверх неё противоречив */
     if (modalCtx && r === 'ok') {
-        if (pr) {
+        if (goalHit) {
+            /* [GOA-S1] тост цели важнее PR-тоста: один подход может дать и рекорд, и цель
+               — показывается ТОЛЬКО тост цели, чип 🏆 у записи остаётся (§11) */
+            toastPr('🏆 Цель достигнута! ' + goalHit.exercise + ' — e1RM ' + fmtW(goalHit.target) + ' кг');
+        } else if (pr) {
             toastPr(pr.type === 'e1rm'
                 ? '🏆 Новый рекорд! 1ПМ ≈ ' + Math.round(pr.val) + ' кг'
                 : '🏆 Рекорд объёма! ' + pr.val + ' повторений');
@@ -3930,6 +3975,11 @@ async function doRename() {
         w.exercises.splice(w.exercises.indexOf(e), 1);
     } else {
         e.name = name;
+    }
+    /* [GOA-S1] переименование упражнения обновляет ex активных целей (§4.3);
+       при слиянии с одноимённым блоки ушли под новое имя — та же замена */
+    for (const g of (G.goals || [])) {
+        if (g.status === 1 && g.type === 1 && (g.exercise || '').toLowerCase() === name2.toLowerCase()) g.exercise = name;
     }
     await save();
     closeModal();

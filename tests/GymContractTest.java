@@ -187,6 +187,27 @@ public class GymContractTest {
         check(Boolean.TRUE.equals(dgrTrue.goalRemind) && Json.write(dgrTrue.toJson()).contains("\"goalRemind\":true"),
             "goalRemind=true: читается и пишется");
 
+        /* [GOA-S1] переименование упражнения обновляет ex ТОЛЬКО активных силовых целей (§4.3) */
+        GymData grn = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":5,\"goals\":[" +
+            "{\"id\":1,\"type\":1,\"ex\":\"Жим\",\"target\":100,\"status\":1,\"doneDate\":\"\",\"doneValue\":0}," +
+            "{\"id\":2,\"type\":1,\"ex\":\"Жим\",\"target\":100,\"status\":2,\"doneDate\":\"2026-11-15\",\"doneValue\":101}," +
+            "{\"id\":3,\"type\":1,\"ex\":\"Жим\",\"target\":100,\"status\":4,\"doneDate\":\"\",\"doneValue\":0}," +
+            "{\"id\":4,\"type\":2,\"target\":12,\"status\":1,\"doneDate\":\"\",\"doneValue\":0}," +
+            "{\"id\":5,\"type\":1,\"ex\":\"Тяга\",\"target\":140,\"status\":1,\"doneDate\":\"\",\"doneValue\":0}" +
+            "],\"workouts\":[]}"));
+        Goal.renameExercise(grn, "жим", "Жим сидя");
+        check("Жим сидя".equals(grn.goals.get(0).exercise), "rename: ex активной цели обновлён (без учёта регистра)");
+        check("Жим".equals(grn.goals.get(1).exercise) && grn.goals.get(1).status == 2,
+            "rename: достигнутая цель не тронута (источник строки архива — doneDate/doneValue)");
+        check("Жим".equals(grn.goals.get(2).exercise) && grn.goals.get(2).status == 4,
+            "rename: отменённая цель не тронута");
+        check(grn.goals.get(3).exercise == null, "rename: частотная цель (ex null) — без падения");
+        check("Тяга".equals(grn.goals.get(4).exercise), "rename: чужое упражнение не тронуто");
+        Goal.renameExercise(grn, null, "X");
+        Goal.renameExercise(grn, "Жим сидя", "Жим сидя");
+        check("Жим сидя".equals(grn.goals.get(0).exercise), "rename: null/то же имя — no-op");
+
         /* план-подсказка в записях [UX-E5]: legacy без pw/ps/pr читается (плана нет); round-trip без плана не пишет ключи */
         check(d2.workouts.get(0).exercises.get(0).planS == 0, "legacy запись без pw/ps/pr: планS=0");
         String noPlanOut = Json.write(d2.toJson());

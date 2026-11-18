@@ -1218,6 +1218,8 @@ public final class BotLogic {
             } else {
                 e.name = text;
             }
+            /* [GOA-S1] переименование упражнения обновляет ex активных целей (§4.3) */
+            Goal.renameExercise(data, st.editName, text);
             storage.save(chatId, data);
         }
         st.editName = text;
