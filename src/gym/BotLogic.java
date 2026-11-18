@@ -40,6 +40,10 @@ public final class BotLogic {
     private static final long REST_FREEZE_MS = 5 * 60 * 1000; /* юзер молчит 5 мин — правки замирают */
     /* [ONB-T2] удаление данных: окно подтверждения /delete_my_data_confirm — 5 минут */
     private static final long DELETE_CONFIRM_MS = 5 * 60 * 1000L;
+    /* [ANA-T6] ежедневная сводка владельцу: 09:00 по серверным часам (как планировщики бота);
+       при ошибке отправки повтор — не чаще раза в 30 минут (до ~48 попыток в сутки) */
+    private static final LocalTime SUMMARY_TIME = LocalTime.of(9, 0);
+    private static final long SUMMARY_RETRY_MS = 30 * 60 * 1000L;
     private static final String PRIVACY_URL = "https://gym-helper.com/privacy.html";
 
     private final TelegramApi api;
@@ -59,6 +63,9 @@ public final class BotLogic {
     /* [ONB-T2] ожидающие подтверждения удаления: chatId → время запроса, только память процесса
        (после рестарта бота подтверждение просто «истекло» — юзер начинает заново) */
     private final Map<Long, Long> pendingDeletes = new ConcurrentHashMap<>();
+    /* [ANA-T6] epoch ms последней попытки отправки сводки (анти-спам Telegram при сбоях);
+       память процесса — после рестарта пауза просто не учитывается, попытка одна */
+    private volatile long lastSummaryAttempt;
     private final ScheduledExecutorService restScheduler;
 
     public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId) {
@@ -85,6 +92,11 @@ public final class BotLogic {
             return t;
         });
         this.restScheduler.scheduleAtFixedRate(this::restTickSafe, 1, 1, TimeUnit.SECONDS);
+        /* [ANA-T6] сводка владельцу раз в сутки: тик раз в минуту на том же daemon-планировщике;
+           владельца нет в настройках (GYM_OWNER_CHAT_ID пуст) или нет stats — фича off */
+        if (ownerChatId > 0 && stats != null) {
+            this.restScheduler.scheduleAtFixedRate(this::summaryTickSafe, 20, 60, TimeUnit.SECONDS);
+        }
     }
 
     /* Сессия таймера одного чата — только в памяти (§2.9): после рестарта бота сообщение
@@ -369,6 +381,11 @@ public final class BotLogic {
         String delCmd = parseDeleteData(text);
         if (delCmd != null) {
             handleDeleteData(chatId, "confirm".equals(delCmd));
+            return;
+        }
+        /* [ANA-T6] сводка владельцу по требованию: строго, /summaryx не матчится (§2.7) */
+        if (low.equals("/summary")) {
+            handleSummaryCommand(chatId);
             return;
         }
         if (low.startsWith("/app")) {
@@ -2066,6 +2083,111 @@ public final class BotLogic {
         }
         api.sendMessage(chatId, rep.toString(), null);
         System.out.println("[announce] sent=" + sent + " failed=" + failed);
+    }
+
+    /* ===== ежедневная сводка владельцу [ANA-T6] ===== */
+
+    private void summaryTickSafe() {
+        try {
+            summaryTick();
+        } catch (Exception e) {
+            System.out.println("[warn] summary tick: " + e.getMessage());
+        }
+    }
+
+    /* тик раз в минуту: после 09:00 серверных и ещё не отправлено сегодня — отправить.
+       State (день + снимок счётчиков) пишется только при успешной отправке, поэтому
+       рестарт контейнера не даёт дубль, а недоставленная сводка повторяется.
+       Если бот был выключен до 09:00 — сводка уходит при первом тике после старта. */
+    private void summaryTick() {
+        LocalDate today = LocalDate.now();
+        if (LocalTime.now().isBefore(SUMMARY_TIME)) return;
+        Map<String, Object> state = storage.summaryState();
+        if (state != null && today.toString().equals(Json.str(state, "day"))) return;
+        long now = System.currentTimeMillis();
+        if (now - lastSummaryAttempt < SUMMARY_RETRY_MS) return;
+        lastSummaryAttempt = now;
+        sendSummary(ownerChatId, true);
+    }
+
+    /* /summary — та же сводка по требованию, без записи state (не сдвигает суточную
+       дельту утренней сводки). Только владелец: чужой id / не задан / нет stats —
+       тихо игнорируем, чтобы команду нельзя было прощупать (паттерн /announce). */
+    private void handleSummaryCommand(long chatId) {
+        if (ownerChatId <= 0 || chatId != ownerChatId || stats == null) return;
+        sendSummary(chatId, false);
+    }
+
+    /* сборка и отправка сводки; persist=true — после успешной отправки запомнить день
+       и снимок счётчиков (дельта следующей утренней сводки считается от этой точки) */
+    private void sendSummary(long chatId, boolean persist) {
+        Map<String, Object> snap = stats.snapshot();
+        Map<String, Long> prev = null;
+        Map<String, Object> state = storage.summaryState();
+        if (state != null) {
+            Map<String, Object> pm = Json.map(state.get("totals"));
+            if (pm != null) {
+                prev = new LinkedHashMap<>();
+                for (String k : Stats.KEYS) {
+                    Object v = pm.get(k);
+                    if (v instanceof Number) prev.put(k, ((Number) v).longValue());
+                }
+            }
+        }
+        String err = api.sendMessageResult(chatId, summaryText(snap, prev,
+            storage.activeChats(7), storage.activeChats(30)));
+        if (err != null) {
+            System.out.println("[warn] summary: " + err);
+            return;
+        }
+        System.out.println("[summary] sent to owner");
+        if (persist) {
+            Map<String, Object> totals = new LinkedHashMap<>();
+            for (String k : Stats.KEYS) totals.put(k, Json.lng(snap.get(k)));
+            Map<String, Object> st = new LinkedHashMap<>();
+            st.put("day", LocalDate.now().toString());
+            st.put("totals", totals);
+            storage.saveSummaryState(st);
+        }
+    }
+
+    /* дельта за сутки: «(+3)»; пусто — prev нет (первая сводка) или прироста нет
+       (счётчики только растут; отрицательное — сброс stats.json, не показываем) */
+    private static String delta(String key, Map<String, Object> snap, Map<String, Long> prev) {
+        if (prev == null) return "";
+        long d = Json.lng(snap.get(key)) - prev.getOrDefault(key, 0L);
+        return d > 0 ? " (+" + d + ")" : "";
+    }
+
+    /* текст сводки (HTML-режим, только числа — без ПДн): продуктовые счётчики stats
+       с дельтой за сутки (prev — снимок прошлой отправки, null — без дельты),
+       активные чаты — по активности файлов (mtime chat_*.json, решение владельца
+       16.11 в #253). static — для юнит-теста. */
+    static String summaryText(Map<String, Object> snap, Map<String, Long> prev, int active7, int active30) {
+        LocalDate d = LocalDate.now();
+        StringBuilder b = new StringBuilder("📊 <b>Ежедневная сводка</b> · ")
+            .append(d.getDayOfMonth()).append('.')
+            .append(String.format("%02d", d.getMonthValue())).append("\n\n")
+            .append("👥 Активные за 7 дней: <b>").append(active7)
+            .append("</b> · за 30: <b>").append(active30)
+            .append("</b> <i>(по активности файлов)</i>\n")
+            .append("📱 Открытия Mini App: <b>").append(Json.lng(snap.get("maInit"))).append("</b>")
+            .append(delta("maInit", snap, prev)).append('\n')
+            .append("💾 Сохранения из приложения: <b>").append(Json.lng(snap.get("maSave"))).append("</b>")
+            .append(delta("maSave", snap, prev)).append('\n')
+            .append("🏋️ Тренировки: <b>").append(Json.lng(snap.get("workoutsCreated"))).append("</b> создано")
+            .append(delta("workoutsCreated", snap, prev))
+            .append(" · <b>").append(Json.lng(snap.get("workoutsCompleted"))).append("</b> завершено")
+            .append(delta("workoutsCompleted", snap, prev)).append('\n')
+            .append("📄 Шаблоны: <b>").append(Json.lng(snap.get("templatesCreated"))).append("</b> создано")
+            .append(delta("templatesCreated", snap, prev))
+            .append(" · <b>").append(Json.lng(snap.get("templatesUsed"))).append("</b> использовано")
+            .append(delta("templatesUsed", snap, prev)).append('\n')
+            .append("💬 Обратная связь: <b>").append(Json.lng(snap.get("feedbackSent"))).append("</b>")
+            .append(delta("feedbackSent", snap, prev)).append('\n')
+            .append("🌐 Просмотры лендинга: <b>").append(Json.lng(snap.get("landingViews"))).append("</b>")
+            .append(delta("landingViews", snap, prev));
+        return b.toString();
     }
 
     /* ===== обратная связь «Написать разработчику» [ONB-T8] ===== */

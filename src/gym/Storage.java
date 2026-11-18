@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -143,5 +144,45 @@ public final class Storage {
             System.out.println("[warn] chatIds: " + e.getMessage());
         }
         return out;
+    }
+
+    /* [ANA-T6] активные чаты за последние days дней — уникальные chat_<id>.json с mtime
+       в периоде («по активности файлов», решение владельца 16.11 в #253). Содержимое
+       не читается — только факт существования и время файла (спека ANA-S2 §3.2). */
+    public synchronized int activeChats(int days) {
+        long since = System.currentTimeMillis() - days * 86400000L;
+        int n = 0;
+        try {
+            if (!Files.exists(dir)) return 0;
+            for (Path p : Files.newDirectoryStream(dir, "chat_*.json")) {
+                if (Files.getLastModifiedTime(p).toMillis() >= since) n++;
+            }
+        } catch (Exception e) {
+            System.out.println("[warn] activeChats: " + e.getMessage());
+        }
+        return n;
+    }
+
+    /* [ANA-T6] ежедневная сводка владельцу: состояние доставки — data/summary-state.json
+       вида {"day":"2026-11-18","totals":{…снимок Stats.KEYS на момент отправки…}}.
+       Глобальный файл без ПДн (только дата и агрегаты-числа); пишется только при
+       успешной отправке — рестарт не даёт дубль, недоставленная сводка повторяется. */
+    public synchronized Map<String, Object> summaryState() {
+        try {
+            Path f = dir.resolve("summary-state.json");
+            if (Files.exists(f)) return Json.map(Json.parse(Files.readString(f, StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            System.out.println("[warn] summaryState: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public synchronized void saveSummaryState(Map<String, Object> m) {
+        try {
+            Files.createDirectories(dir);
+            Files.writeString(dir.resolve("summary-state.json"), Json.write(m), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            System.out.println("[warn] saveSummaryState: " + e.getMessage());
+        }
     }
 }
