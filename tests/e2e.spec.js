@@ -267,7 +267,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard')).toHaveCount(0);
     });
 
-    test('[UX-T22/T23] активная карточка: шапка 1 иконка (⏱), backbar Удалить/Завершить/Назад, плюсики и автосейв-выход', async ({ page, request }) => {
+    test('[UX-T22/T23/T35] активная карточка: шапка 1 иконка (⏱), backbar Удалить/Завершить/Назад, пилюля подхода и автосейв-выход', async ({ page, request }) => {
         await openApp(page);
         await startWorkoutUi(page);
         await openActiveDetail(page);
@@ -298,7 +298,7 @@ test.describe('GymHelper e2e', function () {
         await expect(addBtn).toHaveCount(1);
         await expect(addBtn).toContainText('Добавить упражнение');
         await expect(addBtn).toHaveClass(/wide/);
-        /* плюсик «+ Запись» появляется в exhead вместе с упражнением; кнопки под сетами нет */
+        /* пилюля «Добавить подход» появляется под записями вместе с упражнением; кнопки под сетами нет */
         await addBtn.click();
         await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click(); /* [UX-T30] дефолт «★ Любимые» */
         await page.locator('.modal.open .excard', { hasText: EX }).first().click();
@@ -308,8 +308,8 @@ test.describe('GymHelper e2e', function () {
         await page.locator('#mReps').fill('8-10');
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.expill .exhead [data-act="openEntryModal"]')).toHaveCount(1);
-        await expect(page.locator('.expill .exhead [aria-label="Добавить запись"]')).toHaveCount(1);
+        await expect(page.locator('.expill .ex-addset[data-act="openEntryModal"]')).toHaveCount(1);
+        await expect(page.locator('.expill .ex-addset[aria-label="Добавить подход"]')).toHaveCount(1);
         await expect(page.locator('.expill .btnrow')).toHaveCount(0);
         /* [UX-T22] dirty-модалки нет: выход через нижний «← Назад» тихо автосохраняет */
         await page.locator('.backbar [data-act="closeHistory"]').click();
@@ -353,13 +353,39 @@ test.describe('GymHelper e2e', function () {
         if (order.add < 0 || order.kcal < 0 || order.add > order.kcal) {
             throw new Error('«Добавить упражнение» не перед «Ккал»: ' + JSON.stringify(order));
         }
-        /* завершённая карточка: плюса «+ Запись» в exhead и широкой кнопки добавления нет [UX-B6] */
+        /* завершённая карточка: пилюли «Добавить подход» и широкой кнопки добавления нет [UX-B6] */
         await page.locator('.backbar [data-act="closeHistory"]').click();
         await expect(page.locator('.pcard').nth(1)).toBeVisible({ timeout: 5000 });
         await page.locator('.pcard').nth(1).click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.card [data-act="openPicker"]')).toHaveCount(0);
-        await expect(page.locator('.expill .exhead [data-act="openEntryModal"]')).toHaveCount(0);
+        await expect(page.locator('.expill .ex-addset[data-act="openEntryModal"]')).toHaveCount(0);
+    });
+
+    test('[UX-T35] пилюля «Добавить подход» у каждой плитки; пустая плитка — пилюля единственная и открывает модалку', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 1, del: [],
+            workouts: [{ id: 1, date: today, started: today + 'T18:00:00', ended: '', finished: false, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: today + 'T18:01:00', en: '', sets: [{ w: '100', s: 3, r: '8-10', t: today + 'T18:02:00' }] },
+                    { name: 'Подтягивания', st: today + 'T18:03:00', en: '', sets: [] }
+                ] }]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
+        /* пилюля у КАЖДОЙ плитки активной тренировки (паритет со старым «+») */
+        await expect(page.locator('.expill .ex-addset')).toHaveCount(2);
+        /* пустая плитка (0 подходов): пилюля — единственный элемент под шапкой, без плейсхолдера */
+        const empty = page.locator('.expill').nth(1);
+        await expect(empty.locator('.entry')).toHaveCount(0);
+        await expect(empty.locator('.ex-addset')).toHaveCount(1);
+        /* тап по пилюле пустой плитки — модалка «Новая запись» (путь первого подхода не удлинился) */
+        await empty.locator('.ex-addset').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
     });
 
     test('[UX-T17] «⭐ Любимые упражнения» в Профиле: переход на «Технику» с фильтром «★ Любимые»', async ({ page }) => {
@@ -965,7 +991,7 @@ test.describe('GymHelper e2e', function () {
 
         /* второй подход: вес предыдущего подставлен СРАЗУ В ПОЛЕ; повторения — дефолт «1» [UX-T17] */
         await openActiveDetail(page);
-        await page.locator('.expill .exhead [data-act="openEntryModal"]').click();
+        await page.locator('.expill .ex-addset[data-act="openEntryModal"]').click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await expect(page.locator('#mWeight')).toHaveValue('70');
         await expect(page.locator('#mReps')).toHaveValue('1');
@@ -1488,7 +1514,7 @@ test.describe('таймер отдыха [UX-T4]', function () {
         /* лог нового подхода перезапускает таймер на полную длительность (§1.8) */
         const end1 = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymRest')).end; });
         await page.waitForTimeout(2100);
-        await page.locator('.expill .exhead [data-act="openEntryModal"]').click();
+        await page.locator('.expill .ex-addset[data-act="openEntryModal"]').click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await fillEntry(page, '60', '1', '10');
         const end2 = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymRest')).end; });
@@ -1872,7 +1898,7 @@ test.describe('шаблоны с планом [UX-E5]', function () {
         await tcard.click();
         await expect(page.locator('.toast.show')).toHaveText('📋 Шаблон применён: 2 упражнения', { timeout: 5000 });
         /* пилюля плана в модалке записи (у записи ещё нет подходов) */
-        await page.locator('.expill .exhead [data-act="openEntryModal"]').first().click();
+        await page.locator('.expill .ex-addset[data-act="openEntryModal"]').first().click();
         const pill = page.locator('.prevpill');
         await expect(pill).toContainText('📋 План: 60 кг × 3 × 10 — подставить', { timeout: 5000 });
         /* тап заполняет вес/подходы/повторы */
@@ -1889,7 +1915,7 @@ test.describe('шаблоны с планом [UX-E5]', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await expect(page.locator('.expill .entry').first()).toContainText('60 кг, 3 подхода по 10 повторений', { timeout: 5000 });
         /* после первого блока пилюля плана ушла — [UX-T12/T17] вес предыдущего в поле, повторения — дефолт «1» */
-        await page.locator('.expill .exhead [data-act="openEntryModal"]').first().click();
+        await page.locator('.expill .ex-addset[data-act="openEntryModal"]').first().click();
         await expect(page.locator('#mWeight')).toHaveValue('60', { timeout: 5000 });
         await expect(page.locator('#mReps')).toHaveValue('1');
         await expect(page.locator('.prevpill')).toHaveCount(0);
@@ -1925,7 +1951,7 @@ test.describe('шаблоны с планом [UX-E5]', function () {
         await m.locator('[data-act="newRepeat"]').click();
         await expect(page.locator('.toast.show')).toHaveText('🔁 Повтор прошлой тренировки: 2 упражнения', { timeout: 5000 });
         /* первое упражнение: пилюля показывает ФАКТИЧЕСКИЙ последний блок (80, а не 70) */
-        await page.locator('.expill .exhead [data-act="openEntryModal"]').first().click();
+        await page.locator('.expill .ex-addset[data-act="openEntryModal"]').first().click();
         const pill = page.locator('.prevpill');
         await expect(pill).toContainText('📋 План: 80 кг × 3 × 8-10 — подставить', { timeout: 5000 });
         await pill.click();
@@ -1934,7 +1960,7 @@ test.describe('шаблоны с планом [UX-E5]', function () {
         await expect(page.locator('#mReps')).toHaveValue('8-10');
         await page.locator('[data-act="closeModal"]').click();
         /* второе упражнение без веса: пилюля «свой вес × 4 × 8» */
-        await page.locator('.expill .exhead [data-act="openEntryModal"]').nth(1).click();
+        await page.locator('.expill .ex-addset[data-act="openEntryModal"]').nth(1).click();
         const pill2 = page.locator('.prevpill');
         await expect(pill2).toContainText('📋 План: свой вес × 4 × 8 — подставить', { timeout: 5000 });
         await pill2.click();
@@ -4383,7 +4409,7 @@ test.describe('[ONB-T4] туториал', function () {
         if (done !== '1') throw new Error('gymOnbDone не установлен после туториала');
     });
 
-    test('шаг 2: спотлайт на реальной кнопке добавления подхода (.ex-add), тап заблокирован', async ({ page, request }) => {
+    test('шаг 2: спотлайт на реальной пилюле добавления подхода (.ex-addset), тап заблокирован', async ({ page, request }) => {
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
@@ -4396,9 +4422,9 @@ test.describe('[ONB-T4] туториал', function () {
         await page.locator('.wskip').click();
         await page.locator('[data-act="tutNext"]').click();
         await expect(page.locator('#tutTip .step')).toHaveText('Шаг 2 из 4 · Подходы', { timeout: 5000 });
-        /* подложка — реальная карточка активной тренировки; подсветка ВЛОЖЕНА в .ex-add */
-        await expect(page.locator('.expill .exhead .ex-add .spot.wrap.box')).toHaveCount(1);
-        expect(await coveredByShield(page, '.expill .exhead .ex-add')).toBe('shield');
+        /* подложка — реальная карточка активной тренировки; подсветка ВЛОЖЕНА в пилюлю .ex-addset */
+        await expect(page.locator('.expill .ex-addset .spot.wrap.box')).toHaveCount(1);
+        expect(await coveredByShield(page, '.expill .ex-addset')).toBe('shield');
         /* «Дальше» → шаг 3 (История, пара в шапке) */
         await page.locator('[data-act="tutNext"]').click();
         await expect(page.locator('#tutTip .step')).toHaveText('Шаг 3 из 4 · Календарь и настройки', { timeout: 5000 });

@@ -250,10 +250,10 @@ body.page {
    координатами невозможен. Тень-затемнение 4000px работает из любой точки.
    Порядок слоёв на фикс-экранах: content/topbar с инлайн z-index:46 там,
    где затемнение должно накрыть nav (шаги 2 и 3) */
-.nfab, .nbtn, .ex-add, .tbpair { position: relative; }
+.nfab, .nbtn, .ex-addset, .tbpair { position: relative; }
 .tbpair { display: inline-flex; gap: 8px; }
 .spot.wrap.round { inset: -8px; border-radius: 50%; }          /* FAB (шаг 1) */
-.spot.wrap.box  { inset: -8px; border-radius: 14px; }          /* .ex-add (шаг 2) */
+.spot.wrap.box  { inset: -8px; border-radius: 14px; }          /* .ex-addset (шаг 2) */
 .spot.wrap.pair { inset: -7px -6px; border-radius: 14px; }     /* пара [📅][⚙] (шаг 3) */
 .spot.wrap.tab  { inset: -7px -6px; border-radius: 14px;       /* таб «Статистика» (шаг 4) */
     box-shadow: 0 0 0 4000px rgba(4,5,7,.66), 0 0 26px var(--glowbrd); }
@@ -386,9 +386,14 @@ body.page {
 /* записи подходов: прозрачные строки внутри .expill, тап — редактирование */
 .expill .entry { background: transparent; border: none; margin-top: 1px; padding: 4px 2px; border-radius: 8px; font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
 .rectext { flex: 1; min-width: 0; }
-/* [UX-T22] РЕАЛЬНАЯ кнопка добавления подхода — тонкий плюсик в шапке упражнения */
-.ex-add { background: none; border: none; padding: 6px 2px 6px 4px; display: inline-flex; color: var(--muted); flex: none; -webkit-tap-highlight-color: transparent; }
-.ex-add svg { width: 18px; height: 18px; }
+/* [UX-T35] РЕАЛЬНАЯ точка добавления подхода — пилюля на всю ширину плитки
+   под записями (плюсик из шапки [UX-T22] убран); значения — макет ux-i15-add-set-pill */
+.ex-addset { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px;
+    margin: 8px 0 0; padding: 4px 12px; border-radius: 999px;
+    background: var(--nested); border: 1px solid var(--nestedbrd);
+    color: var(--muted); font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.ex-addset svg { width: 14px; height: 14px; flex: none; }
 .prtag { flex: none; margin-left: auto; background: var(--glow); border: 1px solid var(--glowbrd); color: var(--accent); border-radius: 9px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .restline { font-size: 12px; color: var(--muted); margin-top: 4px; }
 /* backbar активной тренировки: 🗑 Удалить / ✓ Завершить (prime) / ← Назад — fixed над навигацией */
@@ -456,7 +461,7 @@ body.page {
     <path d="M7.5 6v12M16.5 6v12"/><path d="M3.5 9.5v5M20.5 9.5v5"/><path d="M7.5 12h9"/>
   </symbol>
   <symbol id="i-plus-thin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-    <!-- [UX-T22] тонкий плюсик «Добавить запись» в шапке упражнения (как ICONS.plusThin) -->
+    <!-- [UX-T35] тонкий плюсик пилюли «Добавить подход» (как ICONS.plusThin) -->
     <path d="M12 5.5v13M5.5 12h13"/>
   </symbol>
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -818,16 +823,17 @@ muted. Слайды 2–3 в светлой теме собираются тем
 <code>.entry</code> из style.css). Шапка карточки <code>.wchead</code>: название
 «09-11 ПН» + иконка «⏱ Время»; строка пилюль <code>.wcpill</code>: время /
 калории / подходы. Упражнение — <code>.expill</code>: иконка из каталога →
-название → 🗑 (удалить упражнение) → <b>тонкий плюсик
-<code>.ex-add</code></b>. <b>Реальная кнопка добавления подхода — именно этот
-тонкий «+» справа в шапке упражнения</b> ([UX-T22]: «➕ Запись» — тонкий плюсик
-справа в exhead; отдельной кнопки «＋ Подход» под сетами в проде НЕТ —
-под упражнениями только «➕ Добавить упражнение»). Записи — прозрачные строки
+название → 🗑 (удалить упражнение); плюсик из шапки убран [UX-T35].
+<b>Реальная точка добавления подхода — серая пилюля «Добавить подход»
+(<code>.ex-addset</code>) на всю ширину плитки, под записями</b> ([UX-T35]:
+заменила тонкий плюсик из шапки [UX-T22]; та же модалка «Новая запись»;
+рендерится и при 0 подходов; под упражнениями — «➕ Добавить упражнение»).
+Записи — прозрачные строки
 <code>.entry</code> «80 кг, 2 подхода по 8 повторений», у рекордной — чип
-🏆 с оценкой 1ПМ; под записями — «упражнение активно — время идёт».
+🏆 с оценкой 1ПМ; под пилюлей — «упражнение активно — время идёт».
 Внизу — фиксированный backbar активной: «🗑 Удалить» / «<b>✓ Завершить</b>»
-(жёлтая prime) / «← Назад» [UX-T22]. Подсветка — <b>вложена в
-<code>.ex-add</code></b> первого упражнения (<code>.spot.wrap.box</code>,
+(жёлтая prime) / «← Назад» [UX-T22]. Подсветка — <b>вложена в пилюлю
+<code>.ex-addset</code></b> первого упражнения (<code>.spot.wrap.box</code>,
 ореол <code>inset:-8px</code> — ред. 5; расчётные координаты удалены вовсе,
 т.к. дважды расходились с фактическим рендером), тултип ниже.
 <code>content</code> поднят до z-46, чтобы затемнение накрыло шапку и панель.
@@ -846,10 +852,10 @@ muted. Слайды 2–3 в светлой теме собираются тем
           <span class="ico"><svg><use href="#i-barbell"/></svg></span>
           <span class="exname">Жим лёжа</span>
           <button class="barebtn trash-bare" title="Удалить упражнение"><svg><use href="#i-trash"/></svg></button>
-          <button class="ex-add" title="Добавить запись"><svg><use href="#i-plus-thin"/></svg><span class="spot wrap box" aria-hidden="true"></span></button>
         </div>
         <div class="entry"><span class="rectext">80 кг, 2 подхода по 8 повторений</span></div>
         <div class="entry"><span class="rectext">82,5 кг, 1 подход по 6 повторений</span><span class="prtag">🏆 99</span></div>
+        <button class="ex-addset" title="Добавить подход"><svg><use href="#i-plus-thin"/></svg>Добавить подход<span class="spot wrap box" aria-hidden="true"></span></button>
         <div class="restline">упражнение активно — время идёт</div>
       </div>
       <div class="expill">
@@ -857,9 +863,9 @@ muted. Слайды 2–3 в светлой теме собираются тем
           <span class="ico"><svg><use href="#i-dumb"/></svg></span>
           <span class="exname">Трицепс на блоке</span>
           <button class="barebtn trash-bare" title="Удалить упражнение"><svg><use href="#i-trash"/></svg></button>
-          <button class="ex-add" title="Добавить запись"><svg><use href="#i-plus-thin"/></svg></button>
         </div>
         <div class="entry"><span class="rectext">35 кг, 2 подхода по 12 повторений</span></div>
+        <button class="ex-addset" title="Добавить подход"><svg><use href="#i-plus-thin"/></svg>Добавить подход</button>
       </div>
       <div class="btnrow"><button class="btn wide">➕ Добавить упражнение</button></div>
     </div>
@@ -877,11 +883,11 @@ muted. Слайды 2–3 в светлой теме собираются тем
     <button class="btn prime">✓ Завершить</button>
     <button class="btn sec icbtn bb-back"><svg><use href="#i-back"/></svg><span>Назад</span></button>
   </div></div>
-  <!-- ред. 5: подсветка шага 2 ВЛОЖЕНА в .ex-add (см. разметку кнопки выше,
-       ореол inset:-8px) — экранные координаты не используются вовсе -->
+  <!-- ред. 5 + [UX-T35]: подсветка шага 2 ВЛОЖЕНА в пилюлю .ex-addset (см. разметку
+       выше, ореол inset:-8px) — экранные координаты не используются вовсе -->
   <div class="tip" style="top:228px;">
     <div class="step">Шаг 2 из 4 · Подходы</div>
-    <div class="tt">Тонкий «+» у названия упражнения — запись подхода</div>
+    <div class="tt">Пилюля «Добавить подход» под записями — точка ввода</div>
     <p class="tx">Вес подставится с прошлого раза — просто поправьте, если нужно. Тап по записанной строке — правка, чип 🏆 — новый рекорд.</p>
     <div class="tiprow"><button class="btn acc">Дальше</button><button class="tskip">Пропустить</button></div>
   </div>
