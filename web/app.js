@@ -26,6 +26,10 @@ let calOpen = false;
 let CAL = { y: 0, m: 0, sel: null };
 /* [UX-S6] вкладка-источник календаря: «← Назад» возвращает на неё [ред. 5, §3.4] */
 let calFromTab = 'history';
+/* [GOA-S1] экран «Цели»: подэкран-оверлей как Настройки/Календарь (спека §8.1);
+   goalsFromTab — вкладка-источник, «← Назад» возвращает на неё */
+let goalsOpen = false;
+let goalsFromTab = 'stats';
 /* [UX-S6] фиксированные пределы листания месяцев (от данных не зависят) [§7.1] */
 const MIN_MONTH = '2020-01';
 const MAX_MONTH = '2030-12';
@@ -535,6 +539,7 @@ async function reloadSilently(force, adoptServer) {
             if (!G.workouts) G.workouts = [];
             if (!G.del) G.del = [];
             if (!G.templates) G.templates = [];
+            if (!G.goals) G.goals = []; /* [GOA-S1] старый файл без ключа goals */
             /* nextId не откатывается ниже локально известного — защита от id-коллизий */
             if (G.nextId < localNextId) G.nextId = localNextId;
             for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
@@ -986,6 +991,8 @@ const ACTIONS = {
         settingsOpen = false;
         /* [ONB-T5] тап по любому табу закрывает и Помощь (тот же паттерн подэкрана) */
         helpOpen = false;
+        /* [GOA-S1] тап по любому табу закрывает и экран «Цели» */
+        goalsOpen = false;
         /* [UX-S6] тап по любому табу закрывает и календарь [§3.4] */
         calOpen = false;
         tab = a; viewWid = 0; render();
@@ -1177,6 +1184,24 @@ const ACTIONS = {
         window.scrollTo(0, 0);
         render();
     },
+    /* ============ [GOA-S1] цели ============ */
+    openGoals: function () {
+        goalsOpen = true;
+        goalsFromTab = tab;
+        window.scrollTo(0, 0);
+        render();
+    },
+    closeGoals: function () {
+        goalsOpen = false;
+        tab = goalsFromTab; /* «← Назад» — на вкладку, с которой открыли (§8.1) */
+        window.scrollTo(0, 0);
+        render();
+    },
+    goalNew: function () { goalNew(); },
+    goalCancelAsk: function (a) { goalCancel(+a); },
+    goalCancelGo: function (a) { goalCancelGo(+a); },
+    goalArchiveDel: function (a) { goalArchiveDelGo(+a); },
+    goalRepeat: function (a) { goalRepeat(+a); },
     faqToggle: function (a) { helpFaq = (helpFaq === +a) ? -1 : +a; render(); },
     /* [ONB-T4] повтор туториала из Помощи (решение 3) */
     replayTut: function () { tutStart(); },
@@ -1226,6 +1251,7 @@ function render() {
        в календарь с сохранённым месяцем и выбором [§6] */
     /* [ONB-T5] Помощь — подэкран в том же паттерне (вход из Настроек) */
     if (helpOpen) h += renderHelp();
+    else if (goalsOpen) h += renderGoals();
     else if (settingsOpen) h += renderSettings();
     else if (calVisible()) h += renderCalendar();
     else {
@@ -1312,6 +1338,12 @@ function topbarHtml() {
     if (helpOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeHelp" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
             '<span class="tb-title">GymHelper · Помощь</span></div>';
+    }
+    /* [GOA-S1] экран «Цели»: «←» — возврат на вкладку-источник, шестерёнка — Настройки (§8.1) */
+    if (goalsOpen) {
+        return '<div class="topbar"><button class="tb-user" data-act="closeGoals" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
+            '<span class="tb-title">GymHelper · Цели</span>' +
+            '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
     }
     /* [UX-T27] экран Настроек: «←» слева (возврат на вкладку-источник), справа пусто [UX-S4 §3] */
     if (settingsOpen) {
@@ -2306,6 +2338,9 @@ function renderStatsTab() {
     let h = '';
     for (const rec of weekRecords(3)) h += recordCardHtml(rec);
     h += e1rmCardHtml(byEx);
+    /* [GOA-S1] виджет «🎯 Цели» — сразу ПОСЛЕ «Оценка 1ПМ · Эпли» (§7, решение 12.11 —
+       вариант А; иконки 🎯 в topbar нет); вход на подэкран «Цели» */
+    h += goalsWidgetHtml();
     const st = monthStreak();
     if (st && st.days.length >= 2) h += streakCardHtml(st);
     const groups = weekMuscleGroups();
@@ -2364,6 +2399,220 @@ function renderCoachTab() {
     return '<div class="card hero"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="muted">Раздел в разработке: здесь появятся персональные программы тренировок, разборы техники и советы по питанию.</p>' +
         '<p class="meta">Следи за обновлениями 💪</p></div>';
+}
+
+/* ============ [GOA-S1] цели тренировок (docs/spec-goa-s1-goals.md §3/§4/§8) ============ */
+const GOAL_LIMIT = 5; /* активных целей ≤ 5 (§10.3, решение владельца 12.11) */
+
+function goalById(id) { return (G.goals || []).find(g => g.id === +id) || null; }
+function goalActiveList() { return (G.goals || []).filter(g => g.status === 1); }
+
+/* максимальный e1RM упражнения по ВСЕЙ истории — монотонный агрегат, тот же,
+   что в «Оценка 1ПМ · Эпли» (§4.1): откатить e1RM нельзя, прогресс не падает */
+function goalMaxE1rm(name) {
+    const nl = String(name || '').toLowerCase();
+    let best = 0;
+    for (const w of G.workouts) {
+        const m = workoutExMetrics(w, nl);
+        if (m.bestE > best) best = m.bestE;
+    }
+    return best;
+}
+/* завершённые тренировки с датой в окне цели [start..end] (§4.1, частота) */
+function goalCountIn(g) {
+    let n = 0;
+    for (const w of G.workouts) {
+        if (!w.finished || !w.date) continue;
+        if (g.start && w.date < g.start) continue;
+        if (g.end && w.date > g.end) continue;
+        n++;
+    }
+    return n;
+}
+/* текущее значение цели (§4.1): силовая — max e1RM, частота — тренировки окна */
+function goalCur(g) { return g.type === 1 ? goalMaxE1rm(g.exercise) : goalCountIn(g); }
+/* % достижения, cap 100 — перевыполнение не рисуем (§4.1) */
+function goalPct(g) { return g.target > 0 ? Math.min(100, Math.round(goalCur(g) / g.target * 100)) : 0; }
+
+/* конец календарного периода (§3): 'week'|'month'|'quarter', next=1 — следующий;
+   ISO-строка. «Без срока» — не период (end=null), обрабатывается на уровне цели */
+function goalPeriodEnd(kind, next) {
+    const now = new Date();
+    if (kind === 'week') {
+        const add = (7 - now.getDay()) % 7 + 7 * (next ? 1 : 0); /* до ближайшего воскресенья */
+        const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + add);
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+    }
+    if (kind === 'month') {
+        const m = now.getMonth() + 1 + (next ? 1 : 0); /* 1-based месяц, +1 — следующий */
+        const d = new Date(now.getFullYear(), m, 0);   /* последний день месяца m */
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+    }
+    const lastMonth = Math.floor(now.getMonth() / 3) * 3 + 2 + (next ? 3 : 0); /* 0-based последний месяц квартала */
+    const d = new Date(now.getFullYear() + Math.floor(lastMonth / 12), lastMonth % 12 + 1, 0);
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+/* дней от сегодня до конца ISO-даты (чипы «следующего периода» §3, подсказка §5) */
+function goalDaysLeft(iso) {
+    const d = parseDateISO(iso);
+    if (!d) return 0;
+    const now = new Date();
+    return Math.round((d - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+}
+/* срок подсказки/копии (§5): конец текущего квартала, если до него ≥ 6 недель, иначе следующий */
+function goalQuarterHintEnd() {
+    const q = goalPeriodEnd('quarter', 0);
+    return goalDaysLeft(q) >= 42 ? q : goalPeriodEnd('quarter', 1);
+}
+/* срок «до 31.12» без года (§3) / «без срока» */
+function goalEndShort(end) { return end ? end.slice(8, 10) + '.' + end.slice(5, 7) : 'без срока'; }
+
+/* название цели для confirm/архива: «Жим лёжа — 100 кг» / «12 тренировок» */
+function goalNameFull(g) {
+    return g.type === 1 ? (g.exercise || '') + ' — ' + fmtW(g.target) + ' кг'
+        : fmtW(g.target) + ' ' + trainWord(g.target);
+}
+/* правая часть мета-строки карточки: «до 31.12 · осталось 4 кг» / «нужно ещё 4» (§8.2) */
+function goalLeftTxt(g) {
+    const left = Math.max(0, Math.ceil((g.target - goalCur(g)) * 10) / 10);
+    return g.type === 1 ? 'осталось ' + fmtW(left) + ' кг' : 'нужно ещё ' + Math.ceil(left);
+}
+function goalMetaRight(g) {
+    const left = goalLeftTxt(g);
+    return g.end ? 'до ' + goalEndShort(g.end) + ' · ' + left : left;
+}
+
+/* карточка активной цели (§8.2): бар — силовая (стиль .rec-bar), кольцо — частота */
+function goalCardHtml(g) {
+    const pct = goalPct(g);
+    let h = '<div class="gcard"><div class="gh">' +
+        '<span class="gico">' + (g.type === 1 ? '🏋️' : '🔢') + '</span>' +
+        '<span class="gt"><b>' + esc(g.type === 1 ? (g.exercise || '') : fmtW(g.target) + ' ' + trainWord(g.target)) + '</b>' +
+        '<small>' + esc(g.type === 1 ? 'цель: e1RM ' + fmtW(g.target) + ' кг' : 'частота за период') + '</small></span>' +
+        '<span class="gtag">' + esc(g.type === 1 ? 'Силовая · e1RM' : 'Частота') + '</span></div>';
+    if (g.type === 1) {
+        h += '<div class="gb"><i style="width:' + pct + '%"></i></div>' +
+            '<div class="gmeta"><span><b>' + Math.round(goalCur(g)) + '</b> из ' + fmtW(g.target) + ' кг</span>' +
+            '<span>' + esc(goalMetaRight(g)) + '</span></div>';
+    } else {
+        const cur = Math.round(goalCur(g));
+        h += '<div class="grow2"><svg class="gring" viewBox="0 0 64 64" aria-hidden="true">' +
+            '<circle class="bgc" cx="32" cy="32" r="26"></circle>' +
+            (pct > 0 ? '<circle class="fgc" cx="32" cy="32" r="26" stroke-dasharray="' + (Math.round(pct * 1.634 * 10) / 10) + ' 163.4" transform="rotate(-90 32 32)"></circle>' : '') +
+            '<text x="32" y="31">' + pct + '%</text>' +
+            '<text class="sub" x="32" y="43">' + cur + ' ИЗ ' + fmtW(g.target) + '</text></svg>' +
+            '<span class="rtxt"><span class="big">' + cur + ' <small>из ' + fmtW(g.target) + '</small></span>' +
+            '<span class="sub">' + esc(goalMetaRight(g)) + '</span></span></div>';
+    }
+    h += '<div class="gact"><button class="btn sec" data-act="goalCancelAsk" data-a="' + g.id + '">Отменить цель</button></div></div>';
+    return h;
+}
+
+/* строка архива (§8.3): ✅ достигнута / ⏳ не успел (приглушённая); дата закрытия —
+   из doneDate, результат — из doneValue, пересчётов при рендере нет (§11) */
+function goalArchRowHtml(g) {
+    const d = g.doneDate ? g.doneDate.slice(8, 10) + '.' + g.doneDate.slice(5, 7) + '.' + g.doneDate.slice(2, 4) : '';
+    let sub;
+    if (g.type === 1) {
+        sub = (g.status === 3 ? 'не успел: ' : 'e1RM ') + (g.doneValue > 0 ? fmtW(g.doneValue) + ' кг' : '—');
+    } else {
+        sub = (g.status === 3 ? 'не успел: ' : 'выполнено ') + Math.round(g.doneValue) + ' из ' + fmtW(g.target);
+    }
+    sub += d ? ' · ' + d : '';
+    return '<div class="garow' + (g.status === 3 ? ' missed' : '') + '">' +
+        '<span class="ai">' + (g.status === 3 ? '⏳' : '✅') + '</span>' +
+        '<span class="at">' + esc(goalNameFull(g)) + '<small>' + esc(sub) + '</small></span>' +
+        '<button class="btn sec" data-act="goalRepeat" data-a="' + g.id + '">Повторить</button>' +
+        '<button class="gdel" data-act="goalArchiveDel" data-a="' + g.id + '" title="Удалить из архива" aria-label="Удалить из архива">✕</button>' +
+        '</div>';
+}
+
+/* экран «Цели» (§8): активные (≤ 5) + «+ Новая цель» + архив достижений */
+function renderGoals() {
+    const active = goalActiveList();
+    let h = '<div class="goals"><div class="seclabel">Активные · ' + active.length + ' из ' + GOAL_LIMIT + '</div>';
+    if (!active.length) {
+        h += '<div class="empty gempty"><span class="ei">🎯</span><b>Целей пока нет</b>' +
+            'Поставьте первую — например, «пожать 100 кг».<br>Прогресс посчитается автоматически по истории тренировок.' +
+            '<div class="btnrow"><button class="btn prime wide" data-act="goalNew">🎯 Поставить цель</button></div></div>';
+    } else {
+        for (const g of active) h += goalCardHtml(g);
+        h += '<div class="btnrow"><button class="btn prime wide" data-act="goalNew">＋ Новая цель</button></div>';
+    }
+    const arch = (G.goals || []).filter(g => g.status === 2 || g.status === 3)
+        .sort((a, b) => (b.doneDate || '').localeCompare(a.doneDate || ''));
+    if (arch.length) {
+        h += '<div class="seclabel">Архив достижений</div>';
+        for (const g of arch) h += goalArchRowHtml(g);
+    }
+    return h + '</div>';
+}
+
+/* виджет в Статистике (§7): до 3 активных целей компактными строками (название + % +
+   мини-бар; частотная — той же строкой с баром: 24px-кольцо в строке нечитаемо) */
+function goalsWidgetHtml() {
+    const active = goalActiveList();
+    let h = '<div class="card goalsw"><div class="rec-l">🎯 Цели</div>';
+    if (!active.length) {
+        h += '<p class="tn gw-none">Цели не заданы — поставить первую можно в разделе «Цели».</p>';
+    }
+    for (const g of active.slice(0, 3)) {
+        const pct = goalPct(g);
+        const label = g.type === 1 ? (g.exercise || '') + ' — ' + fmtW(g.target) + ' кг'
+            : fmtW(g.target) + ' ' + trainWord(g.target) + (g.end ? ' до ' + goalEndShort(g.end) : '');
+        h += '<div class="wrow"><div class="wl"><b>' + esc(label) + '</b><span>' + pct + '%</span></div>' +
+            '<div class="gb"><i style="width:' + pct + '%"></i></div></div>';
+    }
+    if (active.length > 3) h += '<p class="tn gw-none">Ещё ' + (active.length - 3) + ' — в разделе «Цели».</p>';
+    h += '<button class="btn sec allbtn" data-act="openGoals">Все цели →</button></div>';
+    return h;
+}
+
+/* ---------- действия над целями ---------- */
+/* отмена активной цели: confirm (§8.2), «изменение = отмена + новая» (решение 12.11) */
+function goalCancel(id) {
+    const g = goalById(id);
+    if (!g || g.status !== 1) return;
+    confirmModal('Отменить цель «' + goalNameFull(g) + '»? Прогресс не сохранится в архиве.', 'goalCancelGo', id);
+}
+async function goalCancelGo(id) {
+    const g = goalById(id);
+    if (!g || g.status !== 1) return;
+    g.status = 4; /* в JSON статус 4 остаётся, в интерфейсе не показывается (§8.3) */
+    const r = await save();
+    if (r !== 'ok') { render(); return; } /* сбой сети: цель не отменена — правку откатит перечитывание */
+    render();
+}
+/* удаление из архива — безвозвратно и без confirm (§4.3: архив на расчёты не влияет) */
+async function goalArchiveDelGo(id) {
+    const i = (G.goals || []).findIndex(g => g.id === +id);
+    if (i < 0) return;
+    G.goals.splice(i, 1);
+    const r = await save();
+    if (r === 'ok') toast('Удалено из архива');
+    render();
+}
+/* «Повторить» (§8.3): копия цели, срок пересчитывается от текущей даты («без срока»
+   сохраняется); GOA-T3 заменит прямое создание на мастер с предзаполнением */
+function goalRepeat(id) {
+    const g = goalById(id);
+    if (g) goalCreateCopy(g);
+}
+function goalCreateCopy(src) {
+    if (goalActiveList().length >= GOAL_LIMIT) { toast('Активных целей уже ' + GOAL_LIMIT + ' — отмените одну', true); return; }
+    G.goals.push({
+        id: G.nextId++, type: src.type, exercise: src.exercise || null, target: src.target,
+        start: todayISO(), end: src.end ? goalQuarterHintEnd() : null, status: 1, doneDate: '', doneValue: 0
+    });
+    if (G.nextId < 1) G.nextId = 1;
+    save().then(function (r) {
+        if (r === 'ok') toast('🎯 Цель поставлена');
+        render();
+    });
+}
+/* создание цели — точка входа мастера (GOA-T3); до мастера — честная заглушка */
+function goalNew() {
+    toast('Мастер создания цели — в разработке');
 }
 
 /* ---------- [UX-T27] экран «Настройки» (Story [UX-S4], спека §6) ---------- */
@@ -3911,6 +4160,7 @@ async function init() {
             if (!G.workouts) G.workouts = [];
             if (!G.del) G.del = [];
             if (!G.templates) G.templates = [];
+            if (!G.goals) G.goals = []; /* [GOA-S1] старый файл без ключа goals */
             if (G.nextId < 1) G.nextId = 1;
             /* id из tombstone-списка нельзя выдавать заново — иначе новая тренировка мгновенно «удалится» */
             for (const d of G.del) if (d >= G.nextId) G.nextId = d + 1;
@@ -3948,6 +4198,8 @@ if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
         repsAvg: repsAvg,
         e1rmOf: e1rmOf,
         prCheck: prCheck,
+        goalPct: goalPct,
+        goalPeriodEnd: goalPeriodEnd,
         setsWord: setsWord,
         repsPhrase: repsPhrase,
         dayPart: dayPart,
