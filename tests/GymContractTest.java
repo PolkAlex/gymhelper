@@ -1,6 +1,7 @@
 import gym.BotLogic;
 import gym.ExerciseEntry;
 import gym.GymData;
+import gym.Goal;
 import gym.Json;
 import gym.Records;
 import gym.SetEntry;
@@ -142,6 +143,49 @@ public class GymContractTest {
             && "Спина \"и\" бицепс 💪".equals(dt2.templates.get(0).name)
             && "2026-11-06T18:30:00".equals(dt2.templates.get(0).createdAt), "templates переживают round-trip без потерь");
         check(!Json.write(d2.toJson()).contains("templates"), "toJson без шаблонов не пишет ключ (legacy байт-в-байт)");
+
+        /* [GOA-S1] goals/goalRemind: legacy без ключей читается и пишется байт-в-байт;
+           round-trip цели без потерь; битые элементы пропускаются; goalRemind — только Boolean */
+        check(d2.goals.isEmpty() && d2.goalRemind == null, "goals: legacy без ключей читается (пустой список, null)");
+        String noGoalsOut = Json.write(d2.toJson());
+        check(!noGoalsOut.contains("\"goals\"") && !noGoalsOut.contains("\"goalRemind\""),
+            "toJson без целей не пишет ключи goals/goalRemind (legacy байт-в-байт)");
+        String goalJson = "{\"nextId\":24,\"goals\":[" +
+            "{\"id\":17,\"type\":1,\"ex\":\"Жим лёжа\",\"target\":100,\"start\":\"2026-11-13\",\"end\":\"2026-12-31\",\"status\":1,\"doneDate\":\"\",\"doneValue\":0}," +
+            "{\"id\":18,\"type\":2,\"target\":12,\"start\":\"2026-11-01\",\"end\":\"2026-11-30\",\"status\":2,\"doneDate\":\"2026-11-28\",\"doneValue\":13}," +
+            "{\"id\":19,\"type\":1,\"ex\":\"Становая\",\"target\":140,\"start\":\"2026-11-13\",\"status\":1,\"doneDate\":\"\",\"doneValue\":0}," +
+            "{\"id\":20,\"type\":9,\"target\":5,\"status\":1,\"doneDate\":\"\",\"doneValue\":0}," +
+            "{\"id\":21,\"type\":1,\"target\":0,\"status\":1,\"doneDate\":\"\",\"doneValue\":0}," +
+            "{\"id\":22,\"type\":1,\"target\":80,\"status\":1,\"doneDate\":\"\",\"doneValue\":0}," +
+            "\"мусор\"," +
+            "{\"id\":23,\"type\":2,\"target\":10,\"start\":\"2026-11-01\",\"end\":\"2026-12-31\",\"status\":1,\"doneDate\":\"\",\"doneValue\":0,\"note\":\"x\"}" +
+            "],\"goalRemind\":false,\"workouts\":[]}";
+        GymData dg = GymData.fromJson((Map<String, Object>) Json.parse(goalJson));
+        check(dg.goals.size() == 4, "goals: валидные читаются, битые (тип/target/ex/мусор) пропускаются, а не " + dg.goals.size());
+        Goal g0 = dg.goals.get(0);
+        check(g0.id == 17 && g0.type == 1 && "Жим лёжа".equals(g0.exercise) && g0.target == 100
+                && "2026-11-13".equals(g0.start) && "2026-12-31".equals(g0.end) && g0.status == 1
+                && "".equals(g0.doneDate) && g0.doneValue == 0,
+            "goal: силовая (ex/target/start/end/status) читается как записана");
+        Goal g1 = dg.goals.get(1);
+        check(g1.type == 2 && g1.status == 2 && "2026-11-28".equals(g1.doneDate) && g1.doneValue == 13,
+            "goal: достигнутая частота хранит doneDate/doneValue");
+        check(dg.goals.get(2).id == 19 && dg.goals.get(2).end == null, "goal: ключа end нет → без срока (null)");
+        check(Boolean.FALSE.equals(dg.goalRemind), "goalRemind=false читается");
+        String goalOut = Json.write(dg.toJson());
+        check(goalOut.contains("\"goals\":") && goalOut.contains("\"ex\":\"Жим лёжа\"") && goalOut.contains("\"goalRemind\":false"),
+            "toJson пишет goals (ключ «ex») и goalRemind");
+        check(!goalOut.contains("\"note\""), "toJson отбрасывает незнакомые ключи цели");
+        GymData dg2 = GymData.fromJson((Map<String, Object>) Json.parse(goalOut));
+        check(dg2.goals.size() == 4 && "Жим лёжа".equals(dg2.goals.get(0).exercise)
+                && dg2.goals.get(1).doneValue == 13 && dg2.goals.get(2).end == null
+                && Boolean.FALSE.equals(dg2.goalRemind),
+            "goals/goalRemind переживают round-trip без потерь");
+        GymData dgr = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":1,\"goals\":[],\"goalRemind\":\"да\",\"workouts\":[]}"));
+        check(dgr.goalRemind == null, "goalRemind не-Boolean игнорируется (null = дефолт «вкл»)");
+        GymData dgrTrue = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":1,\"goalRemind\":true,\"workouts\":[]}"));
+        check(Boolean.TRUE.equals(dgrTrue.goalRemind) && Json.write(dgrTrue.toJson()).contains("\"goalRemind\":true"),
+            "goalRemind=true: читается и пишется");
 
         /* план-подсказка в записях [UX-E5]: legacy без pw/ps/pr читается (плана нет); round-trip без плана не пишет ключи */
         check(d2.workouts.get(0).exercises.get(0).planS == 0, "legacy запись без pw/ps/pr: планS=0");
@@ -418,6 +462,40 @@ public class GymContractTest {
                 "birth merge: зеркало обновлено клиентом с датой");
         } catch (Exception birthErr) {
             throw new AssertionError("CONTRACT FAIL: birth merge " + birthErr);
+        }
+
+        /* [GOA-S1] merge-защита целей при /api/save: клиент с ключом goals замещает список
+           целиком (создание/отмена доезжают); старый кэш JS без ключа goals цели не теряет;
+           goalRemind затирается только реальным значением. Реальный WebServer на эфемерном порту. */
+        try {
+            java.nio.file.Path tmpGl = java.nio.file.Files.createTempDirectory("gymgoalm");
+            Storage stGl = new Storage(tmpGl);
+            WebServer wsGl = new WebServer("contract-test-token", stGl, tmpGl, new Stats(tmpGl.resolve("stats.json")));
+            java.net.ServerSocket probeGl = new java.net.ServerSocket(0);
+            int portGl = probeGl.getLocalPort();
+            probeGl.close();
+            wsGl.start(portGl);
+            String idGl = tgInitData("contract-test-token", 424247);
+            java.net.http.HttpResponse<String> rg1 = postSave(portGl, idGl, 0,
+                "{\"rev\":0,\"nextId\":2,\"goals\":[{\"id\":1,\"type\":1,\"ex\":\"Жим\",\"target\":100,\"start\":\"2026-11-13\",\"end\":\"2026-12-31\",\"status\":1,\"doneDate\":\"\",\"doneValue\":0}],\"goalRemind\":false,\"workouts\":[]}");
+            check(rg1.statusCode() == 200, "goals merge: save с целями — 200, а не " + rg1.statusCode());
+            GymData savedGl = stGl.load(424247);
+            check(savedGl.goals.size() == 1 && "Жим".equals(savedGl.goals.get(0).exercise)
+                    && Boolean.FALSE.equals(savedGl.goalRemind),
+                "goals merge: цель и тогл сохранены");
+            java.net.http.HttpResponse<String> rg2 = postSave(portGl, idGl, 1,
+                "{\"rev\":1,\"nextId\":2,\"workouts\":[]}");
+            check(rg2.statusCode() == 200, "goals merge: save без ключа goals — 200, а не " + rg2.statusCode());
+            GymData mergedGl = stGl.load(424247);
+            check(mergedGl.goals.size() == 1 && "Жим".equals(mergedGl.goals.get(0).exercise)
+                    && Boolean.FALSE.equals(mergedGl.goalRemind),
+                "goals merge: старый клиент без ключа goals цели и тогл не теряет");
+            java.net.http.HttpResponse<String> rg3 = postSave(portGl, idGl, 2,
+                "{\"rev\":2,\"nextId\":2,\"goals\":[],\"workouts\":[]}");
+            check(rg3.statusCode() == 200, "goals merge: save с пустым goals — 200, а не " + rg3.statusCode());
+            check(stGl.load(424247).goals.isEmpty(), "goals merge: пустой список целей замещает старый (отмена доезжает)");
+        } catch (Exception goalErr) {
+            throw new AssertionError("CONTRACT FAIL: goals merge " + goalErr);
         }
 
         /* [ANA-T1] Stats: /stats за токеном (404 без токена/с неверным — не палим существование),

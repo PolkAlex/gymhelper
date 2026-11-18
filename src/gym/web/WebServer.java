@@ -324,6 +324,14 @@ public final class WebServer {
             current.templates.clear();
             current.templates.addAll(data.templates);
         }
+        /* [GOA-S1] цели Mini App сохраняет целиком со своим G — замещаем только если клиент
+           вообще прислал ключ (старый кэш JS — не трогаем, по образцу templates);
+           goalRemind — по образцу restSec: null (ключа нет / не настраивал) не затирает */
+        if (dataJson.containsKey("goals")) {
+            current.goals.clear();
+            current.goals.addAll(data.goals);
+        }
+        if (data.goalRemind != null) current.goalRemind = data.goalRemind;
         data = current;
         /* nextId монотонно растёт: max(серверный, клиентский, max(id)+1) — иначе коллизии id затирают данные */
         data.nextId = Math.max(current.nextId, incomingNextId);
