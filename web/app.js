@@ -30,6 +30,11 @@ let calFromTab = 'history';
    goalsFromTab — вкладка-источник, «← Назад» возвращает на неё */
 let goalsOpen = false;
 let goalsFromTab = 'stats';
+/* [GOA-S1] мастер создания цели (§9): подэкран поверх экрана «Цели», шаги с
+   индикатором «Шаг N из M» как в онбординге; GW — черновик {type, ex, target, period, q, warn} */
+let gwOpen = false;
+let gwStep = 0;
+let GW = null;
 /* [UX-S6] фиксированные пределы листания месяцев (от данных не зависят) [§7.1] */
 const MIN_MONTH = '2020-01';
 const MAX_MONTH = '2030-12';
@@ -993,6 +998,9 @@ const ACTIONS = {
         helpOpen = false;
         /* [GOA-S1] тап по любому табу закрывает и экран «Цели» */
         goalsOpen = false;
+        /* [GOA-S1] тап по любому табу закрывает и мастер создания цели (черновик сбрасывается) */
+        gwOpen = false;
+        GW = null;
         /* [UX-S6] тап по любому табу закрывает и календарь [§3.4] */
         calOpen = false;
         tab = a; viewWid = 0; render();
@@ -1202,6 +1210,19 @@ const ACTIONS = {
     goalCancelGo: function (a) { goalCancelGo(+a); },
     goalArchiveDel: function (a) { goalArchiveDelGo(+a); },
     goalRepeat: function (a) { goalRepeat(+a); },
+    /* [GOA-S1] мастер создания цели (§9) */
+    gwType: function (a) { gwType(+a); },
+    gwEx: function (a) { gwEx(a); },
+    gwChip: function (a) { gwChip(parseFloat(a)); },
+    gwChipOwn: function () { gwChipOwn(); },
+    gwTargetNext: function () { gwTargetNext(); },
+    gwPeriod: function (a) { GW.period = a; render(); },
+    gwCreate: function () { gwCreate(); },
+    gwBack: function () { gwBack(); },
+    gwCancel: function () { gwCancel(); },
+    /* [GOA-S1] подсказка цели по истории (§5) */
+    goalHintTake: function () { goalHintTake(); },
+    goalHintDismiss: function () { goalHintDismiss(); },
     faqToggle: function (a) { helpFaq = (helpFaq === +a) ? -1 : +a; render(); },
     /* [ONB-T4] повтор туториала из Помощи (решение 3) */
     replayTut: function () { tutStart(); },
@@ -1251,6 +1272,7 @@ function render() {
        в календарь с сохранённым месяцем и выбором [§6] */
     /* [ONB-T5] Помощь — подэкран в том же паттерне (вход из Настроек) */
     if (helpOpen) h += renderHelp();
+    else if (gwOpen) h += renderGoalWizard();
     else if (goalsOpen) h += renderGoals();
     else if (settingsOpen) h += renderSettings();
     else if (calVisible()) h += renderCalendar();
@@ -1295,6 +1317,11 @@ function render() {
         /* [EXR-T4] refreshTechList: живой список + пустое состояние (раньше techListHtml была не определена) */
         if (q) q.addEventListener('input', function () { TECH.q = this.value; refreshTechList(); });
     }
+    /* [GOA-S1] живой поиск упражнения в мастере целей (§9, шаг 2 силовой) */
+    if (gwOpen && GW && GW.type === 1 && gwStep === 1) {
+        const gwq = document.getElementById('gwQ');
+        if (gwq) gwq.addEventListener('input', function () { GW.q = this.value; refreshGwList(); });
+    }
     /* [UX-T29] живая строка возраста: change на select-ах даты рождения */
     if (tab === 'profile') pfBirthBind();
     renderRestbar(); /* панель/пилюля таймера переживает навигацию: класс raised и содержимое актуальны */
@@ -1338,6 +1365,11 @@ function topbarHtml() {
     if (helpOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeHelp" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
             '<span class="tb-title">GymHelper · Помощь</span></div>';
+    }
+    /* [GOA-S1] мастер создания цели: «←» — предыдущий шаг, на шаге 1 — выход (§9) */
+    if (gwOpen) {
+        return '<div class="topbar"><button class="tb-user" data-act="gwBack" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
+            '<span class="tb-title">Новая цель</span></div>';
     }
     /* [GOA-S1] экран «Цели»: «←» — возврат на вкладку-источник, шестерёнка — Настройки (§8.1) */
     if (goalsOpen) {
@@ -2338,6 +2370,8 @@ function renderStatsTab() {
     let h = '';
     for (const rec of weekRecords(3)) h += recordCardHtml(rec);
     h += e1rmCardHtml(byEx);
+    /* [GOA-S1] подсказка цели по истории (§5) — сразу под карточкой Эпли (макет GOA-1) */
+    h += goalHintCardHtml();
     /* [GOA-S1] виджет «🎯 Цели» — сразу ПОСЛЕ «Оценка 1ПМ · Эпли» (§7, решение 12.11 —
        вариант А; иконки 🎯 в topbar нет); вход на подэкран «Цели» */
     h += goalsWidgetHtml();
@@ -2533,8 +2567,9 @@ function renderGoals() {
     let h = '<div class="goals"><div class="seclabel">Активные · ' + active.length + ' из ' + GOAL_LIMIT + '</div>';
     if (!active.length) {
         h += '<div class="empty gempty"><span class="ei">🎯</span><b>Целей пока нет</b>' +
-            'Поставьте первую — например, «пожать 100 кг».<br>Прогресс посчитается автоматически по истории тренировок.' +
-            '<div class="btnrow"><button class="btn prime wide" data-act="goalNew">🎯 Поставить цель</button></div></div>';
+            'Поставьте первую — например, «пожать 100 кг».<br>Прогресс посчитается автоматически по истории тренировок.</div>';
+        h += goalHintCardHtml(); /* подсказка §5 в пустом состоянии — над кнопкой (§8.4) */
+        h += '<div class="btnrow"><button class="btn prime wide" data-act="goalNew">🎯 Поставить цель</button></div>';
     } else {
         for (const g of active) h += goalCardHtml(g);
         h += '<div class="btnrow"><button class="btn prime wide" data-act="goalNew">＋ Новая цель</button></div>';
@@ -2568,6 +2603,304 @@ function goalsWidgetHtml() {
     return h;
 }
 
+/* ---------- подсказка цели по истории (§5) ---------- */
+/* top-1 по наибольшему e1RM среди упражнений с e1RM ≥ 40 кг и БЕЗ активной цели;
+   target = ceil(e1rm × 1.06 / 2.5) × 2.5 (шаг 2,5 кг); срок — конец текущего квартала,
+   если до него ≥ 6 недель, иначе следующий (§5). «Нет, спасибо» прячет подсказку
+   (localStorage gymGoalDismiss:<упражнение>:<target>) до роста e1RM — ключ меняется */
+function goalHint() {
+    const activeEx = new Set(goalActiveList().filter(g => g.type === 1).map(g => (g.exercise || '').toLowerCase()));
+    const hist = gwHistoryE1rm();
+    let bestName = null, bestE = 0;
+    for (const n of Object.keys(hist)) {
+        if (hist[n] >= 40 && !activeEx.has(n.toLowerCase()) && hist[n] > bestE) { bestName = n; bestE = hist[n]; }
+    }
+    if (!bestName) return null;
+    const target = Math.ceil(bestE * 1.06 / 2.5) * 2.5;
+    if (lsGet('gymGoalDismiss:' + bestName + ':' + target) === '1') return null;
+    return { name: bestName, e1: bestE, target: target, end: goalQuarterHintEnd() };
+}
+/* карточка-предложение: в Статистике — под «Оценка 1ПМ · Эпли» (макет GOA-1),
+   на экране «Цели» — в пустом состоянии над кнопкой (§8.4) */
+function goalHintCardHtml() {
+    const hint = goalHint();
+    if (!hint) return '';
+    return '<div class="card hintcard"><div class="rec-l">💡 Попробуйте цель</div>' +
+        '<div class="hintrow"><span class="hi">🎯</span><span class="ht">e1RM в упражнении «' + esc(hint.name) + '» — <b>' + Math.round(hint.e1) + ' кг</b>. ' +
+        'Разумная следующая ступень — <b>' + goalFmtRu(hint.target) + ' кг' + (hint.end ? ' до ' + goalEndShort(hint.end) : '') + '</b>. ' +
+        'Прогресс посчитается автоматически.</span></div>' +
+        '<div class="split2"><button class="btn prime" data-act="goalHintTake">🎯 Поставить ' + goalFmtRu(hint.target) + ' кг</button>' +
+        '<button class="btn sec" data-act="goalHintDismiss">Нет, спасибо</button></div></div>';
+}
+function goalHintTake() {
+    const hint = goalHint();
+    if (!hint) return;
+    GW = { type: 1, ex: hint.name, target: hint.target, period: null, q: '', warn: false };
+    gwOpen = true;
+    gwStep = 3; /* шаги «упражнение» и «значение» предзаполнены (§5) — остаётся срок */
+    window.scrollTo(0, 0);
+    render();
+}
+function goalHintDismiss() {
+    const hint = goalHint();
+    if (hint) lsSet('gymGoalDismiss:' + hint.name + ':' + hint.target, '1');
+    render();
+}
+
+/* ---------- мастер создания цели (§9, макеты GOA-3..5) ---------- */
+/* силовая — 4 шага (тип → упражнение → значение → срок+резюме), частота — 3
+   (тип → значение → срок+резюме): шаг «Упражнение» частота пропускает (§9) */
+function goalStepTotal() { return GW && GW.type === 2 ? 3 : 4; }
+function goalStepName() {
+    if (gwStep === 0) return 'Тип цели';
+    if (GW.type === 1) return ['Упражнение', 'Значение', 'Срок'][gwStep - 1];
+    return ['Значение', 'Срок'][gwStep - 1];
+}
+function goalFmtRu(v) { return fmtW(v).replace('.', ','); }
+function goalWeekWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'неделя';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'недели';
+    return 'недель';
+}
+function renderGoalWizard() {
+    const total = goalStepTotal();
+    let h = '<div class="goals"><div class="stepcap">Шаг ' + (gwStep + 1) + ' из ' + total + ' · ' + goalStepName() + '</div><div class="steps">';
+    for (let i = 0; i < total; i++) h += '<i' + (i <= gwStep ? ' class="on"' : '') + '></i>';
+    h += '</div>';
+    if (gwStep === 0) h += gwStepTypeHtml();
+    else if (GW.type === 1) h += gwStep === 1 ? gwStepExHtml() : (gwStep === 2 ? gwStepTargetHtml() : gwStepDeadlineHtml());
+    else h += gwStep === 1 ? gwStepTargetHtml() : gwStepDeadlineHtml();
+    return h + '</div>';
+}
+/* шаг 1 · тип цели (макет GOA-3): объём/вес тела — «Скоро» (R4), лимит 5 — плашка (§8.4).
+   Расхождение с макетом: частота БЕЗ «Скоро» — решение владельца 12.11 (R1), спека приоритетна */
+function gwStepTypeHtml() {
+    const limit = goalActiveList().length >= GOAL_LIMIT;
+    let h = '';
+    if (limit) h += '<p class="gwlimit">Активных целей уже ' + GOAL_LIMIT + ' — отмените одну, чтобы поставить новую</p>';
+    const row = function (ico, t, sub, a, off, soon) {
+        return '<button class="frow' + (off ? ' off' : '') + '" data-act="gwType" data-a="' + a + '"' + (off ? ' disabled' : '') + '>' +
+            '<span class="fico">' + ico + '</span><span class="ftxt"><b>' + t + '</b><small>' + sub + '</small></span>' +
+            (soon ? '<span class="soonbadge">Скоро</span>' : '') + '</button>';
+    };
+    h += row('🏋️', 'Силовая', '«Пожать 100 кг» — упражнение + целевой вес (e1RM)', '1', limit);
+    h += row('🔢', 'Частота', 'N тренировок за период — для привычки', '2', limit);
+    h += row('⚖️', 'Объём', 'тоннаж за период — сумма вес × повторения', '', true, true);
+    h += row('📏', 'Вес тела', 'цель по весу из Профиля', '', true, true);
+    h += '<div class="btnrow"><button class="btn sec wide" data-act="gwCancel">Отмена</button></div>' +
+        '<p class="meta" style="text-align:center;margin-top:10px">Прогресс считается автоматически по истории тренировок.</p>';
+    return h;
+}
+/* шаг 2 (силовая) · упражнение: поиск + список; сверху — упражнения истории с e1RM > 0
+   и подписью текущего значения, далее каталог + свои (переиспользование каталога, §9) */
+function gwStepExHtml() {
+    return '<div class="searchbox"><input id="gwQ" type="text" placeholder="Поиск упражнения..." value="' + esc(GW.q || '') + '"></div>' +
+        '<div id="gwList">' + gwExListHtml() + '</div>';
+}
+function gwHistoryE1rm() {
+    const map = {};
+    for (const w of G.workouts) {
+        for (const e of w.exercises) {
+            const m = workoutExMetrics(w, e.name.toLowerCase());
+            if (m.bestE > 0 && m.bestE > (map[e.name] || 0)) map[e.name] = m.bestE;
+        }
+    }
+    return map;
+}
+function gwExListHtml() {
+    const q = (GW.q || '').trim().toLowerCase();
+    const hist = gwHistoryE1rm();
+    const activeEx = new Set(goalActiveList().filter(g => g.type === 1).map(g => (g.exercise || '').toLowerCase()));
+    const row = function (name, e1, hasGoal) {
+        return '<button class="frow" data-act="gwEx" data-a="' + escAttr(name) + '">' +
+            '<span class="ftxt"><b>' + esc(name) + '</b><small>' +
+            (hasGoal ? 'уже есть активная цель' : e1 > 0 ? 'e1RM ' + Math.round(e1) + ' кг' : 'подходов с весом пока нет') +
+            '</small></span>' + (hasGoal ? '<span class="soonbadge">Есть цель</span>' : '') + '</button>';
+    };
+    let h = '';
+    const histNames = Object.keys(hist)
+        .filter(n => !q || n.toLowerCase().includes(q))
+        .sort((a, b) => hist[b] - hist[a]);
+    if (histNames.length) h += '<p class="msub" style="margin:10px 2px 2px">Из истории</p>';
+    for (const n of histNames) h += row(n, hist[n], activeEx.has(n.toLowerCase()));
+    const seen = new Set(histNames.map(n => n.toLowerCase()));
+    const catNames = ownCustomNames().concat(CATALOG.map(c => c.n))
+        .filter(n => !seen.has(n.toLowerCase()) && (!q || n.toLowerCase().includes(q)))
+        .slice(0, 40); /* длинный каталог: дальнейший выбор — через поиск */
+    if (catNames.length) h += '<p class="msub" style="margin:10px 2px 2px">Каталог</p>';
+    for (const n of catNames) h += row(n, 0, false);
+    if (!histNames.length && !catNames.length) h += '<p class="muted" style="text-align:center;margin-top:16px">Ничего не найдено</p>';
+    return h;
+}
+function refreshGwList() {
+    const box = document.getElementById('gwList');
+    if (box) box.innerHTML = gwExListHtml();
+}
+/* шаг · значение (макет GOA-4): чипы-подсказки от текущего e1RM (+5/+7/+10 %, шаг 2,5 кг
+   вверх) или 8/10/12 для частоты; «Своё…» — поле с шагом 0,5 кг; цель не выше текущего
+   e1RM — предупреждение + чип +10% (§4.3) */
+function gwStepTargetHtml() {
+    const isStr = GW.type === 1;
+    const e1 = isStr ? goalMaxE1rm(GW.ex) : 0;
+    let h = '';
+    if (isStr) {
+        h += '<div class="gcard" style="padding:11px 12px"><div class="gh">' +
+            '<span class="gico">🏋️</span><span class="gt"><b>' + esc(GW.ex || '') + '</b>' +
+            '<small>текущий e1RM ' + Math.round(e1) + ' кг</small></span>' +
+            '<span class="gtag">Силовая · e1RM</span></div></div>';
+    }
+    h += '<label class="flabel">' + (isStr
+        ? (e1 > 0 ? 'Целевой e1RM — подсказки от текущего' : 'Целевой e1RM, кг — запишите подходы с весом, и здесь появятся подсказки')
+        : 'Сколько тренировок — подсказки для привычки') + '</label><div class="chips">';
+    let chips = [];
+    if (isStr && e1 > 0) {
+        chips = [1.05, 1.07, 1.10].map(function (k) {
+            const v = Math.ceil(e1 * k / 2.5) * 2.5;
+            return { v: v, label: goalFmtRu(v) + ' · +' + Math.round((v / e1 - 1) * 100) + '%' };
+        });
+    }
+    if (!isStr) chips = [{ v: 8, label: '8' }, { v: 10, label: '10' }, { v: 12, label: '12' }];
+    for (const c of chips) {
+        const on = GW.target != null && Math.abs(GW.target - c.v) < 0.001;
+        h += '<button class="chip' + (on ? ' on' : '') + '" data-act="gwChip" data-a="' + c.v + '">' + esc(c.label) + '</button>';
+    }
+    h += '<button class="chip" data-act="gwChipOwn">Своё…</button></div>';
+    h += '<input id="gwTarget" type="text" inputmode="decimal" ' +
+        (isStr ? 'placeholder="Например, 140"' : 'placeholder="Например, 12"') +
+        ' value="' + (GW.target != null ? esc(goalFmtRu(GW.target)) : '') + '" style="margin-top:8px">';
+    if (GW.warn) {
+        h += '<p class="gw-warn">Текущий e1RM — ' + Math.round(e1) + ' кг. Цель ' + goalFmtRu(GW.target) +
+            ' кг уже достигнута — поставьте выше, например ' +
+            goalFmtRu(Math.ceil(e1 * 1.1 / 2.5) * 2.5) + ' кг · +10%.</p>';
+    }
+    h += '<div class="btnrow"><button class="btn prime wide" data-act="gwTargetNext">Далее →</button></div>';
+    return h;
+}
+/* шаг · срок + резюме (макет GOA-5): календарные чипы §3; «без срока» — только силовая;
+   чипы СЛЕДУЮЩЕГО периода появляются, когда до конца текущего осталось < 3 дней (§3) */
+function gwStepDeadlineHtml() {
+    const isStr = GW.type === 1;
+    let h = '<div class="chips" style="margin-top:4px">';
+    const kinds = [['week', 'Неделя'], ['month', 'Месяц'], ['quarter', 'Квартал']];
+    const nextName = { week: 'Следующая неделя', month: 'Следующий месяц', quarter: 'Следующий квартал' };
+    const chip = function (a, label) {
+        return '<button class="chip' + (GW.period === a ? ' on' : '') + '" data-act="gwPeriod" data-a="' + a + '">' + esc(label) + '</button>';
+    };
+    for (const k of kinds) {
+        const end = goalPeriodEnd(k[0], 0);
+        h += chip(k[0], k[1] + ' · до ' + goalEndShort(end));
+        if (goalDaysLeft(end) < 3) h += chip(k[0] + 'Next', nextName[k[0]] + ' · до ' + goalEndShort(goalPeriodEnd(k[0], 1)));
+    }
+    if (isStr) h += chip('none', 'Без срока');
+    h += '</div>';
+    /* резюме: карточка «Проверьте цель» + строка стартового прогресса (§9) */
+    const end = gwEndIso();
+    const cur = isStr ? goalMaxE1rm(GW.ex) : goalCountIn({ start: todayISO(), end: end });
+    const pct = GW.target > 0 ? Math.min(100, Math.round(cur / GW.target * 100)) : 0;
+    const weeks = end ? Math.max(1, Math.round(goalDaysLeft(end) / 7)) : 0;
+    const title = isStr
+        ? (GW.ex || '') + ' — e1RM ' + goalFmtRu(GW.target) + ' кг'
+        : goalFmtRu(GW.target) + ' ' + trainWord(GW.target) + (end ? ' до ' + goalEndShort(end) : '');
+    const sub = (isStr ? 'Силовая' : 'Частота') +
+        (end ? ' · до ' + end.slice(8, 10) + '.' + end.slice(5, 7) + '.' + end.slice(0, 4) : ' · без срока');
+    h += '<div class="gcard gsummary" style="margin-top:16px"><div class="rec-l">Проверьте цель</div>' +
+        '<div class="gh" style="margin-top:8px"><span class="gico">' + (isStr ? '🏋️' : '🔢') + '</span>' +
+        '<span class="gt"><b>' + esc(title) + '</b><small>' + esc(sub) + '</small></span></div>' +
+        '<div class="gb"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="gmeta"><span>старт: <b>' + Math.round(cur) + '</b> из ' + goalFmtRu(GW.target) + (isStr ? ' кг' : '') + ' (' + pct + '%)</span>' +
+        '<span>' + (end ? '≈ ' + weeks + ' ' + goalWeekWord(weeks) : '') + '</span></div></div>';
+    h += '<div class="btnrow"><button class="btn prime wide" data-act="gwCreate">🎯 Создать цель</button></div>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="gwCancel">Отмена</button></div>';
+    return h;
+}
+function gwEndIso() {
+    if (!GW.period || GW.period === 'none') return null;
+    return goalPeriodEnd(GW.period.replace('Next', ''), GW.period.slice(-4) === 'Next' ? 1 : 0);
+}
+/* шаг «Далее» по значению: валидация числа; силовая с целью ≤ текущего e1RM —
+   предупреждение на первый тап, повторный «Далее» принимается осознанно (§4.3) */
+function gwTargetNext() {
+    const el = document.getElementById('gwTarget');
+    const v = parseFloat(el ? String(el.value).trim().replace(',', '.') : '');
+    if (!(v > 0 && v <= 1000)) {
+        toast(GW.type === 1 ? 'Вес: число от 0,5 до 1000' : 'Число от 1 до 1000', true);
+        return;
+    }
+    GW.target = v;
+    if (GW.type === 1 && goalMaxE1rm(GW.ex) >= v && !GW.warn) {
+        GW.warn = true;
+        render();
+        return;
+    }
+    GW.warn = false;
+    gwStep++;
+    window.scrollTo(0, 0);
+    render();
+}
+function gwType(a) {
+    if (goalActiveList().length >= GOAL_LIMIT) { toast('Активных целей уже ' + GOAL_LIMIT + ' — отмените одну', true); return; }
+    GW.type = a;
+    GW.ex = null;
+    GW.target = null;
+    GW.period = null;
+    GW.warn = false;
+    gwStep = 1;
+    render();
+}
+function gwEx(a) {
+    GW.ex = a;
+    GW.target = null;
+    GW.warn = false;
+    gwStep = 2;
+    window.scrollTo(0, 0);
+    render();
+}
+function gwChip(v) {
+    GW.target = v;
+    GW.warn = false;
+    render();
+}
+function gwChipOwn() {
+    GW.target = null;
+    GW.warn = false;
+    render();
+    const el = document.getElementById('gwTarget');
+    if (el) el.focus();
+}
+/* создание цели (§9): возврат на экран «Цели» с новой карточкой + тост */
+function gwCreate() {
+    if (!(GW.target > 0)) { toast('Заполните значение цели', true); return; }
+    if (GW.type === 1 && !GW.ex) { toast('Выберите упражнение', true); return; }
+    if (!GW.period) { toast('Выберите срок', true); return; }
+    const end = gwEndIso();
+    if (GW.type === 2 && !end) { toast('Для частоты нужен период', true); return; }
+    if (goalActiveList().length >= GOAL_LIMIT) { toast('Активных целей уже ' + GOAL_LIMIT + ' — отмените одну', true); return; }
+    G.goals.push({
+        id: G.nextId++, type: GW.type, exercise: GW.type === 1 ? GW.ex : null, target: GW.target,
+        start: todayISO(), end: end, status: 1, doneDate: '', doneValue: 0
+    });
+    if (G.nextId < 1) G.nextId = 1;
+    gwOpen = false;
+    GW = null;
+    goalsOpen = true; /* возврат на экран «Цели» и из мастера, и из подсказки (§9) */
+    save().then(function (r) {
+        if (r === 'ok') toast('🎯 Цель поставлена');
+        render();
+    });
+}
+/* «←» в мастере: предыдущий шаг; на шаге 1 — выход (§9) */
+function gwBack() {
+    if (gwStep > 0) { gwStep--; GW.warn = false; window.scrollTo(0, 0); render(); return; }
+    gwCancel();
+}
+function gwCancel() {
+    gwOpen = false;
+    GW = null;
+    render();
+}
+
 /* ---------- действия над целями ---------- */
 /* отмена активной цели: confirm (§8.2), «изменение = отмена + новая» (решение 12.11) */
 function goalCancel(id) {
@@ -2592,27 +2925,34 @@ async function goalArchiveDelGo(id) {
     if (r === 'ok') toast('Удалено из архива');
     render();
 }
-/* «Повторить» (§8.3): копия цели, срок пересчитывается от текущей даты («без срока»
-   сохраняется); GOA-T3 заменит прямое создание на мастер с предзаполнением */
+/* «Повторить» (§8.3): мастер с предзаполнением — упражнение/значение из цели,
+   срок пересчитывается от текущей даты («без срока» сохраняется) */
 function goalRepeat(id) {
     const g = goalById(id);
-    if (g) goalCreateCopy(g);
+    if (!g) return;
+    GW = { type: g.type, ex: g.exercise || null, target: g.target, period: g.end ? goalDefaultPeriod(g.end) : 'none', q: '', warn: false };
+    gwOpen = true;
+    gwStep = g.type === 1 ? 3 : 2; /* осталось подтвердить срок */
+    window.scrollTo(0, 0);
+    render();
 }
-function goalCreateCopy(src) {
-    if (goalActiveList().length >= GOAL_LIMIT) { toast('Активных целей уже ' + GOAL_LIMIT + ' — отмените одну', true); return; }
-    G.goals.push({
-        id: G.nextId++, type: src.type, exercise: src.exercise || null, target: src.target,
-        start: todayISO(), end: src.end ? goalQuarterHintEnd() : null, status: 1, doneDate: '', doneValue: 0
-    });
-    if (G.nextId < 1) G.nextId = 1;
-    save().then(function (r) {
-        if (r === 'ok') toast('🎯 Цель поставлена');
-        render();
-    });
+/* период по старому сроку (для «Повторить»): цель могла быть недельной/месячной/квартальной */
+function goalDefaultPeriod(oldEnd) {
+    const d = parseDateISO(oldEnd);
+    if (!d) return 'month';
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    if (d.getDate() === lastDay && (d.getMonth() % 3) === 2) return 'quarter';
+    if (d.getDate() === lastDay) return 'month';
+    if (d.getDay() === 0) return 'week'; /* воскресенье — конец ISO-недели (§3) */
+    return 'month';
 }
-/* создание цели — точка входа мастера (GOA-T3); до мастера — честная заглушка */
+/* создание цели — точка входа мастера (§9); вход с экрана «Цели» (он остаётся под мастером) */
 function goalNew() {
-    toast('Мастер создания цели — в разработке');
+    GW = { type: 0, ex: null, target: null, period: null, q: '', warn: false };
+    gwOpen = true;
+    gwStep = 0;
+    window.scrollTo(0, 0);
+    render();
 }
 
 /* ---------- [UX-T27] экран «Настройки» (Story [UX-S4], спека §6) ---------- */
