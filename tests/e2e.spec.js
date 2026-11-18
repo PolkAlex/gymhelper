@@ -4656,7 +4656,9 @@ test.describe('GOA-S1 цели', function () {
         await page.locator('[data-act="switchTab"][data-a="history"]').click();
         await page.locator('.nav .nfab').click();
         await page.locator('.modal.open [data-act="newRepeat"]').click();
-        await page.locator('.ex-add').click();
+        /* пилюля добавления подхода: «.ex-addset» после merge UX-I15 (main), «.ex-add» на
+           этой ветке (UX-I15 не смержена) — универсальный селектор для обеих версий */
+        await page.locator('.ex-addset, .ex-add').click();
         await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
         await page.locator('#mWeight').fill(weight);
         await page.locator('#mReps').fill(reps);

@@ -3950,7 +3950,7 @@ async function saveEntry() {
         if (goalHit) {
             /* [GOA-S1] тост цели важнее PR-тоста: один подход может дать и рекорд, и цель
                — показывается ТОЛЬКО тост цели, чип 🏆 у записи остаётся (§11) */
-            toastPr('🏆 Цель достигнута! ' + goalHit.exercise + ' — e1RM ' + fmtW(goalHit.target) + ' кг');
+            toastPr('🏆 Цель достигнута! ' + goalHit.exercise + ' — e1RM ' + goalFmtRu(goalHit.target) + ' кг');
         } else if (pr) {
             toastPr(pr.type === 'e1rm'
                 ? '🏆 Новый рекорд! 1ПМ ≈ ' + Math.round(pr.val) + ' кг'
