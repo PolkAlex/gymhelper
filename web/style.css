@@ -2023,3 +2023,209 @@ html.has-bg body::after {
     cursor: pointer;
     -webkit-tap-highlight-color: transparent;
 }
+
+/* ---------- [GOA-S1] цели тренировок (спека §8, макет docs/mockups/goa-goals.html) ---------- */
+.seclabel {
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: .8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 14px 2px 8px;
+}
+.gcard {
+    background: var(--glass);
+    border: 1px solid var(--glass-brd);
+    border-radius: 18px;
+    padding: 13px 14px;
+    margin-bottom: 10px;
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--card-shadow);
+}
+.gh { display: flex; align-items: center; gap: 9px; }
+.gh .gico {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    background: var(--glow);
+    border: 1px solid var(--glow-brd);
+}
+.gh .gt { flex: 1; min-width: 0; }
+.gh .gt b { display: block; font-size: 15px; line-height: 1.25; }
+.gh .gt small { display: block; font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+.gtag {
+    flex: none;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    border-radius: 999px;
+    padding: 3px 9px;
+    background: var(--glow);
+    border: 1px solid var(--glow-brd);
+    color: var(--accent);
+    white-space: nowrap;
+}
+/* бар прогресса силовой цели — стиль .rec-bar */
+.gb { height: 8px; border-radius: 999px; background: var(--btn); margin-top: 12px; overflow: hidden; }
+.gb i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+.gmeta {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.gmeta b { color: var(--accent); }
+.gact { margin-top: 10px; display: flex; justify-content: flex-end; }
+.gact .btn { padding: 6px 12px; font-size: 12px; color: var(--muted); }
+/* частотная цель: кольцо-счётчик + текст (прогресс растёт рывками «+1 тренировка») */
+.grow2 { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+.gring { width: 76px; height: 76px; flex: none; }
+.gring .bgc { fill: none; stroke: var(--btn); stroke-width: 6; }
+.gring .fgc { fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round; }
+.gring text { fill: var(--text); font-size: 15px; font-weight: 800; text-anchor: middle; font-family: inherit; }
+.gring text.sub { fill: var(--muted); font-size: 9.5px; font-weight: 700; }
+.rtxt { flex: 1; min-width: 0; }
+.rtxt .big { display: block; font-size: 22px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.rtxt .big small { font-size: 13px; color: var(--muted); font-weight: 700; }
+.rtxt .sub { display: block; font-size: 12px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+/* архив достижений: ✅ / ⏳-строки + «Повторить» + ✕ (удаление без confirm) */
+.garow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: var(--nested);
+    border: 1px solid var(--nested-brd);
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-top: 7px;
+    font-size: 13px;
+}
+.garow .ai { flex: none; font-size: 14px; }
+.garow .at { flex: 1; min-width: 0; line-height: 1.35; }
+.garow .at small { display: block; color: var(--muted); font-size: 11.5px; }
+.garow.missed { opacity: .72; }
+.garow .btn { padding: 5px 11px; font-size: 11.5px; flex: none; }
+.gdel {
+    flex: none;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 9px;
+    background: none;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+/* пустое состояние «Целей пока нет» (§8.4) */
+.gempty .ei { display: block; font-size: 40px; }
+.gempty b { display: block; color: var(--text); font-size: 16px; margin: 8px 0 4px; }
+.gempty .btnrow { justify-content: center; margin-top: 14px; }
+/* виджет целей в Статистике: компактные строки с мини-баром */
+.goalsw .wrow { margin-top: 10px; }
+.wrow .wl { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; font-weight: 600; }
+.wrow .wl span { color: var(--accent); font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wrow .gb { margin-top: 5px; height: 6px; }
+.gw-none { margin: 8px 0 0; }
+.allbtn { margin-top: 12px; width: 100%; }
+/* подсказка цели (карточка-предложение, §5) */
+.hintcard { position: relative; overflow: hidden; border-color: var(--glow-brd); }
+.hintcard::before {
+    content: '';
+    position: absolute;
+    right: -40px;
+    bottom: -40px;
+    width: 170px;
+    height: 170px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--glow), transparent 70%);
+    pointer-events: none;
+}
+.hintrow { display: flex; align-items: center; gap: 10px; margin-top: 8px; position: relative; }
+.hintrow .hi { font-size: 18px; flex: none; }
+.hintrow .ht { font-size: 13.5px; line-height: 1.45; }
+.hintrow .ht b { color: var(--accent); }
+.split2 { display: flex; gap: 8px; margin-top: 10px; width: 100%; position: relative; }
+.split2 .btn { flex: 1 1 0; min-width: 0; margin: 0; font-size: 14.5px; font-weight: 600; padding: 12px 8px; }
+/* мастер создания цели (§9): шаги как в онбординге, строки-опции frow */
+.steps { display: flex; gap: 5px; margin: 2px 0 12px; }
+.steps i { height: 4px; border-radius: 999px; flex: 1; background: var(--btn); }
+.steps i.on { background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+.stepcap { font-size: 12.5px; color: var(--accent); font-weight: 700; margin: 0 0 6px; }
+.frow .fico {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    background: var(--glow);
+    border: 1px solid var(--glow-brd);
+}
+.frow .ftxt { flex: 1; min-width: 0; }
+.frow .ftxt b { display: block; font-size: 14px; }
+.frow .ftxt small { display: block; font-size: 11.5px; color: var(--muted); font-weight: 500; margin-top: 1px; }
+.frow.on .ftxt small { color: rgba(20, 18, 10, .7); }
+.soonbadge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    border: 1px solid var(--btn-brd);
+    border-radius: 999px;
+    padding: 3px 8px;
+    color: var(--muted);
+    flex: none;
+    white-space: nowrap;
+}
+.frow.off { opacity: .5; }
+/* плашка лимита на шаге 1 (§8.4) и предупреждение «цель уже достигнута» (§4.3) */
+.gwlimit {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--nested);
+    border: 1px solid var(--nested-brd);
+    border-radius: 14px;
+    padding: 11px 12px;
+    margin: 0 0 10px;
+}
+.gw-warn {
+    font-size: 12.5px;
+    line-height: 1.5;
+    font-weight: 600;
+    color: var(--danger);
+    background: var(--nested);
+    border: 1px solid var(--nested-brd);
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin: 10px 0 0;
+}
+.gsummary { border-color: var(--glow-brd); }
+
+/* [GOA-S1] 320px (§8.4, макет GOA-8): без горизонтального скролла — чип типа
+   переезжает под название, кольцо 56px, мета-строка в две строки */
+@media (max-width: 379px) {
+    .gcard { padding: 11px 12px; }
+    .gh { flex-wrap: wrap; }
+    .gh .gico { width: 32px; height: 32px; font-size: 15px; }
+    .gh .gt b { font-size: 14px; }
+    .gtag { margin-top: 6px; font-size: 10px; }
+    .gmeta { flex-direction: column; gap: 2px; }
+    .gring { width: 56px; height: 56px; }
+    .gring text { font-size: 13px; }
+    .gring text.sub { font-size: 8px; }
+    .rtxt .big { font-size: 19px; }
+    .garow { flex-wrap: wrap; }
+}

@@ -13,6 +13,10 @@ public final class GymData {
     public final List<Workout> workouts = new ArrayList<>();
     public final List<Template> templates = new ArrayList<>();
     public final List<Long> deletedIds = new ArrayList<>();
+    /* [GOA-S1] цели тренировок: ключа «goals» нет → пустой список (старые файлы ок, §10.2) */
+    public final List<Goal> goals = new ArrayList<>();
+    /* [GOA-S1] тогл напоминаний о целях (R2): null = включены (дефолт) */
+    public Boolean goalRemind;
 
     public Workout active() {
         for (Workout w : workouts) {
@@ -103,6 +107,25 @@ public final class GymData {
                 d.templates.add(tpl);
             }
         }
+        /* [GOA-S1] цели: битые элементы списка пропускаются, как у шаблонов (§10.2);
+            валидность — id ≥ 1, тип 1..4, target > 0, у силовой — имя упражнения,
+            статус 1..4; мусорное значение не валит чтение всего файла */
+        List<Object> goalList = Json.list(m.get("goals"));
+        if (goalList != null) {
+            for (Object o : goalList) {
+                if (!(o instanceof Map)) continue;
+                Map<String, Object> gm = Json.map(o);
+                if (gm == null) continue;
+                Goal g = Goal.fromJson(gm);
+                if (g.id < 1 || g.type < 1 || g.type > 4 || g.target <= 0) continue;
+                if (g.type == 1 && (g.exercise == null || g.exercise.isEmpty())) continue;
+                if (g.status < 1 || g.status > 4) continue;
+                d.goals.add(g);
+            }
+        }
+        /* [GOA-S1] goalRemind читается только если это Boolean, иначе null (§10.2) */
+        Object gr = m.get("goalRemind");
+        if (gr instanceof Boolean) d.goalRemind = (Boolean) gr;
         for (Object o : Json.list(m.get("workouts"))) {
             Map<String, Object> w = Json.map(o);
             Workout workout = new Workout();
@@ -253,6 +276,14 @@ public final class GymData {
             ws.add(wm);
         }
         m.put("workouts", ws);
+        /* [GOA-S1] цели и тогл напоминаний пишутся только когда заданы: файл пользователя
+           без целей остаётся байт-в-байт прежним (§10.2); порядок ключей — конец карты */
+        if (!goals.isEmpty()) {
+            List<Object> gs = new ArrayList<>();
+            for (Goal g : goals) gs.add(g.toJson());
+            m.put("goals", gs);
+        }
+        if (goalRemind != null) m.put("goalRemind", goalRemind);
         return m;
     }
 }

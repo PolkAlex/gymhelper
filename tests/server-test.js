@@ -12,7 +12,8 @@ function initialStore() {
         del: [],
         profile: { sex: 'м', age: 30, height: 180, weight: 90 },
         workouts: [],
-        templates: []
+        templates: [],
+        goals: [] /* [GOA-S1] серверный протокол: ключ «ex» (§10.1) — мок хранит как пришло */
     };
 }
 let store = initialStore();
@@ -89,6 +90,10 @@ http.createServer(function (req, res) {
                 const d = j.data || {};
                 if (Array.isArray(d.workouts)) store.workouts = d.workouts;
                 if (Array.isArray(d.templates)) store.templates = d.templates;
+                /* [GOA-S1] цели — merge по образцу реального WebServer: замещение только
+                   при наличии ключа (старый кэш JS — не трогаем); goalRemind — значением */
+                if (Array.isArray(d.goals)) store.goals = d.goals;
+                if (typeof d.goalRemind === 'boolean') store.goalRemind = d.goalRemind;
                 /* restSec: merge-политика реального WebServer — null у клиента (ещё не настраивал)
                    серверное значение не затирает [UX-T4/T5, спека §0.1] */
                 if (typeof d.restSec === 'number') store.restSec = d.restSec;
