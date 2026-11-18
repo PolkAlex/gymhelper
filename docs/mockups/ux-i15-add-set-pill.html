@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-I15] #257 · Пилюля «+ Добавить подход» · Amber Glass</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    margin: 0; padding: 28px 16px 90px;
+}
+.stage { max-width: 1020px; margin: 0 auto; }
+.pagehead h1 { font-size: 20px; font-weight: 700; color: #f2f3f5; margin: 0 0 6px; letter-spacing: .2px; }
+.pagehead h1 span { color: #ffc220; }
+.pagehead p { margin: 0; font-size: 13px; color: #8d939e; line-height: 1.55; max-width: 820px; }
+.pagehead p b { color: #c9ccd2; }
+.caption { margin: 42px 2px 10px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -4px 2px 4px; font-size: 12.5px; color: #7d838e; line-height: 1.5; max-width: 820px; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+
+.pair { display: flex; flex-wrap: wrap; gap: 26px; justify-content: center; }
+.pcol { flex: 0 1 414px; min-width: 340px; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 12px auto 0;
+    height: 780px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    --bg:#101114; --text:#f2f3f5; --muted:#9aa0aa;
+    --accent:#ffc220; --accent-deep:#ffb000; --on-accent:#14120a;
+    --danger:#ff6b5e;
+    --glass:rgba(255,255,255,.055); --glass-brd:rgba(255,255,255,.10);
+    --glow-brd:rgba(255,194,32,.28); --glow:rgba(255,194,32,.08);
+    --blik:rgba(255,255,255,.06); --card-shadow:rgba(0,0,0,.28);
+    --cta-shadow:rgba(255,194,32,.22); --fab-shadow:rgba(255,194,32,.35);
+    --nested:rgba(0,0,0,.18); --nested-brd:rgba(255,255,255,.05);
+    --btn:rgba(255,255,255,.07); --btn-pressed:rgba(255,255,255,.12); --btn-brd:rgba(255,255,255,.08);
+    --sheet:rgba(30,32,38,.92); --nav-idle:#6d737d;
+    position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+    background-color: var(--bg);
+    color: var(--text); font-size: 15px; line-height: 1.45;
+    font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased;
+    scrollbar-width: none;
+}
+.p::-webkit-scrollbar { display: none; }
+
+/* шапка Telegram + топбар */
+.tgchrome { position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 8px 12px 4px; }
+.statusrow { display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--text); opacity: .8; }
+.statusrow .sig { font-size: 9.5px; color: var(--muted); letter-spacing: 1px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.topbar .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbtn { width: 32px; height: 32px; border-radius: 9px; border: none; flex: none;
+    background: var(--btn); color: var(--muted); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; }
+.tbtn svg { width: 17px; height: 17px; }
+.content { padding: 8px 12px 160px; }
+
+/* стеклянная карточка тренировки */
+.card { background: var(--glass); border: 1px solid var(--glass-brd); border-radius: 20px;
+    padding: 14px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--card-shadow); }
+.wchead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.wchead .t1 { font-size: 18px; font-weight: 700; margin: 0; letter-spacing: .2px; }
+.icobtn { background: none; border: none; padding: 6px; color: var(--muted); display: inline-flex; }
+.icobtn svg { width: 18px; height: 18px; }
+.wcpill { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%;
+    background: var(--nested); border: 1px solid var(--nested-brd); border-radius: 12px;
+    padding: 7px 12px; margin: 8px 0 2px; }
+.wpill { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.wpill.rt { color: var(--text); }
+
+/* плитка упражнения */
+.expill { background: var(--nested); border: 1px solid var(--nested-brd); border-radius: 14px;
+    padding: 10px; margin-top: 12px; }
+.exhead { display: flex; align-items: center; gap: 8px; }
+.exthumb { width: 40px; height: 40px; border-radius: 12px; flex: none; object-fit: cover;
+    border: 1px solid var(--glass-brd);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 16px; }
+.th-bench { background: linear-gradient(135deg, #3a2320, #5e332c 55%, #2a1a17); }
+.th-pull  { background: linear-gradient(135deg, #1f2a3c, #31445f 55%, #17202e); }
+.th-fly   { background: linear-gradient(135deg, #26313a, #3d5261 55%, #1a232b); }
+.exname { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+.bare { background: none; border: none; padding: 6px 2px 6px 4px; color: var(--muted);
+    display: inline-flex; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.bare svg { width: 18px; height: 18px; }
+.bare.trash { color: var(--danger); padding: 6px 4px; }
+/* [UX-T22] тонкий «+» в шапке — ТОЛЬКО на экране «БЫЛО» (удаляется по UX-I15) */
+.ex-add { padding: 6px 2px 6px 4px; }
+
+.entry { display: flex; justify-content: space-between; align-items: center; gap: 6px;
+    margin-top: 6px; padding: 8px 10px; border-radius: 11px;
+    background: var(--nested); border: 1px solid var(--nested-brd); font-size: 13.5px; }
+.expill .entry { background: transparent; margin-top: 1px; padding: 4px 2px; border-radius: 8px; font-size: 13.5px; }
+.prtag { flex: none; margin-left: auto; background: rgba(255,194,32,.12); border: 1px solid var(--glow-brd);
+    color: var(--accent); border-radius: 9px; padding: 2px 8px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+
+/* ============ [UX-I15] НОВАЯ тонкая пилюля «+ Добавить подход» ============
+   над плашкой «упражнение активно — время идёт»; нейтральный серо-стеклянный
+   инсет (--nested / --nested-brd / --muted) — заметно скромнее «Добавить упражнение» */
+.ex-addset { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px;
+    margin: 8px 0 0; padding: 4px 12px; border-radius: 999px;
+    background: var(--nested); border: 1px solid var(--nested-brd);
+    color: var(--muted); font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+    touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+.ex-addset svg { width: 14px; height: 14px; flex: none; }
+.ex-addset:active { background: var(--btn-pressed); color: var(--text); transform: scale(.985); }
+.restline { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
+
+/* «➕ Добавить упражнение» — эталон яркости (не меняется) */
+.btnrow { display: flex; margin-top: 8px; }
+.btn { border: 1px solid var(--btn-brd); border-radius: 14px; padding: 9px 14px;
+    font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
+    background: var(--btn); color: var(--text); }
+.btn.wide { flex: 1 1 100%; }
+.btn.prime2 { background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent); font-weight: 700; box-shadow: 0 8px 26px var(--cta-shadow); }
+
+details { margin-top: 12px; }
+summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+summary .wip { font-size: 11.5px; font-weight: 400; }
+
+/* нижняя панель действий */
+.backbar { position: absolute; left: 12px; right: 12px; bottom: 78px; z-index: 19;
+    display: flex; gap: 8px; }
+.backbar .btn { flex: 1 1 0; min-width: 0; padding: 11px 8px; font-size: 13px; font-weight: 600;
+    background: var(--sheet); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: 0 8px 28px var(--card-shadow); }
+.backbar .del { color: var(--danger); }
+.backbar .prime2 { flex: 1.4 1 0; }
+
+/* нижняя навигация */
+.nav { position: absolute; left: 0; right: 0; bottom: 0; z-index: 20;
+    display: flex; align-items: flex-end; padding: 8px 12px 14px;
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.nbtn { flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: var(--nav-idle); font-size: 10px; font-weight: 600; font-family: inherit; padding: 2px 0; }
+.nbtn.on { color: var(--text); }
+.nbtn.on svg { color: var(--accent); }
+.nbtn svg { width: 20px; height: 20px; color: inherit; stroke: currentColor; }
+.nfab { flex: none; width: 52px; height: 52px; margin: 0 6px; border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent)); color: var(--on-accent);
+    display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px var(--fab-shadow); }
+.nfab svg { width: 24px; height: 24px; stroke-width: 2.2; }
+
+/* ============ аннотации на макете ============ */
+.anno { position: relative; }
+.anno-dash { outline: 1.5px dashed rgba(255,194,32,.75); outline-offset: 5px; border-radius: 12px; }
+.anno-dash.pillr { border-radius: 999px; }
+.atag { position: absolute; z-index: 25; font-size: 10.5px; font-weight: 600; letter-spacing: .2px;
+    color: #ffc220; background: #191b20; border: 1px solid rgba(255,194,32,.35);
+    border-radius: 8px; padding: 3px 8px; white-space: nowrap; pointer-events: none;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+.atag.red { color: #ff8d82; border-color: rgba(255,107,94,.4); }
+
+/* ============ анатомия и иерархия ============ */
+.anat { margin: 14px auto 0; max-width: 640px; background: #12141a; border: 1px solid #23262c;
+    border-radius: 20px; padding: 18px 18px 8px; }
+/* образцы стоят на «карточной» поверхности — токены читаются как в продукте */
+.adesign { flex: 0 0 300px; background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.10);
+    border-radius: 14px; padding: 12px; }
+.arow { display: flex; align-items: center; gap: 16px; padding: 10px 0 16px; border-bottom: 1px solid #1d2027; }
+.arow:last-child { border-bottom: none; }
+.adesc { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #8d939e; line-height: 1.6; }
+.adesc b { color: #ffc220; font-weight: 600; }
+.desc-btn { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; }
+.hierbar { display: flex; gap: 8px; margin: 2px 0 18px; }
+.hierbar i { display: block; height: 10px; border-radius: 999px; flex: 1; }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+  <div class="pagehead">
+    <h1>[UX-I15] #257 · Пилюля «<span>+ Добавить подход</span>» вместо «+» в шапке упражнения</h1>
+    <p>Тёмная тема Amber Glass, вьюпорт 390px. Слева — <b>текущий прод</b>
+    (реконструкция <b>docs/screenshots/02-workout-card.png</b>), рядом — <b>предложение</b>:
+    «+» из шапки удалён, под подходами — тонкая пилюля на всю ширину, над плашкой
+    «упражнение активно — время идёт». Пилюля — нейтральный серый инсет
+    (<b>не ярче</b> «➕ Добавить упражнение»: темнее, тише, ниже, мельче).</p>
+  </div>
+
+  <!-- ================= 1 · БЫЛО / 2 · СТАЛО ================= -->
+  <div class="caption">1–2 · Карточка «Жим штанги лёжа» <span>было → стало</span></div>
+  <p class="note">Тап по пилюле открывает ту же модалку «Новая запись», что старый «+»
+  (вес прошлого подхода подставляется). Плашка времени никуда не делась — пилюля стоит
+  <b>над</b> ней. Пустая плитка (0 подходов) тоже показывает пилюлю — она единственный
+  способ добавить первый подход (упражнение создаётся с пустым списком).</p>
+
+  <div class="pair">
+
+    <!-- ========== ЭКРАН «БЫЛО» ========== -->
+    <div class="pcol">
+      <div class="phone">
+        <div class="p">
+          <div class="tgchrome">
+            <div class="statusrow"><span>9:41</span><span class="sig">TELEGRAM WEB APP</span></div>
+            <div class="topbar">
+              <div class="ttl">GymHelper · История</div>
+              <button class="tbtn" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card">
+              <div class="wchead">
+                <p class="t1">16.11, Пн</p>
+                <button class="icobtn" title="Время"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg></button>
+              </div>
+              <div class="wcpill">
+                <span class="wpill">🕐 с 18:30</span>
+                <span class="wpill rt">🏆 3 подх.</span>
+              </div>
+
+              <div class="expill">
+                <div class="exhead">
+                  <span class="exthumb th-bench">🏋️</span>
+                  <span class="exname">Жим штанги лёжа</span>
+                  <button class="bare trash" title="Удалить упражнение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+                  <button class="bare ex-add anno anno-dash" title="Добавить запись" style="border-radius:8px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    <span class="atag red" style="top:-34px; right:-2px;">удаляется ✕</span>
+                  </button>
+                </div>
+                <div class="entry"><span>85 кг, 1 подход по 8 повторений</span><span class="prtag">🏆 108</span></div>
+                <div class="entry"><span>85 кг, 1 подход по 8 повторений</span></div>
+                <div class="entry"><span>87,5 кг, 1 подход по 6 повторений</span></div>
+              </div>
+
+              <div class="btnrow"><button class="btn wide">➕ Добавить упражнение</button></div>
+              <details><summary>🔥 Ккал по упражнениям <span class="wip">(в разработке)</span></summary></details>
+              <details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary></details>
+            </div>
+          </div>
+          <div class="backbar">
+            <button class="btn del">🗑 Удалить</button>
+            <button class="btn prime2">✓ Завершить</button>
+            <button class="btn">← Назад</button>
+          </div>
+          <div class="nav">
+            <button class="nbtn on"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 5v4h4"/><path d="M12 8v4l3 2"/></svg><span class="nlabel">История</span></button>
+            <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/></svg><span class="nlabel">Статистика</span></button>
+            <button class="nfab" title="Новая тренировка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/><path d="M4 12h3M17 12h3"/></svg><span class="nlabel">Техника</span></button>
+            <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg><span class="nlabel">Профиль</span></button>
+          </div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:10px;"><b>БЫЛО.</b> Тонкий «+» справа вверху плитки
+      (<code>ex-add</code>, [UX-T22]) — добавление подхода. Сливается с корзиной 🗑,
+      не читается как «точка ввода» списка подходов.</p>
+    </div>
+
+    <!-- ========== ЭКРАН «СТАЛО» ========== -->
+    <div class="pcol">
+      <div class="phone">
+        <div class="p">
+          <div class="tgchrome">
+            <div class="statusrow"><span>9:41</span><span class="sig">TELEGRAM WEB APP</span></div>
+            <div class="topbar">
+              <div class="ttl">GymHelper · История</div>
+              <button class="tbtn" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+            </div>
+          </div>
+          <div class="content">
+            <div class="card">
+              <div class="wchead">
+                <p class="t1">16.11, Пн</p>
+                <button class="icobtn" title="Время"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg></button>
+              </div>
+              <div class="wcpill">
+                <span class="wpill">🕐 с 18:30</span>
+                <span class="wpill rt">🏆 3 подх.</span>
+              </div>
+
+              <div class="expill">
+                <div class="exhead">
+                  <span class="exthumb th-bench">🏋️</span>
+                  <span class="exname">Жим штанги лёжа</span>
+                  <button class="bare trash" title="Удалить упражнение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+                </div>
+                <div class="entry"><span>85 кг, 1 подход по 8 повторений</span><span class="prtag">🏆 108</span></div>
+                <div class="entry"><span>85 кг, 1 подход по 8 повторений</span></div>
+                <div class="entry"><span>87,5 кг, 1 подход по 6 повторений</span></div>
+
+                <!-- [UX-I15] новая тонкая пилюля -->
+                <button class="ex-addset anno anno-dash pillr" title="Добавить подход">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  Добавить подход
+                  <span class="atag" style="top:-32px; right:0;">новая · над плашкой времени</span>
+                </button>
+                <div class="restline">упражнение активно — время идёт</div>
+              </div>
+
+              <div class="btnrow"><button class="btn wide">➕ Добавить упражнение</button></div>
+              <details><summary>🔥 Ккал по упражнениям <span class="wip">(в разработке)</span></summary></details>
+              <details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary></details>
+            </div>
+          </div>
+          <div class="backbar">
+            <button class="btn del">🗑 Удалить</button>
+            <button class="btn prime2">✓ Завершить</button>
+            <button class="btn">← Назад</button>
+          </div>
+          <div class="nav">
+            <button class="nbtn on"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 5v4h4"/><path d="M12 8v4l3 2"/></svg><span class="nlabel">История</span></button>
+            <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/></svg><span class="nlabel">Статистика</span></button>
+            <button class="nfab" title="Новая тренировка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/><path d="M4 12h3M17 12h3"/></svg><span class="nlabel">Техника</span></button>
+            <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg><span class="nlabel">Профиль</span></button>
+          </div>
+        </div>
+      </div>
+      <p class="note" style="margin-top:10px;"><b>СТАЛО.</b> Пилюля <code>.ex-addset</code>
+      на всю ширину плитки: фон <code>--nested</code> (темнее карточки), рамка
+      <code>--nested-brd</code>, текст <code>--muted</code> 12px, высота ≈26px
+      (у «Добавить упражнение» — ≈40px, фон <code>--btn</code>, текст <code>--text</code> 14px).
+      Янтарного в пилюле нет — ни рамки, ни текста.</p>
+    </div>
+  </div>
+
+  <!-- ================= 3 · НЕСКОЛЬКО УПРАЖНЕНИЙ + ПУСТАЯ ================= -->
+  <div class="caption">3 · Несколько упражнений + пустая плитка <span>пилюля у каждой</span></div>
+  <p class="note">Пилюля — <b>у каждой плитки</b> активной тренировки (паритет со старым «+»).
+  У текущего упражнения — над плашкой «время идёт». Пустая плитка «Разведение гантелей»
+  (только что добавили из каталога): список пуст, пилюля — единственная точка входа,
+  первый подход добавляется в один тап, как раньше через «+».</p>
+
+  <div class="phone" style="max-width:390px;">
+    <div class="p">
+      <div class="tgchrome">
+        <div class="statusrow"><span>9:41</span><span class="sig">TELEGRAM WEB APP</span></div>
+        <div class="topbar">
+          <div class="ttl">GymHelper · История</div>
+          <button class="tbtn" title="Настройки"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="wchead">
+            <p class="t1">17.11, Вт</p>
+            <button class="icobtn" title="Время"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg></button>
+          </div>
+          <div class="wcpill">
+            <span class="wpill">🕐 с 19:05</span>
+            <span class="wpill">🔥 410 ккал</span>
+            <span class="wpill rt">🏋 5 подх.</span>
+          </div>
+
+          <div class="expill">
+            <div class="exhead">
+              <span class="exthumb th-bench">🏋️</span>
+              <span class="exname">Жим штанги лёжа</span>
+              <button class="bare trash" title="Удалить упражнение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+            </div>
+            <div class="entry"><span>85 кг, 1 подход по 8 повторений</span><span class="prtag">🏆 108</span></div>
+            <div class="entry"><span>87,5 кг, 1 подход по 6 повторений</span></div>
+            <button class="ex-addset" title="Добавить подход"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Добавить подход</button>
+            <div class="restline">упражнение активно — время идёт</div>
+          </div>
+
+          <div class="expill">
+            <div class="exhead">
+              <span class="exthumb th-pull">🦾</span>
+              <span class="exname">Тяга верхнего блока</span>
+              <button class="bare trash" title="Удалить упражнение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+            </div>
+            <div class="entry"><span>60 кг, 1 подход по 12 повторений</span></div>
+            <button class="ex-addset" title="Добавить подход"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Добавить подход</button>
+          </div>
+
+          <div class="expill">
+            <div class="exhead">
+              <span class="exthumb th-fly">💪</span>
+              <span class="exname">Разведение гантелей</span>
+              <button class="bare trash" title="Удалить упражнение"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></button>
+            </div>
+            <button class="ex-addset anno anno-dash pillr" title="Добавить подход">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              Добавить подход
+              <span class="atag" style="top:-32px; right:0;">0 подходов · пилюля одна</span>
+            </button>
+          </div>
+
+          <div class="btnrow"><button class="btn wide">➕ Добавить упражнение</button></div>
+          <details><summary>🔥 Ккал по упражнениям <span class="wip">(в разработке)</span></summary></details>
+          <details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary></details>
+        </div>
+      </div>
+      <div class="backbar">
+        <button class="btn del">🗑 Удалить</button>
+        <button class="btn prime2">✓ Завершить</button>
+        <button class="btn">← Назад</button>
+      </div>
+      <div class="nav">
+        <button class="nbtn on"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 5v4h4"/><path d="M12 8v4l3 2"/></svg><span class="nlabel">История</span></button>
+        <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-8M21 20H3"/></svg><span class="nlabel">Статистика</span></button>
+        <button class="nfab" title="Новая тренировка"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/><path d="M4 12h3M17 12h3"/></svg><span class="nlabel">Техника</span></button>
+        <button class="nbtn"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg><span class="nlabel">Профиль</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 4 · АНАТОМИЯ И ИЕРАРХИЯ ================= -->
+  <div class="caption">4 · Анатомия и иерархия <span>пилюля ≠ ярче упражнения</span></div>
+  <p class="note">Слева — элементы в масштабе 1:1 на фоне карточки, справа — токены.
+  Лестница яркости внизу: пилюля на самой тёмной ступени, «Добавить упражнение» — ступенью
+  выше, «Завершить» (prime) — вершина. Пилюля — единственный элемент тройки без янтаря.</p>
+
+  <div class="anat">
+    <div class="arow">
+      <div class="adesign desc-btn">
+        <div style="--nested:rgba(0,0,0,.18); --nested-brd:rgba(255,255,255,.05); --muted:#9aa0aa; --btn-pressed:rgba(255,255,255,.12);">
+          <button class="ex-addset">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Добавить подход
+          </button>
+        </div>
+      </div>
+      <div class="adesc">высота <b>≈26px</b> (−40%) · радиус <b>999px</b> · шрифт <b>12px/600</b><br>
+        фон <b>--nested</b> rgba(0,0,0,.18) · рамка <b>--nested-brd</b> .05 · текст <b>--muted</b><br>
+        «+» — тонкая svg-иконка (plusThin, stroke 1.6), не эмодзи</div>
+    </div>
+    <div class="arow">
+      <div class="adesign desc-btn" style="--btn:rgba(255,255,255,.07); --btn-brd:rgba(255,255,255,.08); --text:#f2f3f5;">
+        <button class="btn wide" style="width:100%;">➕ Добавить упражнение</button>
+      </div>
+      <div class="adesc">высота <b>≈40px</b> · радиус <b>14px</b> · шрифт <b>14px/600</b><br>
+        фон <b>--btn</b> rgba(255,255,255,.07) · рамка <b>--btn-brd</b> .08 · текст <b>--text</b><br>
+        эталон яркости — пилюля заведомо тише</div>
+    </div>
+    <div class="arow">
+      <div class="adesign" style="--accent:#ffc220; --accent-deep:#ffb000; --on-accent:#14120a; --cta-shadow:rgba(255,194,32,.22); --btn:rgba(255,255,255,.07); --btn-brd:rgba(255,255,255,.08); --text:#f2f3f5;">
+        <button class="btn prime2 wide" style="width:100%;">✓ Завершить</button>
+      </div>
+      <div class="adesc">янтарный prime — только вершина воронки (завершение),<br>
+        в него же попадает жёлтый FAB «+»; добавление подхода<br>
+        и упражнения — стеклянные ступени без акцента</div>
+    </div>
+    <div class="hierbar">
+      <i style="background:rgba(255,255,255,.14);" title="--nested: пилюля подхода"></i>
+      <i style="background:rgba(255,255,255,.22);" title="--btn: добавить упражнение"></i>
+      <i style="background:linear-gradient(90deg,#ffb000,#ffc220);" title="prime: завершить"></i>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
