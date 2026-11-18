@@ -515,6 +515,16 @@ public class GymContractTest {
                 "{\"rev\":2,\"nextId\":2,\"goals\":[],\"workouts\":[]}");
             check(rg3.statusCode() == 200, "goals merge: save с пустым goals — 200, а не " + rg3.statusCode());
             check(stGl.load(424247).goals.isEmpty(), "goals merge: пустой список целей замещает старый (отмена доезжает)");
+            /* регресс ревью: сырой клиентский payload с клиентским ключом «exercise»
+               (без «ex») — сервер сохраняет цель, merge не теряет (§10.2) */
+            java.net.http.HttpResponse<String> rg4 = postSave(portGl, idGl, 3,
+                "{\"rev\":3,\"nextId\":3,\"goals\":[{\"id\":2,\"type\":1,\"exercise\":\"Тяга\",\"target\":140,\"start\":\"2026-11-18\",\"end\":\"2026-12-31\",\"status\":1,\"doneDate\":\"\",\"doneValue\":0}],\"workouts\":[]}");
+            check(rg4.statusCode() == 200, "goals merge: save с ключом exercise — 200, а не " + rg4.statusCode());
+            GymData wireGl = stGl.load(424247);
+            check(wireGl.goals.size() == 1 && "Тяга".equals(wireGl.goals.get(0).exercise),
+                "goals merge: клиентский ключ exercise не теряет цель");
+            check(Json.write(wireGl.toJson()).contains("\"ex\":\"Тяга\"") && !Json.write(wireGl.toJson()).contains("\"exercise\""),
+                "goals merge: toJson пишет серверный ключ ex (без exercise)");
         } catch (Exception goalErr) {
             throw new AssertionError("CONTRACT FAIL: goals merge " + goalErr);
         }

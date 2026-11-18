@@ -37,6 +37,9 @@ public final class Goal {
         g.id = Json.lng(m.get("id"));
         g.type = (int) Json.lng(m.get("type"));
         g.exercise = Json.str(m, "ex");
+        /* толерантность к клиентскому ключу «exercise» (Mini App шлёт модель как есть):
+           без него merge по ключу «goals» заменил бы список, потеряв цель (§10.2) */
+        if (g.exercise == null) g.exercise = Json.str(m, "exercise");
         g.target = Json.dbl(m.get("target"));
         g.start = Json.str(m, "start");
         g.end = Json.str(m, "end");

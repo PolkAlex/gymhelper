@@ -487,7 +487,7 @@ async function doSave() {
     try {
         const r = await fetch('/api/save', {
             method: 'POST',
-            body: JSON.stringify({ initData: INIT, rev: G.rev || 0, data: G })
+            body: JSON.stringify({ initData: INIT, rev: G.rev || 0, data: goalsToWire(G) })
         });
         let j = {};
         try { j = await r.json(); } catch (e2) { /* noop */ }
@@ -545,6 +545,7 @@ async function reloadSilently(force, adoptServer) {
             if (!G.del) G.del = [];
             if (!G.templates) G.templates = [];
             if (!G.goals) G.goals = []; /* [GOA-S1] старый файл без ключа goals */
+            goalsAdopt(G.goals); /* [GOA-S1] протокол «ex» → клиентская модель exercise */
             /* nextId не откатывается ниже локально известного — защита от id-коллизий */
             if (G.nextId < localNextId) G.nextId = localNextId;
             for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
@@ -1271,10 +1272,12 @@ function render() {
        openHistory из календаря НЕ сбрасывает calOpen, «← Назад» backbar'а возвращает
        в календарь с сохранённым месяцем и выбором [§6] */
     /* [ONB-T5] Помощь — подэкран в том же паттерне (вход из Настроек) */
+    /* [GOA-S1] Цели/мастер — подэкраны поверх вкладки; Настройки ПОВЕРХ них (приоритет
+       как у календаря: иначе шестерёнка-вход из подэкрана был бы мёртвой кнопкой) */
     if (helpOpen) h += renderHelp();
+    else if (settingsOpen) h += renderSettings();
     else if (gwOpen) h += renderGoalWizard();
     else if (goalsOpen) h += renderGoals();
-    else if (settingsOpen) h += renderSettings();
     else if (calVisible()) h += renderCalendar();
     else {
         if (tab === 'history') h += renderHistoryTab();
@@ -1366,21 +1369,22 @@ function topbarHtml() {
         return '<div class="topbar"><button class="tb-user" data-act="closeHelp" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
             '<span class="tb-title">GymHelper · Помощь</span></div>';
     }
+    /* [UX-T27] экран Настроек: «←» слева (возврат на вкладку-источник), справа пусто [UX-S4 §3];
+       приоритет выше подэкранов Целей/мастера — «←» Настроек возвращает на подэкран */
+    if (settingsOpen) {
+        return '<div class="topbar"><button class="tb-user" data-act="closeSettings" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
+            '<span class="tb-title">GymHelper · Настройки</span></div>';
+    }
     /* [GOA-S1] мастер создания цели: «←» — предыдущий шаг, на шаге 1 — выход (§9) */
     if (gwOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="gwBack" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
             '<span class="tb-title">Новая цель</span></div>';
     }
-    /* [GOA-S1] экран «Цели»: «←» — возврат на вкладку-источник, шестерёнка — Настройки (§8.1) */
+    /* [GOA-S1] экран «Цели»: «←» — возврат на вкладку-источник (§8.1: «← | GymHelper · Цели»,
+       без шестерёнки — Настройки поверх подэкрана по общему приоритету) */
     if (goalsOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeGoals" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
-            '<span class="tb-title">GymHelper · Цели</span>' +
-            '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
-    }
-    /* [UX-T27] экран Настроек: «←» слева (возврат на вкладку-источник), справа пусто [UX-S4 §3] */
-    if (settingsOpen) {
-        return '<div class="topbar"><button class="tb-user" data-act="closeSettings" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
-            '<span class="tb-title">GymHelper · Настройки</span></div>';
+            '<span class="tb-title">GymHelper · Цели</span></div>';
     }
     /* [UX-S6] экран календаря: «←» слева (возврат на вкладку-источник), шестерёнка
        справа [ред. 5 — владелец: «не вижу Настройки. Добавляй»] [§3.4]; кнопки 📅
@@ -2441,12 +2445,15 @@ const GOAL_LIMIT = 5; /* активных целей ≤ 5 (§10.3, решени
 function goalById(id) { return (G.goals || []).find(g => g.id === +id) || null; }
 function goalActiveList() { return (G.goals || []).filter(g => g.status === 1); }
 
-/* максимальный e1RM упражнения по ВСЕЙ истории — монотонный агрегат, тот же,
-   что в «Оценка 1ПМ · Эпли» (§4.1): откатить e1RM нельзя, прогресс не падает */
-function goalMaxE1rm(name) {
+/* максимальный e1RM упражнения по истории — монотонный агрегат, тот же,
+   что в «Оценка 1ПМ · Эпли» (§4.1): откатить e1RM нельзя, прогресс не падает.
+   finishedOnly=true — только завершённые (дисплей: согласован с карточкой Эпли);
+   по умолчанию — все тренировки (точка тоста §4.2 осознанно включает текущую) */
+function goalMaxE1rm(name, finishedOnly) {
     const nl = String(name || '').toLowerCase();
     let best = 0;
     for (const w of G.workouts) {
+        if (finishedOnly && !w.finished) continue;
         const m = workoutExMetrics(w, nl);
         if (m.bestE > best) best = m.bestE;
     }
@@ -2463,10 +2470,11 @@ function goalCountIn(g) {
     }
     return n;
 }
-/* текущее значение цели (§4.1): силовая — max e1RM, частота — тренировки окна */
-function goalCur(g) { return g.type === 1 ? goalMaxE1rm(g.exercise) : goalCountIn(g); }
+/* текущее значение цели (§4.1): силовая — max e1RM, частота — тренировки окна;
+   finishedOnly — для отображения (см. goalMaxE1rm) */
+function goalCur(g, finishedOnly) { return g.type === 1 ? goalMaxE1rm(g.exercise, finishedOnly) : goalCountIn(g); }
 /* % достижения, cap 100 — перевыполнение не рисуем (§4.1) */
-function goalPct(g) { return g.target > 0 ? Math.min(100, Math.round(goalCur(g) / g.target * 100)) : 0; }
+function goalPct(g, finishedOnly) { return g.target > 0 ? Math.min(100, Math.round(goalCur(g, finishedOnly) / g.target * 100)) : 0; }
 /* активные силовые цели упражнения — для проверки в точке записи подхода (§4.2) */
 function goalActiveForEx(name) {
     const nl = String(name || '').toLowerCase();
@@ -2477,6 +2485,27 @@ function goalClose(g, val) {
     g.status = 2;
     g.doneDate = todayISO();
     g.doneValue = val;
+}
+/* [GOA-S1] серверный протокол целей — ключ «ex» (§10.1), клиентская модель — exercise:
+   нормализация на границе. Чтение (init/reloadSilently): ex → exercise */
+function goalsAdopt(list) {
+    for (const g of (list || [])) {
+        if (g.exercise === undefined) g.exercise = g.ex !== undefined ? g.ex : null;
+        delete g.ex;
+    }
+}
+/* отправка (doSave): exercise → ex в поверхностной копии — G не мутируется
+   (между началом fetch и ответом рендер читает клиентскую модель) */
+function goalsToWire(g) {
+    const clone = {};
+    for (const k in g) clone[k] = g[k];
+    clone.goals = (g.goals || []).map(function (go) {
+        const w = {};
+        for (const k in go) w[k] = go[k];
+        if (w.exercise !== undefined) { w.ex = w.exercise; delete w.exercise; }
+        return w;
+    });
+    return clone;
 }
 
 /* конец календарного периода (§3): 'week'|'month'|'quarter', next=1 — следующий;
@@ -2514,39 +2543,40 @@ function goalEndShort(end) { return end ? end.slice(8, 10) + '.' + end.slice(5, 
 
 /* название цели для confirm/архива: «Жим лёжа — 100 кг» / «12 тренировок» */
 function goalNameFull(g) {
-    return g.type === 1 ? (g.exercise || '') + ' — ' + fmtW(g.target) + ' кг'
-        : fmtW(g.target) + ' ' + trainWord(g.target);
+    return g.type === 1 ? (g.exercise || '') + ' — ' + goalFmtRu(g.target) + ' кг'
+        : goalFmtRu(g.target) + ' ' + trainWord(g.target);
 }
 /* правая часть мета-строки карточки: «до 31.12 · осталось 4 кг» / «нужно ещё 4» (§8.2) */
 function goalLeftTxt(g) {
-    const left = Math.max(0, Math.ceil((g.target - goalCur(g)) * 10) / 10);
-    return g.type === 1 ? 'осталось ' + fmtW(left) + ' кг' : 'нужно ещё ' + Math.ceil(left);
+    const left = Math.max(0, Math.ceil((g.target - goalCur(g, true)) * 10) / 10);
+    return g.type === 1 ? 'осталось ' + goalFmtRu(left) + ' кг' : 'нужно ещё ' + Math.ceil(left);
 }
 function goalMetaRight(g) {
     const left = goalLeftTxt(g);
     return g.end ? 'до ' + goalEndShort(g.end) + ' · ' + left : left;
 }
 
-/* карточка активной цели (§8.2): бар — силовая (стиль .rec-bar), кольцо — частота */
+/* карточка активной цели (§8.2): бар — силовая (стиль .rec-bar), кольцо — частота.
+   Прогресс — по завершённым (согласован с карточкой «Оценка 1ПМ · Эпли») */
 function goalCardHtml(g) {
-    const pct = goalPct(g);
+    const pct = goalPct(g, true);
     let h = '<div class="gcard"><div class="gh">' +
         '<span class="gico">' + (g.type === 1 ? '🏋️' : '🔢') + '</span>' +
-        '<span class="gt"><b>' + esc(g.type === 1 ? (g.exercise || '') : fmtW(g.target) + ' ' + trainWord(g.target)) + '</b>' +
-        '<small>' + esc(g.type === 1 ? 'цель: e1RM ' + fmtW(g.target) + ' кг' : 'частота за период') + '</small></span>' +
+        '<span class="gt"><b>' + esc(g.type === 1 ? (g.exercise || '') : goalFmtRu(g.target) + ' ' + trainWord(g.target)) + '</b>' +
+        '<small>' + esc(g.type === 1 ? 'цель: e1RM ' + goalFmtRu(g.target) + ' кг' : 'частота за период') + '</small></span>' +
         '<span class="gtag">' + esc(g.type === 1 ? 'Силовая · e1RM' : 'Частота') + '</span></div>';
     if (g.type === 1) {
         h += '<div class="gb"><i style="width:' + pct + '%"></i></div>' +
-            '<div class="gmeta"><span><b>' + Math.round(goalCur(g)) + '</b> из ' + fmtW(g.target) + ' кг</span>' +
+            '<div class="gmeta"><span><b>' + Math.round(goalCur(g, true)) + '</b> из ' + goalFmtRu(g.target) + ' кг</span>' +
             '<span>' + esc(goalMetaRight(g)) + '</span></div>';
     } else {
-        const cur = Math.round(goalCur(g));
+        const cur = Math.round(goalCur(g, true));
         h += '<div class="grow2"><svg class="gring" viewBox="0 0 64 64" aria-hidden="true">' +
             '<circle class="bgc" cx="32" cy="32" r="26"></circle>' +
             (pct > 0 ? '<circle class="fgc" cx="32" cy="32" r="26" stroke-dasharray="' + (Math.round(pct * 1.634 * 10) / 10) + ' 163.4" transform="rotate(-90 32 32)"></circle>' : '') +
             '<text x="32" y="31">' + pct + '%</text>' +
-            '<text class="sub" x="32" y="43">' + cur + ' ИЗ ' + fmtW(g.target) + '</text></svg>' +
-            '<span class="rtxt"><span class="big">' + cur + ' <small>из ' + fmtW(g.target) + '</small></span>' +
+            '<text class="sub" x="32" y="43">' + cur + ' ИЗ ' + goalFmtRu(g.target) + '</text></svg>' +
+            '<span class="rtxt"><span class="big">' + cur + ' <small>из ' + goalFmtRu(g.target) + '</small></span>' +
             '<span class="sub">' + esc(goalMetaRight(g)) + '</span></span></div>';
     }
     h += '<div class="gact"><button class="btn sec" data-act="goalCancelAsk" data-a="' + g.id + '">Отменить цель</button></div></div>';
@@ -2559,9 +2589,9 @@ function goalArchRowHtml(g) {
     const d = g.doneDate ? g.doneDate.slice(8, 10) + '.' + g.doneDate.slice(5, 7) + '.' + g.doneDate.slice(2, 4) : '';
     let sub;
     if (g.type === 1) {
-        sub = (g.status === 3 ? 'не успел: ' : 'e1RM ') + (g.doneValue > 0 ? fmtW(g.doneValue) + ' кг' : '—');
+        sub = (g.status === 3 ? 'не успел: ' : 'e1RM ') + (g.doneValue > 0 ? goalFmtRu(g.doneValue) + ' кг' : '—');
     } else {
-        sub = (g.status === 3 ? 'не успел: ' : 'выполнено ') + Math.round(g.doneValue) + ' из ' + fmtW(g.target);
+        sub = (g.status === 3 ? 'не успел: ' : 'выполнено ') + Math.round(g.doneValue) + ' из ' + goalFmtRu(g.target);
     }
     sub += d ? ' · ' + d : '';
     return '<div class="garow' + (g.status === 3 ? ' missed' : '') + '">' +
@@ -2603,9 +2633,9 @@ function goalsWidgetHtml() {
         h += '<p class="tn gw-none">Цели не заданы — поставить первую можно в разделе «Цели».</p>';
     }
     for (const g of active.slice(0, 3)) {
-        const pct = goalPct(g);
-        const label = g.type === 1 ? (g.exercise || '') + ' — ' + fmtW(g.target) + ' кг'
-            : fmtW(g.target) + ' ' + trainWord(g.target) + (g.end ? ' до ' + goalEndShort(g.end) : '');
+        const pct = goalPct(g, true);
+        const label = g.type === 1 ? (g.exercise || '') + ' — ' + goalFmtRu(g.target) + ' кг'
+            : goalFmtRu(g.target) + ' ' + trainWord(g.target) + (g.end ? ' до ' + goalEndShort(g.end) : '');
         h += '<div class="wrow"><div class="wl"><b>' + esc(label) + '</b><span>' + pct + '%</span></div>' +
             '<div class="gb"><i style="width:' + pct + '%"></i></div></div>';
     }
@@ -2710,9 +2740,12 @@ function gwStepExHtml() {
     return '<div class="searchbox"><input id="gwQ" type="text" placeholder="Поиск упражнения..." value="' + esc(GW.q || '') + '"></div>' +
         '<div id="gwList">' + gwExListHtml() + '</div>';
 }
+/* e1RM упражнений истории — для списка мастера и подсказки §5 (дисплей: только
+   завершённые, согласовано с «Оценка 1ПМ · Эпли») */
 function gwHistoryE1rm() {
     const map = {};
     for (const w of G.workouts) {
+        if (!w.finished) continue;
         for (const e of w.exercises) {
             const m = workoutExMetrics(w, e.name.toLowerCase());
             if (m.bestE > 0 && m.bestE > (map[e.name] || 0)) map[e.name] = m.bestE;
@@ -2754,7 +2787,7 @@ function refreshGwList() {
    e1RM — предупреждение + чип +10% (§4.3) */
 function gwStepTargetHtml() {
     const isStr = GW.type === 1;
-    const e1 = isStr ? goalMaxE1rm(GW.ex) : 0;
+    const e1 = isStr ? goalMaxE1rm(GW.ex, true) : 0; /* дисплей: согласован с Эпли-карточкой */
     let h = '';
     if (isStr) {
         h += '<div class="gcard" style="padding:11px 12px"><div class="gh">' +
@@ -2808,7 +2841,7 @@ function gwStepDeadlineHtml() {
     h += '</div>';
     /* резюме: карточка «Проверьте цель» + строка стартового прогресса (§9) */
     const end = gwEndIso();
-    const cur = isStr ? goalMaxE1rm(GW.ex) : goalCountIn({ start: todayISO(), end: end });
+    const cur = isStr ? goalMaxE1rm(GW.ex, true) : goalCountIn({ start: todayISO(), end: end });
     const pct = GW.target > 0 ? Math.min(100, Math.round(cur / GW.target * 100)) : 0;
     const weeks = end ? Math.max(1, Math.round(goalDaysLeft(end) / 7)) : 0;
     const title = isStr
@@ -2830,13 +2863,15 @@ function gwEndIso() {
     if (!GW.period || GW.period === 'none') return null;
     return goalPeriodEnd(GW.period.replace('Next', ''), GW.period.slice(-4) === 'Next' ? 1 : 0);
 }
-/* шаг «Далее» по значению: валидация числа; силовая с целью ≤ текущего e1RM —
-   предупреждение на первый тап, повторный «Далее» принимается осознанно (§4.3) */
+/* шаг «Далее» по значению: силовая — число от 0,5 (шаг блинов) до 1000, частота — целое
+   от 1; силовая с целью ≤ текущего e1RM — предупреждение на первый тап, повторный
+   «Далее» принимается осознанно (§4.3) */
 function gwTargetNext() {
     const el = document.getElementById('gwTarget');
     const v = parseFloat(el ? String(el.value).trim().replace(',', '.') : '');
-    if (!(v > 0 && v <= 1000)) {
-        toast(GW.type === 1 ? 'Вес: число от 0,5 до 1000' : 'Число от 1 до 1000', true);
+    const okVal = GW.type === 1 ? (v >= 0.5 && v <= 1000) : (Number.isInteger(v) && v >= 1 && v <= 1000);
+    if (!okVal) {
+        toast(GW.type === 1 ? 'Вес: число от 0,5 до 1000' : 'Целое число от 1 до 1000', true);
         return;
     }
     GW.target = v;
@@ -3894,8 +3929,9 @@ async function saveEntry() {
         const old = e.sets[setIdx];
         e.sets[setIdx] = { w: weight, s: sets, r: reps, t: old ? (old.t || nowLocalISO()) : nowLocalISO() };
     }
-    /* закрытие достигнутых целей: правка задним числом (setIdx >= 0) не празднуется;
-       «проскочившая» по правкам история закрывается молча — doneValue честный (§4.3) */
+    /* закрытие достигнутых целей: ветка работает только для НОВОГО блока (setIdx < 0) —
+       при правке задним числом goalCands пуст и проверка не выполняется вовсе;
+       doneValue фиксируется честным подсчётом в момент события (§4.3) */
     let goalHit = null;
     goalCands.forEach(function (g, i) {
         const val = goalCur(g);
@@ -4551,6 +4587,7 @@ async function init() {
             if (!G.del) G.del = [];
             if (!G.templates) G.templates = [];
             if (!G.goals) G.goals = []; /* [GOA-S1] старый файл без ключа goals */
+            goalsAdopt(G.goals); /* [GOA-S1] протокол «ex» → клиентская модель exercise */
             if (G.nextId < 1) G.nextId = 1;
             /* id из tombstone-списка нельзя выдавать заново — иначе новая тренировка мгновенно «удалится» */
             for (const d of G.del) if (d >= G.nextId) G.nextId = d + 1;
