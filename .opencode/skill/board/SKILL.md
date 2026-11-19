@@ -33,6 +33,15 @@ description: Управление тикетами на доске GitHub Projec
    # далее gh gist edit по инструкциям docs/metrics.md, раздел «Дашборд»
    ```
 
+4) **После каждой партии правок доски** — аудит порядка:
+
+   ```powershell
+   node tools/board-audit.mjs
+   ```
+
+   Blocker'ы чинятся немедленно, до передачи работы дальше; правила —
+   «Гигиена доски и тикетов» в AGENTS.md.
+
 ## Правила движения (сводка)
 
 - Порядок: Todo → (In Design — только для `need_design`) → In Dev → Code Review →
