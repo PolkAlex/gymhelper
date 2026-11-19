@@ -5180,7 +5180,7 @@ function renderShareCard(w) {
             const brandW = measure('GymHelper', 15, '800', 0.3);
             txt('GymHelper', PX, y + 14, 15, '800', C.amber, 'left', 0.3);
             const d = parseDateISO(w.date);
-            const dateStr = d ? d.getDate() + ' ' + MONTHS_GEN[d.getMonth()] + ' · ' + DOW_FULL[(d.getDay() + 6) % 7] : String(w.date || '');
+            const dateStr = d ? d.getDate() + ' ' + MONTHS_GEN[d.getMonth()] + ' · ' + DOW_FULL[(d.getDay() + 6) % 7].toLowerCase() : String(w.date || '');
             let right = dateStr;
             if (G.shareName && tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
                 const nm = String(tg.initDataUnsafe.user.first_name || '').trim().slice(0, 60);
