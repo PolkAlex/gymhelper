@@ -2052,8 +2052,9 @@ function gridCanvasHtml(days, hourHeight, byDate, mode) {
     for (let hr = 1; hr < 24; hr++) h += '<span class="whr" style="top:' + (hr * hourHeight) + 'px">' + hr + '</span>';
     if (containsToday) h += '<i class="nowline" style="top:' + Math.round(nowMin / 60 * hourHeight) + 'px"></i>';
     /* блоки по дням [§3.3]: пустой ended → условно 1 час; активная в периоде с сегодня
-       тянется до линии «сейчас», в другом — старт+1ч; пересечения [§3.4]: дорожка ≥34px →
-       блок с текстом (День ≈150px, 3 дня ≈47px), <34px → полоса без текста (Неделя ≈20px) */
+       тянется до линии «сейчас», в другом — старт+1ч; дорожки [§3.4]: порог ≥34px —
+       блок с текстом (День ≈150px, 3 дня ≈47px), <34px — полоса .wbar (Неделя ≈20px;
+       и одиночные блоки узких колонок — Неделя 320px ≈33px, §10.8) */
     for (let c = 0; c < cols; c++) {
         const timed = [];
         for (const w of (byDate[days[c]] || [])) {
@@ -2128,9 +2129,13 @@ function geoCol(cols, col, k, track) {
     return { left: left + ')', width: width };
 }
 /* блок тренировки [§3.3]: время + название; высота ≥26px, <36px — название скрыто;
-   активная — контур (live). Время: в «Дне» диапазон «11:00–12:30» (активная «с 19:05»),
-   в узких видах — старт. Пересечения: дорожка <34px (withText=false) — полоса без
-   текста [§3.4]. Тексты: День — .wide (крупнее, clamp 2), 3 дня — .c2 (clamp 2) [§4, §5] */
+   активная — контур (live). Время: в «Дне» диапазон «11:00–12:30» (активная «с 19:05»;
+   конец clamp на полночь — 23:30 без ended даёт «23:30–24:00», не «24:30» [UX-T39]),
+   в узких видах — старт. Дорожка <34px (withText=false) — полоса .wbar без текста:
+   и пересечения [§3.4], и одиночные блоки узких колонок (Неделя 320px ≈33px — §10.8,
+   отложенное T1). .wbar — кнопка, как .wblk: клавиатура Enter/Space из коробки
+   (nit ревью T1/T2, [UX-T39]). Тексты: День — .wide (крупнее, clamp 2), 3 дня — .c2
+   (clamp 2) [§4, §5] */
 function gridBlockHtml(b, k, geo, hourHeight, withText, containsToday, mode) {
     const w = b.w;
     const top = Math.round(b.s / 60 * hourHeight);
@@ -2138,14 +2143,15 @@ function gridBlockHtml(b, k, geo, hourHeight, withText, containsToday, mode) {
     const d = parseDateISO(w.date);
     const dwName = d ? DOW_FULL[(d.getDay() + 6) % 7] : '';
     const startHM = hmOf(b.s);
+    const endHM = hmOf(Math.min(b.e, 24 * 60)); /* 1440 — полночь; 23:30+60мин не даёт «24:30» */
     const name = dayRowName(w);
     const liveNow = !w.finished && containsToday && w.date === todayISO();
-    if (k > 1 && !withText) {
-        return '<i class="wbar" style="left:' + geo.left + ';top:' + top + 'px;width:' + geo.width + ';height:' + hPx + 'px"' +
-            ' data-act="wkOpen" data-a="' + w.id + '" role="button" aria-label="' + escAttr(dwName + ', ' + startHM + ', ' + name) + '"></i>';
+    if (!withText) {
+        return '<button class="wbar" style="left:' + geo.left + ';top:' + top + 'px;width:' + geo.width + ';height:' + hPx + 'px"' +
+            ' data-act="wkOpen" data-a="' + w.id + '" aria-label="' + escAttr(dwName + ', ' + startHM + ', ' + name) + '"></button>';
     }
     const wide = mode === 'day';
-    const tm = wide ? (liveNow ? 'с ' + startHM : startHM + '–' + hmOf(b.e)) : (liveNow ? 'с ' + startHM : startHM);
+    const tm = wide ? (liveNow ? 'с ' + startHM : startHM + '–' + endHM) : (liveNow ? 'с ' + startHM : startHM);
     let inner = '<span class="bt">' + tm + '</span>';
     if (hPx >= 36) inner += '<span class="bn">' + esc(name) + '</span>';
     const aria = liveNow ? (dwName + ', с ' + startHM + ' идёт тренировка') : (dwName + ', ' + tm + ', ' + name);

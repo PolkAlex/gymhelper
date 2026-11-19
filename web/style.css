@@ -1789,7 +1789,9 @@ html.has-bg body::after {
 .wblk.wide .bt { font-size: 10.5px; }
 .wblk.wide .bn { font-size: 11.5px; -webkit-line-clamp: 2; }
 .wblk.c2 .bn { -webkit-line-clamp: 2; }
-/* полоса пересечения без текста (дорожка < 34px — Неделя) [§3.4] */
+/* полоса без текста — дорожка/колонка < 34px [§3.4]: пересечения и одиночные блоки
+   узких колонок (Неделя 320px, §10.8); кнопка со сбросом стилей, как .wblk —
+   фокус/Enter/Space из коробки [UX-T39] */
 .wbar {
     position: absolute;
     border-radius: 6px;
@@ -1798,6 +1800,9 @@ html.has-bg body::after {
     display: block;
     padding: 0;
     cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
     z-index: 3;
 }
 /* линия «сейчас»: 1.5px accent через сетку + точка на границе гуттера [§3.2] */
