@@ -33,7 +33,10 @@ public final class Stats {
         "maInit", "maInitNew", "maInitRepeat", "maInitReturn",
         "maSave", "workoutsCreated", "workoutsCompleted", "templatesCreated", "templatesUsed", "feedbackSent",
         "onboardingStarted", "onboardingCompleted", "onboardingTutorialSkipped",
-        "landingViews"
+        "landingViews",
+        /* [UX-I16] воронка шеринга ссылки (§7.3 спеки): create — POST /api/share,
+           copy/send — клиентские события через /api/track, view — GET /w/<shareId> 200 */
+        "linkCreate", "linkCopy", "linkSend", "linkView"
     };
     /* сколько последних недель (ISO) хранить в weeks */
     public static final int WEEKS_TO_KEEP = 26;

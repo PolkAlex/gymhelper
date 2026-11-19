@@ -1,5 +1,7 @@
 const { defineConfig, devices } = require('@playwright/test');
 
+const TEST_PORT = Number(process.env.GYM_TEST_PORT) || 8099;
+
 module.exports = defineConfig({
     testDir: 'tests',
     testMatch: 'e2e.spec.js',
@@ -8,12 +10,12 @@ module.exports = defineConfig({
     timeout: 30000,
     retries: 0,
     use: {
-        baseURL: 'http://127.0.0.1:8099',
+        baseURL: 'http://127.0.0.1:' + TEST_PORT,
         trace: 'retain-on-failure'
     },
     webServer: {
         command: 'node tests/server-test.js',
-        port: 8099,
+        port: TEST_PORT,
         reuseExistingServer: !process.env.CI,
         timeout: 15000
     },

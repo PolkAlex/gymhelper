@@ -5217,3 +5217,111 @@ test.describe('GOA-S1 цели', function () {
         await expect(page.locator('.garow', { hasText: EXG })).toHaveCount(0);
     });
 });
+
+/* ============ [UX-I16] шейринг тренировки по ссылке ============ */
+test.describe('[UX-I16] шейринг по ссылке', function () {
+
+    test('шит «Картинка/Телеграм» → буфер → выбор чата → тост; повтор даёт ту же ссылку', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        /* мок Telegram WebApp: telegram-web-app.js (загружается из index.html) ЗАМЕНЯЕТ
+           window.Telegram.WebApp после init-скриптов — переустанавливаем openTelegramLink
+           на том же объекте интервалом, пока app.js не снимет копию (tg = const) */
+        await context.addInitScript(function () {
+            let tries = 0;
+            const t = setInterval(function () {
+                tries++;
+                const w = window.Telegram || (window.Telegram = {});
+                const app = w.WebApp;
+                if (app && !app.__mocked) {
+                    app.__mocked = true;
+                    app.__opened = [];
+                    app.openTelegramLink = function (url) { app.__opened.push(url); };
+                }
+                if ((app && app.__mocked) || tries > 40) clearInterval(t);
+            }, 25);
+        });
+        await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        /* у активной/пустой тренировки кнопки нет; у завершённой — в теле карточки */
+        await page.locator('.pcard').first().click();
+        const shareBtn = page.locator('[data-act="shareSheet"]');
+        await expect(shareBtn).toBeVisible({ timeout: 5000 });
+        await shareBtn.click();
+        const modal = page.locator('.modal.open');
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        /* «Картинка» — постер [UX-I14] приедет позже: строка показывается, но disabled с «скоро» */
+        const imgRow = modal.locator('.shrow', { hasText: 'Картинка' });
+        await expect(imgRow).toBeDisabled();
+        await expect(imgRow).toContainText('скоро');
+        /* тап «Телеграм»: шит закрывается → prepare ссылки → буфер → выбор чата
+           (на localhost prepare мгновенный, busy-состояние кнопки не ловим ассертом) */
+        await modal.locator('.shrow.tg').click();
+        await expect(modal).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.toast.show')).toContainText('Ссылка скопирована', { timeout: 5000 });
+        const url = await page.evaluate(function () { return navigator.clipboard.readText(); });
+        expect(url).toMatch(/\/w\/[0-9a-zA-Z]{22}$/);
+        const opened = await page.evaluate(function () { return window.Telegram.WebApp.__opened; });
+        expect(opened.length).toBe(1);
+        expect(opened[0]).toBe('https://t.me/share/url?url=' + encodeURIComponent(url));
+        /* клиентские счётчики воронки доезжают через /api/track */
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('linkCopy');
+        expect(ev).toContain('linkSend');
+        /* после возврата из выбора чата кнопка разблокирована */
+        await expect(shareBtn).toBeEnabled();
+        /* повторный шеринг той же тренировки — тот же shareId (§4.2) */
+        await shareBtn.click();
+        await page.locator('.modal.open .shrow.tg').click();
+        await expect(page.locator('.toast.show')).toContainText('Ссылка скопирована', { timeout: 5000 });
+        const url2 = await page.evaluate(function () { return navigator.clipboard.readText(); });
+        expect(url2).toBe(url);
+    });
+
+    test('страница /w/<id> рендерится, мусорный id — 404 «Тренировка недоступна»', async ({ request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        const r = await request.post('/api/share', { data: { wid: 1 } });
+        expect(r.ok()).toBeTruthy();
+        const j = await r.json();
+        expect(j.ok).toBe(true);
+        expect(j.shareId).toMatch(/^[0-9a-zA-Z]{22}$/);
+        const ok = await request.get('/w/' + j.shareId);
+        expect(ok.status()).toBe(200);
+        const html = await ok.text();
+        expect(html).toContain('og:title');
+        expect(html).toContain('только просмотр');
+        expect(html).toContain(EX);
+        expect(html).toContain('Попробовать в Telegram');
+        const bad = await request.get('/w/garbage0123456789abcdefghij');
+        expect(bad.status()).toBe(404);
+        expect(await bad.text()).toContain('Тренировка недоступна');
+    });
+
+    test('нет сети — тост об ошибке, без «Ссылка скопирована»', async ({ page, request }) => {
+        test.setTimeout(60000);
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.context().setOffline(true);
+        await page.locator('.modal.open .shrow.tg').click();
+        await expect(page.locator('.toast.show')).toContainText('Нет связи', { timeout: 5000 });
+        await page.context().setOffline(false);
+        /* кнопка разблокирована — ретрай легален */
+        await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).not.toContain('linkCopy');
+    });
+});

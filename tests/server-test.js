@@ -1,6 +1,7 @@
 'use strict';
 /* Тестовый сервер: отдаёт web/ и заглушку API (без проверки Telegram-подписи). Порт 8099. */
 const http = require('http');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -35,6 +36,61 @@ function sendJson(res, code, obj) {
     res.end(JSON.stringify(obj));
 }
 
+/* [UX-I16] хелперы мок-страницы /w/<shareId> */
+function newShareId() {
+    const abc = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const bytes = crypto.randomBytes(22);
+    let s = '';
+    for (let i = 0; i < 22; i++) s += abc[bytes[i] % abc.length];
+    return s;
+}
+function escHtml(s) {
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function shareDate(iso) {
+    const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+    return m ? (+m[3]) + ' ' + MONTHS[+m[2] - 1] : String(iso || '');
+}
+function shareWorkoutHtml(store, w) {
+    let vol = 0, reps = 0;
+    for (const e of (w.exercises || [])) for (const s of (e.sets || [])) {
+        vol += (parseFloat(String(s.w).replace(',', '.')) || 0) * (+s.s || 0) * 8;
+        reps += (+s.s || 0) * 8;
+    }
+    const hero = vol > 0 ? vol : reps;
+    const title = 'Тренировка · ' + shareDate(w.date) + (store.shareName && store.shareOwner ? ' · ' + store.shareOwner : '');
+    let exHtml = '';
+    for (const e of (w.exercises || [])) {
+        exHtml += '<div class="expill"><div class="exhead"><span class="ic">🏋️</span><span class="en">' + escHtml(e.name) + '</span></div>';
+        for (const s of (e.sets || [])) {
+            const wt = parseFloat(String(s.w).replace(',', '.')) || 0;
+            exHtml += '<div class="entry"><span class="rt">' + (wt > 0 ? escHtml(s.w) + ' кг × ' : '') + (+s.s || 0) + '×' + escHtml(s.r) + '</span></div>';
+        }
+        exHtml += '</div>';
+    }
+    return '<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n' +
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n' +
+        '<meta name="robots" content="noindex, nofollow">\n<title>' + escHtml(title) + '</title>\n' +
+        '<meta property="og:title" content="' + escHtml(title) + '">\n' +
+        '<meta property="og:description" content="Открытая карточка тренировки — GymHelper, дневник тренировок в Telegram">\n' +
+        '<meta property="og:site_name" content="GymHelper">\n</head>\n<body>\n' +
+        '<div class="wp"><div class="wp-brand"><b>GymHelper</b><span class="ro">👁 только просмотр</span></div>' +
+        '<div class="wp-body"><div class="glass glow"><p class="wdate">' + escHtml(shareDate(w.date)) + '</p>' +
+        '<div class="hero-num">' + hero + '</div></div>' +
+        '<div class="glass">' + exHtml + '</div>' +
+        '<p class="privline">🔒 Карточка видна только по этой ссылке — без входа и без имени.</p>' +
+        '</div><div class="cta"><a class="btn" href="https://t.me/GymHelper_bot/app">🏋️ Попробовать в Telegram</a></div>' +
+        '</div>\n</body>\n</html>';
+}
+function share404Html() {
+    return '<!doctype html>\n<html lang="ru">\n<head>\n<meta charset="utf-8">\n' +
+        '<meta name="robots" content="noindex, nofollow">\n<title>Тренировка недоступна</title>\n</head>\n<body>\n' +
+        '<div class="wp"><div class="na-card"><h2>Тренировка недоступна</h2>' +
+        '<p>Ссылка устарела, или владелец удалил тренировку и закрыл доступ.</p></div></div>\n</body>\n</html>';
+}
+
 http.createServer(function (req, res) {
     /* [UX-I17 T1] предохранители прогонов: падение обработчика (гонка existsSync/statSync,
        запись в прерванное клиентом соединение) раньше убивало процесс — и весь остаток
@@ -49,8 +105,8 @@ http.createServer(function (req, res) {
             res.end('server error');
         } catch (e2) { /* socket уже мёртв */ }
     }
-}).listen(8099, '127.0.0.1', function () {
-    console.log('test server: http://127.0.0.1:8099');
+}).listen(Number(process.env.GYM_TEST_PORT) || 8099, '127.0.0.1', function () {
+    console.log('test server: http://127.0.0.1:' + (Number(process.env.GYM_TEST_PORT) || 8099));
 });
 /* последнее средство: непойманное исключение в async-колбэке (например, JSON.parse вне
    try в будущих правках) не должно ронять сервер посреди прогона */
@@ -102,6 +158,46 @@ function handle(req, res) {
     }
     if (req.method === 'POST' && url === '/api/init') {
         sendJson(res, 200, { ok: true, userId: 1, rev: store.rev, botUsername: 'GymHelper_bot', data: store });
+        return;
+    }
+    /* [UX-I16] мок /api/share: shareId создаётся лениво на завершённой тренировке,
+       повторный вызов возвращает тот же (§4.2). Прод: WebServer.handleShare */
+    if (req.method === 'POST' && url === '/api/share') {
+        let body = '';
+        req.on('data', function (ch) { body += ch; });
+        req.on('end', function () {
+            try {
+                const j = JSON.parse(body);
+                const w = (store.workouts || []).find(function (x) { return x.id === j.wid; });
+                if (!w) { sendJson(res, 404, { ok: false }); return; }
+                if (!w.finished) { sendJson(res, 400, { ok: false }); return; }
+                if (typeof j.shareName === 'boolean') {
+                    store.shareName = j.shareName;
+                    if (!j.shareName) store.shareOwner = null;
+                }
+                /* имя в проде сервер берёт сам из проверенного initData (user.first_name);
+                   в e2e initData пуст → shareOwner не заполняется (аноним) */
+                if (!w.shareId) w.shareId = newShareId();
+                sendJson(res, 200, { ok: true, shareId: w.shareId, url: 'http://' + (req.headers.host || '127.0.0.1:8099') + '/w/' + w.shareId });
+            } catch (e) {
+                sendJson(res, 400, { ok: false });
+            }
+        });
+        return;
+    }
+    /* [UX-I16] мок GET /w/<shareId>: структура зеркалит Java-страницу SharePage
+       (og-теги, noindex, состав §6) — контракт рендера проверяет GymContractTest */
+    if (req.method === 'GET' && url.startsWith('/w/')) {
+        const sid = url.slice(3);
+        const w = (store.workouts || []).find(function (x) { return x.finished && x.shareId === sid; });
+        const headers = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' };
+        if (!w) {
+            res.writeHead(404, headers);
+            res.end(share404Html());
+            return;
+        }
+        res.writeHead(200, headers);
+        res.end(shareWorkoutHtml(store, w));
         return;
     }
     if (req.method === 'POST' && url === '/api/save') {
