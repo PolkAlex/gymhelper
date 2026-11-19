@@ -1654,7 +1654,8 @@ html.has-bg body::after {
 
 /* ============ [UX-I17] мультивидовый календарь: пикер вида + сеточный движок ============
    источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 3; T1 —
-   вид «Неделя» (7 колонок, высота часа 44px), День/3 дня/Год — TODO(T2)/TODO(T3) */
+   состояние/пикер/Неделя (7 колонок, высота часа 44px); T2 — День (1 колонка, 56px)
+   и 3 дня (3 колонки, 48px) на том же движке; Год — TODO(T3) */
 
 /* полоса дней: 7 ячеек Пн–Вс; капсула окна winpill — во всех сеточных видах [§2.4, §12.7] */
 .wk-days { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 9px; }
@@ -1782,6 +1783,12 @@ html.has-bg body::after {
 }
 /* активная (незавершённая) — контур [§3.3] */
 .wblk.live { background: transparent; border: 1.5px solid var(--accent); }
+/* [T2 §3.3/§4] просторные блоки вида «День»: диапазон времени + название крупнее
+   (макет, экран 3); «3 дня» — название в 2 строки [§5] */
+.wblk.wide { padding: 5px 8px; border-radius: 10px; }
+.wblk.wide .bt { font-size: 10.5px; }
+.wblk.wide .bn { font-size: 11.5px; -webkit-line-clamp: 2; }
+.wblk.c2 .bn { -webkit-line-clamp: 2; }
 /* полоса пересечения без текста (дорожка < 34px — Неделя) [§3.4] */
 .wbar {
     position: absolute;
@@ -1849,6 +1856,11 @@ html.has-bg body::after {
     letter-spacing: .3px;
     white-space: nowrap;
 }
+/* [T2 §3.5] вид «День»: полоса «без времени» одной колонкой — капсула крупнее и слева
+   (макет, экран 6) */
+.wk-allday.one { grid-template-columns: 30px 1fr; }
+.wk-ad.one { justify-content: flex-start; }
+.wk-ad.one .adpill { font-size: 11px; padding: 4px 12px; }
 /* [§10.8] на 320px подпись гуттера скрывается */
 @media (max-width: 359px) { .wk-adlab { display: none; } }
 

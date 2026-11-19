@@ -42,11 +42,13 @@ let GW = null;
 /* [UX-S6] фиксированные пределы листания месяцев (от данных не зависят) [§7.1] */
 const MIN_MONTH = '2020-01';
 const MAX_MONTH = '2030-12';
-/* [UX-I17] пределы листания дат (аналог MIN_MONTH/MAX_MONTH) [§2.3]; высота часа Недели
-   44px [§2.2, решение владельца §12.4] — День=56/3 дня=48 на том же движке, TODO(T2) */
+/* [UX-I17] пределы листания дат (аналог MIN_MONTH/MAX_MONTH) [§2.3]; высота часа сеточных
+   видов [§2.2, решение владельца §12.4]: Неделя=44 (T1), День=56, 3 дня=48 (T2, один движок) */
 const MIN_DATE = '2020-01-01';
 const MAX_DATE = '2030-12-31';
 const WK_HOUR = 44;
+const DAY_HOUR = 56;
+const D3_HOUR = 48;
 /* [UX-I17] scrollTop сеточного вида: запоминается при уходе в карточку (тап по блоку),
    восстанавливается при возврате «← Назад» — тот же вид/период/позиция [§3.2] */
 let wkScroll = { key: '', top: 0 };
@@ -1056,13 +1058,13 @@ const ACTIONS = {
         window.scrollTo(0, 0);
         render();
     },
-    /* [UX-I17 §2.2/§2.3] стрелки по видам: Месяц — ±1 месяц, Неделя — ±7 дней
-       (TODO(T2): День ±1, 3 дня ±3 — тот же роутер) */
+    /* [UX-I17 §2.2/§2.3] стрелки по видам: Месяц — ±1 месяц; День ±1, 3 дня ±3,
+       Неделя ±7 дней (шаг = ширине окна сеточного вида) */
     calPrev: function () {
-        if (CAL.view === 'month') calShiftMonth(-1); else calShiftDays(-7);
+        if (CAL.view === 'month') calShiftMonth(-1); else calShiftDays(-gridStep());
     },
     calNext: function () {
-        if (CAL.view === 'month') calShiftMonth(1); else calShiftDays(7);
+        if (CAL.view === 'month') calShiftMonth(1); else calShiftDays(gridStep());
     },
     /* [UX-I17 §2.3/§9.2] «Сегодня» (пилюля в потоке месяца + плавающая сеточных видов):
        date = сегодня; панель дня месяца закрывается (как sel=null в S6) */
@@ -1087,26 +1089,27 @@ const ACTIONS = {
     /* [UX-I17 §2.5/§9.1] пикер вида — нижний лист; тап по фону закрывает (modalBackdrop) */
     openCalPicker: function () { openModal(calPickerHtml()); },
     calSetView: function (a) {
-        /* [UX-I17 §9.1] смена вида с сохранением даты, запись gymCalView; Неделя/Месяц
-           реализованы в T1, День/3 дня/Год — TODO(T2)/TODO(T3) (пункты листа отключены) */
-        if (a !== 'week' && a !== 'month') return;
+        /* [UX-I17 §9.1] смена вида с сохранением даты, запись gymCalView; День/3 дня/
+           Неделя/Месяц реализованы (T1/T2), Год — TODO(T3): пункт листа отключён, прочие
+           значения игнорируются (роутер покажет Неделю — безопасный fallback §10.10) */
+        if (a !== 'day' && a !== 'd3' && a !== 'week' && a !== 'month') return;
         if (CAL.view !== a) { CAL.view = a; calSaveState(); }
         closeModal();
         render();
     },
     /* [UX-I17 §2.3/§2.4] тап по дню полосы дней: date = этот день (в «Неделе» окно — та же
-       неделя, меняется только якорь-обводка); листание ограничено clamp'ом */
+       неделя, меняется только якорь-обводка; в «3 дня» окно перестраивается от этого дня;
+       в «Дне» день меняется); листание ограничено clamp'ом */
     wkDay: function (a) {
         if (!dateValidISO(a)) return;
         CAL.date = calClampDate(a);
         calSaveState();
         render();
     },
-    /* [UX-I17 §3.2/§3.6] тап по блоку/капсуле сеточного вида → карточка тренировки;
-       scrollTop периода запоминается — «← Назад» вернёт в ту же позицию */
+    /* [UX-I17 §3.6] тап по блоку/капсуле сеточного вида → карточка тренировки; снимок
+       scrollTop делает calGridScrollPre в render() ДО перестройки DOM — «← Назад» вернёт
+       в ту же позицию [§3.2] */
     wkOpen: function (a) {
-        const el = document.getElementById('wkScroll');
-        if (el) wkScroll.top = el.scrollTop;
         ACTIONS.openHistory(a);
     },
     openHistory: function (a) {
@@ -1657,7 +1660,7 @@ function calShiftMonth(dir) {
     calSaveState();
     render();
 }
-/* стрелки сеточных видов [§2.2/§2.3]: Неделя ±7 дней (TODO(T2): День ±1, 3 дня ±3);
+/* стрелки сеточных видов [§2.2/§2.3]: День ±1, 3 дня ±3, Неделя ±7 (шаг даёт ACTION);
    на границе [MIN_DATE, MAX_DATE] — стрелка disabled, защиты мало не бывает */
 function calShiftDays(dir) {
     const t = calClampDate(addDaysISO(CAL.date, dir));
@@ -1712,12 +1715,12 @@ function dayRowExList(w) {
     if (!exs.length) return 'Без упражнений';
     return exs.slice(0, 4).map(e => e.name).join(', ');
 }
-/* [UX-I17] роутер видов [§2.2]: Неделя — сеточный движок [§6], Месяц — существующий рендер
-   S6 от даты [§7]. День/3 дня/Год — TODO(T2)/TODO(T3): до их реализации любой прочий вид
-   рендерится как Неделя (безопасный fallback, §10.10) */
+/* [UX-I17] роутер видов [§2.2]: День/3 дня/Неделя — сеточный движок [§3–§6], Месяц —
+   существующий рендер S6 от даты [§7]. Год — TODO(T3): любой прочий вид рендерится
+   как Неделя (безопасный fallback, §10.10) */
 function renderCalendar() {
     if (CAL.view === 'month') return renderMonth();
-    return renderWeek();
+    return renderGrid();
 }
 function renderMonth() {
     const byDate = workoutsByDate();
@@ -1802,7 +1805,7 @@ function renderMonth() {
     return h;
 }
 
-/* ---------- [UX-I17] пикер вида и сеточные виды (T1: Неделя) ---------- */
+/* ---------- [UX-I17] пикер вида и сеточные виды (T1: Неделя; T2: День/3 дня) ---------- */
 /* иконки — локальные SVG: ICONS живёт в catalog.js, его не трогаем [§2.5] */
 const CAL_CHEV_L = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg>';
 const CAL_CHEV_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg>';
@@ -1861,12 +1864,11 @@ function rangeTitle(days) {
 }
 /* пикер вида — нижний лист «Вид календаря»: 5 пунктов, у текущего янтарная иконка +
    точка-отметка; крестика нет (дубль действий), фон закрывает (modalBackdrop) [§2.5, §9.1].
-   T1: реализованы Неделя/Месяц — День/3 дня/Год показаны отключёнными («скоро»),
-   выбор пока не активирует вид (TODO(T2): День/3 дня, TODO(T3): Год) */
+   T2: День/3 дня/Неделя/Месяц активны; Год — TODO(T3), показан отключённым («скоро») */
 function calPickerHtml() {
     const items = [
-        { v: 'day', label: 'День', todo: 'T2' },
-        { v: 'd3', label: '3 дня', todo: 'T2' },
+        { v: 'day', label: 'День' },
+        { v: 'd3', label: '3 дня' },
         { v: 'week', label: 'Неделя' },
         { v: 'month', label: 'Месяц' },
         { v: 'year', label: 'Год', todo: 'T3' }
@@ -1887,40 +1889,83 @@ function calPickerHtml() {
     h += '</div>';
     return h;
 }
-/* ---------- [UX-I17] вид «Неделя» [§6]: 7 колонок, высота часа 44px ---------- */
-function renderWeek() {
-    const days = weekDaysOf(CAL.date);
+/* ---------- [UX-I17] сеточные виды «День»/«3 дня»/«Неделя» — один движок [§2.2, §3] ----------
+   T2: вид берётся из CAL.view, всё остальное — параметры движка: колонки (1/3/7), высота
+   часа (56/48/44), шаг стрелок (±1/±3/±7), заголовок, капсула окна, пилюля «Сегодня» */
+/* колонки периода по виду [§2.2]: День = [date], 3 дня = окно [date, +1, +2], Неделя = Пн–Вс */
+function gridDaysOf(iso) {
+    if (CAL.view === 'day') return [iso];
+    if (CAL.view === 'd3') return [iso, addDaysISO(iso, 1), addDaysISO(iso, 2)];
+    return weekDaysOf(iso);
+}
+/* высота часа по виду [§2.2, решение владельца §12.4] */
+function gridHour() {
+    if (CAL.view === 'day') return DAY_HOUR;
+    if (CAL.view === 'd3') return D3_HOUR;
+    return WK_HOUR;
+}
+/* шаг стрелок = ширине окна [§2.2]: ±1 / ±3 / ±7 */
+function gridStep() {
+    if (CAL.view === 'day') return 1;
+    if (CAL.view === 'd3') return 3;
+    return 7;
+}
+function renderGrid() {
+    const mode = (CAL.view === 'day' || CAL.view === 'd3') ? CAL.view : 'week';
+    const days = gridDaysOf(CAL.date);
+    const hour = gridHour();
     const byDate = workoutsByDate();
+    const todayIso = todayISO();
     let h = '<div class="card cal">';
-    /* строка периода: ‹ заголовок › — ±7 дней, на границе dim + disabled [§2.2, §2.3] */
-    const atMin = calClampDate(addDaysISO(CAL.date, -7)) === CAL.date;
-    const atMax = calClampDate(addDaysISO(CAL.date, 7)) === CAL.date;
+    /* строка периода: ‹ заголовок › — шаг ±1/±3/±7, на границе dim + disabled [§2.2, §2.3] */
+    const step = gridStep();
+    const atMin = calClampDate(addDaysISO(CAL.date, -step)) === CAL.date;
+    const atMax = calClampDate(addDaysISO(CAL.date, step)) === CAL.date;
+    const prevTitle = mode === 'day' ? 'Предыдущий день' : (mode === 'd3' ? 'Предыдущее окно' : 'Предыдущая неделя');
+    const nextTitle = mode === 'day' ? 'Следующий день' : (mode === 'd3' ? 'Следующее окно' : 'Следующая неделя');
+    /* заголовок: День — «Суббота, 21 ноября», 3 дня/Неделя — «19–21 ноября» [§2.2] */
+    let title;
+    if (mode === 'day') {
+        const d = parseDateISO(CAL.date);
+        title = DOW_FULL[(d.getDay() + 6) % 7] + ', ' + d.getDate() + ' ' + MONTHS_GEN[d.getMonth()];
+    } else {
+        title = rangeTitle(days);
+    }
     h += '<div class="cal-nav">' +
-        '<button class="cal-navbtn' + (atMin ? ' dim' : '') + '" data-act="calPrev" title="Предыдущая неделя" aria-label="Предыдущая неделя"' + (atMin ? ' disabled aria-disabled="true"' : '') + '>' + CAL_CHEV_L + '</button>' +
-        '<div class="cal-title">' + rangeTitle(days) + '</div>' +
-        '<button class="cal-navbtn' + (atMax ? ' dim' : '') + '" data-act="calNext" title="Следующая неделя" aria-label="Следующая неделя"' + (atMax ? ' disabled aria-disabled="true"' : '') + '>' + CAL_CHEV_R + '</button>' +
+        '<button class="cal-navbtn' + (atMin ? ' dim' : '') + '" data-act="calPrev" title="' + prevTitle + '" aria-label="' + prevTitle + '"' + (atMin ? ' disabled aria-disabled="true"' : '') + '>' + CAL_CHEV_L + '</button>' +
+        '<div class="cal-title">' + title + '</div>' +
+        '<button class="cal-navbtn' + (atMax ? ' dim' : '') + '" data-act="calNext" title="' + nextTitle + '" aria-label="' + nextTitle + '"' + (atMax ? ' disabled aria-disabled="true"' : '') + '>' + CAL_CHEV_R + '</button>' +
         '</div>';
-    /* полоса дней Пн–Вс + капсула окна (вся полоса, 7/7 — решение владельца §12.7) */
-    h += dayStripHtml(days);
+    /* полоса дней Пн–Вс недели якоря + капсула окна (1/3/7 ячейки — решение владельца §12.7) */
+    h += dayStripHtml(mode);
     /* полоса «без времени» — только при наличии таких тренировок [§3.5] */
-    h += alldayHtml(days, byDate);
-    /* скролл-сетка 24 × 44px: блоки/дорожки/линия «сейчас» [§3.2–3.4] */
-    h += gridCanvasHtml(days, 7, WK_HOUR, byDate);
+    h += alldayHtml(days, byDate, mode);
+    /* скролл-сетка 24 × hour: блоки/дорожки/линия «сейчас» [§3.2–3.4] */
+    h += gridCanvasHtml(days, hour, byDate, mode);
     h += '</div>';
-    /* плавающая пилюля «Сегодня» — неделя ≠ текущая [§9.2, решение владельца §12.3] */
-    if (days[0] !== mondayOfISO(todayISO())) {
+    /* плавающая пилюля «Сегодня» — период не содержит сегодня [§9.2, решение владельца §12.3]:
+       День — date ≠ сегодня, 3 дня — окно не содержит, Неделя — неделя не текущая */
+    if (days.indexOf(todayIso) === -1) {
         /* [UX-T36] raised — календарь поверх открытой карточки техники: панель отдыха
            поднята (.restbar.raised), пилюля поднимается вместе с ней */
         h += '<button class="todayfab' + (restRaised() ? ' raised' : '') + '" data-act="calToday" aria-label="Вернуться к сегодняшнему дню">Сегодня</button>';
     }
     return h;
 }
-/* полоса дней: 7 ячеек Пн–Вс недели якоря (не скроллится) [§2.4]; сегодня — glow-круг,
-   якорь (CAL.date) — обводка; капсула окна winpill — во всех сеточных видах [§12.7] */
-function dayStripHtml(days) {
+/* полоса дней: всегда 7 ячеек Пн–Вс недели якоря (не скроллится) [§2.4]; сегодня — glow-круг,
+   якорь (CAL.date) — обводка; капсула окна winpill — во всех сеточных видах [§12.7]:
+   День — ячейка выбранного дня, 3 дня — окно (видимая часть недели, капсула не вылезает
+   за полосу), Неделя — вся полоса; позиция left/width кратно 1/7 [§2.4] */
+function winPct(cells) { return (cells * 100 / 7).toFixed(3).replace(/\.?0+$/, '') + '%'; }
+function dayStripHtml(mode) {
+    const days = weekDaysOf(CAL.date);
     const todayIso = todayISO();
+    const startIdx = (parseDateISO(CAL.date).getDay() + 6) % 7;
+    let pillLeft = 0, pillW = 7;
+    if (mode === 'day') { pillLeft = startIdx; pillW = 1; }
+    else if (mode === 'd3') { pillLeft = startIdx; pillW = Math.min(3, 7 - startIdx); }
     let h = '<div class="wk-days">';
-    h += '<i class="winpill" style="left:0;width:100%" aria-hidden="true"></i>';
+    h += '<i class="winpill" style="left:' + winPct(pillLeft) + ';width:' + winPct(pillW) + '" aria-hidden="true"></i>';
     for (let i = 0; i < days.length; i++) {
         const iso = days[i];
         const d = parseDateISO(iso);
@@ -1933,40 +1978,55 @@ function dayStripHtml(days) {
     return h;
 }
 /* аллдей-полоса: тренировки периода с пустым/битым started — капсулы по дням,
-   тап → карточка; рендерится только при наличии [§3.5] */
-function alldayHtml(days, byDate) {
+   тап → карточка; рендерится только при наличии [§3.5]. Сетка недельных видов —
+   7 колонок (выравнивание с полосой дней), капсулы только в днях периода («3 дня» —
+   окно); в «Дне» — one: одна колонка, капсула крупнее и слева (макет, экран 6) */
+function alldayHtml(days, byDate, mode) {
+    const pill = function (w) {
+        return '<button class="adpill" data-act="wkOpen" data-a="' + w.id + '">' + esc(dayRowName(w)) + '</button>';
+    };
+    const noTime = function (w) { return minutesOf(w.started) == null; };
+    if (mode === 'day') {
+        const list = (byDate[days[0]] || []).filter(noTime);
+        if (!list.length) return '';
+        return '<div class="wk-allday one"><span class="wk-adlab">без времени</span>' +
+            '<span class="wk-ad one">' + list.map(pill).join('') + '</span></div>';
+    }
+    const inPeriod = {};
+    for (const iso of days) inPeriod[iso] = true;
     const cells = [];
     let any = false;
-    for (const iso of days) {
-        const list = (byDate[iso] || []).filter(function (w) { return minutesOf(w.started) == null; });
+    for (const iso of weekDaysOf(CAL.date)) {
+        const list = inPeriod[iso] ? (byDate[iso] || []).filter(noTime) : [];
         cells.push(list);
         if (list.length) any = true;
     }
     if (!any) return '';
     let h = '<div class="wk-allday"><span class="wk-adlab">без времени</span>';
     for (const list of cells) {
-        h += '<span class="wk-ad">' + list.map(function (w) {
-            return '<button class="adpill" data-act="wkOpen" data-a="' + w.id + '">' + esc(dayRowName(w)) + '</button>';
-        }).join('') + '</span>';
+        h += '<span class="wk-ad">' + list.map(pill).join('') + '</span>';
     }
     h += '</div>';
     return h;
 }
 /* скролл-сетка: гуттер 30px с метками 0–23, канвас 24×hourHeight с часовыми линиями
    (repeating-gradient), линия «сейчас» — только если период содержит сегодня [§3.2] */
-function gridCanvasHtml(days, cols, hourHeight, byDate) {
+function gridCanvasHtml(days, hourHeight, byDate, mode) {
     const todayIso = todayISO();
     const containsToday = days.indexOf(todayIso) !== -1;
     const nowMin = containsToday ? nowMinutes() : 0;
+    const cols = days.length;
+    /* номинал ширины колонки — для порога дорожек «≥34px → с текстом» [§3.4] */
+    const colW = (gridInnerWidth() - 2 * cols) / cols;
     let h = '<div class="wk-scroll" id="wkScroll"><div class="wk-inner" style="height:' + (24 * hourHeight) + 'px;' +
         'background-image:repeating-linear-gradient(to bottom, var(--nested-brd) 0 1px, transparent 1px ' + hourHeight + 'px)">';
     h += '<span class="whr first" style="top:2px">0</span>';
     for (let hr = 1; hr < 24; hr++) h += '<span class="whr" style="top:' + (hr * hourHeight) + 'px">' + hr + '</span>';
     if (containsToday) h += '<i class="nowline" style="top:' + Math.round(nowMin / 60 * hourHeight) + 'px"></i>';
     /* блоки по дням [§3.3]: пустой ended → условно 1 час; активная в периоде с сегодня
-       тянется до линии «сейчас», в другом — старт+1ч; пересечения [§3.4] — в Неделе
-       дорожки ≈20px < 34px → полосы без текста */
-    for (let c = 0; c < days.length; c++) {
+       тянется до линии «сейчас», в другом — старт+1ч; пересечения [§3.4]: дорожка ≥34px →
+       блок с текстом (День ≈150px, 3 дня ≈47px), <34px → полоса без текста (Неделя ≈20px) */
+    for (let c = 0; c < cols; c++) {
         const timed = [];
         for (const w of (byDate[days[c]] || [])) {
             const s = minutesOf(w.started);
@@ -1978,13 +2038,24 @@ function gridCanvasHtml(days, cols, hourHeight, byDate) {
         }
         timed.sort(function (a, b) { return a.s - b.s || a.w.id - b.w.id; });
         for (const cl of layoutDay(timed)) {
+            const withText = (colW - 2 * (cl.k - 1)) / cl.k >= 34;
             for (const b of cl.members) {
-                h += gridBlockHtml(b, cl.k, geoCol(cols, c, cl.k, b.track), hourHeight, true, containsToday);
+                h += gridBlockHtml(b, cl.k, geoCol(cols, c, cl.k, b.track), hourHeight, withText, containsToday, mode);
             }
         }
     }
     h += '</div></div>';
     return h;
+}
+/* номинальная ширина сетки (внутренний канвас без гуттера) для порога §3.4: ширина
+   .wk-scroll прошлого рендера (DOM ещё жив при построении строки) либо оценка от #app
+   в первый раз; на десктопе #app ограничен 560px — дорожки Недели честно получают текст */
+function gridInnerWidth() {
+    const el = document.querySelector('.wk-scroll');
+    if (el && el.clientWidth > 40) return el.clientWidth - 30; /* минус margin-left гуттера */
+    const app = document.getElementById('app');
+    const w = (app && app.clientWidth > 40) ? app.clientWidth : 390;
+    return Math.max(200, w - 24 - 2 - 30); /* 24 — паддинг .cal, 2 — рамки .wk-scroll, 30 — гуттер */
 }
 /* кластеры пересечений дня [§3.4]: цепочка строгих пересечений (end == start касанием
    не считается); внутри кластера k = максимум одновременных, track — жадные дорожки */
@@ -2028,10 +2099,11 @@ function geoCol(cols, col, k, track) {
     }
     return { left: left + ')', width: width };
 }
-/* блок тренировки [§3.3]: время старта + название (clamp 3 строки, ellipsis); высота
-   ≥26px, <36px — название скрыто; активная — контур (live); в Неделе пересечения
-   (k>1) — полосы без текста [§3.4]. TODO(T2): День/3 дня передадут narrowBars=false */
-function gridBlockHtml(b, k, geo, hourHeight, narrowBars, containsToday) {
+/* блок тренировки [§3.3]: время + название; высота ≥26px, <36px — название скрыто;
+   активная — контур (live). Время: в «Дне» диапазон «11:00–12:30» (активная «с 19:05»),
+   в узких видах — старт. Пересечения: дорожка <34px (withText=false) — полоса без
+   текста [§3.4]. Тексты: День — .wide (крупнее, clamp 2), 3 дня — .c2 (clamp 2) [§4, §5] */
+function gridBlockHtml(b, k, geo, hourHeight, withText, containsToday, mode) {
     const w = b.w;
     const top = Math.round(b.s / 60 * hourHeight);
     const hPx = Math.max(26, Math.round((b.e - b.s) / 60 * hourHeight));
@@ -2040,14 +2112,16 @@ function gridBlockHtml(b, k, geo, hourHeight, narrowBars, containsToday) {
     const startHM = hmOf(b.s);
     const name = dayRowName(w);
     const liveNow = !w.finished && containsToday && w.date === todayISO();
-    if (narrowBars && k > 1) {
+    if (k > 1 && !withText) {
         return '<i class="wbar" style="left:' + geo.left + ';top:' + top + 'px;width:' + geo.width + ';height:' + hPx + 'px"' +
             ' data-act="wkOpen" data-a="' + w.id + '" role="button" aria-label="' + escAttr(dwName + ', ' + startHM + ', ' + name) + '"></i>';
     }
-    let inner = '<span class="bt">' + (liveNow ? 'с ' + startHM : startHM) + '</span>';
+    const wide = mode === 'day';
+    const tm = wide ? (liveNow ? 'с ' + startHM : startHM + '–' + hmOf(b.e)) : (liveNow ? 'с ' + startHM : startHM);
+    let inner = '<span class="bt">' + tm + '</span>';
     if (hPx >= 36) inner += '<span class="bn">' + esc(name) + '</span>';
-    const aria = liveNow ? (dwName + ', с ' + startHM + ' идёт тренировка') : (dwName + ', ' + startHM + ', ' + name);
-    return '<button class="wblk' + (w.finished ? '' : ' live') + '" style="left:' + geo.left + ';top:' + top + 'px;width:' + geo.width + ';height:' + hPx + 'px"' +
+    const aria = liveNow ? (dwName + ', с ' + startHM + ' идёт тренировка') : (dwName + ', ' + tm + ', ' + name);
+    return '<button class="wblk' + (wide ? ' wide' : '') + (mode === 'd3' ? ' c2' : '') + (w.finished ? '' : ' live') + '" style="left:' + geo.left + ';top:' + top + 'px;width:' + geo.width + ';height:' + hPx + 'px"' +
         ' data-act="wkOpen" data-a="' + w.id + '" aria-label="' + escAttr(aria) + '">' + inner + '</button>';
 }
 /* снимает scrollTop сетки ДО перестройки DOM (render → app.innerHTML): один снимок
@@ -2061,17 +2135,20 @@ function calGridScrollPre() {
    (а) активная тренировка в периоде → к её старту −30 мин; (б) тренировки со временем →
    к самой ранней −60 мин; (в) иначе → 06:00; clamp в [0, canvas − окно]. Тот же период —
    восстанавливается позиция, снятая calGridScrollPre перед перестройкой: возврат из
-   карточки возвращает место ухода, тап по дню той же недели не сбрасывает ручной скролл */
+   карточки возвращает место ухода; в «Неделе» тап по дню той же недели не сбрасывает
+   ручной скролл (ключ по понедельнику недели), в «Дне»/«3 дня» период = дата якоря */
 function calGridScrollPost() {
     const el = document.getElementById('wkScroll');
     if (!el) return; /* месячный вид — сетки нет */
-    const canvas = 24 * WK_HOUR;
-    const key = 'week:' + mondayOfISO(CAL.date);
+    const hour = gridHour();
+    const canvas = 24 * hour;
+    const days = gridDaysOf(CAL.date);
+    const key = (CAL.view === 'day' || CAL.view === 'd3') ? CAL.view + ':' + CAL.date : 'week:' + mondayOfISO(CAL.date);
     if (wkScroll.key === key) { el.scrollTop = wkScroll.top; return; }
     const byDate = workoutsByDate();
     const todayIso = todayISO();
     let active = null, earliest = null;
-    for (const iso of weekDaysOf(CAL.date)) {
+    for (const iso of days) {
         for (const w of (byDate[iso] || [])) {
             const m = minutesOf(w.started);
             if (m == null) continue;
@@ -2079,9 +2156,9 @@ function calGridScrollPost() {
             if (earliest == null || m < earliest) earliest = m;
         }
     }
-    let target = 6 * WK_HOUR;
-    if (active != null) target = (active - 30) / 60 * WK_HOUR;
-    else if (earliest != null) target = (earliest - 60) / 60 * WK_HOUR;
+    let target = 6 * hour;
+    if (active != null) target = (active - 30) / 60 * hour;
+    else if (earliest != null) target = (earliest - 60) / 60 * hour;
     const maxTop = Math.max(0, canvas - el.clientHeight);
     target = Math.round(Math.max(0, Math.min(target, maxTop)));
     el.scrollTop = target;
