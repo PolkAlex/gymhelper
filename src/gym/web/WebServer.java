@@ -391,7 +391,9 @@ public final class WebServer {
     private static final Set<String> TRACK_EVENTS = Set.of(
         "onboardingStarted", "onboardingCompleted", "onboardingTutorialSkipped",
         /* [UX-I16] клиентские события воронки шеринга (§7.3): буфер + открытие выбора чата */
-        "linkCopy", "linkSend");
+        "linkCopy", "linkSend",
+        /* [UX-I14] клиентские события воронки картинки (§5): тап/resolved share/скачивание */
+        "shareClick", "shareOk", "shareDownload");
 
     /* [ANA-T5] POST /api/track {initData, events:[имя,...]} — события онбординга в Stats.
        Онбординг завершается без изменений данных, /api/save при нём не вызывается, а
