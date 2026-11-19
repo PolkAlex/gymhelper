@@ -19,6 +19,8 @@
     --blik: rgba(255,255,255,.06);
     --card-shadow: rgba(0,0,0,.28);
     --glow: rgba(255,194,32,.08);
+    /* [UX-I17] усиленный янтарный — фон блоков тренировок сеточных видов (§3.3) */
+    --glow-2: rgba(255,194,32,.14);
     --cta-shadow: rgba(255,194,32,.22);
     --fab-shadow: rgba(255,194,32,.35);
     /* вложенные поверхности и кнопки */
@@ -74,6 +76,8 @@
     --blik: rgba(255,255,255,.60);
     --card-shadow: rgba(22,24,27,.10);
     --glow: rgba(255,176,0,.10);
+    /* [UX-I17] усиленный янтарный — фон блоков тренировок сеточных видов (§3.3) */
+    --glow-2: rgba(255,176,0,.16);
     --cta-shadow: rgba(255,176,0,.28);
     --fab-shadow: rgba(255,176,0,.38);
     --nested: rgba(22,24,27,.05);
@@ -1647,6 +1651,348 @@ html.has-bg body::after {
     padding: 2px 8px;
     white-space: nowrap;
 }
+
+/* ============ [UX-I17] мультивидовый календарь: пикер вида + сеточный движок ============
+   источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 3; T1 —
+   состояние/пикер/Неделя (7 колонок, высота часа 44px); T2 — День (1 колонка, 56px)
+   и 3 дня (3 колонки, 48px) на том же движке; T3 — Год (сетка мини-месяцев ниже) */
+
+/* полоса дней: 7 ячеек Пн–Вс; капсула окна winpill — во всех сеточных видах [§2.4, §12.7] */
+.wk-days { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 9px; }
+.winpill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--nested);
+    border: 1px solid var(--nested-brd);
+    border-radius: 14px;
+}
+.wd {
+    position: relative;
+    z-index: 1;
+    background: none;
+    border: none;
+    padding: 2px 0 3px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.wd .dw {
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    color: var(--muted);
+    line-height: 1;
+    text-transform: uppercase;
+}
+.wd .cir {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1.5px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.wd .dn {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+.wd.today .cir { background: var(--glow); border-color: var(--glow-brd); }
+.wd.today .dn { color: var(--accent); font-weight: 700; }
+/* якорь (выбранная дата) — обводка-круг; сегодня+якорь — glow-фон + accent-обводка [§2.4] */
+.wd.sel .cir { border-color: var(--accent); }
+
+/* скролл-сетка: гуттер 30px, канвас 24×hourHeight (высота/часовые линии — inline) [§3.2] */
+.wk-scroll {
+    margin-top: 8px;
+    height: 440px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-radius: 12px;
+    border: 1px solid var(--nested-brd);
+    background: var(--nested);
+    scrollbar-width: none;
+    position: relative;
+}
+.wk-scroll::-webkit-scrollbar { display: none; }
+.wk-inner { position: relative; margin-left: 30px; }
+.wk-inner::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--btn-brd);
+}
+.whr {
+    position: absolute;
+    left: -30px;
+    width: 24px;
+    text-align: right;
+    font-size: 9px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    transform: translateY(-50%);
+    line-height: 1;
+    z-index: 2;
+}
+.whr.first { transform: none; top: 2px; }
+
+/* блок тренировки: время + название (clamp 3), фон --glow-2, тап → карточка [§3.3] */
+.wblk {
+    position: absolute;
+    border-radius: 8px;
+    overflow: hidden;
+    text-align: left;
+    background: var(--glow-2);
+    border: 1px solid var(--glow-brd);
+    padding: 2px 3px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+    z-index: 3;
+}
+.wblk .bt {
+    display: block;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+.wblk .bn {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1.25;
+    margin-top: 1px;
+}
+/* активная (незавершённая) — контур [§3.3] */
+.wblk.live { background: transparent; border: 1.5px solid var(--accent); }
+/* [T2 §3.3/§4] просторные блоки вида «День»: диапазон времени + название крупнее
+   (макет, экран 3); «3 дня» — название в 2 строки [§5] */
+.wblk.wide { padding: 5px 8px; border-radius: 10px; }
+.wblk.wide .bt { font-size: 10.5px; }
+.wblk.wide .bn { font-size: 11.5px; -webkit-line-clamp: 2; }
+.wblk.c2 .bn { -webkit-line-clamp: 2; }
+/* полоса без текста — дорожка/колонка < 34px [§3.4]: пересечения и одиночные блоки
+   узких колонок (Неделя 320px, §10.8); кнопка со сбросом стилей, как .wblk —
+   фокус/Enter/Space из коробки [UX-T39] */
+.wbar {
+    position: absolute;
+    border-radius: 6px;
+    background: var(--glow-2);
+    border: 1px solid var(--glow-brd);
+    display: block;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+    z-index: 3;
+}
+/* линия «сейчас»: 1.5px accent через сетку + точка на границе гуттера [§3.2] */
+.nowline { position: absolute; left: 0; right: 0; height: 0; border-top: 1.5px solid var(--accent); z-index: 4; pointer-events: none; }
+.nowline::before {
+    content: '';
+    position: absolute;
+    left: -28px;
+    top: -3.5px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+/* полоса «без времени»: капсулы старых записей без started; появляется при наличии [§3.5] */
+.wk-allday {
+    position: relative;
+    display: grid;
+    grid-template-columns: 30px repeat(7, 1fr);
+    gap: 2px;
+    margin-top: 9px;
+    align-items: center;
+}
+.wk-ad {
+    min-height: 26px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 0;
+    min-width: 0;
+}
+.adpill {
+    max-width: 100%;
+    min-width: 0;
+    background: var(--glow-2);
+    border: 1px solid var(--glow-brd);
+    color: var(--accent);
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 9.5px;
+    font-weight: 600;
+    padding: 3px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+}
+.wk-adlab {
+    font-size: 8.5px;
+    color: var(--muted);
+    text-align: right;
+    padding-right: 4px;
+    letter-spacing: .3px;
+    white-space: nowrap;
+}
+/* [T2 §3.5] вид «День»: полоса «без времени» одной колонкой — капсула крупнее и слева
+   (макет, экран 6) */
+.wk-allday.one { grid-template-columns: 30px 1fr; }
+.wk-ad.one { justify-content: flex-start; }
+.wk-ad.one .adpill { font-size: 11px; padding: 4px 12px; }
+/* [§10.8] на 320px подпись гуттера скрывается */
+@media (max-width: 359px) { .wk-adlab { display: none; } }
+
+/* плавающая пилюля «Сегодня» сеточных видов: период ≠ текущий [§9.2] */
+.todayfab {
+    position: fixed;
+    left: 50%;
+    bottom: calc(102px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    z-index: 45;
+    background: var(--glow);
+    border: 1px solid var(--glow-brd);
+    color: var(--accent);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 12.5px;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 6px 18px var(--card-shadow);
+}
+/* [UX-T36] живой таймер отдыха переживает навигацию: панель (z 38, 88..143px от низа)
+   и пилюля пересекались на календаре — при body.resting пилюля уходит выше панели
+   (механика .restbar.raised). .raised — панель поднята (календарь поверх открытой
+   карточки техники): ступень та же, что у restbar (+52px) */
+body.resting .todayfab { bottom: calc(160px + env(safe-area-inset-bottom)); }
+body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)); }
+
+/* пикер вида — пункты нижнего листа (лист — существующая модалка .modal) [§2.5, §9.1] */
+.sh-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    padding: 10px 12px 6px;
+}
+.pli {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 14px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    font-family: inherit;
+    color: var(--text);
+}
+.pli:active { background: var(--btn); }
+.pli svg { width: 20px; height: 20px; color: var(--muted); flex: none; }
+.pli .nm { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--text); }
+.pli .cur { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.pli.on svg { color: var(--accent); }
+
+/* ============ [UX-I17][UX-T38] вид «Год» — 12 мини-месяцев 3×4 [§8] ============ */
+/* сетка в потоке карточки — весь год в кадре без внутреннего скролла (§12.1) */
+.yr { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 6px; margin-top: 9px; }
+.ym {
+    min-width: 0;
+    background: var(--glass);
+    border: 1px solid var(--glass-brd);
+    border-radius: 12px;
+    padding: 5px 4px 6px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text);
+    -webkit-tap-highlight-color: transparent;
+}
+.ym:active { background: var(--btn); }
+.ym-t {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text);
+    text-align: center;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+/* компактная сетка чисел: ряд Пн–Вс 6.5px + числа 8px (ячейка ≈14×15px, tabular) [§8] */
+.yd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.ydow {
+    font-size: 6.5px;
+    font-weight: 700;
+    color: var(--muted);
+    text-align: center;
+    padding: 1px 0 2px;
+    letter-spacing: .2px;
+    line-height: 1;
+}
+.yd i {
+    font-style: normal;
+    font-size: 8px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--text);
+    height: 15px;
+    opacity: .85;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+/* день с тренировкой — точка 3px accent под числом (несколько — одна) [§8, §12.9] */
+.yd i.h::after {
+    content: '';
+    position: absolute;
+    bottom: .5px;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+/* сегодня — янтарная цифра, без рамки (ячейка мала) [§8, §12.9] */
+.yd i.t { color: var(--accent); font-weight: 700; opacity: 1; }
+/* месяц якоря (CAL.date) — лёгкое выделение: вложенный фон + accent-рамка,
+   паттерн якоря .wd.sel полосы дней [§2.4] */
+.ym.cur { background: var(--nested); border-color: var(--accent); }
+.ym.cur:active { background: var(--btn); }
 
 /* ============ плавные анимации ============ */
 .card, .btn, .chip, .excard, .nav .nbtn, .nav .nfab, .barebtn, .prevpill, .entry, .expill {
