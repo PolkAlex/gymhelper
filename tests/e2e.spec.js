@@ -3484,6 +3484,10 @@ test.describe('UX-S6 календарь', function () {
             del: [], workouts: workouts } } });
     }
     async function openCalendar(page) {
+        /* [UX-I17] дефолтный вид — «Неделя» (§12.2, gymCalView отсутствует → week).
+           Сценарии S6 ниже проверяют месячный вид — фиксируем его явно; пикер,
+           Неделя и дефолт покрываются отдельными сценариями [UX-S10 T4] */
+        await page.evaluate(function () { localStorage.setItem('gymCalView', 'month'); });
         await page.locator('.topbar [data-act="openCal"]').click();
         await expect(page.locator('.cal-grid')).toBeVisible({ timeout: 5000 });
     }
@@ -3523,13 +3527,14 @@ test.describe('UX-S6 календарь', function () {
         await page.locator('[data-act="switchTab"][data-a="coach"]').click();
         await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · Тренер');
         await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
-        /* тап с Профиля: заголовок, «Назад», шестерёнка в topbar, сетка видна [S6-update5] */
+        /* тап с Профиля: заголовок, «Назад», шестерёнка в topbar, календарь отрисован [S6-update5]
+           [UX-I17] дефолтный вид — «Неделя» (§12.2): маркер открытого календаря — полоса дней */
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
         await calBtn.click();
         await expect(page.locator('.tb-title')).toHaveText('GymHelper · Календарь');
         await expect(page.locator('.topbar [data-act="closeCal"]')).toHaveCount(1);
         await expect(page.locator('.topbar [data-act="openSettings"]')).toHaveCount(1);
-        await expect(page.locator('.cal-grid')).toBeVisible();
+        await expect(page.locator('.wk-days')).toBeVisible();
         /* «Назад» — возврат на вкладку-источник (calFromTab) [§3.4] */
         await page.locator('.topbar [data-act="closeCal"]').click();
         await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · Профиль');
@@ -3791,9 +3796,10 @@ test.describe('UX-S6 календарь', function () {
         await page.evaluate(function () { localStorage.setItem('gymCalMonth', '99x'); });
         await openCalendar(page);
         await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[now.getMonth()] + ' ' + now.getFullYear());
-        /* ключ перезаписан валидным значением [§7.3] */
-        const saved = await page.evaluate(function () { return localStorage.getItem('gymCalMonth'); });
-        expect(saved).toBe(now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'));
+        /* [UX-I17] gymCalMonth больше не пишется (§12.8): миграция — разовое чтение;
+           разрешённая дата (месяц последней тренировки = текущий) записана в gymCalDate */
+        const saved = await page.evaluate(function () { return localStorage.getItem('gymCalDate'); });
+        expect(saved).toBe(today);
     });
 
     test('§14.11 «сегодня»: рамка+фон; с активной — полая точка', async ({ page, request }) => {
@@ -4020,9 +4026,10 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-today')).toBeVisible();
         await expect(page.locator('[data-act="calPrev"]')).toBeEnabled();
         await expect(page.locator('[data-act="calNext"]')).toBeEnabled();
-        /* gymCalMonth пережил переход года [§7.3] */
-        const saved = await page.evaluate(function () { return localStorage.getItem('gymCalMonth'); });
-        expect(saved).toBe('2021-01');
+        /* [UX-I17] память теперь в gymCalDate (§2.1): стрелки месяца ставят
+           date = 1-е число соседнего месяца [§2.3] — год пережит */
+        const saved = await page.evaluate(function () { return localStorage.getItem('gymCalDate'); });
+        expect(saved).toBe('2021-01-01');
         /* ‹ назад через границу → декабрь 2020, точка на месте */
         await page.locator('[data-act="calPrev"]').click();
         await expect(page.locator('.cal-title')).toHaveText('Декабрь 2020');

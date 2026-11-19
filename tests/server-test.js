@@ -36,6 +36,29 @@ function sendJson(res, code, obj) {
 }
 
 http.createServer(function (req, res) {
+    /* [UX-I17 T1] предохранители прогонов: падение обработчика (гонка existsSync/statSync,
+       запись в прерванное клиентом соединение) раньше убивало процесс — и весь остаток
+       прогона e2e сыпался каскадом ECONNREFUSED. Теперь ошибку отдаём как 500/тихо глотаем */
+    req.on('error', function () { /* aborted */ });
+    res.on('error', function () { /* client aborted mid-write */ });
+    try {
+        handle(req, res);
+    } catch (e) {
+        try {
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('server error');
+        } catch (e2) { /* socket уже мёртв */ }
+    }
+}).listen(8099, '127.0.0.1', function () {
+    console.log('test server: http://127.0.0.1:8099');
+});
+/* последнее средство: непойманное исключение в async-колбэке (например, JSON.parse вне
+   try в будущих правках) не должно ронять сервер посреди прогона */
+process.on('uncaughtException', function (e) {
+    console.error('test server survived: ' + (e && e.message));
+});
+
+function handle(req, res) {
     const raw = req.url;
     const url = raw.split('?')[0];
     if (req.method === 'POST' && url === '/api/reset') {
@@ -136,6 +159,4 @@ http.createServer(function (req, res) {
         'Cache-Control': img ? 'public, max-age=604800' : 'no-store'
     });
     res.end(fs.readFileSync(file));
-}).listen(8099, '127.0.0.1', function () {
-    console.log('test server: http://127.0.0.1:8099');
-});
+}
