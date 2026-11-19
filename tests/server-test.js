@@ -152,9 +152,8 @@ http.createServer(function (req, res) {
                     store.shareName = j.shareName;
                     if (!j.shareName) store.shareOwner = null;
                 }
-                if (store.shareName && typeof j.name === 'string' && j.name.trim()) {
-                    store.shareOwner = j.name.trim().slice(0, 60);
-                }
+                /* имя в проде сервер берёт сам из проверенного initData (user.first_name);
+                   в e2e initData пуст → shareOwner не заполняется (аноним) */
                 if (!w.shareId) w.shareId = newShareId();
                 sendJson(res, 200, { ok: true, shareId: w.shareId, url: 'http://' + (req.headers.host || '127.0.0.1:8099') + '/w/' + w.shareId });
             } catch (e) {

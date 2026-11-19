@@ -99,12 +99,14 @@ final class SharePage {
         b.append("<div class=\"glass glow\">")
             .append("<p class=\"wdate\">").append(esc(dateLong(w.date))).append("</p>");
         double volume = volumeOf(w);
-        b.append("<div class=\"hero-num\">").append(fmtNum(Math.round(volume)));
+        b.append("<div class=\"hero-num\">");
         if (volume > 0) {
-            b.append("<small>кг</small></div>\n<div class=\"hero-lbl\">объём тренировки</div>\n");
+            b.append(fmtNum(Math.round(volume))).append("<small>кг</small>");
         } else {
-            b.append("<small>повторений</small></div>\n<div class=\"hero-lbl\">объём тренировки</div>\n");
+            /* [UX-I16] edge 8 (§5.1/§9.8): объём 0 (калистеника) → герой = сумма повторений */
+            b.append(fmtNum(totalReps(w))).append("<small>повторений</small>");
         }
+        b.append("</div>\n<div class=\"hero-lbl\">объём тренировки</div>\n");
         /* плашка рекорда: максимальный реальный вес тренировки, строго побивший все прошлые
            тренировки этого упражнения (§5.1 — решение владельца: рекорд реальным весом,
            расчётный 1ПМ по Эпли на странице не показываем) */
@@ -229,6 +231,17 @@ final class SharePage {
             }
         }
         return v;
+    }
+
+    /* сумма повторений: Σ подходы × средние повторения — герой калистеники (edge 8) */
+    static long totalReps(Workout w) {
+        long n = 0;
+        for (ExerciseEntry e : w.exercises) {
+            for (SetEntry s : e.sets) {
+                n += (long) Math.max(s.sets, 0) * Records.repsAvg(s.reps);
+            }
+        }
+        return n;
     }
 
     /* длительность в минутах (округление как durationMin в app.js); null — нет времён */

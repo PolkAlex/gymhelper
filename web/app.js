@@ -4383,14 +4383,11 @@ async function shareTelegramGo(wid) {
     setBusy(true);
     let url = null;
     try {
+        /* имя для opt-in сервер берёт сам из проверенного initData (user.first_name) —
+           клиент payload-имя не шлёт (ревью №3: server-owned ПДн) */
         const r = await fetch('/api/share', {
             method: 'POST',
-            body: JSON.stringify({
-                initData: INIT,
-                wid: wid,
-                shareName: !!G.shareName,
-                name: G.shareName ? tgUserName() : ''
-            })
+            body: JSON.stringify({ initData: INIT, wid: wid, shareName: !!G.shareName })
         });
         const j = await r.json();
         if (r.ok && j.ok && j.url) url = j.url;
@@ -4423,14 +4420,6 @@ async function shareTelegramGo(wid) {
     }
     if (!opened) window.open(shareUrl, '_blank'); /* вне Telegram / старый webview */
     setBusy(false);
-}
-
-/* имя для opt-in OG-превью — first_name из initData Telegram (клиентский источник) */
-function tgUserName() {
-    try {
-        const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
-        return (u && u.first_name && String(u.first_name).trim().slice(0, 60)) || '';
-    } catch (e) { return ''; }
 }
 
 /* [UX-I16] события воронки шеринга (§7.3) в существующий канал /api/track

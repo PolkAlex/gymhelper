@@ -471,16 +471,17 @@ public final class WebServer {
             sendJson(ex, 400, Map.of("ok", false));
             return;
         }
-        /* opt-in имя владельца ссылки (§11.1): состояние тогла живёт в данных; имя берём
-           из запроса (first_name из initData клиента) только при включённом opt-in */
+        /* opt-in имя владельца ссылки (§11.1): состояние тогла живёт в данных; само имя —
+           server-owned: берётся ТОЛЬКО из проверенного initData (user.first_name, ревью №3),
+           клиентский payload «name» не доверенный. Нет юзера/имени в initData → аноним */
         Object sn = body.get("shareName");
         if (sn instanceof Boolean) {
             data.shareName = (Boolean) sn;
             if (!data.shareName) data.shareOwner = null;
         }
         if (Boolean.TRUE.equals(data.shareName)) {
-            String nm = Json.str(body, "name");
-            if (nm != null && !nm.isBlank()) data.shareOwner = nm.trim();
+            String nm = initUserName(initData);
+            if (nm != null) data.shareOwner = nm;
         }
         if (w.shareId == null || w.shareId.isEmpty()) {
             w.shareId = newShareId(data);
@@ -494,6 +495,36 @@ public final class WebServer {
         resp.put("shareId", w.shareId);
         resp.put("url", SHARE_URL_BASE + w.shareId);
         sendJson(ex, 200, resp);
+    }
+
+    /* [UX-I16] имя владельца ссылки из ПОДПИСАННОГО initData (user.first_name) — клиентский
+       payload «name» не доверенный (ревью №3). null — в initData нет юзера/имени (аноним).
+       Лимит 60 символов и срез управляющих — до записи в файл/og:title (ревью №2). */
+    static String initUserName(String initData) {
+        if (initData == null || initData.isEmpty()) return null;
+        try {
+            Map<String, String> params = new HashMap<>();
+            for (String pair : initData.split("&")) {
+                int i = pair.indexOf('=');
+                if (i <= 0) continue;
+                params.put(URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8),
+                    URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8));
+            }
+            String userJson = params.get("user");
+            if (userJson == null) return null;
+            Map<String, Object> user = Json.map(Json.parse(userJson));
+            String fn = Json.str(user, "first_name");
+            if (fn == null) return null;
+            fn = fn.strip();
+            StringBuilder b = new StringBuilder();
+            for (int i = 0; i < fn.length() && b.length() < 60; i++) {
+                char c = fn.charAt(i);
+                if (c >= 0x20) b.append(c);
+            }
+            return b.length() == 0 ? null : b.toString();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /* 22 символа base62 (§4.1); коллизию в пределах файла данных исключаем перегенерацией
@@ -560,6 +591,9 @@ public final class WebServer {
         ex.getResponseHeaders().set("X-Robots-Tag", "noindex, nofollow");
         /* на странице нет ни JS, ни внешних ресурсов (§8.1) */
         ex.getResponseHeaders().set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'");
+        /* hardening публичной страницы (ревью №4) */
+        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        ex.getResponseHeaders().set("Referrer-Policy", "no-referrer");
         if (head) {
             ex.sendResponseHeaders(code, -1);
             return;

@@ -962,6 +962,10 @@ public class GymContractTest {
             check(rp.statusCode() == 200, "share: GET /w/<id> — 200, а не " + rp.statusCode());
             check("noindex, nofollow".equals(rp.headers().firstValue("X-Robots-Tag").orElse(null)),
                 "share: X-Robots-Tag noindex, nofollow");
+            check("nosniff".equals(rp.headers().firstValue("X-Content-Type-Options").orElse(null)),
+                "share: X-Content-Type-Options nosniff (ревью №4)");
+            check("no-referrer".equals(rp.headers().firstValue("Referrer-Policy").orElse(null)),
+                "share: Referrer-Policy no-referrer (ревью №4)");
             check("no-store".equals(rp.headers().firstValue("Cache-Control").orElse(null)), "share: Cache-Control no-store (живой рендер)");
             check(rp.body().contains("noindex, nofollow"), "share: meta robots noindex в HTML");
             check(rp.body().contains("og:title") && rp.body().contains("Тренировка · 14 марта 2025"),
@@ -982,19 +986,43 @@ public class GymContractTest {
             /* HEAD — заголовки без тела, linkView не растёт */
             check(headStatus(portSh, "/w/" + sid) == 200, "share: HEAD /w/<id> — 200");
 
-            /* opt-in имени (§11.1): вкл → og:title с именем; выкл → имя исчезает из страницы и данных */
-            check(postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":1,\"shareName\":true,\"name\":\"Антон\"}").statusCode() == 200,
+            /* opt-in имени (§11.1, ревью №2/№3): имя — ТОЛЬКО из проверенного initData
+               (user.first_name), клиентский payload «name» не доверенный; лимит 60 символов */
+            check(postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":1,\"shareName\":true,\"name\":\"ПОДМЕНА\"}").statusCode() == 200,
                 "share: opt-in true — 200");
             java.net.http.HttpResponse<String> rpOn = get(portSh, "/w/" + sid);
-            check(rpOn.statusCode() == 200 && rpOn.body().contains("Тренировка · 14 марта 2025 · Антон"),
-                "share: og:title с именем при opt-in");
+            check(rpOn.statusCode() == 200 && rpOn.body().contains("Тренировка · 14 марта 2025 · Test"),
+                "share: og:title с именем из initData при opt-in");
+            check(!rpOn.body().contains("ПОДМЕНА"),
+                "share: клиентский payload «name» игнорируется (server-owned ПДн)");
+            check("Test".equals(stSh.load(424251).shareOwner),
+                "share: в файле — имя из подписанного initData");
             check(postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":1,\"shareName\":false}").statusCode() == 200,
                 "share: opt-in false — 200");
             java.net.http.HttpResponse<String> rpOff = get(portSh, "/w/" + sid);
-            check(rpOff.statusCode() == 200 && !rpOff.body().contains("Антон"),
+            check(rpOff.statusCode() == 200 && !rpOff.body().contains("Test"),
                 "share: opt-in выключен — имени на странице нет");
             check(!Json.write(stSh.load(424251).toJson()).contains("shareOwner"),
                 "share: opt-in выключен — имя удалено из данных (ПДн-минимализм)");
+            /* ревью №2: длинный first_name initData обрезается до 60 символов до записи */
+            GymData seedCap = new GymData();
+            seedCap.nextId = 2;
+            seedCap.rev = 1;
+            Workout wCap = new Workout();
+            wCap.id = 1;
+            wCap.date = "2026-11-18";
+            wCap.finished = true;
+            seedCap.workouts.add(wCap);
+            stSh.save(424256, seedCap);
+            StringBuilder longName = new StringBuilder();
+            for (int i = 0; i < 100; i++) longName.append('А');
+            String idLong = tgInitData("contract-test-token", 424256, longName.toString());
+            check(postJson(portSh, "/api/share", "{\"initData\":\"" + idLong + "\",\"wid\":1,\"shareName\":true}").statusCode() == 200,
+                "share: opt-in с длинным именем — 200");
+            GymData capSaved = stSh.load(424256);
+            check(capSaved.shareOwner != null && capSaved.shareOwner.length() == 60,
+                "share: shareOwner обрезан до 60 символов, а не "
+                    + (capSaved.shareOwner == null ? "null" : String.valueOf(capSaved.shareOwner.length())));
 
             /* клиентские события воронки через /api/track (§7.3): неизвестные игнорируются */
             check(postTrack(portSh, idSh, "[\"linkCopy\",\"linkSend\",\"bogusEvent\"]").statusCode() == 200,
@@ -1052,8 +1080,37 @@ public class GymContractTest {
             check(rpStreak.body().contains("беспрерывно с " + yest.getDayOfMonth() + " "),
                 "share: подстрока серии «беспрерывно с <день> <месяц>»");
 
-            /* счётчики воронки §7.3: linkCreate = каждый успешный POST (5), linkView = только
-               GET 200 (страница + opt-in вкл/выкл + рекорд/серия + рестарт ниже = 5); HEAD и 404 не считаются */
+            /* edge 8 (§5.1/§9.8): калистеника (веса «»/0, объём 0) → герой = сумма повторений,
+               строки подходов без «кг» */
+            GymData seedBw = new GymData();
+            seedBw.nextId = 2;
+            seedBw.rev = 1;
+            Workout wBw = new Workout();
+            wBw.id = 1;
+            wBw.date = "2026-11-18";
+            wBw.startedAt = "2026-11-18T09:30:00";
+            wBw.endedAt = "2026-11-18T10:30:00";
+            wBw.finished = true;
+            ExerciseEntry eBw = new ExerciseEntry("Подтягивания");
+            eBw.sets.add(new SetEntry("", 4, "8"));
+            eBw.sets.add(new SetEntry("0", 3, "10"));
+            wBw.exercises.add(eBw);
+            seedBw.workouts.add(wBw);
+            stSh.save(424255, seedBw);
+            String idBw = tgInitData("contract-test-token", 424255);
+            java.net.http.HttpResponse<String> rsBw = postJson(portSh, "/api/share", "{\"initData\":\"" + idBw + "\",\"wid\":1}");
+            check(rsBw.statusCode() == 200, "share: калистеника seed — 200, а не " + rsBw.statusCode());
+            String sidBw = Json.str(Json.map(Json.parse(rsBw.body())), "shareId");
+            java.net.http.HttpResponse<String> rpBw = get(portSh, "/w/" + sidBw);
+            check(rpBw.statusCode() == 200
+                    && rpBw.body().contains("<div class=\"hero-num\">62<small>повторений</small></div>"),
+                "share: герой калистеники = сумма повторений (4×8 + 3×10 = 62), а не «0» (edge 8)");
+            check(rpBw.body().contains("4×8") && rpBw.body().contains("3×10") && !rpBw.body().contains(" кг ×"),
+                "share: строки подходов калистеники без «кг» (edge 8)");
+
+            /* счётчики воронки §7.3: linkCreate = каждый успешный POST (7), linkView = только
+               GET 200 (страница + opt-in вкл/выкл + рекорд/серия + калистеника + рестарт ниже = 6);
+               HEAD и 404 не считаются */
             check(get(portSh, "/w/@bad").statusCode() == 404, "share: /w/ без id — 404");
 
             /* поиск после «рестарта» процесса: shareId в файле (создан не этим экземпляром
@@ -1081,10 +1138,10 @@ public class GymContractTest {
                 "share: shareId из файла (после рестарта) находится сканом — 200, а не " + rRe.statusCode());
 
             Map<String, Object> snapSh = Json.map(Json.parse(get(portSh, "/stats?token=contract-test-token").body()));
-            check(Json.lng(snapSh.get("linkCreate")) == 5,
-                "share: linkCreate=5 (успешные POST), а не " + Json.lng(snapSh.get("linkCreate")));
-            check(Json.lng(snapSh.get("linkView")) == 5,
-                "share: linkView=5 (только GET 200; HEAD и 404 не считаются), а не " + Json.lng(snapSh.get("linkView")));
+            check(Json.lng(snapSh.get("linkCreate")) == 7,
+                "share: linkCreate=7 (успешные POST), а не " + Json.lng(snapSh.get("linkCreate")));
+            check(Json.lng(snapSh.get("linkView")) == 6,
+                "share: linkView=6 (только GET 200; HEAD и 404 не считаются), а не " + Json.lng(snapSh.get("linkView")));
             check(Json.lng(snapSh.get("linkCopy")) == 1 && Json.lng(snapSh.get("linkSend")) == 1,
                 "share: linkCopy/linkSend через /api/track=1, bogus — мимо белого списка");
         } catch (Exception shareErr) {
@@ -1099,10 +1156,15 @@ public class GymContractTest {
        декодированным значениям, отсортированным по ключу (так читает их WebServer.validateInitData);
        secret = HMAC-SHA256(token, "WebAppData"), hash = HMAC-SHA256(secret, checkString) */
     static String tgInitData(String token, long userId) throws Exception {
+        return tgInitData(token, userId, "Test");
+    }
+
+    /* вариант с кастомным first_name ([UX-I16] ревью №3: имя сервер берёт из initData) */
+    static String tgInitData(String token, long userId, String firstName) throws Exception {
         javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
         mac.init(new javax.crypto.spec.SecretKeySpec("WebAppData".getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
         byte[] secret = mac.doFinal(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        String userJson = "{\"id\":" + userId + ",\"first_name\":\"Test\"}";
+        String userJson = "{\"id\":" + userId + ",\"first_name\":\"" + firstName + "\"}";
         java.util.TreeMap<String, String> p = new java.util.TreeMap<>();
         p.put("auth_date", "1700000000");
         p.put("user", userJson);
