@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-T40] #295 · Разминка по дефолту: тоггл + селектор упражнения · Amber Glass</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 414px; margin: 0 auto; }
+.h1 { margin: 0 auto 10px; font-size: 21px; font-weight: 800; color: #f2f3f5; letter-spacing: .2px; }
+.h1 span { color: #ffc220; }
+.intro { margin: 0 auto 30px; font-size: 13.5px; color: #7d838e; line-height: 1.65; }
+.intro b { color: #a9aeb8; }
+.caption { margin: 40px auto 12px; max-width: 414px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px auto 16px; max-width: 414px; font-size: 12.5px; color: #7d838e; line-height: 1.6; }
+.note b { color: #a9aeb8; font-weight: 600; }
+
+/* ============ карточка настроек (Amber Glass, значения из web/style.css) ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    border-radius: 36px; border: 1px solid #23262c; background: #101114;
+    box-shadow: 0 24px 70px rgba(0,0,0,.55); padding: 18px 14px; overflow: hidden;
+}
+.p {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --nested: rgba(0,0,0,.18); --nestedbrd: rgba(255,255,255,.05);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    /* тогл [UX-S4]: тёмные значения */
+    --sw-track-off: rgba(0,0,0,.35);
+    --sw-track-brd: rgba(255,255,255,.10);
+    --sw-knob: rgba(255,255,255,.92);
+    --sw-knob-brd: rgba(255,255,255,.25);
+    color: var(--text); font-size: 15px; line-height: 1.45;
+}
+.card {
+    background: var(--glass); border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 14px 16px; margin: 0 0 12px;
+    box-shadow: 0 8px 22px rgba(0,0,0,.28);
+}
+.t1 { margin: 0 0 10px; font-size: 16.5px; font-weight: 700; }
+.setrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+.setrow + .setrow { border-top: 1px solid var(--nestedbrd); }
+.lbl { font-size: 14.5px; }
+.meta { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.hr { height: 1px; background: var(--nestedbrd); margin: 10px 0; }
+.chevr { color: var(--muted); font-size: 15px; }
+.arow {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    width: 100%; padding: 11px 2px; border: none; background: none; cursor: pointer;
+    color: var(--text); font-size: 14.5px; font-family: inherit; text-align: left;
+}
+.arow .aval { color: var(--muted); font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arow .aright { display: flex; align-items: center; gap: 8px; flex: none; }
+
+/* тогл-компонент .switch [UX-S4] */
+.switch {
+    position: relative; flex: none; width: 52px; height: 30px; border-radius: 999px;
+    border: 1px solid var(--sw-track-brd); background: var(--sw-track-off); cursor: pointer; padding: 0;
+}
+.switch .sw-track { position: absolute; inset: 0; }
+.switch .sw-knob {
+    position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--sw-knob); border: 1px solid var(--sw-knob-brd);
+    box-shadow: 0 2px 6px rgba(0,0,0,.4);
+    transition: left .18s ease, background .18s ease;
+}
+.switch.on { background: var(--accent); border-color: var(--accent); }
+.switch.on .sw-knob { left: 24px; background: var(--on-accent); }
+.switch.on .sw-knob::after {
+    content: '✓'; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-size: 13px; font-weight: 800;
+}
+
+/* ============ нижний лист выбора (стиль calPickerHtml) ============ */
+.backdrop {
+    position: absolute; inset: 0; z-index: 20;
+    background: rgba(8,9,11,.55);
+    display: flex; align-items: flex-end;
+}
+.sheet {
+    width: 100%; background: rgba(30,32,38,.97);
+    border: 1px solid var(--glassbrd); border-bottom: none;
+    border-radius: 22px 22px 0 0; padding: 14px 14px 20px;
+}
+.sh-title { font-size: 16px; font-weight: 700; margin: 0 0 10px 4px; }
+.pli {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 12px 12px; margin: 0 0 6px; border-radius: 14px; cursor: pointer;
+    background: var(--btn); border: 1px solid var(--btnbrd);
+    color: var(--text); font-size: 14px; font-family: inherit; text-align: left;
+}
+.pli .nm { flex: 1; min-width: 0; }
+.pli .nm small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+.pli .pi { flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--nested);
+    border: 1px solid var(--nestedbrd); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.pli.on { border-color: rgba(255,194,32,.45); background: rgba(255,194,32,.08); }
+.pli.on .pi { background: rgba(255,194,32,.15); border-color: rgba(255,194,32,.35); }
+.pli .cur { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 8px rgba(255,194,32,.5); }
+
+.footblock {
+    margin: 40px auto 0; max-width: 414px; padding: 14px 16px; border: 1px solid #23262c; border-radius: 14px;
+    background: rgba(255,255,255,.03); font-size: 12.5px; color: #8f95a0; line-height: 1.6;
+}
+.footblock b { color: #c9ccd2; }
+.footblock .t { font-size: 13px; font-weight: 700; color: #f2f3f5; margin-bottom: 6px; }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="h1">[UX-T40] #295 · <span>Разминка по дефолту</span></div>
+    <p class="intro">
+        Решение владельца (19.11.2026): <b>выбор первого упражнения — за пользователем</b>.
+        В Настройках карточка «🏋️ Тренировка»: тоггл «Разминка первым упражнением» (<b>дефолт — выкл</b>)
+        и селектор упражнения (виден при включённом тоггле). По умолчанию — обобщённая запись
+        <b>«Разминка»</b>, дальше — упражнения каталога с тегом <code>cat:warmup</code> по возрастанию
+        метаболической нагрузки. Спецификация: <code>docs/spec-ux-t40-warmup-toggle.md</code> (ред. 2). Черновик, не прод.
+    </p>
+
+    <div class="caption">1 · Тоггл выключен <span>дефолт · прежнее поведение</span></div>
+    <p class="note">Соседние карточки — для контекста положения в списке Настроек. Селектора при выключенном
+        тоггле НЕТ (прогрессивное раскрытие): карточка = тоггл + одна подпись.</p>
+
+    <div class="phone"><div class="p">
+
+        <div class="card">
+            <p class="t1">⏱ Таймер отдыха</p>
+            <div class="setrow"><span class="lbl">Звук по окончании</span>
+                <button class="switch on" aria-checked="true"><span class="sw-track"><span class="sw-knob"></span></span></button>
+            </div>
+        </div>
+
+        <div class="card">
+            <p class="t1">🏋️ Тренировка</p>
+            <div class="setrow"><span class="lbl">Разминка первым упражнением</span>
+                <button class="switch" role="switch" aria-checked="false" aria-label="Разминка первым упражнением">
+                    <span class="sw-track"><span class="sw-knob"></span></span></button>
+            </div>
+            <p class="meta">При старте новой тренировки первым добавится выбранное упражнение разминки</p>
+        </div>
+
+        <div class="card">
+            <p class="t1">🧑‍🏫 Персональный тренер</p>
+            <p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>
+        </div>
+
+    </div></div>
+
+    <div class="caption">2 · Тоггл включён <span>селектор свёрнут</span></div>
+    <p class="note">Под тогглом появляется строка «Упражнение разминки» со значением. Дефолт — обобщённая
+        запись <b>«Разминка»</b> (решение владельца «по умолчанию — Разминка»; точного упражнения с таким
+        именем в каталоге нет — это системная запись, поддержанная фильтром <code>isWarmupName</code>).
+        Настройка живёт в GymData: <code>warmupFirst</code> + <code>warmupEx</code> (null = «Разминка»).</p>
+
+    <div class="phone"><div class="p">
+
+        <div class="card">
+            <p class="t1">🏋️ Тренировка</p>
+            <div class="setrow"><span class="lbl">Разминка первым упражнением</span>
+                <button class="switch on" role="switch" aria-checked="true" aria-label="Разминка первым упражнением">
+                    <span class="sw-track"><span class="sw-knob"></span></span></button>
+            </div>
+            <p class="meta">При старте новой тренировки первым добавится выбранное упражнение разминки</p>
+            <div class="hr"></div>
+            <button class="arow">
+                <span>Упражнение разминки</span>
+                <span class="aright"><span class="aval">Разминка · по умолчанию</span><span class="chevr">›</span></span>
+            </button>
+        </div>
+
+        <div class="card">
+            <p class="t1">Что появится в новой тренировке</p>
+            <div class="setrow"><span class="lbl" style="color:var(--accent)">1 · Разминка</span>
+                <span class="meta">разминка · без подходов</span></div>
+            <div class="hr"></div>
+            <p class="meta">Дальше — обычный список: «+ Упражнение», каталог, свои упражнения.
+                Разминку можно удалить — повторно она не вернётся до следующего старта.</p>
+        </div>
+
+    </div></div>
+
+    <div class="caption">3 · Селектор раскрыт <span>нижний лист «Упражнение разминки»</span></div>
+    <p class="note">Первый пункт — системная «Разминка» (подпись «по умолчанию»), затем упражнения каталога
+        с тегом <code>cat:warmup</code> <b>по возрастанию met</b>: лёгкие вращения (2.0–2.5) →
+        кардио-разминка 3.0 → приседания без веса 3.8 → прыжки/джампинг-джек (7.0–8.0).
+        У выбранного пункта янтарная рамка и точка-отметка; тап — выбор + закрытие листа.
+        Категории «Разминка» и коллекция «Разминка и заминка» в списке НЕ участвуют (это не упражнения).</p>
+
+    <div class="phone"><div class="p">
+
+        <div class="card" style="filter:blur(1px);opacity:.55">
+            <p class="t1">🏋️ Тренировка</p>
+            <div class="setrow"><span class="lbl">Разминка первым упражнением</span>
+                <button class="switch on" aria-checked="true"><span class="sw-track"><span class="sw-knob"></span></span></button>
+            </div>
+            <div class="hr"></div>
+            <div class="arow"><span>Упражнение разминки</span>
+                <span class="aright"><span class="aval">Разминка · по умолчанию</span><span class="chevr">›</span></span></div>
+        </div>
+
+        <div class="backdrop">
+            <div class="sheet" role="dialog" aria-modal="true" aria-label="Упражнение разминки">
+                <div class="sh-title">Упражнение разминки</div>
+                <button class="pli on">
+                    <span class="pi">🤸</span>
+                    <span class="nm">Разминка<small>по умолчанию · обобщённая запись</small></span>
+                    <span class="cur"></span>
+                </button>
+                <button class="pli">
+                    <span class="pi">🌀</span>
+                    <span class="nm">Вращения плечами вперед и назад<small>разминка · лёгкая</small></span>
+                </button>
+                <button class="pli">
+                    <span class="pi">🏃</span>
+                    <span class="nm">Кардио-разминка (ходьба/лёгкий бег)<small>разминка · кардио</small></span>
+                </button>
+                <button class="pli">
+                    <span class="pi">🦵</span>
+                    <span class="nm">Приседания без веса<small>разминка · ноги</small></span>
+                </button>
+                <button class="pli">
+                    <span class="pi">🏃‍♂️</span>
+                    <span class="nm">Прыжки с высоким подниманием бедра (High Knees)<small>кардио · интенсивно</small></span>
+                </button>
+                <button class="pli">
+                    <span class="pi">🤾</span>
+                    <span class="nm">Джампинг-джек (Jumping Jacks)<small>кардио · интенсивно</small></span>
+                </button>
+            </div>
+        </div>
+
+    </div></div>
+
+    <div class="footblock">
+        <div class="t">Примечания (решения владельца 19.11.2026)</div>
+        <b>Дефолт «Разминка»</b> — системная запись: не навязывает тип разминки; время входит в тренировку
+        через <code>started</code> (модель [UX-T15]); справочный MET 2.5 — на случай справочных расчётов.<br>
+        <b>Не пересекается</b> с «🤸 Разминка 10 мин» [UX-T15]: там сдвиг времени, здесь упражнение; включены оба — применяются оба.<br>
+        <b>Хранение:</b> <code>warmupFirst</code> (Boolean, null=выкл) + <code>warmupEx</code> (id каталога, null=«Разминка») в GymData — старые файлы без ключей читаются.<br>
+        Макет статичный; тогглы и пункты листа некликабельны (демонстрация состояний).
+    </div>
+
+</div>
+</body>
+</html>

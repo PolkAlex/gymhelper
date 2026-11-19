@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[ANA-T7] #289 · Периодная статистика — пикер периода · Amber Glass · черновик для владельца</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 460px; margin: 0 auto; }
+.h1 { max-width: 520px; margin: 0 auto 10px; font-size: 21px; font-weight: 800; color: #f2f3f5; letter-spacing: .2px; }
+.h1 span { color: #ffc220; }
+.intro { max-width: 520px; margin: 0 auto 26px; font-size: 13.5px; color: #7d838e; line-height: 1.65; }
+.intro b { color: #a9aeb8; }
+.intro code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+/* переключатель ширины предпросмотра */
+.controls {
+    max-width: 520px; margin: 0 auto 30px; display: flex; gap: 8px; align-items: center;
+}
+.controls .lbl { font-size: 12.5px; color: #7d838e; margin-right: 4px; }
+.cbtn {
+    padding: 7px 16px; border-radius: 999px; border: 1px solid #2a2d34; cursor: pointer;
+    background: rgba(255,255,255,.04); color: #c9ccd2; font-size: 13px; font-weight: 600;
+    font-family: inherit;
+}
+.cbtn.on { background: #ffc220; border-color: #ffc220; color: #14120a; }
+body.w390 .phone { max-width: 390px; }
+body.w320 .phone { max-width: 320px; }
+.caption { margin: 46px auto 12px; max-width: 460px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px auto 14px; max-width: 460px; font-size: 12.5px; color: #7d838e; line-height: 1.6; }
+.note b { color: #a9aeb8; font-weight: 600; }
+
+/* ============ телефон (Amber Glass, значения из web/style.css) ============ */
+.phone {
+    position: relative; width: 100%; margin: 0 auto;
+    height: 800px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+    transition: max-width .25s ease;
+}
+.p {
+    /* тёмная тема (базовая) — значения из web/style.css */
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --glow: rgba(255,194,32,.08);
+    --nested: rgba(0,0,0,.18); --nestedbrd: rgba(255,255,255,.05);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg); color: var(--text);
+    font-size: 15px; line-height: 1.45;
+    scrollbar-width: none;
+    padding: 12px 12px 110px;
+}
+.p::-webkit-scrollbar { display: none; }
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+
+/* ---- topbar ---- */
+.topbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 10px 12px; margin: 0 0 12px;
+}
+.tb-title { font-weight: 700; font-size: 17px; letter-spacing: .2px; }
+.tb-ic { width: 32px; height: 32px; border-radius: 9px; background: var(--btn); border: 1px solid var(--btnbrd);
+    display: flex; align-items: center; justify-content: center; font-size: 15px; color: var(--muted); }
+
+/* ---- пикер периода (НОВОЕ) ---- */
+.perpicker {
+    display: flex; flex-wrap: nowrap; gap: 7px;
+    overflow-x: auto; scrollbar-width: none;
+    padding: 2px 2px 8px; margin: 0 -2px 4px;
+}
+.perpicker::-webkit-scrollbar { display: none; }
+.pchip {
+    flex: none; padding: 8px 14px; border-radius: 999px; cursor: default;
+    background: var(--btn); border: 1px solid var(--btnbrd);
+    font-size: 13.5px; font-weight: 600; color: var(--text); white-space: nowrap;
+}
+.pchip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+/* подсказка скролла на узком экране (только визуально в макете) */
+.scrollfade { position: relative; }
+.scrollfade::after {
+    content: ''; position: absolute; right: -2px; top: 0; bottom: 8px; width: 28px; pointer-events: none;
+    background: linear-gradient(90deg, transparent, #101114);
+}
+
+/* ---- карточки (общий стиль приложения) ---- */
+.card {
+    background: var(--glass); border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 14px 16px; margin: 0 0 12px;
+    box-shadow: 0 8px 22px rgba(0,0,0,.28);
+}
+.reccard {
+    background: linear-gradient(135deg, rgba(255,194,32,.10), rgba(255,255,255,.04));
+    border: 1px solid var(--glowbrd);
+}
+.rec-l { font-size: 12.5px; font-weight: 600; letter-spacing: .3px; text-transform: none; color: var(--muted); }
+.rec-num { font-size: 30px; font-weight: 800; margin: 4px 0 8px; }
+.rec-num small { font-size: 15px; font-weight: 600; color: var(--muted); }
+.rec-bar { height: 8px; border-radius: 999px; background: var(--nested); overflow: hidden; }
+.rec-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+.rec-sub { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.t1 { margin: 0 0 8px; font-size: 16.5px; font-weight: 700; }
+.muted { color: var(--muted); font-size: 13px; }
+.tn { color: var(--muted); font-size: 12.5px; }
+
+/* Эпли */
+.prmrow { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+.prmrow + .prmrow { border-top: 1px solid var(--nestedbrd); }
+.pr-ic {
+    width: 34px; height: 34px; border-radius: 10px; flex: none;
+    background: var(--nested); border: 1px solid var(--nestedbrd);
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.prmwho { flex: 1; min-width: 0; }
+.prmwho b { display: block; font-size: 14px; }
+.prmval { font-weight: 700; font-size: 15px; white-space: nowrap; }
+.prmval small { color: var(--muted); font-weight: 600; }
+.formula { margin-top: 8px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--nestedbrd); padding-top: 8px; }
+
+/* Цели */
+.wrow { padding: 6px 0; }
+.wrow .wl { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+.wrow .wl span { color: var(--muted); }
+.gb { height: 6px; border-radius: 999px; background: var(--nested); overflow: hidden; }
+.gb i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+.allbtn { display: block; width: 100%; margin-top: 10px; padding: 9px; border-radius: 10px;
+    background: var(--btn); border: 1px solid var(--btnbrd); color: var(--text);
+    font-size: 13.5px; font-weight: 600; font-family: inherit; text-align: center; }
+
+/* Серия */
+.strow { display: flex; align-items: center; gap: 12px; }
+.mgc-fire {
+    width: 40px; height: 40px; border-radius: 50%; flex: none;
+    background: rgba(255,194,32,.15); border: 1px solid var(--glowbrd);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.sttxt b { display: block; font-size: 14.5px; }
+
+/* Мышечные группы */
+.mgroups { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 10px; }
+.mg { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; }
+.mgc {
+    width: 46px; height: 46px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-size: 20px;
+    border: 1px solid rgba(255,255,255,.10);
+}
+.mgn { font-size: 11.5px; color: var(--muted); text-align: center; line-height: 1.2; }
+.mg b { font-size: 12px; }
+
+/* Сводка Тренировки */
+.statgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.sg { background: var(--nested); border: 1px solid var(--nestedbrd); border-radius: 12px; padding: 10px 12px; }
+.sg b { display: block; font-size: 19px; font-weight: 800; }
+.sg b small { font-size: 12px; font-weight: 600; color: var(--muted); }
+.sg span { font-size: 11.5px; color: var(--muted); }
+
+/* Тренды / Упражнения */
+.trendline { display: flex; align-items: baseline; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--nestedbrd); }
+.trendline:last-child { border-bottom: none; }
+.statline { font-size: 14px; padding-top: 8px; }
+.statline + .tn, .tn + .tn { padding-top: 1px; }
+
+/* пустой период */
+.hero { text-align: center; padding: 22px 16px; }
+.hero .big { font-size: 30px; margin-bottom: 6px; }
+.hero .t1 { margin-bottom: 4px; }
+
+/* ---- нижняя навигация ---- */
+.nav {
+    position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 40;
+    display: flex; align-items: center; gap: 4px;
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94));
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--glassbrd); border-radius: 20px; padding: 8px 10px;
+}
+.nbtn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    border: none; background: none; cursor: default; font-family: inherit;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 4px 0;
+}
+.nbtn .ni { font-size: 17px; line-height: 1; }
+.nbtn.on { color: var(--accent); }
+.nfab {
+    flex: none; width: 52px; height: 52px; margin: -18px 2px 0; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 18px rgba(255,194,32,.35);
+}
+
+.footblock {
+    margin: 40px auto 0; max-width: 460px; padding: 14px 16px; border: 1px solid #23262c; border-radius: 14px;
+    background: rgba(255,255,255,.03); font-size: 12.5px; color: #8f95a0; line-height: 1.6;
+}
+.footblock b { color: #c9ccd2; }
+.footblock .t { font-size: 13px; font-weight: 700; color: #f2f3f5; margin-bottom: 6px; }
+</style>
+</head>
+<body class="page w390">
+<div class="stage">
+
+    <div class="h1">[ANA-T7] #289 · <span>Периодная статистика</span></div>
+    <p class="intro">
+        Пикер периода вверху вкладки «Статистика»: <b>Неделя · Месяц · Квартал · Полгода · Год · Всё время</b>.
+        Период пересчитывает все периодные блоки вкладки (решение владельца 19.11.2026), кроме
+        «Оценка 1ПМ · Эпли» и «Целей» — они вне периода. Новая ячейка <b>«≈ средняя»</b> — среднее время
+        тренировки за период. Дефолт — <b>«Месяц»</b>. Спецификация: <code>docs/spec-ana-t7-periods.md</code>.
+        Черновик, не прод.
+    </p>
+
+    <div class="controls">
+        <span class="lbl">Ширина предпросмотра:</span>
+        <button class="cbtn on" id="b390" onclick="setW('390')">390px</button>
+        <button class="cbtn" id="b320" onclick="setW('320')">320px</button>
+    </div>
+
+    <!-- ============ ЭКРАН 1: Месяц ============ -->
+    <div class="caption">1 · Вкладка «Статистика», пикер в состоянии <span>Месяц · дефолт</span></div>
+    <p class="note">Пикер — первая строка вкладки, пилюли со скроллом (стиль чипов «Таймера отдыха»).
+        Все периодные блоки ниже пересчитаны на календарный месяц (с 1-го числа). «Рекорды недели» →
+        <b>«Рекорды месяца»</b>; шкала «% от личного рекорда» остаётся по всей истории.
+        В карточке «Тренировки»: 4 ячейки периода, включая новую <b>«≈ … · средняя»</b>.</p>
+
+    <div class="phone"><div class="p">
+
+        <div class="topbar">
+            <div class="tb-title">Статистика</div>
+            <div class="tb-ic">⚙</div>
+        </div>
+
+        <div class="perpicker">
+            <div class="pchip">Неделя</div>
+            <div class="pchip on">Месяц</div>
+            <div class="pchip">Квартал</div>
+            <div class="pchip">Полгода</div>
+            <div class="pchip">Год</div>
+            <div class="pchip">Всё время</div>
+        </div>
+
+        <div class="card reccard">
+            <div class="rec-l">Рекорды месяца · Жим лёжа</div>
+            <div class="rec-num">82,5 <small>кг</small></div>
+            <div class="rec-bar"><i style="width:92%"></i></div>
+            <div class="rec-sub"><span>личный рекорд: 90 кг</span><span>92%</span></div>
+        </div>
+
+        <div class="card reccard">
+            <div class="rec-l">Рекорды месяца · Приседания</div>
+            <div class="rec-num">100 <small>кг</small></div>
+            <div class="rec-bar"><i style="width:100%"></i></div>
+            <div class="rec-sub"><span>личный рекорд: 100 кг</span><span>100%</span></div>
+        </div>
+
+        <div class="card">
+            <div class="rec-l">Оценка 1ПМ · Эпли</div>
+            <div class="prmrow"><div class="pr-ic">🏋️</div><div class="prmwho"><b>Жим лёжа</b><span class="tn">лучший подход: 82,5 кг × 3</span></div><div class="prmval">≈ 91 <small>кг</small></div></div>
+            <div class="prmrow"><div class="pr-ic">🦵</div><div class="prmwho"><b>Приседания</b><span class="tn">лучший подход: 100 кг × 5</span></div><div class="prmval">≈ 117 <small>кг</small></div></div>
+            <div class="prmrow"><div class="pr-ic">💪</div><div class="prmwho"><b>Подтягивания</b><span class="tn">лучший подход: 20 кг × 8</span></div><div class="prmval">≈ 25 <small>кг</small></div></div>
+            <div class="formula">e1RM = вес × (1 + повторения ÷ 30) — оценка, а не цель для разовых попыток</div>
+        </div>
+
+        <div class="card goalsw">
+            <div class="rec-l">🎯 Цели</div>
+            <div class="wrow"><div class="wl"><b>Жим лёжа — 95 кг</b><span>92%</span></div><div class="gb"><i style="width:92%"></i></div></div>
+            <div class="wrow"><div class="wl"><b>12 тренировок до 30 ноября</b><span>75%</span></div><div class="gb"><i style="width:75%"></i></div></div>
+            <button class="allbtn">Все цели →</button>
+        </div>
+
+        <div class="card strow">
+            <span class="mgc-fire">🔥</span>
+            <span class="sttxt"><b>Серия: 4 тренировки подряд</b>
+            <span class="tn">СР · ЧТ · ПН · ВТ — самая длинная за месяц</span></span>
+        </div>
+
+        <div class="card">
+            <div class="rec-l">Мышечные группы · этот месяц</div>
+            <div class="mgroups">
+                <div class="mg"><span class="mgc" style="background:rgba(255,194,32,.15)">🏋️</span><span class="mgn">Грудь</span><b>42 подх.</b></div>
+                <div class="mg"><span class="mgc" style="background:rgba(255,138,92,.15)">↩️</span><span class="mgn">Спина</span><b>36 подх.</b></div>
+                <div class="mg"><span class="mgc" style="background:rgba(90,176,255,.15)">🦵</span><span class="mgn">Ноги</span><b>28 подх.</b></div>
+                <div class="mg"><span class="mgc" style="background:rgba(186,140,255,.15)">💪</span><span class="mgn">Руки</span><b>17 подх.</b></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="rec-l">Тренировки</div>
+            <div class="statgrid">
+                <div class="sg"><b>9</b><span>за месяц</span></div>
+                <div class="sg"><b>≈ 1 ч 20 м</b><span>средняя</span></div>
+                <div class="sg"><b>12 ч</b><span>общее время</span></div>
+                <div class="sg"><b>123</b><span>подходов</span></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <p class="t1">📈 Тренды</p>
+            <div class="trendline"><span style="flex:1"><b>Жим лёжа</b><br><span class="tn">82,5 кг — последний результат</span></span></div>
+            <div class="trendline"><span style="flex:1"><b>Приседания</b><br><span class="tn">100 кг — последний результат</span></span></div>
+        </div>
+
+        <div class="card">
+            <p class="t1">🏆 Упражнения</p>
+            <div class="statline"><b>Жим лёжа</b> (5 раз.)</div>
+            <div class="tn">Рекорд веса: 82,5 кг</div>
+            <div class="tn">Последний: 80 кг, 3 подхода по 8 повторений (18.11)</div>
+            <div class="statline"><b>Подтягивания</b> (4 раз.)</div>
+            <div class="tn">Рекорд веса: 20 кг</div>
+            <div class="tn">Последний: 15 кг, 4 подхода по 8 повторений (16.11)</div>
+        </div>
+
+        <div class="nav">
+            <button class="nbtn"><span class="ni">📓</span>Дневник</button>
+            <button class="nbtn"><span class="ni">🕘</span>История</button>
+            <button class="nbtn on"><span class="ni">📊</span>Статистика</button>
+            <button class="nbtn"><span class="ni">👤</span>Профиль</button>
+            <div class="nfab">+</div>
+        </div>
+
+    </div></div>
+
+    <!-- ============ ЭКРАН 2: пустой период ============ -->
+    <div class="caption">2 · Пустой период <span>Неделя без тренировок</span></div>
+    <p class="note">Пикер остаётся — им же пользователь уходит из пустоты. Под ним одна заглушка;
+        все периодные блоки скрыты. <b>«Цели» остаются</b> — блок вне периода (как и Эпли, выше за кадром).
+        Текст заглушки подставляет название периода: «За эту неделю / За этот месяц / За этот квартал…».</p>
+
+    <div class="phone"><div class="p">
+
+        <div class="topbar">
+            <div class="tb-title">Статистика</div>
+            <div class="tb-ic">⚙</div>
+        </div>
+
+        <div class="perpicker">
+            <div class="pchip on">Неделя</div>
+            <div class="pchip">Месяц</div>
+            <div class="pchip">Квартал</div>
+            <div class="pchip">Полгода</div>
+            <div class="pchip">Год</div>
+            <div class="pchip">Всё время</div>
+        </div>
+
+        <div class="card hero">
+            <div class="big">📭</div>
+            <p class="t1">За эту неделю тренировок нет</p>
+            <p class="muted">Выбери другой период — вся история на месте.</p>
+        </div>
+
+        <div class="card goalsw">
+            <div class="rec-l">🎯 Цели</div>
+            <div class="wrow"><div class="wl"><b>Жим лёжа — 95 кг</b><span>92%</span></div><div class="gb"><i style="width:92%"></i></div></div>
+            <button class="allbtn">Все цели →</button>
+        </div>
+
+        <div class="nav">
+            <button class="nbtn"><span class="ni">📓</span>Дневник</button>
+            <button class="nbtn"><span class="ni">🕘</span>История</button>
+            <button class="nbtn on"><span class="ni">📊</span>Статистика</button>
+            <button class="nbtn"><span class="ni">👤</span>Профиль</button>
+            <div class="nfab">+</div>
+        </div>
+
+    </div></div>
+
+    <!-- ============ ЭКРАН 3: Всё время + 320px ============ -->
+    <div class="caption">3 · «Всё время» и проверка <span>320px</span></div>
+    <p class="note">«Всё время» = прежняя логика «всего»: сводка возвращает исторические значения,
+        «Рекорды» теряют слово периода («Рекорды · Жим лёжа»), серия ищется по всей истории.
+        Переключателем <b>320px / 390px</b> в шапке страницы можно сузить все экраны: пилюли
+        уезжают в горизонтальный скролл, активная («Всё время») — в конце ряда.</p>
+
+    <div class="phone"><div class="p">
+
+        <div class="topbar">
+            <div class="tb-title">Статистика</div>
+            <div class="tb-ic">⚙</div>
+        </div>
+
+        <div class="perpicker">
+            <div class="pchip">Неделя</div>
+            <div class="pchip">Месяц</div>
+            <div class="pchip">Квартал</div>
+            <div class="pchip">Полгода</div>
+            <div class="pchip">Год</div>
+            <div class="pchip on">Всё время</div>
+        </div>
+
+        <div class="card reccard">
+            <div class="rec-l">Рекорды · Жим лёжа</div>
+            <div class="rec-num">90 <small>кг</small></div>
+            <div class="rec-bar"><i style="width:100%"></i></div>
+            <div class="rec-sub"><span>личный рекорд: 90 кг</span><span>100%</span></div>
+        </div>
+
+        <div class="card">
+            <div class="rec-l">Тренировки</div>
+            <div class="statgrid">
+                <div class="sg"><b>127</b><span>за всё время</span></div>
+                <div class="sg"><b>≈ 1 ч 15 м</b><span>средняя</span></div>
+                <div class="sg"><b>158 ч</b><span>общее время</span></div>
+                <div class="sg"><b>1 940</b><span>подходов</span></div>
+            </div>
+        </div>
+
+        <div class="card strow">
+            <span class="mgc-fire">🔥</span>
+            <span class="sttxt"><b>Серия: 6 тренировок подряд</b>
+            <span class="tn">ПН · ВТ · ЧТ · ПТ · ПН · ВТ — самая длинная за всё время</span></span>
+        </div>
+
+        <div class="nav">
+            <button class="nbtn"><span class="ni">📓</span>Дневник</button>
+            <button class="nbtn"><span class="ni">🕘</span>История</button>
+            <button class="nbtn on"><span class="ni">📊</span>Статистика</button>
+            <button class="nbtn"><span class="ni">👤</span>Профиль</button>
+            <div class="nfab">+</div>
+        </div>
+
+    </div></div>
+
+    <div class="footblock">
+        <div class="t">Примечания для обсуждения</div>
+        <b>Вне периода:</b> Эпли и Цели на всех экранах одни и те же — специально, без признака в UI (решение в спеке §5.2).<br>
+        <b>«Полгода»</b> в макете = «последние 6 календарных месяцев (с 1-го числа)» — утверждено владельцем 19.11.2026.<br>
+        <b>«за месяц»</b> в сводке заменяет прежнюю ячейку «в этом месяце» — утверждено: сводка = ровно 4 ячейки за период.<br>
+        Макет статичный: цифры и даты условные, состояние пикера показано классом <code>.on</code>.
+    </div>
+
+</div>
+<script>
+function setW(w) {
+    document.body.classList.toggle('w320', w === '320');
+    document.body.classList.toggle('w390', w === '390');
+    document.getElementById('b390').classList.toggle('on', w === '390');
+    document.getElementById('b320').classList.toggle('on', w === '320');
+}
+</script>
+</body>
+</html>
