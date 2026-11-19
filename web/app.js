@@ -1374,6 +1374,8 @@ function render() {
     if (obOpen) h += obWelcomeHtml();
     if (tutOpen) h += tutOverlayHtml();
     if (wnOpen) h += wnModalHtml();
+    /* [UX-T36] снимок скролла недели — ДО перестройки DOM, restore вернёт свежую позицию */
+    calGridScrollPre();
     app.innerHTML = h;
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
@@ -1826,7 +1828,10 @@ function isoOfDate(d) {
     return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 }
 function dateValidISO(s) {
-    return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !!parseDateISO(s);
+    /* roundtrip отсекает нормализуемые даты (2026-02-30, 2026-99-99): Date() прокатывает
+       их в соседние, iso-строка не совпадёт с исходной [UX-T36] */
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) && !!parseDateISO(s) &&
+        isoOfDate(parseDateISO(s)) === s;
 }
 function addDaysISO(iso, n) {
     const d = parseDateISO(iso);
@@ -1904,7 +1909,9 @@ function renderWeek() {
     h += '</div>';
     /* плавающая пилюля «Сегодня» — неделя ≠ текущая [§9.2, решение владельца §12.3] */
     if (days[0] !== mondayOfISO(todayISO())) {
-        h += '<button class="todayfab" data-act="calToday" aria-label="Вернуться к сегодняшнему дню">Сегодня</button>';
+        /* [UX-T36] raised — календарь поверх открытой карточки техники: панель отдыха
+           поднята (.restbar.raised), пилюля поднимается вместе с ней */
+        h += '<button class="todayfab' + (restRaised() ? ' raised' : '') + '" data-act="calToday" aria-label="Вернуться к сегодняшнему дню">Сегодня</button>';
     }
     return h;
 }
@@ -2043,10 +2050,18 @@ function gridBlockHtml(b, k, geo, hourHeight, narrowBars, containsToday) {
     return '<button class="wblk' + (w.finished ? '' : ' live') + '" style="left:' + geo.left + ';top:' + top + 'px;width:' + geo.width + ';height:' + hPx + 'px"' +
         ' data-act="wkOpen" data-a="' + w.id + '" aria-label="' + escAttr(aria) + '">' + inner + '</button>';
 }
+/* снимает scrollTop сетки ДО перестройки DOM (render → app.innerHTML): один снимок
+   на рендер, без scroll-listener'ов (перф §11). Благодаря снимку в wkScroll.top всегда
+   актуальная позиция — восстановление не сбрасывает ручной скролл [UX-T36] */
+function calGridScrollPre() {
+    const el = document.getElementById('wkScroll');
+    if (el) wkScroll.top = el.scrollTop;
+}
 /* автоскролл/восстановление scrollTop сетки — после каждого render() [§3.2]:
    (а) активная тренировка в периоде → к её старту −30 мин; (б) тренировки со временем →
-   к самой ранней −60 мин; (в) иначе → 06:00; clamp в [0, canvas − окно]. Тот же период
-   (возврат из карточки) — восстанавливается запомненная позиция */
+   к самой ранней −60 мин; (в) иначе → 06:00; clamp в [0, canvas − окно]. Тот же период —
+   восстанавливается позиция, снятая calGridScrollPre перед перестройкой: возврат из
+   карточки возвращает место ухода, тап по дню той же недели не сбрасывает ручной скролл */
 function calGridScrollPost() {
     const el = document.getElementById('wkScroll');
     if (!el) return; /* месячный вид — сетки нет */

@@ -1871,6 +1871,12 @@ html.has-bg body::after {
     -webkit-tap-highlight-color: transparent;
     box-shadow: 0 6px 18px var(--card-shadow);
 }
+/* [UX-T36] живой таймер отдыха переживает навигацию: панель (z 38, 88..143px от низа)
+   и пилюля пересекались на календаре — при body.resting пилюля уходит выше панели
+   (механика .restbar.raised). .raised — панель поднята (календарь поверх открытой
+   карточки техники): ступень та же, что у restbar (+52px) */
+body.resting .todayfab { bottom: calc(160px + env(safe-area-inset-bottom)); }
+body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)); }
 
 /* пикер вида — пункты нижнего листа (лист — существующая модалка .modal) [§2.5, §9.1] */
 .sh-title {
