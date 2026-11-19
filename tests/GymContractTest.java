@@ -1024,9 +1024,11 @@ public class GymContractTest {
                 "share: shareOwner обрезан до 60 символов, а не "
                     + (capSaved.shareOwner == null ? "null" : String.valueOf(capSaved.shareOwner.length())));
 
-            /* клиентские события воронки через /api/track (§7.3): неизвестные игнорируются */
-            check(postTrack(portSh, idSh, "[\"linkCopy\",\"linkSend\",\"bogusEvent\"]").statusCode() == 200,
-                "share: /api/track принимает linkCopy/linkSend");
+            /* клиентские события воронки через /api/track (§7.3, [UX-I14] §5):
+               неизвестные игнорируются */
+            check(postTrack(portSh, idSh,
+                    "[\"linkCopy\",\"linkSend\",\"shareClick\",\"shareOk\",\"shareDownload\",\"bogusEvent\"]").statusCode() == 200,
+                "share: /api/track принимает linkCopy/linkSend и shareClick/shareOk/shareDownload");
 
             /* смерть ссылки: удаление данных владельца → та же 404 «Тренировка недоступна» (§6.3) */
             stSh.deleteChat(424251);
@@ -1144,6 +1146,9 @@ public class GymContractTest {
                 "share: linkView=6 (только GET 200; HEAD и 404 не считаются), а не " + Json.lng(snapSh.get("linkView")));
             check(Json.lng(snapSh.get("linkCopy")) == 1 && Json.lng(snapSh.get("linkSend")) == 1,
                 "share: linkCopy/linkSend через /api/track=1, bogus — мимо белого списка");
+            check(Json.lng(snapSh.get("shareClick")) == 1 && Json.lng(snapSh.get("shareOk")) == 1
+                    && Json.lng(snapSh.get("shareDownload")) == 1,
+                "share: shareClick/shareOk/shareDownload через /api/track=1 ([UX-I14] §5)");
         } catch (Exception shareErr) {
             throw new AssertionError("CONTRACT FAIL: share " + shareErr);
         }

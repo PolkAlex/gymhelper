@@ -5269,10 +5269,10 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         await shareBtn.click();
         const modal = page.locator('.modal.open');
         await expect(modal).toBeVisible({ timeout: 5000 });
-        /* «Картинка» — постер [UX-I14] приедет позже: строка показывается, но disabled с «скоро» */
+        /* [UX-I14] «Картинка» больше не «скоро»: строка активна, поток — в describe [UX-I14] */
         const imgRow = modal.locator('.shrow', { hasText: 'Картинка' });
-        await expect(imgRow).toBeDisabled();
-        await expect(imgRow).toContainText('скоро');
+        await expect(imgRow).toBeEnabled();
+        await expect(imgRow).not.toContainText('скоро');
         /* тап «Телеграм»: шит закрывается → prepare ссылки → буфер → выбор чата
            (на localhost prepare мгновенный, busy-состояние кнопки не ловим ассертом) */
         await modal.locator('.shrow.tg').click();
@@ -5338,5 +5338,256 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).not.toContain('linkCopy');
+    });
+});
+
+/* ============ [UX-I14] виральная карточка картинкой (canvas 9:16) ============ */
+test.describe('[UX-I14] шейринг картинкой', function () {
+
+    /* мок Web Share API: у desktop-движков share с files нет — подменяем на in-memory
+       (паттерн UX-I16 с буфером), иначе поток всегда уходит в fallback-скачивание.
+       addInitScript исполняется до app.js — объект navigator остаётся подменённым */
+    async function mockWebShare(context) {
+        await context.addInitScript(function () {
+            try {
+                Object.defineProperty(navigator, 'canShare', {
+                    configurable: true,
+                    value: function (d) { return !!(d && d.files && d.files.length); }
+                });
+                Object.defineProperty(navigator, 'share', {
+                    configurable: true,
+                    value: function (d) { window.__shared = d; return Promise.resolve(); }
+                });
+            } catch (e) { /* движок не дал переопределить — тест упадёт по счётчикам */ }
+        });
+    }
+
+    /* рендер асинхронный (toBlob): ждём завершения конкретного рендера по счётчику scLast.n */
+    async function scRendered(page, n) {
+        await page.waitForFunction(function (k) {
+            return !!(window.__gym && window.__gym.scLast && window.__gym.scLast.n >= k);
+        }, n, { timeout: 5000 });
+        return page.evaluate(function () { return window.__gym.scLast; });
+    }
+
+    test('«Картинка» → canvas 1080×1920 → navigator.share с PNG; shareClick/shareOk', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const sc = await scRendered(page, 1);
+        /* канва создалась: формат 9:16, реальный PNG (размер > порога), состав постера:
+           бренд, ссылка §6, строка упражнения (крюк __gym.scLast — канву текстом не читать) */
+        expect(sc.w).toBe(1080);
+        expect(sc.h).toBe(1920);
+        expect(sc.size).toBeGreaterThan(15000);
+        expect(sc.texts).toContain('GymHelper');
+        expect(sc.texts).toContain('t.me/MyHelperGymBot/app');
+        expect(sc.texts.some(function (t) { return String(t).indexOf(EX) === 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('120 кг × 3×') >= 0; })).toBeTruthy();
+        /* PNG ушёл в navigator.share (в Telegram — системная шторка, §5.3); имя/тип файла
+           читаем внутри страницы — File не переживает structured-сериализацию evaluate */
+        const shared = await page.evaluate(function () {
+            return (window.__shared && window.__shared.files || []).map(function (f) {
+                return { name: f.name, type: f.type };
+            });
+        });
+        expect(shared.length).toBe(1);
+        expect(shared[0].name).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
+        expect(shared[0].type).toBe('image/png');
+        /* воронка картинки §5: тап + успешный шеринг; fallback-события нет */
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('shareClick');
+        expect(ev).toContain('shareOk');
+        expect(ev).not.toContain('shareDownload');
+        /* кнопка разблокирована; повторный тап рендерит заново (edge 8.11 — не кешируется) */
+        await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const sc2 = await scRendered(page, 2);
+        expect(sc2.size).toBeGreaterThan(15000);
+    });
+
+    test('имя на картинке — только при opt-in тумблере', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        /* имя берётся из initData Telegram (паттерн UX-I16: server-owned ПДн). В e2e юзер
+           подкладывается в location.hash — telegram-web-app.js парсит #tgWebAppData= в
+           initDataUnsafe (свойство WebApp getter non-configurable, не переопределить) */
+        const userEnc = encodeURIComponent('user=' + encodeURIComponent('{"id":7,"first_name":"Антон"}'));
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await page.goto('/#tgWebAppData=' + userEnc);
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.pcard').first().click();
+        const hasName = function (sc) {
+            return sc.texts.some(function (t) { return String(t).indexOf('Антон') >= 0; });
+        };
+        /* по умолчанию тогл выключен — постер анонимный (§10.2) */
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        expect(hasName(await scRendered(page, 1))).toBeFalsy();
+        /* opt-in: тогл в шите → имя из Telegram попадает в шапку постера */
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .switch').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        expect(hasName(await scRendered(page, 2))).toBeTruthy();
+        /* тогл выключили — имя снова не рисуется */
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .switch').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        expect(hasName(await scRendered(page, 3))).toBeFalsy();
+    });
+
+    test('без Web Share — скачивание PNG + тост + shareDownload; длинное название и «+ N»', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        /* старый webview / десктоп без API (§5.4): share/canShare отсутствуют */
+        await context.addInitScript(function () {
+            try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
+            try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
+        });
+        /* название заведомо не влезает в 2 строки списка → вторая с многоточием (edge 8.3) */
+        const LONG = 'Подъём гантелей через стороны лёжа на наклонной скамье с разворотом';
+        const today = isoDate(new Date());
+        const wLong = doneWorkout(1, today, LONG, '12,5', 3);
+        /* ещё 4 упражнения: в постере первые 3 (в т.ч. калистеника — строка без «кг»),
+           под списком «+ 2 упражнения» (edge 8.4) */
+        wLong.exercises.push({ name: 'Подтягивания', st: today + 'T09:31:00', en: today + 'T10:00:00',
+            sets: [{ w: '', s: 4, r: '8', t: today + 'T09:32:00' }] });
+        wLong.exercises.push({ name: 'Жим гантелей на скамье', st: today + 'T09:31:00', en: today + 'T10:00:00',
+            sets: [{ w: '40', s: 3, r: '10', t: today + 'T09:32:00' }] });
+        wLong.exercises.push({ name: 'Разгибания с канатом', st: today + 'T09:31:00', en: today + 'T10:00:00',
+            sets: [{ w: '35', s: 3, r: '12', t: today + 'T09:32:00' }] });
+        wLong.exercises.push({ name: 'Отжимания на брусьях', st: today + 'T09:31:00', en: today + 'T10:00:00',
+            sets: [{ w: '', s: 4, r: '10', t: today + 'T09:32:00' }] });
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [wLong]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        const dl = page.waitForEvent('download');
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const download = await dl;
+        /* имя файла без даты-времени персонального формата (edge 8.12) */
+        expect(download.suggestedFilename()).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
+        await expect(page.locator('.toast.show')).toContainText('Картинка сохранена — прикрепите её в чат', { timeout: 5000 });
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('shareClick');
+        expect(ev).toContain('shareDownload');
+        expect(ev).not.toContain('shareOk');
+        /* длинное название: перенос с многоточием, значение на своей строке (edge 8.3);
+           дробный вес — с запятой, без веса — строка без «кг» (edge 8.1/8.7) */
+        const sc = await scRendered(page, 1);
+        expect(sc.texts.some(function (t) { return String(t).indexOf('…') >= 0; })).toBeTruthy();
+        expect(sc.texts).toContain('+ 2 упражнения');
+        expect(sc.texts.some(function (t) { return String(t).indexOf('12,5 кг × 3×') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return /^4×8$/.test(String(t)); })).toBeTruthy();
+    });
+
+    test('рекорд: равный вес — без плашки (герой = объём); 125 после базы 120 — герой «Вес подхода»', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        const d1 = isoDate(new Date(Date.now() - 86400000));
+        const d2 = isoDate(new Date(Date.now() - 2 * 86400000));
+        /* база: две тренировки жимом 120; текущая тоже 120 — равный результат не праздник (§5.1) */
+        const seed120 = { initData: '', rev: 1, data: { nextId: 4, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, d2, EX, '120', 3), doneWorkout(2, d1, EX, '120', 3), doneWorkout(3, today, EX, '120', 3)] } };
+        await request.post('/api/save', { data: seed120 });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        let sc = await scRendered(page, 1);
+        /* равный вес: ни плашки, ни 🏆; герой = объём (120 кг × 3×9 ср. = 3 240) */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('РЕКОРД') >= 0; })).toBeFalsy();
+        expect(sc.texts).not.toContain('🏆');
+        expect(sc.texts).toContain('ОБЪЁМ ТРЕНИРОВКИ');
+        expect(sc.texts).not.toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('3 240');
+        /* сегодня 125 — живой рекорд: герой = реальный вес, Эпли мелкой строкой, плашка */
+        await request.post('/api/save', { data: { initData: '', rev: 2, data: {
+            nextId: 4, del: [], profile: seed120.data.profile,
+            workouts: [seed120.data.workouts[0], seed120.data.workouts[1], doneWorkout(3, today, EX, '125', 3)]
+        } } });
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        sc = await scRendered(page, 1); /* после reload счётчик рендеров стартует заново */
+        expect(sc.texts).toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('125');
+        expect(sc.texts.some(function (t) { return String(t).indexOf('оценка 1ПМ по Эпли') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД') >= 0; })).toBeTruthy();
+        expect(sc.texts).toContain('реальный вес подхода');
+    });
+
+    test('рекорд 120 после 100: герой = реальный вес подхода, НЕ Эпли; Эпли мелкой строкой', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        const d1 = isoDate(new Date(Date.now() - 86400000));
+        /* вчера 100 — база; сегодня 120 — рекорд реальным весом (ред. 2 §3, «который жал») */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, d1, EX, '100', 3), doneWorkout(2, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const sc = await scRendered(page, 1);
+        /* герой — реальный вес 120 отдельным числом; если бы герой считался по Эпли,
+           в heroNum стояло бы «156» отдельным элементом (120 × (1 + 9/30) = 156) */
+        expect(sc.texts).toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('120');
+        expect(sc.texts).not.toContain('156');
+        /* Эпли — только мелкой второстепенной строкой; плашка — реальным весом */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('оценка 1ПМ по Эпли ≈ 156 кг') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД · ЖИМ ШТАНГИ ЛЁЖА') >= 0; })).toBeTruthy();
+    });
+
+    test('рекорд у более лёгкого упражнения: присед 80 (база 60) при жиме 100 (база 130)', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        const d1 = isoDate(new Date(Date.now() - 86400000));
+        function benchSquat(id, day, bench, squat) {
+            return { id: id, date: day, started: day + 'T09:30:00', ended: day + 'T10:30:00', finished: true, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: day + 'T09:31:00', en: day + 'T10:00:00', sets: [{ w: bench, s: 3, r: '8', t: day + 'T09:32:00' }] },
+                    { name: 'Приседания со штангой', st: day + 'T09:31:00', en: day + 'T10:00:00', sets: [{ w: squat, s: 3, r: '8', t: day + 'T09:32:00' }] }
+                ] };
+        }
+        /* жим 100 тяжелее приседа 80, но рекорд только у приседа: 80 > база 60,
+           жим 100 < база 130 — глобально максимальный подход не обязан быть рекордом */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [benchSquat(1, d1, '130', '60'), benchSquat(2, today, '100', '80')]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const sc = await scRendered(page, 1);
+        expect(sc.texts).toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('80');
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД · ПРИСЕДАНИЯ СО ШТАНГОЙ') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД · ЖИМ ШТАНГИ ЛЁЖА') >= 0; })).toBeFalsy();
+        /* 🏆 у строки-рекордсмена — приседа, не у более тяжёлого жима */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('80 кг × 3×8  🏆') >= 0; })).toBeTruthy();
     });
 });
