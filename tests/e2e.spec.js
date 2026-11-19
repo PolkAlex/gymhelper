@@ -5240,7 +5240,22 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
                 if ((app && app.__mocked) || tries > 40) clearInterval(t);
             }, 25);
         });
-        await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+        /* буфер: in-memory мок navigator.clipboard вместо grantPermissions — clipboard-*
+           permissions Playwright поддерживает только в Chromium, на WebKit падает
+           (BLOCKED-вердикт tester). UX-поток не меняется: app вызывает
+           navigator.clipboard.writeText → мок копит значения, readText отдаёт последнее */
+        await context.addInitScript(function () {
+            const mem = [];
+            try {
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    value: {
+                        writeText: function (t) { mem.push(String(t)); return Promise.resolve(); },
+                        readText: function () { return Promise.resolve(mem.length ? mem[mem.length - 1] : ''); }
+                    }
+                });
+            } catch (e) { /* движок не дал переопределить — тест упадёт по тосту, сигнал тот же */ }
+        });
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
