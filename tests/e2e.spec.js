@@ -4060,6 +4060,433 @@ test.describe('UX-S6 календарь', function () {
     });
 });
 
+/* ===== [UX-I17][UX-T39] T4: пикер вида, День/3 дня/Неделя/Год, скролл-матрица, 320px =====
+   Спека docs/spec-ux-i17-week-view.md rev.3. Тесты, зависящие от ширины (порог дорожек
+   §3.4 «≥34px → с текстом»), задают viewport 360/320 явно — порог считается по живой
+   ширине DOM и на десктоп-проекте проверяет ту же узкую геометрию [§3.4, §10.8] */
+test.describe('[UX-I17] T4: пикер видов, сеточные виды, Год, скролл, 320px', function () {
+
+    const CAL_DOW_FULL = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'];
+    /* сид одним POST /api/save (как в S6-блоке выше) */
+    async function seedCal(request, workouts) {
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: workouts.reduce(function (mx, w) { return Math.max(mx, w.id + 1); }, 1),
+            del: [], workouts: workouts } } });
+    }
+    /* тренировка календаря: start/end могут быть пустыми ('' — аллдей-капсула; пустой
+       ended — блок условно 1 час), finished по умолчанию true */
+    function calW(id, day, start, end, name, finished) {
+        return { id: id, date: day, started: start ? day + 'T' + start : '', ended: end ? day + 'T' + end : '', finished: finished !== false,
+            title: '', nutrition: '',
+            exercises: [{ name: name, st: day + 'T' + (start || '10:00:00'), en: day + 'T' + (end || '11:00:00'),
+                sets: [{ w: '60', s: 3, r: '8-10', t: day + 'T' + (start || '10:00:00') }] }] };
+    }
+    /* открытие календаря в ЛЮБОМ виде: вид/дата заданы ключами localStorage ДО тапа */
+    async function openCalAny(page) {
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.card.cal')).toBeVisible({ timeout: 5000 });
+    }
+    /* смена вида через пикер: тюнеры → нижний лист → пункт */
+    async function pickView(page, label) {
+        await page.locator('.topbar [data-act="openCalPicker"]').click();
+        const sheet = page.locator('.modal.open');
+        await expect(sheet).toBeVisible({ timeout: 5000 });
+        await sheet.locator('.pli', { hasText: label }).click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+    }
+    function gridTop(page) {
+        return page.evaluate(function () { return document.getElementById('wkScroll').scrollTop; });
+    }
+
+    test('T4.1 пикер вида: 5 активных пунктов (Год без «скоро»), отметка текущего, переключение с сохранением даты', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'week');
+            localStorage.setItem('gymCalDate', '2026-02-15'); /* воскресенье */
+        });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('9–15 февраля');
+        /* пикер: нижний лист, 5 пунктов, все — активные кнопки, «скоро» нет [UX-T38, §2.5] */
+        await page.locator('.topbar [data-act="openCalPicker"]').click();
+        const sheet = page.locator('.modal.open');
+        await expect(sheet.locator('.sh-title')).toHaveText('Вид календаря');
+        const items = sheet.locator('.pli');
+        await expect(items).toHaveCount(5);
+        await expect(items).toHaveText(['День', '3 дня', 'Неделя', 'Месяц', 'Год']);
+        await expect(sheet).not.toContainText('скоро');
+        for (let i = 0; i < 5; i++) await expect(items.nth(i)).toBeEnabled();
+        /* отметка текущего: класс .on + точка .cur — ровно одна [§9.1] */
+        await expect(sheet.locator('.pli.on')).toHaveCount(1);
+        await expect(sheet.locator('.pli.on')).toHaveText('Неделя');
+        await expect(sheet.locator('.pli.on .cur')).toHaveCount(1);
+        /* переключение на «День» — дата сохраняется [§2.3] */
+        await items.nth(0).click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.wk-days')).toBeVisible();
+        await expect(page.locator('.cal-title')).toHaveText('Воскресенье, 15 февраля');
+        const state = await page.evaluate(function () {
+            return { v: localStorage.getItem('gymCalView'), d: localStorage.getItem('gymCalDate') };
+        });
+        expect(state.v).toBe('day');
+        expect(state.d).toBe('2026-02-15');
+        /* отметка переехала на «День» */
+        await page.locator('.topbar [data-act="openCalPicker"]').click();
+        await expect(page.locator('.modal.open .pli.on')).toHaveText('День');
+    });
+
+    test('T4.2 дефолт: чистый localStorage → вид «Неделя» (§12.2), gymCalDate = сегодня, капсула 7/7', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.removeItem('gymCalView');
+            localStorage.removeItem('gymCalDate');
+            localStorage.removeItem('gymCalMonth');
+        });
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.wk-days')).toBeVisible({ timeout: 5000 });
+        /* сетка месячного вида не рисуется — это именно Неделя */
+        await expect(page.locator('.cal-grid')).toHaveCount(0);
+        const now = new Date();
+        const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+        const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+        const t = mon.getMonth() === sun.getMonth()
+            ? mon.getDate() + '–' + sun.getDate() + ' ' + CAL_MONTHS_GEN[mon.getMonth()]
+            : mon.getDate() + ' ' + CAL_MONTHS_GEN[mon.getMonth()] + ' – ' + sun.getDate() + ' ' + CAL_MONTHS_GEN[sun.getMonth()];
+        await expect(page.locator('.cal-title')).toHaveText(t);
+        /* ключи записаны при первом открытии [§2.1] */
+        const state = await page.evaluate(function () {
+            return { v: localStorage.getItem('gymCalView'), d: localStorage.getItem('gymCalDate') };
+        });
+        expect(state.v).toBe('week');
+        expect(state.d).toBe(isoDate(now));
+        /* якорь и сегодня — одна ячейка; капсула на всей полосе (7/7) [§12.7] */
+        await expect(page.locator('.wd.sel')).toHaveAttribute('data-a', isoDate(now));
+        await expect(page.locator('.wd.today')).toHaveAttribute('data-a', isoDate(now));
+        const strip = await page.locator('.wk-days').boundingBox();
+        const pill = await page.locator('.winpill').boundingBox();
+        expect(Math.abs(pill.x - strip.x)).toBeLessThan(4);
+        expect(Math.abs(pill.width - strip.width)).toBeLessThan(4);
+        /* на «своей» неделе пилюли «Сегодня» нет [§9.2] */
+        await expect(page.locator('.todayfab')).toHaveCount(0);
+    });
+
+    test('T4.3 миграция: старый gymCalMonth без gymCalDate → Неделя от 1-го числа сохранённого месяца (§12.8)', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(function () { localStorage.setItem('gymCalMonth', '2026-02'); });
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.wk-days')).toBeVisible({ timeout: 5000 });
+        /* 1.02.2026 — воскресенье: неделя Пн 26.01 – Вс 01.02, заголовок через месяц [§2.2] */
+        await expect(page.locator('.cal-title')).toHaveText('26 января – 1 февраля');
+        const state = await page.evaluate(function () {
+            return { v: localStorage.getItem('gymCalView'), d: localStorage.getItem('gymCalDate') };
+        });
+        expect(state.v).toBe('week');
+        expect(state.d).toBe('2026-02-01');
+    });
+
+    test('T4.4 Неделя (360px): пересечение — .wbar без текста, одиночный блок с текстом; тап полосы → карточка', async ({ page, request }) => {
+        await page.setViewportSize({ width: 360, height: 740 });
+        const today = isoDate(new Date());
+        await seedCal(request, [
+            calW(1, today, '10:00:00', '11:30:00', 'Кроссфит'),
+            calW(2, today, '11:00:00', '12:30:00', 'Велосипед'),
+            calW(3, today, '18:00:00', '19:00:00', 'Жим штанги лёжа')
+        ]);
+        await openApp(page);
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.wk-days')).toBeVisible({ timeout: 5000 });
+        /* порог §3.4 на 360px: колонка ≈38.6px → пересечение (k=2, дорожка ≈18px) —
+           две полосы .wbar без текста, одиночный блок (≥34px) — .wblk со временем */
+        await expect(page.locator('.wbar')).toHaveCount(2);
+        await expect(page.locator('.wblk')).toHaveCount(1);
+        const bar = page.locator('.wbar').first();
+        await expect(bar).toHaveAttribute('aria-label', /.+/);
+        expect((await bar.textContent()) || '').toBe('');
+        await expect(page.locator('.wblk', { hasText: '18:00' })).toHaveCount(1);
+        /* тап полосы (кнопка) → карточка; «Назад» возвращает в Неделю той же недели */
+        await bar.click();
+        await expect(page.locator('#w1')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.bb-back')).toBeVisible();
+        await page.locator('.bb-back').click();
+        await expect(page.locator('.wk-days')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('T4.5 День: .wide с диапазоном («23:30–24:00», не «24:30»), пересечения — дорожки с текстом, капсула 1/7, стрелки ±1', async ({ page, request }) => {
+        await page.setViewportSize({ width: 360, height: 740 });
+        await seedCal(request, [
+            calW(1, '2026-02-14', '09:00:00', '10:00:00', 'Жим штанги лёжа'),
+            calW(2, '2026-02-14', '15:00:00', '16:30:00', 'Кроссфит'),
+            calW(3, '2026-02-14', '15:30:00', '17:00:00', 'Велосипед'),
+            calW(4, '2026-02-14', '23:30:00', '', 'Ночная смена') /* пустой ended → условно 1ч */
+        ]);
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'day');
+            localStorage.setItem('gymCalDate', '2026-02-14'); /* суббота */
+        });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('Суббота, 14 февраля');
+        /* капсула-подсветка на ячейке выбранного дня (5-я из 7), ширина 1/7 [§12.7] */
+        const strip = await page.locator('.wk-days').boundingBox();
+        const pill = await page.locator('.winpill').boundingBox();
+        expect(Math.abs(pill.x - (strip.x + strip.width * 5 / 7))).toBeLessThan(4);
+        expect(Math.abs(pill.width - strip.width / 7)).toBeLessThan(4);
+        /* все 4 блока широкие .wide с диапазоном времени [§4] */
+        await expect(page.locator('.wblk.wide')).toHaveCount(4);
+        await expect(page.locator('.wblk.wide', { hasText: '09:00–10:00' })).toHaveCount(1);
+        /* clamp конца: 23:30 без ended → «23:30–24:00», «24:30» не показываем [UX-T39] */
+        await expect(page.locator('.wblk.wide', { hasText: '23:30–24:00' })).toHaveCount(1);
+        await expect(page.locator('.wblk', { hasText: '24:30' })).toHaveCount(0);
+        /* пересечение: 2 дорожки, обе с текстом (дорожка ≈140px ≥ 34), рядом, не друг на друге */
+        await expect(page.locator('.wbar')).toHaveCount(0);
+        const t1 = page.locator('.wblk', { hasText: '15:00–16:30' });
+        const t2 = page.locator('.wblk', { hasText: '15:30–17:00' });
+        await expect(t1).toHaveCount(1);
+        await expect(t2).toHaveCount(1);
+        const b1 = await t1.boundingBox();
+        const b2 = await t2.boundingBox();
+        expect(b1.width).toBeGreaterThan(100);
+        expect(b2.x).toBeGreaterThan(b1.x);
+        /* стрелки ±1 [§2.3] */
+        await page.locator('[data-act="calPrev"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('Пятница, 13 февраля');
+        await page.locator('[data-act="calNext"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('Суббота, 14 февраля');
+    });
+
+    test('T4.6 3 дня: капсула 3/7, у края недели clamp 2/7 и 1/7; аллдей-капсулы только в днях окна', async ({ page, request }) => {
+        await seedCal(request, [
+            calW(1, '2026-02-10', '', '', 'Растяжка'), /* Вт: в полосе, но вне окна */
+            calW(2, '2026-02-14', '', '', 'Зарядка'), /* Сб: в окне */
+            calW(3, '2026-02-15', '', '', 'Отжимания'), /* Вс: в окне */
+            calW(4, '2026-02-17', '', '', 'Кардио') /* Вт следующей недели: вне окна */
+        ]);
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'd3');
+            localStorage.setItem('gymCalDate', '2026-02-14'); /* суббота — до конца недели 2 дня */
+        });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('14–16 февраля');
+        /* окно у края недели: капсула обрезана до видимых 2/7 [§2.4] */
+        const strip = await page.locator('.wk-days').boundingBox();
+        let pill = await page.locator('.winpill').boundingBox();
+        expect(Math.abs(pill.x - (strip.x + strip.width * 5 / 7))).toBeLessThan(4);
+        expect(Math.abs(pill.width - strip.width * 2 / 7)).toBeLessThan(4);
+        /* аллдей: капсулы только в днях окна ∩ полосы (14, 15); 10-е вне окна и 17-е
+           вне полосы не рендерятся [§3.5] */
+        await expect(page.locator('.adpill')).toHaveCount(2);
+        await expect(page.locator('.adpill', { hasText: 'Зарядка' })).toHaveCount(1);
+        await expect(page.locator('.adpill', { hasText: 'Отжимания' })).toHaveCount(1);
+        /* ‹ ±3 дня → окно 11–13 целиком внутри недели: капсула 3/7, аллдей нет */
+        await page.locator('[data-act="calPrev"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('11–13 февраля');
+        pill = await page.locator('.winpill').boundingBox();
+        expect(Math.abs(pill.width - strip.width * 3 / 7)).toBeLessThan(4);
+        await expect(page.locator('.adpill')).toHaveCount(0);
+        /* тап воскресенья в полосе → окно 15–17: капсула 1/7, из безвременных видна только 15-я */
+        await page.locator('.wd[data-a="2026-02-15"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('15–17 февраля');
+        pill = await page.locator('.winpill').boundingBox();
+        expect(Math.abs(pill.x - (strip.x + strip.width * 6 / 7))).toBeLessThan(4);
+        expect(Math.abs(pill.width - strip.width / 7)).toBeLessThan(4);
+        await expect(page.locator('.adpill')).toHaveCount(1);
+        await expect(page.locator('.adpill', { hasText: 'Отжимания' })).toHaveCount(1);
+    });
+
+    test('T4.7 скролл: Неделя — тап соседнего дня той же недели сохраняет ручной скролл; возврат из карточки — та же позиция', async ({ page, request }) => {
+        await page.setViewportSize({ width: 360, height: 740 });
+        const now = new Date();
+        const today = isoDate(now);
+        const mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+        /* соседний день той же недели: понедельник, а если сегодня он — вторник */
+        const other = mon.getDay() === now.getDay() && mon.getDate() === now.getDate()
+            ? isoDate(new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 1))
+            : isoDate(mon);
+        await seedCal(request, [
+            calW(1, today, '08:00:00', '09:00:00', 'Утро'),
+            calW(2, today, '19:00:00', '20:00:00', 'Вечер')
+        ]);
+        await openApp(page);
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.wk-days')).toBeVisible({ timeout: 5000 });
+        /* ручной скролл сетки */
+        await page.evaluate(function () { document.getElementById('wkScroll').scrollTop = 400; });
+        /* тап по дню той же недели — период не сменился, скролл на месте (ключ по понедельнику) */
+        await page.locator('.wd[data-a="' + other + '"]').click();
+        await expect(page.locator('.wd.sel')).toHaveAttribute('data-a', other);
+        await expect(page.locator('.wd.today')).toHaveAttribute('data-a', today);
+        expect(await gridTop(page)).toBe(400);
+        /* тап по блоку → карточка; «Назад» — та же позиция скролла [§3.2].
+           Перед тапом скроллим на 350: блок «Утро» (08:00 → top 352–396) полностью в окне
+           350–790, иначе Playwright сам центрирует блок (CDP scrollIntoViewIfNeeded →
+           scrollTop 374−220=154) и pre захватит позицию Playwright, а не ручную */
+        await page.evaluate(function () { document.getElementById('wkScroll').scrollTop = 350; });
+        await page.locator('.wblk').first().click();
+        await expect(page.locator('#w1')).toBeVisible({ timeout: 5000 });
+        await page.locator('.bb-back').click();
+        await expect(page.locator('.wk-days')).toBeVisible({ timeout: 5000 });
+        expect(await gridTop(page)).toBe(350);
+    });
+
+    test('T4.8 скролл: День/3 дня — тап другого дня сбрасывает на автоскролл (семантика смены периода §3.2)', async ({ page, request }) => {
+        await page.setViewportSize({ width: 360, height: 740 });
+        await seedCal(request, [
+            calW(1, '2026-02-13', '08:00:00', '09:00:00', 'Утро'),
+            calW(2, '2026-02-14', '21:00:00', '22:00:00', 'Вечер')
+        ]);
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'day');
+            localStorage.setItem('gymCalDate', '2026-02-14');
+        });
+        await openCalAny(page);
+        /* автоскролл при открытии: ранняя 21:00 → (21:00−60мин)×56px, clamp [0, 1344−440] → 904 */
+        expect(await gridTop(page)).toBe(904);
+        await page.evaluate(function () { document.getElementById('wkScroll').scrollTop = 100; });
+        /* тап по другому дню полосы — период сменился → автоскролл к 08:00−60мин = 7×56 = 392 */
+        await page.locator('.wd[data-a="2026-02-13"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('Пятница, 13 февраля');
+        expect(await gridTop(page)).toBe(392);
+        /* «3 дня»: та же семантика (час 48px) — открытие окна 13–15: 7×48 = 336 */
+        await pickView(page, '3 дня');
+        await expect(page.locator('.cal-title')).toHaveText('13–15 февраля');
+        expect(await gridTop(page)).toBe(336);
+        await page.evaluate(function () { document.getElementById('wkScroll').scrollTop = 50; });
+        /* тап 14-го → окно 14–16: в нём «Вечер» 21:00 → автоскролл (21:00−60мин)×48 = 960,
+           clamp в [0, 1152−440=712] → 712 (заодно проверка clamp'а [§3.2]) */
+        await page.locator('.wd[data-a="2026-02-14"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('14–16 февраля');
+        expect(await gridTop(page)).toBe(712);
+    });
+
+    test('T4.9 Год: 12 мини-месяцев, валидные дни (февраль 2024 = 29), точка .h, сегодня .t, .ym.cur', async ({ page, request }) => {
+        await seedCal(request, [calW(1, '2024-02-10', '10:00:00', '11:00:00', 'Жим штанги лёжа')]);
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'year');
+            localStorage.setItem('gymCalDate', '2024-02-10');
+        });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('2024');
+        await expect(page.locator('.ym')).toHaveCount(12);
+        /* февраль 2024 — високосный: ровно 29 чисел (без заглушек aria-hidden) [§8] */
+        const feb = page.locator('.ym', { hasText: 'Февраль' });
+        const nums = await feb.locator('.yd i:not([aria-hidden])').allTextContents();
+        expect(nums.length).toBe(29);
+        expect(nums[28]).toBe('29');
+        /* точка .h на дне с тренировкой; якорный месяц подсвечен (регресс бага с дефисом) */
+        await expect(feb.locator('.yd i.h')).toHaveCount(1);
+        await expect(feb.locator('.yd i.h')).toHaveText('10');
+        await expect(page.locator('.ym.cur')).toHaveCount(1);
+        await expect(page.locator('.ym.cur')).toHaveClass(/cur/);
+        /* стрелки ±1 год */
+        await page.locator('[data-act="calNext"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('2025');
+        await page.locator('[data-act="calPrev"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('2024');
+        /* «Сегодня» → текущий год: ноябрь .cur, ячейка сегодняшнего дня .t [§12.9] */
+        await expect(page.locator('.todayfab')).toBeVisible();
+        await page.locator('.todayfab').click();
+        await expect(page.locator('.cal-title')).toHaveText(String(new Date().getFullYear()));
+        const cur = page.locator('.ym.cur');
+        await expect(cur).toHaveCount(1);
+        await expect(cur.locator('.ym-t')).toHaveText(CAL_MONTHS[new Date().getMonth()]);
+        await expect(cur.locator('.yd i.t')).toHaveText(String(new Date().getDate()));
+        await expect(page.locator('.todayfab')).toHaveCount(0);
+    });
+
+    test('T4.10 Год → Месяц: тап месяца якоря сохраняет дату (панель дня жива), чужой месяц — 1-е число и панель закрыта', async ({ page, request }) => {
+        await seedCal(request, [calW(1, '2024-02-15', '10:00:00', '11:00:00', 'Жим штанги лёжа')]);
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'month');
+            localStorage.setItem('gymCalDate', '2024-02-15');
+        });
+        await openCalAny(page);
+        /* панель дня открыта тапом по 15-му */
+        await page.locator('.cal-d[data-a="2024-02-15"]').click();
+        await expect(page.locator('.daypanel')).toBeVisible({ timeout: 5000 });
+        await pickView(page, 'Год');
+        await expect(page.locator('.cal-title')).toHaveText('2024');
+        /* тап по мини-месяцу ЯКОРЯ: дата сохраняется целиком (решение владельца, ТЗ #274) */
+        await page.locator('.ym', { hasText: 'Февраль' }).click();
+        await expect(page.locator('.cal-grid')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.cal-title')).toHaveText('Февраль 2024');
+        let d = await page.evaluate(function () { return localStorage.getItem('gymCalDate'); });
+        expect(d).toBe('2024-02-15');
+        /* месяц не менялся — панель дня осталась жива [§2.3] */
+        await expect(page.locator('.daypanel')).toBeVisible();
+        /* снова Год, тап ЧУЖОГО месяца: 1-е число, панель закрыта [§2.3, §8] */
+        await pickView(page, 'Год');
+        await page.locator('.ym', { hasText: 'Март' }).click();
+        await expect(page.locator('.cal-title')).toHaveText('Март 2024');
+        d = await page.evaluate(function () { return localStorage.getItem('gymCalDate'); });
+        expect(d).toBe('2024-03-01');
+        await expect(page.locator('.daypanel')).toHaveCount(0);
+        await expect(page.locator('.cal-d.sel')).toHaveCount(0);
+    });
+
+    test('T4.11 Год: 29.02.2024 стрелкой года → 28.02.2025 (и назад); границы 2020/2030 — стрелки disabled', async ({ page }) => {
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'year');
+            localStorage.setItem('gymCalDate', '2024-02-29');
+        });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('2024');
+        await expect(page.locator('.ym', { hasText: 'Февраль' }).locator('.yd i:not([aria-hidden])')).toHaveCount(29);
+        /* +1 год: 29 февраля → 28 (невисокосный 2025) [§2.3] */
+        await page.locator('[data-act="calNext"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('2025');
+        const feb25 = page.locator('.ym', { hasText: 'Февраль' });
+        const nums = await feb25.locator('.yd i:not([aria-hidden])').allTextContents();
+        expect(nums.length).toBe(28);
+        let d = await page.evaluate(function () { return localStorage.getItem('gymCalDate'); });
+        expect(d).toBe('2025-02-28');
+        /* −1 год: 2024 високосный, но 29-го в якоре уже нет — 28.02.2024 */
+        await page.locator('[data-act="calPrev"]').click();
+        await expect(page.locator('.cal-title')).toHaveText('2024');
+        d = await page.evaluate(function () { return localStorage.getItem('gymCalDate'); });
+        expect(d).toBe('2024-02-28');
+        /* нижняя граница 2020: ‹ disabled + aria-disabled, › жив [§8] */
+        await page.locator('[data-act="closeCal"]').click();
+        await page.evaluate(function () { localStorage.setItem('gymCalDate', '2020-06-10'); });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('2020');
+        const prevBtn = page.locator('[data-act="calPrev"]');
+        await expect(prevBtn).toBeDisabled();
+        await expect(prevBtn).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('[data-act="calNext"]')).toBeEnabled();
+        /* верхняя граница 2030: › disabled, ‹ жив */
+        await page.locator('[data-act="closeCal"]').click();
+        await page.evaluate(function () { localStorage.setItem('gymCalDate', '2030-06-10'); });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('2030');
+        const nextBtn = page.locator('[data-act="calNext"]');
+        await expect(nextBtn).toBeDisabled();
+        await expect(nextBtn).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('[data-act="calPrev"]')).toBeEnabled();
+    });
+
+    test('T4.12 320px (§10.8): Неделя — колонка ≈33px, одиночные блоки — полосы .wbar; без горизонтального скролла', async ({ page, request }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        const today = isoDate(new Date());
+        await seedCal(request, [calW(1, today, '10:00:00', '11:00:00', 'Жим штанги лёжа')]);
+        await openApp(page);
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.wk-days')).toBeVisible({ timeout: 5000 });
+        /* порог §3.4: колонка (244−14)/7 ≈ 32.9px < 34px — даже одиночный блок уходит
+           в полосу без текста (отложенное T1, реализовано в T4) [§10.8] */
+        await expect(page.locator('.wbar')).toHaveCount(1);
+        await expect(page.locator('.wblk')).toHaveCount(0);
+        expect((await page.locator('.wbar').textContent()) || '').toBe('');
+        await expect(page.locator('.wbar')).toHaveAttribute('aria-label', /.+/);
+        /* 320px-регресс: без горизонтального переполнения */
+        const sw = await page.evaluate(function () { return document.documentElement.scrollWidth; });
+        expect(sw).toBeLessThanOrEqual(320);
+    });
+});
+
 /* ===== [EXR-T2] база упражнений free-exercise-db: фото вместо иконок, RU-описание ===== */
 test.describe('EXR-T2: фото упражнений (free-exercise-db) в Технике', function () {
 
