@@ -755,6 +755,10 @@ function restRaised() {
     return !!w || (tab === 'tech' && !!TECH.open);
 }
 function renderRestbar() {
+    /* [GOA-B1] класс на body: при живом таймере контенту нужен больший нижний
+       запас (style.css body.resting), иначе последний блок не выскроллить
+       из-под панели */
+    document.body.classList.toggle('resting', !!REST);
     const el = document.getElementById('restbar');
     if (!el) return;
     if (!REST) { el.className = 'restbar hidden'; el.innerHTML = ''; return; }
@@ -1207,6 +1211,7 @@ const ACTIONS = {
         goalsFromTab = tab;
         window.scrollTo(0, 0);
         render();
+        goalArchNudge();
     },
     closeGoals: function () {
         goalsOpen = false;
@@ -2637,6 +2642,31 @@ function renderGoals() {
         for (const g of arch) h += goalArchRowHtml(g);
     }
     return h + '</div>';
+}
+
+/* [GOA-B1] на узких экранах последняя строка архива попадает под фиксированные
+   слои низа: навигацию (72px) или активный restbar — кнопки «Повторить»/✕ видны,
+   но тап по ним перехватывают .nav/.nbtn/.rb-sqbtn (hit-test отдаёт не кнопку).
+   При открытии «Целей» проверяем центры кнопок первой строки: если перекрыты —
+   доскролливаем строку в чистую зону; где перекрытия нет, ничего не происходит */
+function goalArchNudge() {
+    requestAnimationFrame(function () {
+        const row = document.querySelector('.garow');
+        if (!row) return;
+        let barrier = Infinity;
+        const rb = document.getElementById('restbar');
+        if (REST && rb && !rb.classList.contains('hidden')) barrier = rb.getBoundingClientRect().top;
+        const nav = document.querySelector('.nav');
+        if (nav) barrier = Math.min(barrier, nav.getBoundingClientRect().top);
+        if (!isFinite(barrier)) return;
+        let need = 0;
+        row.querySelectorAll('[data-act="goalRepeat"], [data-act="goalArchiveDel"]').forEach(function (b) {
+            const r = b.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (!hit || (hit !== b && !b.contains(hit))) need = Math.max(need, r.bottom - barrier + 8);
+        });
+        if (need > 0) window.scrollBy(0, need);
+    });
 }
 
 /* виджет в Статистике (§7): до 3 активных целей компактными строками (название + % +
