@@ -5402,7 +5402,7 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(shared.length).toBe(1);
         expect(shared[0].name).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
         expect(shared[0].type).toBe('image/png');
-        /* воронка картинки §5: тап + успешный шершинг; fallback-события нет */
+        /* воронка картинки §5: тап + успешный шеринг; fallback-события нет */
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).toContain('shareClick');
         expect(ev).toContain('shareOk');
@@ -5494,5 +5494,100 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts).toContain('+ 2 упражнения');
         expect(sc.texts.some(function (t) { return String(t).indexOf('12,5 кг × 3×') >= 0; })).toBeTruthy();
         expect(sc.texts.some(function (t) { return /^4×8$/.test(String(t)); })).toBeTruthy();
+    });
+
+    test('рекорд: равный вес — без плашки (герой = объём); 125 после базы 120 — герой «Вес подхода»', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        const d1 = isoDate(new Date(Date.now() - 86400000));
+        const d2 = isoDate(new Date(Date.now() - 2 * 86400000));
+        /* база: две тренировки жимом 120; текущая тоже 120 — равный результат не праздник (§5.1) */
+        const seed120 = { initData: '', rev: 1, data: { nextId: 4, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, d2, EX, '120', 3), doneWorkout(2, d1, EX, '120', 3), doneWorkout(3, today, EX, '120', 3)] } };
+        await request.post('/api/save', { data: seed120 });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        let sc = await scRendered(page, 1);
+        /* равный вес: ни плашки, ни 🏆; герой = объём (120 кг × 3×9 ср. = 3 240) */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('РЕКОРД') >= 0; })).toBeFalsy();
+        expect(sc.texts).not.toContain('🏆');
+        expect(sc.texts).toContain('ОБЪЁМ ТРЕНИРОВКИ');
+        expect(sc.texts).not.toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('3 240');
+        /* сегодня 125 — живой рекорд: герой = реальный вес, Эпли мелкой строкой, плашка */
+        await request.post('/api/save', { data: { initData: '', rev: 2, data: {
+            nextId: 4, del: [], profile: seed120.data.profile,
+            workouts: [seed120.data.workouts[0], seed120.data.workouts[1], doneWorkout(3, today, EX, '125', 3)]
+        } } });
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        sc = await scRendered(page, 1); /* после reload счётчик рендеров стартует заново */
+        expect(sc.texts).toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('125');
+        expect(sc.texts.some(function (t) { return String(t).indexOf('оценка 1ПМ по Эпли') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД') >= 0; })).toBeTruthy();
+        expect(sc.texts).toContain('реальный вес подхода');
+    });
+
+    test('рекорд 120 после 100: герой = реальный вес подхода, НЕ Эпли; Эпли мелкой строкой', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        const d1 = isoDate(new Date(Date.now() - 86400000));
+        /* вчера 100 — база; сегодня 120 — рекорд реальным весом (ред. 2 §3, «который жал») */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, d1, EX, '100', 3), doneWorkout(2, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const sc = await scRendered(page, 1);
+        /* герой — реальный вес 120 отдельным числом; если бы герой считался по Эпли,
+           в heroNum стояло бы «156» отдельным элементом (120 × (1 + 9/30) = 156) */
+        expect(sc.texts).toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('120');
+        expect(sc.texts).not.toContain('156');
+        /* Эпли — только мелкой второстепенной строкой; плашка — реальным весом */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('оценка 1ПМ по Эпли ≈ 156 кг') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД · ЖИМ ШТАНГИ ЛЁЖА') >= 0; })).toBeTruthy();
+    });
+
+    test('рекорд у более лёгкого упражнения: присед 80 (база 60) при жиме 100 (база 130)', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        const d1 = isoDate(new Date(Date.now() - 86400000));
+        function benchSquat(id, day, bench, squat) {
+            return { id: id, date: day, started: day + 'T09:30:00', ended: day + 'T10:30:00', finished: true, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: day + 'T09:31:00', en: day + 'T10:00:00', sets: [{ w: bench, s: 3, r: '8', t: day + 'T09:32:00' }] },
+                    { name: 'Приседания со штангой', st: day + 'T09:31:00', en: day + 'T10:00:00', sets: [{ w: squat, s: 3, r: '8', t: day + 'T09:32:00' }] }
+                ] };
+        }
+        /* жим 100 тяжелее приседа 80, но рекорд только у приседа: 80 > база 60,
+           жим 100 < база 130 — глобально максимальный подход не обязан быть рекордом */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [benchSquat(1, d1, '130', '60'), benchSquat(2, today, '100', '80')]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const sc = await scRendered(page, 1);
+        expect(sc.texts).toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('80');
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД · ПРИСЕДАНИЯ СО ШТАНГОЙ') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД · ЖИМ ШТАНГИ ЛЁЖА') >= 0; })).toBeFalsy();
+        /* 🏆 у строки-рекордсмена — приседа, не у более тяжёлого жима */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('80 кг × 3×8  🏆') >= 0; })).toBeTruthy();
     });
 });

@@ -353,6 +353,14 @@ function setsWord(n) {
     if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'подхода';
     return 'подходов';
 }
+/* склонение повторений для постера [UX-I14]: «21 повторение / 3 повторения / 108 повторений» */
+function repsWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'повторение';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'повторения';
+    return 'повторений';
+}
 /* [UX-T29] дата рождения: возраст вычисляется, склонения, бейдж месяца рождения */
 const MONTHS_FULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 function ageOf(p, now) {
@@ -1243,8 +1251,9 @@ const ACTIONS = {
        там же перерисовка после закрытия шита фильтров Техники */
     modalBackdrop: function () { closeModal(); },
     /* ============ [UX-I16] шейринг тренировки по ссылке ============ */
-    /* шит выбора «Картинка / Телеграм» на завершённой тренировке (спека §7) */
-    shareSheet: function (a) { shareSheet(+a); },
+    /* шит выбора «Картинка / Телеграм» на завершённой тренировке (спека §7);
+       shareClick (§5) — на тап «Поделиться», как точка входа воронки шеринг-картинки */
+    shareSheet: function (a) { trackShare('shareClick'); shareSheet(+a); },
     /* поток «Телеграм» (§7.2): POST /api/share → буфер → выбор чата → тост */
     shareTg: function (a) { shareTelegramGo(+a); },
     /* opt-in имени в OG-превью и на картинке (§11.1): тогл в шите, состояние в G.shareName */
@@ -4917,9 +4926,9 @@ function shareSheet(wid) {
         '<span class="st"><b>Телеграм</b>' +
         '<span class="ssub">Отправить в любой чат — откроется выбор чата, ссылка также скопируется</span></span></button>';
     /* opt-in имени (§11.1): по умолчанию выключено — картинка и ссылка анонимны */
-    h += '<div class="shname"><span class="st"><b>Показывать моё имя при шершинге</b>' +
+    h += '<div class="shname"><span class="st"><b>Показывать моё имя при шеринге</b>' +
         '<span class="ssub">' + (nameOn ? 'Имя из Telegram увидят получатели картинки и ссылки' : 'Выключено — картинка и ссылка без вашего имени') + '</span></span>' +
-        swToggleHtml(nameOn, 'shareNameToggle', String(wid), 'Показывать моё имя при шершинге') + '</div>';
+        swToggleHtml(nameOn, 'shareNameToggle', String(wid), 'Показывать моё имя при шеринге') + '</div>';
     h += '<p class="snote">🔒 Ссылку видят только те, кому вы её отправили.</p>';
     openModal(h);
 }
@@ -5027,44 +5036,40 @@ function shareExWord(n) {
     if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'упражнения';
     return 'упражнений';
 }
-/* [UX-I14 §10.2] имя для opt-in на картинке: источник — initDataUnsafe Telegram,
-   как шапка профиля; на канве только при включённом тогле, нигде не хранится */
-function tgUserName() {
-    const u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-    if (!u) return '';
-    return String([u.first_name, u.last_name].filter(Boolean).join(' ') || u.username || '').trim();
-}
 /* рекорд тренировки (ред. 2 §3, решение владельца 19.11): силовой — максимальный
-   РЕАЛЬНЫЙ вес подхода, строго побивший все прошлые тренировки этого упражнения
-   (база — только прошлые, как в prChipSetIdx; первое выполнение и равный — не рекорд);
+   РЕАЛЬНЫЙ вес подхода, строго побивший все прошлые тренировки СВОЕГО упражнения
+   (база — только прошлые, как в prChipSetIdx; первое выполнение и равный — не рекорд;
+   проверяется каждое упражнение — глобально самый тяжёлый подход может и не быть
+   рекордом: жим 100 при базе 130 рядом с приседом 80 при базе 60 → рекорд у приседа);
    Эпли — вторичной оценкой мелко (расчёт не должен выглядеть фактом). Калистеника
    без весов — рекорд по объёму повторений без 1ПМ (edge 8.1). null — рекорда нет */
 function shareRecord(w) {
     const idx = G.workouts.indexOf(w);
     if (idx < 0) return null;
-    let maxW = 0, maxEx = null, maxWStr = null, maxSet = null;
+    let best = null;
     for (const e of (w.exercises || [])) {
+        let exW = 0, exSet = null;
         for (const s of e.sets) {
             const v = avgNum(s.w);
-            if (v > maxW) { maxW = v; maxEx = e.name; maxWStr = shareWeightText(s.w); maxSet = s; }
+            if (v > exW) { exW = v; exSet = s; }
         }
-    }
-    if (maxW > 0 && maxEx) {
-        const nl = maxEx.toLowerCase();
+        if (!(exW > 0)) continue;
+        const nl = e.name.toLowerCase();
         let baseHas = false, baseMax = 0;
         for (let i = 0; i < idx; i++) {
-            for (const e of (G.workouts[i].exercises || [])) {
-                if (e.name.toLowerCase() !== nl || !e.sets.length) continue;
-                for (const s of e.sets) {
+            for (const pe of (G.workouts[i].exercises || [])) {
+                if (pe.name.toLowerCase() !== nl || !pe.sets.length) continue;
+                for (const s of pe.sets) {
                     const v = avgNum(s.w);
                     if (v > 0) { baseHas = true; if (v > baseMax) baseMax = v; }
                 }
             }
         }
-        return (baseHas && maxW > baseMax)
-            ? { ex: maxEx, wStr: maxWStr, wNum: maxW, epley: Math.round(e1rmOf(maxSet)) }
-            : null;
+        if (baseHas && exW > baseMax && (!best || exW > best.wNum)) {
+            best = { ex: e.name, wNum: exW, epley: Math.round(e1rmOf(exSet)) };
+        }
     }
+    if (best) return best;
     /* калистеника: объём повторений (подходы × повторения) этой тренировки vs база */
     let bestVol = 0, bestEx = null;
     for (const e of (w.exercises || [])) {
@@ -5205,7 +5210,7 @@ function renderShareCard(w) {
             } else {
                 heroLbl = 'Сумма повторений';
                 heroNum = fmtCardNum(shareTotalReps(w));
-                heroUnit = 'повторений';
+                heroUnit = repsWord(shareTotalReps(w)); /* «21 повторение» / «108 повторений» */
             }
             const heroH = 20 + 11 + 8 + 66 + (epleyStr ? 18 : 0) + 18;
             glass(PX, y, CW, heroH, true);
@@ -5252,7 +5257,7 @@ function renderShareCard(w) {
                 const isVol = rec.vol != null;
                 const headLines = wrap2(((isVol ? 'Рекорд · ' : 'Новый рекорд · ') + rec.ex).toUpperCase(),
                     10.5, '800', CW - 16 * 2 - 26 - 13);
-                const valNum = isVol ? String(rec.vol) : rec.wStr;
+                const valNum = isVol ? String(rec.vol) : fmtCardNum(rec.wNum); /* «75-175» → «125» (edge 8.14) */
                 const valUnit = isVol ? 'повт.' : 'кг';
                 const subStr = isVol ? 'объём повторений' : 'реальный вес подхода';
                 const recH = 14 + headLines.length * 13 + 6 + 26 + 4 + 11 + 14;
@@ -5315,16 +5320,15 @@ function renderShareCard(w) {
                 glass(PX, listTop, CW, listH, false);
                 y += listH + 8;
             }
-            const more = (w.exercises || []).length - exs.length;
-            if (more > 0) {
-                txt('+ ' + more + ' ' + shareExWord(more), PX, y + 12, 12.5, '400', C.muted);
-                y += 24;
-            }
-
             /* футер всегда физически внизу: бренд-строка + пилюля t.me (§6) */
             const st = monthStreak();
             const footH = 14 + 12 + 10 + 40;
             const sepY = H - 22 - footH;
+            const more = (w.exercises || []).length - exs.length;
+            if (more > 0 && y + 24 < sepY) { /* не наезжаем на футер (edge 8.13) */
+                txt('+ ' + more + ' ' + shareExWord(more), PX, y + 12, 12.5, '400', C.muted);
+                y += 24;
+            }
             if (st && st.n >= 2 && y + 30 < sepY) { /* серия < 2 не рисуется (edge 8.6) */
                 txt('🔥 Серия: ' + st.n + ' ' + trainWord(st.n) + ' подряд', PX, Math.min(y + 22, sepY - 16), 13.5, '700', C.text);
             }
@@ -5359,9 +5363,10 @@ function renderShareCard(w) {
 
 /* поток «Картинка» (§5, механика UX-I16 «буфер → действие»): рендер PNG → буфер →
    navigator.share с файлом (шторка Telegram); fallback — скачивание + тост
-   «прикрепите в чат». Счётчики shareClick/shareOk/shareDownload через /api/track;
-   отмена шторки (AbortError) — не событие. Ошибка рендера — тост, кнопка
-   разблокируется (edge 8.10). */
+   «прикрепите в чат». shareClick пишется на тапе «Поделиться» (ACTION shareSheet,
+   точка входа воронки §5); shareOk/shareDownload — по факту шторки/скачивания;
+   отмена шторки (AbortError) — не событие. Ошибка рендера/старый webview без
+   File — тост + разблокировка кнопки (edge 8.10). */
 async function sharePictureGo(wid) {
     const btn = document.getElementById('shareBtn' + wid);
     const setBusy = function (busy) {
@@ -5371,7 +5376,6 @@ async function sharePictureGo(wid) {
     };
     closeModal();
     setBusy(true);
-    trackShare('shareClick');
     const w = findW(wid);
     if (!w) { setBusy(false); return; }
     let card = null;
@@ -5398,9 +5402,10 @@ async function sharePictureGo(wid) {
             toast('Картинка также скопирована в буфер');
         } catch (e) { /* отказ буфера — не ошибка */ }
     }
-    const file = new File([card.blob], fname, { type: 'image/png' });
-    /* §5.3: Web Share API Level 2 — системная шторка Telegram с готовой PNG */
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    /* §5.3: Web Share API Level 2 — системная шторка Telegram с готовой PNG;
+       File в старом webview может отсутствовать — тогда сразу fallback-скачивание */
+    const file = (typeof File !== 'undefined') ? new File([card.blob], fname, { type: 'image/png' }) : null;
+    if (file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
             await navigator.share({ files: [file] });
             trackShare('shareOk'); /* resolved — картинка ушла в шторку */
@@ -5427,7 +5432,6 @@ async function sharePictureGo(wid) {
     }
     setBusy(false);
 }
-
 
 /* [ANA-T5] события онбординга (спека ANA-S2 г2): имена — белый список сервера, доставка —
    fire-and-forget POST /api/track (онбординг завершается без изменений данных, /api/save
@@ -5742,7 +5746,7 @@ async function init() {
             /* и не должен совпадать с живыми тренировками сервера */
             for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
             if (G.profile) profileSex = G.profile.sex;
-            /* [UX-I14 §10.2] opt-in имени при шершинге — персист на устройстве:
+            /* [UX-I14 §10.2] opt-in имени при шеринге — персист на устройстве:
                localStorage старше серверной копии (сервер перечитает флаг при
                следующем POST /api/share); нет записи — дефолт выключено */
             const snSaved = lsGet('gymShareName');
