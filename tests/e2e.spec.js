@@ -5590,4 +5590,70 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         /* 🏆 у строки-рекордсмена — приседа, не у более тяжёлого жима */
         expect(sc.texts.some(function (t) { return String(t).indexOf('80 кг × 3×8  🏆') >= 0; })).toBeTruthy();
     });
+    test('диапазон веса «75-175» → рекорд «125» (edge 8.14); vol-рекорд калистеники «32 повт.» (edge 8.1)', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        await mockWebShare(context);
+        const today = isoDate(new Date());
+        const d1 = isoDate(new Date(Date.now() - 86400000));
+        function pull(day, sets, reps) {
+            return { name: 'Подтягивания', st: day + 'T09:31:00', en: day + 'T10:00:00',
+                sets: [{ w: '', s: sets, r: reps, t: day + 'T09:32:00' }] };
+        }
+        function two(id, day, benchW, pullSets, pullReps) {
+            return { id: id, date: day, started: day + 'T09:30:00', ended: day + 'T10:30:00', finished: true, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: day + 'T09:31:00', en: day + 'T10:00:00', sets: [{ w: benchW, s: 3, r: '8', t: day + 'T09:32:00' }] },
+                    pull(day, pullSets, pullReps)
+                ] };
+        }
+        /* база: жим 120, подтягивания 4×6 = 24 повт. */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 3, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [two(1, d1, '120', 4, '6')] } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        /* Фаза A — силовой рекорд диапазоном: avgNum('75-175') = 125 > база 120 → рекорд;
+           плашка и герой = «125» (edge 8.14: диапазон не протекает в постер), Эпли от
+           среднего мелкой строкой; vol-рекорд подтягиваний (28 > 24) есть, но подавлен
+           силовым: «повт.» не рисуется */
+        await request.post('/api/save', { data: { initData: '', rev: 2, data: {
+            nextId: 3, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [two(1, d1, '120', 4, '6'), two(2, today, '75-175', 4, '7')] } } });
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        let sc = await scRendered(page, 1); /* после reload счётчик рендеров стартует заново */
+        expect(sc.texts).toContain('ВЕС ПОДХОДА');
+        expect(sc.texts).toContain('125');
+        expect(sc.texts).toContain('125 кг'); /* плашка = реальный вес, fmtCardNum */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД · ЖИМ ШТАНГИ ЛЁЖА') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('оценка 1ПМ по Эпли ≈ 158 кг') >= 0; })).toBeTruthy(); /* 125 × (1 + 8/30) */
+        expect(sc.texts).not.toContain('75-175 кг'); /* значение плашки = среднее диапазона (edge 8.14); строка списка честно показывает вес как написан: «75-175 кг × 3×8» */
+        expect(sc.texts.some(function (t) { return String(t).indexOf(' повт.') >= 0; })).toBeFalsy();
+        /* Фаза B — чистая калистеника: подтягивания 4×8 = 32 повт. > база 24 = рекорд по
+           объёму повторений без 1ПМ (edge 8.1): плашка «РЕКОРД · ПОДТЯГИВАНИЯ» + «32 повт.»,
+           герой «Сумма повторений» со склонением «32 повторения» */
+        await request.post('/api/save', { data: { initData: '', rev: 3, data: {
+            nextId: 3, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [two(1, d1, '120', 4, '6'), { id: 2, date: today, started: today + 'T09:30:00', ended: today + 'T10:30:00', finished: true, title: '', nutrition: '',
+                exercises: [pull(today, 4, '8')] }] } } });
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        sc = await scRendered(page, 1);
+        expect(sc.texts).toContain('СУММА ПОВТОРЕНИЙ');
+        expect(sc.texts).toContain('32');
+        expect(sc.texts).toContain('повторения'); /* repsWord(32) */
+        expect(sc.texts).toContain('32 повт.'); /* плашка: значение + единица */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('РЕКОРД · ПОДТЯГИВАНИЯ') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('объём повторений') >= 0; })).toBeTruthy();
+        expect(sc.texts.some(function (t) { return String(t).indexOf('НОВЫЙ РЕКОРД') >= 0; })).toBeFalsy(); /* весов нет: силовой плашки нет */
+        expect(sc.texts.some(function (t) { return String(t).indexOf('Эпли') >= 0; })).toBeFalsy(); /* 1ПМ у калистеники нет */
+    });
 });
