@@ -2233,3 +2233,58 @@ html.has-bg body::after {
     .rtxt .big { font-size: 19px; }
     .garow { flex-wrap: wrap; }
 }
+
+/* ============ [UX-I16] шейринг тренировки по ссылке ============ */
+/* кнопка «Поделиться» на завершённой тренировке (тело карточки, спека §7.1) */
+.btn.share-new {
+    border: 1px dashed rgba(255, 194, 32, .55);
+    background: rgba(255, 194, 32, .06);
+    position: relative;
+}
+.btn.share-new .tag {
+    position: absolute; right: 10px; top: -9px;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 999px;
+    font-size: 9.5px; font-weight: 800; letter-spacing: .5px;
+    padding: 2px 8px; text-transform: uppercase;
+}
+.btn.share-new:disabled { opacity: .6; }
+
+/* шит выбора «Картинка / Телеграм» (модалка-шит продукта) */
+.shrow {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    background: var(--nested); border: 1px solid var(--nested-brd);
+    border-radius: 16px; padding: 12px; margin-top: 8px;
+    font-family: inherit; text-align: left; cursor: pointer; color: var(--text);
+}
+.shrow .sic2 {
+    width: 44px; height: 44px; border-radius: 13px; flex: none; font-size: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--btn); border: 1px solid var(--glass-brd);
+}
+.shrow.tg .sic2 {
+    background: linear-gradient(135deg, #2aabee, #229ed9);
+    border-color: transparent;
+    box-shadow: 0 4px 14px rgba(42, 171, 238, .30);
+}
+.shrow:disabled { cursor: default; opacity: .55; }
+.shrow b { display: block; font-size: 15px; font-weight: 700; }
+.shrow .ssub, .shname .ssub { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+.shrow .st, .shname .st { flex: 1; min-width: 0; }
+/* «скоро» — метка пункта «Картинка» (постер [UX-I14] приедет позже) */
+.shrow .soon {
+    display: inline-block; vertical-align: 2px; margin-left: 6px;
+    background: rgba(255, 194, 32, .12); border: 1px solid rgba(255, 194, 32, .28);
+    color: var(--accent); border-radius: 999px; padding: 1px 8px;
+    font-size: 9.5px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+}
+/* opt-in имени в превью: строка с тоглом (компонент .switch из Настроек) */
+.shname {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    background: var(--nested); border: 1px solid var(--nested-brd);
+    border-radius: 16px; padding: 10px 12px; margin-top: 8px;
+}
+.shname b { display: block; font-size: 14px; font-weight: 700; }
+.shname .switch { flex: none; }
+/* футер шита — приватность ссылки */
+.snote { margin: 12px 2px 0; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }

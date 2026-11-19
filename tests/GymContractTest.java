@@ -3,6 +3,7 @@ import gym.ExerciseEntry;
 import gym.GymData;
 import gym.Goal;
 import gym.Json;
+import gym.ProfileData;
 import gym.Records;
 import gym.SetEntry;
 import gym.Stats;
@@ -186,6 +187,37 @@ public class GymContractTest {
         GymData dgrTrue = GymData.fromJson((Map<String, Object>) Json.parse("{\"nextId\":1,\"goalRemind\":true,\"workouts\":[]}"));
         check(Boolean.TRUE.equals(dgrTrue.goalRemind) && Json.write(dgrTrue.toJson()).contains("\"goalRemind\":true"),
             "goalRemind=true: читается и пишется");
+
+        /* [UX-I16] shareId публичной ссылки: legacy-файл (фикстура d2 выше без ключа) читается
+            как раньше; ключ пишется только у тренировок, которыми делились; round-trip без потерь */
+        check(w2.shareId == null, "share: legacy тренировка без shareId читается (null)");
+        check(!Json.write(d2.toJson()).contains("shareId"), "share: toJson без шеринга не пишет ключ shareId (legacy байт-в-байт)");
+        GymData ds = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":3,\"workouts\":[{\"id\":1,\"date\":\"2026-11-16\",\"finished\":true,\"shareId\":\"9kQz4vTm2wR8pLd1XaBc5e\",\"exercises\":[]},{\"id\":2,\"date\":\"2026-11-17\",\"finished\":false,\"exercises\":[]}]}"));
+        check("9kQz4vTm2wR8pLd1XaBc5e".equals(ds.findById(1).shareId), "share: shareId тренировки читается");
+        check(ds.findById(2).shareId == null, "share: тренировка без ключа shareId → null");
+        String shareOut = Json.write(ds.toJson());
+        check(shareOut.contains("\"shareId\":\"9kQz4vTm2wR8pLd1XaBc5e\""), "share: toJson пишет shareId заданной тренировки");
+        GymData ds2 = GymData.fromJson((Map<String, Object>) Json.parse(shareOut));
+        check("9kQz4vTm2wR8pLd1XaBc5e".equals(ds2.findById(1).shareId), "share: shareId переживает round-trip");
+        /* мусорное значение не валит чтение файла */
+        GymData dsBad = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"workouts\":[{\"id\":1,\"finished\":true,\"shareId\":42,\"exercises\":[]}]}"));
+        check(dsBad.findById(1).shareId == null, "share: shareId не-строкой игнорируется (null, без падения)");
+
+        /* [UX-I16] opt-in имени владельца ссылки: ключей нет → анонимно (ПДн-минимализм §5);
+            shareName — только Boolean, shareOwner — строка; пишутся только когда заданы */
+        check(d2.shareName == null && d2.shareOwner == null, "shareName: legacy без ключей → null (анонимно)");
+        check(!noGoalsOut.contains("shareName") && !noGoalsOut.contains("shareOwner"),
+            "shareName: toJson анонимного пользователя не пишет opt-in ключи");
+        GymData dn = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"shareName\":true,\"shareOwner\":\"Антон\",\"workouts\":[]}"));
+        check(Boolean.TRUE.equals(dn.shareName) && "Антон".equals(dn.shareOwner), "shareName: opt-in и имя читаются");
+        GymData dn2 = GymData.fromJson((Map<String, Object>) Json.parse(Json.write(dn.toJson())));
+        check(Boolean.TRUE.equals(dn2.shareName) && "Антон".equals(dn2.shareOwner), "shareName: round-trip opt-in без потерь");
+        GymData dnb = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"shareName\":\"да\",\"shareOwner\":42,\"workouts\":[]}"));
+        check(dnb.shareName == null && dnb.shareOwner == null, "shareName: мусор (не Boolean/не строка) игнорируется без падения");
 
         /* [GOA-S1] переименование упражнения обновляет ex ТОЛЬКО активных силовых целей (§4.3) */
         GymData grn = GymData.fromJson((Map<String, Object>) Json.parse(
@@ -854,6 +886,209 @@ public class GymContractTest {
                     + Json.lng(snapL.get("landingViews")));
         } catch (Exception landErr) {
             throw new AssertionError("CONTRACT FAIL: landing " + landErr);
+        }
+
+        /* [UX-I16] шейринг тренировки по ссылке: POST /api/share (ленивый shareId, повтор
+           возвращает тот же, чужая/незавершённая — 4xx), GET /w/<shareId> (состав §6,
+           noindex-заголовки, приватность §5.2, XSS-экранирование §8.2), 404 «Тренировка
+           недоступна» (мусорный id и удалённая), opt-in имени в OG, счётчики §7.3,
+           robots.txt, поиск после «рестарта» (скан data/*.json). Прод-раскладка каталогов:
+           root/web + root/data. */
+        try {
+            java.nio.file.Path root = java.nio.file.Files.createTempDirectory("gymshare");
+            java.nio.file.Path webDir = root.resolve("web");
+            java.nio.file.Files.createDirectories(webDir);
+            java.nio.file.Files.writeString(webDir.resolve("robots.txt"), "User-agent: *\nDisallow: /w/\n");
+            Storage stSh = new Storage(root.resolve("data"));
+            Stats counterSh = new Stats(root.resolve("stats.json"));
+            WebServer wsSh = new WebServer("contract-test-token", stSh, webDir, counterSh);
+            java.net.ServerSocket probeSh = new java.net.ServerSocket(0);
+            int portSh = probeSh.getLocalPort();
+            probeSh.close();
+            wsSh.start(portSh);
+            String idSh = tgInitData("contract-test-token", 424251);
+            /* seed: завершённая тренировка с рекордным весом, кастомным названием,
+               питанием и XSS-именем упражнения (§8.2); незавершённая — для негатива */
+            GymData seedSh = new GymData();
+            seedSh.nextId = 3;
+            seedSh.rev = 1;
+            ProfileData pSh = new ProfileData();
+            pSh.sex = "м";
+            pSh.age = 30;
+            pSh.height = 180;
+            pSh.weight = 80;
+            seedSh.profile = pSh;
+            Workout wSh = new Workout();
+            wSh.id = 1;
+            wSh.date = "2025-03-14";
+            wSh.startedAt = "2025-03-14T09:30:00";
+            wSh.endedAt = "2025-03-14T10:30:00";
+            wSh.finished = true;
+            wSh.title = "Тренировка с Машей";
+            wSh.nutrition = "вода и соль";
+            ExerciseEntry eSh = new ExerciseEntry("Жим <img src=x onerror=alert(1)>");
+            eSh.sets.add(new SetEntry("120", 3, "8"));
+            eSh.sets.add(new SetEntry("100", 3, "8"));
+            wSh.exercises.add(eSh);
+            seedSh.workouts.add(wSh);
+            Workout wAct = new Workout();
+            wAct.id = 2;
+            wAct.date = "2025-03-15";
+            wAct.finished = false;
+            seedSh.workouts.add(wAct);
+            stSh.save(424251, seedSh);
+
+            /* чужая тренировка (другой initData) → 404; незавершённая → 400 */
+            String idOther = tgInitData("contract-test-token", 424252);
+            check(postJson(portSh, "/api/share", "{\"initData\":\"" + idOther + "\",\"wid\":1}").statusCode() == 404,
+                "share: чужой wid → 404");
+            check(postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":2}").statusCode() == 400,
+                "share: незавершённая тренировка → 400");
+
+            java.net.http.HttpResponse<String> rs1 = postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":1}");
+            check(rs1.statusCode() == 200, "share: завершённая — 200, а не " + rs1.statusCode());
+            Map<String, Object> ms1 = Json.map(Json.parse(rs1.body()));
+            String sid = (String) ms1.get("shareId");
+            check(Boolean.TRUE.equals(ms1.get("ok")) && sid != null && sid.matches("[0-9a-zA-Z]{22}"),
+                "share: shareId — 22 символа base62, а не «" + sid + "»");
+            check(("https://app.gym-helper.com/w/" + sid).equals(ms1.get("url")), "share: url = " + ms1.get("url"));
+
+            java.net.http.HttpResponse<String> rs2 = postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":1}");
+            check(rs2.statusCode() == 200 && sid.equals(Json.str(Json.map(Json.parse(rs2.body())), "shareId")),
+                "share: повторный POST возвращает ТОТ ЖЕ shareId (§4.2)");
+
+            /* страница: 200, noindex-заголовки, состав §6, ПДн-минимализм §5.2, XSS-экранирование */
+            java.net.http.HttpResponse<String> rp = get(portSh, "/w/" + sid);
+            check(rp.statusCode() == 200, "share: GET /w/<id> — 200, а не " + rp.statusCode());
+            check("noindex, nofollow".equals(rp.headers().firstValue("X-Robots-Tag").orElse(null)),
+                "share: X-Robots-Tag noindex, nofollow");
+            check("no-store".equals(rp.headers().firstValue("Cache-Control").orElse(null)), "share: Cache-Control no-store (живой рендер)");
+            check(rp.body().contains("noindex, nofollow"), "share: meta robots noindex в HTML");
+            check(rp.body().contains("og:title") && rp.body().contains("Тренировка · 14 марта 2025"),
+                "share: og:title «Тренировка · 14 марта 2025» (год не текущий — edge 13)");
+            check(rp.body().contains("только просмотр"), "share: пилюля «только просмотр»");
+            check(rp.body().contains("5 280"), "share: герой-число с группировкой тысяч («5 280 кг»)");
+            check(rp.body().contains("1:00") && rp.body().contains("ккал") && rp.body().contains("<b>6</b><span>подходов</span>"),
+                "share: агрегаты время/ккал/подходы");
+            check(rp.body().contains("120 кг × 3×8"), "share: строка подхода «120 кг × 3×8»");
+            check(rp.body().contains("🏆 рекорд"), "share: бейдж лучшего сета");
+            check(!rp.body().contains("Новый рекорд"), "share: плашки рекорда нет — база прошлых пуста (первое выполнение)");
+            check(!rp.body().contains("Серия:"), "share: серии нет при N < 2 (edge 17)");
+            check(!rp.body().contains("Тренировка с Машей") && !rp.body().contains("вода и соль"),
+                "share: кастомное название и питание НЕ утекают (§5.2)");
+            check(rp.body().contains("&lt;img src=x onerror=alert(1)&gt;") && !rp.body().contains("<img src=x"),
+                "share: XSS-имя упражнения экранировано, не исполняется (§8.2)");
+            check(rp.body().contains("t.me/GymHelper_bot/app"), "share: sticky CTA на бота");
+            /* HEAD — заголовки без тела, linkView не растёт */
+            check(headStatus(portSh, "/w/" + sid) == 200, "share: HEAD /w/<id> — 200");
+
+            /* opt-in имени (§11.1): вкл → og:title с именем; выкл → имя исчезает из страницы и данных */
+            check(postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":1,\"shareName\":true,\"name\":\"Антон\"}").statusCode() == 200,
+                "share: opt-in true — 200");
+            java.net.http.HttpResponse<String> rpOn = get(portSh, "/w/" + sid);
+            check(rpOn.statusCode() == 200 && rpOn.body().contains("Тренировка · 14 марта 2025 · Антон"),
+                "share: og:title с именем при opt-in");
+            check(postJson(portSh, "/api/share", "{\"initData\":\"" + idSh + "\",\"wid\":1,\"shareName\":false}").statusCode() == 200,
+                "share: opt-in false — 200");
+            java.net.http.HttpResponse<String> rpOff = get(portSh, "/w/" + sid);
+            check(rpOff.statusCode() == 200 && !rpOff.body().contains("Антон"),
+                "share: opt-in выключен — имени на странице нет");
+            check(!Json.write(stSh.load(424251).toJson()).contains("shareOwner"),
+                "share: opt-in выключен — имя удалено из данных (ПДн-минимализм)");
+
+            /* клиентские события воронки через /api/track (§7.3): неизвестные игнорируются */
+            check(postTrack(portSh, idSh, "[\"linkCopy\",\"linkSend\",\"bogusEvent\"]").statusCode() == 200,
+                "share: /api/track принимает linkCopy/linkSend");
+
+            /* смерть ссылки: удаление данных владельца → та же 404 «Тренировка недоступна» (§6.3) */
+            stSh.deleteChat(424251);
+            java.net.http.HttpResponse<String> rGone = get(portSh, "/w/" + sid);
+            check(rGone.statusCode() == 404, "share: после удаления — 404, а не " + rGone.statusCode());
+            check(rGone.body().contains("Тренировка недоступна"), "share: 404-страница «Тренировка недоступна»");
+            check("noindex, nofollow".equals(rGone.headers().firstValue("X-Robots-Tag").orElse(null)),
+                "share: 404-страница тоже noindex");
+            check(get(portSh, "/w/garbage0123456789abcdefgh").statusCode() == 404,
+                "share: мусорный shareId — та же 404 (без оракула, §4.3)");
+            check(get(portSh, "/robots.txt").body().contains("Disallow: /w/"), "share: robots.txt Disallow /w/");
+
+            /* позитивные ветки рендера: рекорд реальным весом (база = прошлые тренировки)
+               и серия ≥ 2, заканчивающаяся датой тренировки (§6.1/§6.2) */
+            GymData seedStreak = new GymData();
+            seedStreak.nextId = 3;
+            seedStreak.rev = 1;
+            java.time.LocalDate todaySt = java.time.LocalDate.now();
+            java.time.LocalDate yest = todaySt.minusDays(1);
+            Workout wY = new Workout();
+            wY.id = 1;
+            wY.date = yest.toString();
+            wY.startedAt = yest + "T09:30:00";
+            wY.endedAt = yest + "T10:30:00";
+            wY.finished = true;
+            ExerciseEntry eY = new ExerciseEntry("Жим штанги лёжа");
+            eY.sets.add(new SetEntry("100", 3, "8"));
+            wY.exercises.add(eY);
+            seedStreak.workouts.add(wY);
+            Workout wT = new Workout();
+            wT.id = 2;
+            wT.date = todaySt.toString();
+            wT.startedAt = todaySt + "T09:30:00";
+            wT.endedAt = todaySt + "T10:30:00";
+            wT.finished = true;
+            ExerciseEntry eT = new ExerciseEntry("Жим штанги лёжа");
+            eT.sets.add(new SetEntry("120", 3, "8"));
+            wT.exercises.add(eT);
+            seedStreak.workouts.add(wT);
+            stSh.save(424254, seedStreak);
+            String idStreak = tgInitData("contract-test-token", 424254);
+            java.net.http.HttpResponse<String> rs3 = postJson(portSh, "/api/share", "{\"initData\":\"" + idStreak + "\",\"wid\":2}");
+            check(rs3.statusCode() == 200, "share: рекорд/серия seed — 200");
+            String sidStreak = Json.str(Json.map(Json.parse(rs3.body())), "shareId");
+            java.net.http.HttpResponse<String> rpStreak = get(portSh, "/w/" + sidStreak);
+            check(rpStreak.statusCode() == 200 && rpStreak.body().contains("Новый рекорд")
+                    && rpStreak.body().contains("120") && rpStreak.body().contains("реальный вес подхода"),
+                "share: плашка рекорда реальным весом (120 > 100 из прошлой тренировки)");
+            check(rpStreak.body().contains("Серия: 2 тренировки подряд"),
+                "share: серия N ≥ 2 — «Серия: 2 тренировки подряд» (§6.2)");
+            check(rpStreak.body().contains("беспрерывно с " + yest.getDayOfMonth() + " "),
+                "share: подстрока серии «беспрерывно с <день> <месяц>»");
+
+            /* счётчики воронки §7.3: linkCreate = каждый успешный POST (5), linkView = только
+               GET 200 (страница + opt-in вкл/выкл + рекорд/серия + рестарт ниже = 5); HEAD и 404 не считаются */
+            check(get(portSh, "/w/@bad").statusCode() == 404, "share: /w/ без id — 404");
+
+            /* поиск после «рестарта» процесса: shareId в файле (создан не этим экземпляром
+               сервера) находится ленивым сканом data/*.json (§8.1) */
+            GymData seed2 = new GymData();
+            seed2.nextId = 2;
+            seed2.rev = 1;
+            Workout w2Sh = new Workout();
+            w2Sh.id = 1;
+            w2Sh.date = "2026-11-16";
+            w2Sh.finished = true;
+            w2Sh.shareId = "restartScan0AbCdEfGhIj";
+            ExerciseEntry e2 = new ExerciseEntry("Приседания");
+            e2.sets.add(new SetEntry("130", 4, "6"));
+            w2Sh.exercises.add(e2);
+            seed2.workouts.add(w2Sh);
+            stSh.save(424253, seed2);
+            WebServer wsRe = new WebServer("contract-test-token", stSh, webDir, counterSh);
+            java.net.ServerSocket probeRe = new java.net.ServerSocket(0);
+            int portRe = probeRe.getLocalPort();
+            probeRe.close();
+            wsRe.start(portRe);
+            java.net.http.HttpResponse<String> rRe = get(portRe, "/w/restartScan0AbCdEfGhIj");
+            check(rRe.statusCode() == 200 && rRe.body().contains("Приседания"),
+                "share: shareId из файла (после рестарта) находится сканом — 200, а не " + rRe.statusCode());
+
+            Map<String, Object> snapSh = Json.map(Json.parse(get(portSh, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapSh.get("linkCreate")) == 5,
+                "share: linkCreate=5 (успешные POST), а не " + Json.lng(snapSh.get("linkCreate")));
+            check(Json.lng(snapSh.get("linkView")) == 5,
+                "share: linkView=5 (только GET 200; HEAD и 404 не считаются), а не " + Json.lng(snapSh.get("linkView")));
+            check(Json.lng(snapSh.get("linkCopy")) == 1 && Json.lng(snapSh.get("linkSend")) == 1,
+                "share: linkCopy/linkSend через /api/track=1, bogus — мимо белого списка");
+        } catch (Exception shareErr) {
+            throw new AssertionError("CONTRACT FAIL: share " + shareErr);
         }
 
         System.out.println("CONTRACT OK");

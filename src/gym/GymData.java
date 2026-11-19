@@ -17,6 +17,10 @@ public final class GymData {
     public final List<Goal> goals = new ArrayList<>();
     /* [GOA-S1] тогл напоминаний о целях (R2): null = включены (дефолт) */
     public Boolean goalRemind;
+    /* [UX-I16] opt-in имени владельца на публичной странице/OG-превью: null = выключено
+       (дефолт — ПДн-минимализм §5.2 спеки); shareOwner — имя, хранится только при opt-in */
+    public Boolean shareName;
+    public String shareOwner;
 
     public Workout active() {
         for (Workout w : workouts) {
@@ -126,6 +130,12 @@ public final class GymData {
         /* [GOA-S1] goalRemind читается только если это Boolean, иначе null (§10.2) */
         Object gr = m.get("goalRemind");
         if (gr instanceof Boolean) d.goalRemind = (Boolean) gr;
+        /* [UX-I16] opt-in имени: ключа нет → null (анонимно, старые файлы ок); только
+            реальные типы (Boolean/String) — мусорное значение не валит чтение файла */
+        Object sn = m.get("shareName");
+        if (sn instanceof Boolean) d.shareName = (Boolean) sn;
+        Object soVal = m.get("shareOwner");
+        if (soVal instanceof String && !((String) soVal).isEmpty()) d.shareOwner = (String) soVal;
         for (Object o : Json.list(m.get("workouts"))) {
             Map<String, Object> w = Json.map(o);
             Workout workout = new Workout();
@@ -136,6 +146,10 @@ public final class GymData {
             workout.finished = Boolean.TRUE.equals(w.get("finished"));
             workout.title = Json.str(w, "title");
             workout.nutrition = Json.str(w, "nutrition");
+            /* [UX-I16] shareId: ключа нет → null (старые файлы и тренировки без шеринга);
+                только String — мусорное значение (число и т.п.) игнорируется без падения */
+            Object sid = w.get("shareId");
+            if (sid instanceof String && !((String) sid).isEmpty()) workout.shareId = (String) sid;
             for (Object eo : Json.list(w.get("exercises"))) {
                 Map<String, Object> e = Json.map(eo);
                 ExerciseEntry entry = new ExerciseEntry(Json.str(e, "name"));
@@ -248,6 +262,8 @@ public final class GymData {
             wm.put("finished", w.finished);
             if (w.title != null) wm.put("title", w.title);
             if (w.nutrition != null) wm.put("nutrition", w.nutrition);
+            /* [UX-I16] shareId пишется только когда задан — файлы без шеринга байт-в-байт прежние */
+            if (w.shareId != null) wm.put("shareId", w.shareId);
             List<Object> es = new ArrayList<>();
             for (ExerciseEntry e : w.exercises) {
                 Map<String, Object> em = new LinkedHashMap<>();
@@ -284,6 +300,10 @@ public final class GymData {
             m.put("goals", gs);
         }
         if (goalRemind != null) m.put("goalRemind", goalRemind);
+        /* [UX-I16] opt-in имени — конец карты, пишется только когда задан (аналог goalRemind):
+           файл анонимного пользователя (opt-in выкл.) остаётся без новых ключей */
+        if (shareName != null) m.put("shareName", shareName);
+        if (shareOwner != null) m.put("shareOwner", shareOwner);
         return m;
     }
 }

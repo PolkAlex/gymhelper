@@ -1173,6 +1173,16 @@ const ACTIONS = {
     /* [EXR-T4 fix] фоновый тап перехватывается в dispatchFromEl до ACTIONS —
        там же перерисовка после закрытия шита фильтров Техники */
     modalBackdrop: function () { closeModal(); },
+    /* ============ [UX-I16] шейринг тренировки по ссылке ============ */
+    /* шит выбора «Картинка / Телеграм» на завершённой тренировке (спека §7) */
+    shareSheet: function (a) { shareSheet(+a); },
+    /* поток «Телеграм» (§7.2): POST /api/share → буфер → выбор чата → тост */
+    shareTg: function (a) { shareTelegramGo(+a); },
+    /* opt-in имени в OG-превью (§11.1): тогл в шите, состояние в G.shareName */
+    shareNameToggle: function (a) {
+        G.shareName = !G.shareName;
+        shareSheet(+a); /* перерисовка шита с новым состоянием тогла */
+    },
     /* [ONB-T2] политика конфиденциальности: openLink внутри Telegram, иначе обычная вкладка */
     openPrivacy: function () {
         const url = 'https://gym-helper.com/privacy.html';
@@ -1770,6 +1780,13 @@ function workoutCard(w) {
         }
         h += '</div>';
     });
+    /* [UX-I16] одна кнопка «Поделиться» — тело карточки завершённой тренировки
+       (спека §7.1, правило UX-I14: finished && setsTotal > 0); тап открывает шит
+       выбора «Картинка / Телеграм» */
+    const setsTotalAll = exs.reduce((a, e) => a + setsCount(e), 0);
+    if (w.finished && setsTotalAll > 0) {
+        h += '<div class="btnrow"><button class="btn wide share-new" id="shareBtn' + w.id + '" data-act="shareSheet" data-a="' + w.id + '">📤 Поделиться<span class="tag">выбор</span></button></div>';
+    }
     /* [UX-T22] «Добавить упражнение» — кнопка на всю ширину под упражнениями
        (➕ из шапки убрана); только у активной */
     if (!w.finished) {
@@ -4325,6 +4342,105 @@ function lsOk() {
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* noop */ } }
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* noop */ } }
+
+/* ============ [UX-I16] шейринг тренировки по ссылке ============ */
+/* шит выбора «Картинка / Телеграм» (макет экран 3): строка «Картинка» — постер [UX-I14],
+   приедет позже — показывается, но disabled с подписью «скоро» (канва не реализуется) */
+const TG_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#ffffff" aria-hidden="true"><path d="M21.7 3.3c.3-.2.7-.2 1 .1.2.3.3.6.2 1l-3.1 14.4c-.2.9-.9 1.3-1.7.9l-4.9-3.6-2.5 2.4c-.6.6-1.5.4-1.8-.4l-1.7-5.4-4.6-1.4c-.9-.3-.9-1.3.1-1.7l18.4-7.1c.2-.1.4-.2.6-.2zM8.9 13.2l.3 3.1 1.9-1.8 4.9 3.6c.3.2.6.1.7-.3l2.9-13.5-10.7 8.9z"/></svg>';
+
+function shareSheet(wid) {
+    const nameOn = !!G.shareName;
+    let h = '<div class="mtitle-row"><p class="mtitle">Поделиться тренировкой</p>' +
+        '<button class="barebtn" data-act="closeModal" aria-label="Закрыть">✕</button></div>';
+    h += '<button class="shrow" disabled>' +
+        '<span class="sic2">🖼</span>' +
+        '<span class="st"><b>Картинка <span class="soon">скоро</span></b>' +
+        '<span class="ssub">Постер для сторис и каналов</span></span></button>';
+    h += '<button class="shrow tg" data-act="shareTg" data-a="' + wid + '">' +
+        '<span class="sic2 tg2">' + TG_SVG + '</span>' +
+        '<span class="st"><b>Телеграм</b>' +
+        '<span class="ssub">Отправить в любой чат — откроется выбор чата, ссылка также скопируется</span></span></button>';
+    /* opt-in имени в OG-превью (§11.1): по умолчанию выключено — карточка анонимна */
+    h += '<div class="shname"><span class="st"><b>Показывать моё имя в превью</b>' +
+        '<span class="ssub">' + (nameOn ? 'Имя из Telegram увидят получатели ссылки' : 'Выключено — карточка без вашего имени') + '</span></span>' +
+        swToggleHtml(nameOn, 'shareNameToggle', String(wid), 'Показывать моё имя в превью') + '</div>';
+    h += '<p class="snote">🔒 Ссылку видят только те, кому вы её отправили.</p>';
+    openModal(h);
+}
+
+/* поток «Телеграм» (§7.2, порядок важен): POST /api/share → сначала буфер → затем
+   выбор чата через t.me/share/url (tg.openTelegramLink; вне Telegram — window.open).
+   Без текст-заготовки: Telegram строит превью по OG-тегам страницы. Повторный шеринг
+   той же тренировки возвращает тот же shareId — ссылка стабильна (§4.2). */
+async function shareTelegramGo(wid) {
+    const btn = document.getElementById('shareBtn' + wid);
+    const setBusy = function (busy) {
+        if (!btn) return;
+        btn.disabled = busy;
+        btn.innerHTML = busy ? '⏳ Готовим ссылку…' : '📤 Поделиться<span class="tag">выбор</span>';
+    };
+    closeModal();
+    setBusy(true);
+    let url = null;
+    try {
+        const r = await fetch('/api/share', {
+            method: 'POST',
+            body: JSON.stringify({
+                initData: INIT,
+                wid: wid,
+                shareName: !!G.shareName,
+                name: G.shareName ? tgUserName() : ''
+            })
+        });
+        const j = await r.json();
+        if (r.ok && j.ok && j.url) url = j.url;
+    } catch (e) { /* сеть/сервер — тост ниже */ }
+    if (!url) {
+        setBusy(false);
+        toast('Нет связи: не удалось приготовить ссылку', true);
+        return;
+    }
+    /* 3 · сначала буфер: ссылка остаётся у пользователя при любом повороте сценария;
+       fallback без navigator.clipboard — копирование пропускается, тост не показывается
+       (Telegram сам прикрепит URL из параметра ?url=) */
+    let copied = false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        try {
+            await navigator.clipboard.writeText(url);
+            copied = true;
+        } catch (e) { /* отказ буфера — не ошибка (§7.2) */ }
+    }
+    if (copied) {
+        toast('🔗 Ссылка скопирована');
+        trackShare('linkCopy');
+    }
+    /* 4 · затем выбор чата: t.me-адреса в Mini App открываются только через openTelegramLink */
+    const shareUrl = 'https://t.me/share/url?url=' + encodeURIComponent(url);
+    trackShare('linkSend');
+    let opened = false;
+    if (tg && typeof tg.openTelegramLink === 'function') {
+        try { tg.openTelegramLink(shareUrl); opened = true; } catch (e) { opened = false; }
+    }
+    if (!opened) window.open(shareUrl, '_blank'); /* вне Telegram / старый webview */
+    setBusy(false);
+}
+
+/* имя для opt-in OG-превью — first_name из initData Telegram (клиентский источник) */
+function tgUserName() {
+    try {
+        const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+        return (u && u.first_name && String(u.first_name).trim().slice(0, 60)) || '';
+    } catch (e) { return ''; }
+}
+
+/* [UX-I16] события воронки шеринга (§7.3) в существующий канал /api/track
+   (белый список сервера); каждое вхождение считается — дедупа нет (не онбординг) */
+function trackShare(name) {
+    try {
+        fetch('/api/track', { method: 'POST', body: JSON.stringify({ initData: INIT, events: [name] }), keepalive: true })
+            .catch(function () { /* аналитика не роняет шеринг */ });
+    } catch (e) { /* noop */ }
+}
 
 /* [ANA-T5] события онбординга (спека ANA-S2 г2): имена — белый список сервера, доставка —
    fire-and-forget POST /api/track (онбординг завершается без изменений данных, /api/save

@@ -18,8 +18,9 @@ public final class Records {
 
     private Records() { }
 
-    /* среднее по числам строки веса: «75-175» → 125, «50, 80» → 65, «100» → 100, без веса → 0 */
-    static double avgWeight(String t) {
+    /* среднее по числам строки веса: «75-175» → 125, «50, 80» → 65, «100» → 100, без веса → 0.
+       public с [UX-I16] — SharePage (пакет gym.web) считает объём/рекорды страницы по тем же правилам */
+    public static double avgWeight(String t) {
         String s = t == null ? "" : t;
         List<Double> nums = new ArrayList<>();
         Matcher m = NUM.matcher(s);
