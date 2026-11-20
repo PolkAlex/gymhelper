@@ -5315,6 +5315,8 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         expect(html).toContain('только просмотр');
         expect(html).toContain(EX);
         expect(html).toContain('Попробовать в Telegram');
+        /* [UX-B14] CTA ведёт на нашего бота (мок /w-страницы зеркалит прод-фолбэк) */
+        expect(html).toContain('t.me/MyHelperGymBot/app');
         const bad = await request.get('/w/garbage0123456789abcdefghij');
         expect(bad.status()).toBe(404);
         expect(await bad.text()).toContain('Тренировка недоступна');
@@ -5449,12 +5451,20 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(hasName(await scRendered(page, 3))).toBeFalsy();
     });
 
-    test('без Web Share — скачивание PNG + тост + shareDownload; длинное название и «+ N»', async ({ page, context, request }) => {
+    test('fallback desktop (UA не мобильный) — a.download PNG + тост «в загрузки»; длинное название и «+ N»', async ({ page, context, request }) => {
         test.setTimeout(60000);
-        /* старый webview / десктоп без API (§5.4): share/canShare отсутствуют */
+        /* старый webview / десктоп без API (§5.4): share/canShare отсутствуют;
+           [UX-B15] UA форсируем десктопный — на мобильных проектах (iphone13) реальный UA
+           увёл бы поток в мобильную ветку «новая вкладка», а эта проверка — про a.download */
         await context.addInitScript(function () {
             try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
             try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
+            try {
+                Object.defineProperty(navigator, 'userAgent', {
+                    configurable: true,
+                    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                });
+            } catch (e) { /* движок не дал — на десктоп-проектах UA и так десктопный */ }
         });
         /* название заведомо не влезает в 2 строки списка → вторая с многоточием (edge 8.3) */
         const LONG = 'Подъём гантелей через стороны лёжа на наклонной скамье с разворотом';
@@ -5482,7 +5492,8 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         const download = await dl;
         /* имя файла без даты-времени персонального формата (edge 8.12) */
         expect(download.suggestedFilename()).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
-        await expect(page.locator('.toast.show')).toContainText('Картинка сохранена — прикрепите её в чат', { timeout: 5000 });
+        /* [UX-B15] тост отражает фактическое действие (a.download — в загрузки) */
+        await expect(page.locator('.toast.show')).toContainText('Картинка сохранена в загрузки', { timeout: 5000 });
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).toContain('shareClick');
         expect(ev).toContain('shareDownload');
@@ -5494,6 +5505,90 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts).toContain('+ 2 упражнения');
         expect(sc.texts.some(function (t) { return String(t).indexOf('12,5 кг × 3×') >= 0; })).toBeTruthy();
         expect(sc.texts.some(function (t) { return /^4×8$/.test(String(t)); })).toBeTruthy();
+    });
+
+    test('fallback Telegram — нативный downloadFile с objectURL + честный тост (UX-B15)', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        /* мок Telegram WebApp: telegram-web-app.js (загружается из index.html) ЗАМЕНЯЕТ
+           window.Telegram.WebApp после init-скриптов — переустанавливаем downloadFile
+           на том же объекте (tg в app.js — const-ссылка на него; паттерн UX-I16) */
+        await context.addInitScript(function () {
+            let tries = 0;
+            const t = setInterval(function () {
+                tries++;
+                const w = window.Telegram || (window.Telegram = {});
+                const app = w.WebApp;
+                if (app && !app.__dlMock) {
+                    app.__dlMock = true;
+                    app.__dlCalls = [];
+                    app.downloadFile = function (p) {
+                        app.__dlCalls.push({ url: p && p.url, name: p && p.file_name });
+                    };
+                }
+                if ((app && app.__dlMock) || tries > 40) clearInterval(t);
+            }, 25);
+        });
+        /* share/canShare нет — поток доходит до fallback-цепочки, где побеждает ветка Telegram */
+        await context.addInitScript(function () {
+            try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
+            try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
+        });
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        await scRendered(page, 1);
+        /* downloadFile вызван ровно один раз с blob-objectURL канвы и именем файла (§5.4) */
+        const dl = await page.evaluate(function () { return window.Telegram.WebApp.__dlCalls; });
+        expect(dl.length).toBe(1);
+        expect(String(dl[0].url).startsWith('blob:')).toBeTruthy();
+        expect(dl[0].name).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
+        /* тост соответствует ветке — Telegram покажет свой диалог сохранения */
+        await expect(page.locator('.toast.show')).toContainText('подтвердите в Telegram', { timeout: 5000 });
+        /* ни скачивания (a.click), ни новой вкладки — нативная ветка перехватила сохранение */
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('shareDownload');
+        expect(ev).not.toContain('shareOk');
+        await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+    });
+
+    test('fallback мобильный без Telegram — картинка в новой вкладке + честный тост (UX-B15)', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        /* мобильный UA вне Telegram + share нет: a.download на мобильных тихо фейлится —
+           честная ветка: window.open(objectURL) и тост «удерживайте → Скачать» */
+        await context.addInitScript(function () {
+            try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
+            try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
+            try {
+                Object.defineProperty(navigator, 'userAgent', {
+                    configurable: true,
+                    value: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+                });
+            } catch (e) { /* на iphone13 UA и так мобильный */ }
+        });
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        const popupPromise = context.waitForEvent('page');
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const popup = await popupPromise;
+        /* открылась новая вкладка с blob-URL картинки */
+        expect(String(popup.url()).startsWith('blob:')).toBeTruthy();
+        await expect(page.locator('.toast.show')).toContainText('удерживайте её и выберите', { timeout: 5000 });
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('shareDownload');
+        expect(ev).not.toContain('shareOk');
+        await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
     });
 
     test('рекорд: равный вес — без плашки (герой = объём); 125 после базы 120 — герой «Вес подхода»', async ({ page, context, request }) => {

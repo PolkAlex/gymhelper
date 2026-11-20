@@ -73,7 +73,7 @@ let helpFaq = 0;      /* открытый вопрос аккордеона (-1 
 let srvState = '';    /* проверка сервера: '' | 'checking' | 'ok' | 'fail' */
 let wnOpen = false;   /* модалка «Что нового» */
 let wnRel = null;     /* показываемый релиз {ver, items:[{t, d}]} */
-let BOT_NAME = 'GymHelper_bot'; /* [ONB-T6] deep-link feedback; сервер может прислать свой в /api/init */
+let BOT_NAME = 'MyHelperGymBot'; /* [ONB-T6][UX-B14] deep-link feedback; сервер может прислать свой в /api/init (фолбэк — настоящий юзернейм бота, старый GymHelper_bot — чужой) */
 
 const DOW = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MONTHS_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
@@ -5362,11 +5362,12 @@ function renderShareCard(w) {
 }
 
 /* поток «Картинка» (§5, механика UX-I16 «буфер → действие»): рендер PNG → буфер →
-   navigator.share с файлом (шторка Telegram); fallback — скачивание + тост
-   «прикрепите в чат». shareClick пишется на тапе «Поделиться» (ACTION shareSheet,
-   точка входа воронки §5); shareOk/shareDownload — по факту шторки/скачивания;
-   отмена шторки (AbortError) — не событие. Ошибка рендера/старый webview без
-   File — тост + разблокировка кнопки (edge 8.10). */
+   navigator.share с файлом (шторка Telegram); fallback [UX-B15] — по платформе:
+   Telegram downloadFile → новая вкладка (мобильный) → a.download (desktop), тост
+   всегда отражает фактическое действие. shareClick пишется на тапе «Поделиться»
+   (ACTION shareSheet, точка входа воронки §5); shareOk/shareDownload — по факту
+   шторки/fallback-сохранения; отмена шторки (AbortError) — не событие. Ошибка
+   рендера/старый webview без File — тост + разблокировка кнопки (edge 8.10). */
 async function sharePictureGo(wid) {
     const btn = document.getElementById('shareBtn' + wid);
     const setBusy = function (busy) {
@@ -5416,18 +5417,53 @@ async function sharePictureGo(wid) {
             /* отказ API — падаем в скачивание (fallback ниже) */
         }
     }
-    /* §5.4 fallback: PNG в «Загрузки»; ссылка нанесена на картинку — механика не ломается */
-    try {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(card.blob);
-        a.download = fname;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
-        trackShare('shareDownload');
-        toast('Картинка сохранена — прикрепите её в чат');
-    } catch (e) {
+    /* §5.4 fallback [UX-B15]: a.download не доносит файл до файловой системы в мобильных
+       WebView (Telegram Android игнорирует download-атрибут, мобильный Chrome часто тихо
+       фейлится) — тост «сохранена» врал. Цепочка по платформе, тост отражает фактическое
+       действие: 1) Telegram — нативный downloadFile (≥ 8.0; URL бракует по протоколу —
+       падаем в цепочку); 2) мобильный вне Telegram — картинка в новой вкладке, оттуда
+       «удерживайте → Скачать»; 3) desktop — a.download работает как раньше. */
+    const plat = tg ? String(tg.platform || '') : '';
+    const inTg = !!plat && plat !== 'unknown' && plat !== 'web';
+    const isMobile = inTg ? (plat === 'android' || plat === 'ios')
+        : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const objUrl = URL.createObjectURL(card.blob);
+    let saved = false;
+    if (tg && typeof tg.downloadFile === 'function') {
+        try {
+            tg.downloadFile({ url: objUrl, file_name: fname });
+            setTimeout(function () { URL.revokeObjectURL(objUrl); }, 60000);
+            trackShare('shareDownload');
+            toast('Открыл диалог сохранения — подтвердите в Telegram');
+            saved = true;
+        } catch (e) { /* Telegram < 8.0 или blob-URL не принят — шаг цепочки ниже */ }
+    }
+    if (!saved && isMobile) {
+        let wn = null;
+        try { wn = window.open(objUrl, '_blank'); } catch (e) { wn = null; }
+        if (wn) {
+            setTimeout(function () { URL.revokeObjectURL(objUrl); }, 60000);
+            trackShare('shareDownload');
+            toast('Открыл картинку — удерживайте её и выберите „Скачать“');
+            saved = true;
+        }
+    }
+    if (!saved && !isMobile) {
+        try {
+            const a = document.createElement('a');
+            a.href = objUrl;
+            a.download = fname;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
+            trackShare('shareDownload');
+            toast('Картинка сохранена в загрузки');
+            saved = true;
+        } catch (e) { /* dead-end ниже */ }
+    }
+    if (!saved) {
+        URL.revokeObjectURL(objUrl);
         toast('Не получилось подготовить картинку', true);
     }
     setBusy(false);
