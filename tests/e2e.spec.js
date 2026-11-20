@@ -4734,7 +4734,7 @@ test.describe('EXR-T2: фото упражнений (free-exercise-db) в Те�
 /* ===== [EXR-T8] фото-инфра: Cache-Control на GET /img/ + path traversal гвард ===== */
 test.describe('EXR-T8: Cache-Control на img и path traversal', function () {
 
-    test('GET img (из «Техники») отдаёт Cache-Control: public, max-age=604800, не-img статика — no-store', async ({ page }) => {
+    test('GET img (из «Техники») и JS-статика — годовой immutable-кэш [UX-B17], было 604800/no-store', async ({ page }) => {
         /* перехват реального ответа по фото из UI (page.on('response')) */
         let imgCacheControl = null;
         page.on('response', function (r) {
@@ -4745,16 +4745,16 @@ test.describe('EXR-T8: Cache-Control на img и path traversal', function () {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
         await expect.poll(function () { return imgCacheControl; }, { timeout: 5000 })
-            .toBe('public, max-age=604800');
+            .toBe('public, max-age=31536000, immutable');
         /* прямой GET того же файла — та же прод-логика */
         const direct = await page.request.get('/img/exercises/bench-0.jpg');
-        if (direct.headers()['cache-control'] !== 'public, max-age=604800') {
+        if (direct.headers()['cache-control'] !== 'public, max-age=31536000, immutable') {
             throw new Error('прямой GET img cache-control: ' + JSON.stringify(direct.headers()['cache-control']));
         }
-        /* остальная статика по-прежнему no-store */
+        /* JS-статика тоже годовой immutable: раньше no-store — Mini App перекачивал 660KB (UX-B17) */
         const js = await page.request.get('/app.js');
-        if (js.headers()['cache-control'] !== 'no-store') {
-            throw new Error('app.js cache-control: ' + JSON.stringify(js.headers()['cache-control']) + ', ожидалось no-store');
+        if (js.headers()['cache-control'] !== 'public, max-age=31536000, immutable') {
+            throw new Error('app.js cache-control: ' + JSON.stringify(js.headers()['cache-control']) + ', ожидался годовой immutable');
         }
     });
 
@@ -5436,7 +5436,10 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
                     app.__opened = [];
                     app.openTelegramLink = function (url) { app.__opened.push(url); };
                 }
-                if ((app && app.__mocked) || tries > 40) clearInterval(t);
+                /* окно 10с (было 1с = 40×25мс): на медленном CI telegram-web-app.js может
+                   исполниться позже первой секунды от document-start — мок не успевал
+                   установиться, и приложение звало vendor downloadFile (флейк UX-I14) */
+                if ((app && app.__mocked) || tries > 400) clearInterval(t);
             }, 25);
         });
         /* буфер: in-memory мок navigator.clipboard вместо grantPermissions — clipboard-*
@@ -5572,7 +5575,7 @@ test.describe('[UX-I14] шейринг картинкой', function () {
     }
 
     test('«Картинка» → canvas 1080×1920 → navigator.share с PNG; shareClick/shareOk', async ({ page, context, request }) => {
-        test.setTimeout(60000);
+        test.setTimeout(120000); /* canvas-рендеры ×2: на медленном CI 60с впритык (флейк UX-I14) */
         await mockWebShare(context);
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
@@ -5610,14 +5613,20 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(ev).not.toContain('shareDownload');
         /* кнопка разблокирована; повторный тап рендерит заново (edge 8.11 — не кешируется) */
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        /* [UX-B17 ревью] сетл после тяжёлого canvas-рендера: на медленном CI композитор
+           догоняет до повторного открытия шита; строка ждёт открытие явно (не съедая
+           остаток бюджета теста молча) */
+        await page.waitForTimeout(300);
         await page.locator('[data-act="shareSheet"]').click();
-        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const row2 = page.locator('.modal.open .shrow', { hasText: 'Картинка' });
+        await expect(row2).toBeVisible({ timeout: 20000 });
+        await row2.click();
         const sc2 = await scRendered(page, 2);
         expect(sc2.size).toBeGreaterThan(15000);
     });
 
     test('имя на картинке — только при opt-in тумблере', async ({ page, context, request }) => {
-        test.setTimeout(60000);
+        test.setTimeout(120000); /* canvas-рендеры ×4: на медленном CI 60с впритык (флейк UX-I14, PR #317) */
         await mockWebShare(context);
         /* имя берётся из initData Telegram (паттерн UX-I16: server-owned ПДн). В e2e юзер
            подкладывается в location.hash — telegram-web-app.js парсит #tgWebAppData= в
@@ -5726,7 +5735,10 @@ test.describe('[UX-I14] шейринг картинкой', function () {
                         app.__dlCalls.push({ url: p && p.url, name: p && p.file_name });
                     };
                 }
-                if ((app && app.__dlMock) || tries > 40) clearInterval(t);
+                /* окно 10с (было 1с = 40×25мс) — гонка с загрузкой telegram-web-app.js на
+                   медленном CI: мок не устанавливался → vendor downloadFile → __dlCalls
+                   пуст (воспроизведено локально 2/5 прогонов UX-I14) */
+                if ((app && app.__dlMock) || tries > 400) clearInterval(t);
             }, 25);
         });
         /* share/canShare нет — поток доходит до fallback-цепочки, где побеждает ветка Telegram */
@@ -5773,7 +5785,7 @@ test.describe('[UX-I14] шейринг картинкой', function () {
     });
 
     test('fallback мобильный без Telegram — инлайн-оверлей с картинкой, long-press-подсказка (UX-B15)', async ({ page, context, request }) => {
-        test.setTimeout(60000);
+        test.setTimeout(120000); /* canvas-рендеры ×2 + скачивание: на медленном CI 60с впритык */
         /* мобильный UA вне Telegram + share нет: a.download на мобильных тихо фейлится,
            а window.open(blob:) в in-app браузере Telegram вкладку не показывает (WebView
            без multi-window) — честная ветка [UX-B15]: инлайн-оверлей с <img>, long-press
@@ -5825,9 +5837,14 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         await page.locator('[data-act="cvClose"]').click();
         await expect(page.locator('#cardview.open')).toHaveCount(0);
         expect(await page.evaluate(function () { return window.__cvRevoked; })).toContain(src);
-        /* повторный поток: закрытие тапом по фону (края оверлея) — тоже revoke */
+        /* повторный поток: закрытие тапом по фону (края оверлея) — тоже revoke.
+           [UX-B17 ревью] сетл после a.download/закрытия оверлея + явное ожидание
+           строки шита (на медленном CI открытие может запаздывать — флейк UX-I14) */
+        await page.waitForTimeout(300);
         await page.locator('[data-act="shareSheet"]').click();
-        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const row2 = page.locator('.modal.open .shrow', { hasText: 'Картинка' });
+        await expect(row2).toBeVisible({ timeout: 20000 });
+        await row2.click();
         await scRendered(page, 2);
         await expect(page.locator('#cardview.open')).toBeVisible();
         const src2 = String(await page.locator('#cvImg').getAttribute('src'));
@@ -6180,5 +6197,85 @@ test.describe('UX-T40: разминка по дефолту', function () {
         if (list.length !== 2 || list[0] !== 'Тяга верхнего блока' || list[1] !== 'Подтягивания' || list.indexOf('Разминка') !== -1) {
             throw new Error('старт из шаблона не должен добавлять разминку: ' + JSON.stringify(list));
         }
+    });
+});
+
+/* ===== [UX-B17] кэш статики и gzip (issue #319: Mini App перекачивал 660KB при каждом открытии) ===== */
+test.describe('UX-B17: кэш и gzip статики', function () {
+
+    test('gzip: app.js с Accept-Encoding: gzip — Content-Encoding, gzip-магия 1f 8b, меньше сырого', async ({ request, baseURL }) => {
+        /* заголовки — через API-клиент (тело Playwright распаковывает прозрачно) */
+        const gz = await request.get('/app.js', { headers: { 'Accept-Encoding': 'gzip' } });
+        if (gz.status() !== 200) throw new Error('GET /app.js с gzip — ' + gz.status());
+        if (gz.headers()['content-encoding'] !== 'gzip') {
+            throw new Error('content-encoding: ' + JSON.stringify(gz.headers()['content-encoding']) + ', ожидался gzip');
+        }
+        const v = gz.headers()['vary'] || '';
+        if (v.indexOf('Accept-Encoding') < 0) throw new Error('нет Vary: Accept-Encoding, есть: ' + JSON.stringify(v));
+        /* сырые байты — прямым http-запросом: gzip-магия и размер сжатого тела */
+        const base = new URL(baseURL || 'http://127.0.0.1:8099');
+        const rawGz = await new Promise(function (resolve, reject) {
+            const rq = http.request({ host: base.hostname, port: base.port, path: '/app.js', method: 'GET',
+                headers: { 'Accept-Encoding': 'gzip' } }, function (rs) {
+                const chunks = [];
+                rs.on('data', function (c) { chunks.push(c); });
+                rs.on('end', function () { resolve({ status: rs.statusCode, headers: rs.headers, body: Buffer.concat(chunks) }); });
+            });
+            rq.on('error', reject);
+            rq.end();
+        });
+        if (rawGz.status !== 200) throw new Error('сырой GET /app.js — ' + rawGz.status);
+        if (rawGz.body.length < 2 || rawGz.body[0] !== 0x1f || rawGz.body[1] !== 0x8b) {
+            throw new Error('нет gzip-магии 1f 8b: ' + rawGz.body.subarray(0, 2).toString('hex'));
+        }
+        if (Number(rawGz.headers['content-length']) !== rawGz.body.length) {
+            throw new Error('content-length ' + rawGz.headers['content-length'] + ' != размеру gzip-тела ' + rawGz.body.length);
+        }
+        /* сжатое тело строго меньше сырого файла (app.js ~360KB) */
+        const fs = require('fs');
+        const path = require('path');
+        const orig = fs.readFileSync(path.join(__dirname, '..', 'web', 'app.js'));
+        if (rawGz.body.length >= orig.length) throw new Error('gzip не сжал: ' + rawGz.body.length + ' >= ' + orig.length);
+    });
+
+    test('без Accept-Encoding: gzip — нет Content-Encoding, тело байт-в-байт оригинал', async ({ request }) => {
+        const fs = require('fs');
+        const path = require('path');
+        const orig = fs.readFileSync(path.join(__dirname, '..', 'web', 'app.js'));
+        const rawRes = await request.get('/app.js', { headers: { 'Accept-Encoding': 'identity' } });
+        if (rawRes.headers()['content-encoding'] != null) {
+            throw new Error('клиенту без gzip ушёл content-encoding: ' + JSON.stringify(rawRes.headers()['content-encoding']));
+        }
+        const body = await rawRes.body();
+        if (!body.equals(orig)) throw new Error('тело без gzip не равно файлу: ' + body.length + ' vs ' + orig.length);
+    });
+
+    test('Cache-Control: версионная статика (js/css/img) — годовой immutable, html — no-cache', async ({ request }) => {
+        const IMM = 'public, max-age=31536000, immutable';
+        for (const p of ['/app.js', '/style.css', '/catalog.js', '/img/exercises/bench-0.jpg']) {
+            const r = await request.get(p, { headers: { 'Accept-Encoding': 'identity' } });
+            if (r.status() !== 200) throw new Error('GET ' + p + ' — ' + r.status());
+            if (r.headers()['cache-control'] !== IMM) {
+                throw new Error(p + ' cache-control: ' + JSON.stringify(r.headers()['cache-control']) + ', ожидался ' + IMM);
+            }
+        }
+        /* HTML-документы — входные точки (в index.html ссылки на ?v=) — всегда ре-валидация */
+        const home = await request.get('/');
+        if (home.headers()['cache-control'] !== 'no-cache') {
+            throw new Error('/ cache-control: ' + JSON.stringify(home.headers()['cache-control']) + ', ожидался no-cache');
+        }
+        const privacy = await request.get('/privacy.html');
+        if (privacy.headers()['cache-control'] !== 'no-cache') {
+            throw new Error('/privacy.html cache-control: ' + JSON.stringify(privacy.headers()['cache-control']) + ', ожидался no-cache');
+        }
+    });
+
+    test('HEAD на статику — 200 без тела, заголовки на месте', async ({ request }) => {
+        const h = await request.head('/app.js');
+        if (h.status() !== 200) throw new Error('HEAD /app.js — ' + h.status());
+        const body = await h.body();
+        if (body.length !== 0) throw new Error('HEAD вернул тело: ' + body.length + ' байт');
+        if (!h.headers()['content-type']) throw new Error('HEAD без Content-Type');
+        if (!h.headers()['cache-control']) throw new Error('HEAD без Cache-Control');
     });
 });

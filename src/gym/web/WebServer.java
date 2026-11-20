@@ -907,11 +907,17 @@ public final class WebServer {
             stats.inc("landingViews");
         }
         String ct = contentType(path);
-        /* [EXR-T6] фото упражнений (/img/) неизменяемы и именуются стабильно — кэш на неделю;
-           [CNT-T1] ассеты лендинга (/landing/assets/: og/favicon/скриншоты PNG) — тоже;
-           остальная статика (JS/CSS с ?v=-бампом) по-прежнему no-store */
-        boolean longCache = "GET".equalsIgnoreCase(ex.getRequestMethod())
-            && (path.startsWith("/img/") || path.startsWith("/landing/assets/"));
+        /* [UX-B17] кэш-политика статики: HTML-документы — входные точки (/, /app, /landing/,
+           /privacy.html — открываются по ссылкам без ?v=) — no-cache: браузер каждый раз
+           ре-валидирует, в index.html лежат ссылки на ?v= версионной статики. Вся остальная
+           статика (JS/CSS с обязательным ?v=-бампом на каждом релизе, img/ассеты с
+           неизменяемыми именами) — годовой immutable-кэш. Раньше вся статика была
+           no-store: Mini App перекачивал ~660KB при каждом открытии (UX-B17).
+           Релиз без бампа ?v= = устаревшая статика у пользователей до истечения max-age —
+           docs/static-caching.md, контроль — ревьюер */
+        String cachePolicy = path.endsWith(".html")
+            ? "no-cache"
+            : "public, max-age=31536000, immutable";
         /* [EXR-T7] gzip-клиенту текстовая статика отдаётся сжатой — из кэша байтов (precompressed:
            send не жмёт повторно); клиенту без gzip — чтение с диска как раньше */
         boolean gzStatic = acceptsGzip(ex) && compressible(ct);
@@ -920,12 +926,12 @@ public final class WebServer {
            как /health; иначе JDK-сервер предупреждает о Content-Length при HEAD в лог */
         if ("HEAD".equalsIgnoreCase(ex.getRequestMethod())) {
             ex.getResponseHeaders().set("Content-Type", ct);
-            ex.getResponseHeaders().set("Cache-Control", longCache ? "public, max-age=604800" : "no-store");
+            ex.getResponseHeaders().set("Cache-Control", cachePolicy);
             ex.getResponseHeaders().set("Vary", "Accept-Encoding");
             ex.sendResponseHeaders(200, -1);
             return;
         }
-        send(ex, 200, body, ct, longCache ? "public, max-age=604800" : "no-store", gzStatic);
+        send(ex, 200, body, ct, cachePolicy, gzStatic);
     }
 
     private static String contentType(String path) {
