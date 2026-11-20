@@ -895,8 +895,9 @@ public class GymContractTest {
            web/landing/index.html (безредиректный рерайт, как у / и /app), просмотры
            считаются анонимным счётчиком landingViews (агрегат без ПДн, /stats) — ровно
            по одному на запрос, без задвоений; HEAD-пробы и 404 не считаются.
-           Ассеты /landing/assets/ кэшируются неделю (по образцу /img/ [EXR-T6]),
-           сама страница — no-store. Реальный WebServer на эфемерном порту. */
+           Кэш [UX-B17]: ассеты /landing/assets/ — годовой immutable (неизменяемые имена,
+           по образцу /img/), сама страница — no-cache (html-документ, входная точка).
+           Реальный WebServer на эфемерном порту. */
         try {
             java.nio.file.Path tmpL = java.nio.file.Files.createTempDirectory("gymland");
             java.nio.file.Files.createDirectories(tmpL.resolve("landing").resolve("assets"));
@@ -924,14 +925,15 @@ public class GymContractTest {
             java.net.http.HttpResponse<String> land2 = get(portL, "/landing/index.html");
             check(land2.statusCode() == 200, "landing: GET /landing/index.html — 200, а не " + land2.statusCode());
 
-            /* кэш: ассеты лендинга — неделя (как /img/), страница — no-store */
+            /* кэш [UX-B17]: ассеты лендинга — годовой immutable (неизменяемые имена),
+               страница-документ (html) — no-cache: входная точка без ?v=, ре-валидация */
             java.net.http.HttpResponse<String> asset = get(portL, "/landing/assets/og.png");
             check(asset.statusCode() == 200, "landing: GET /landing/assets/og.png — 200, а не " + asset.statusCode());
-            check("public, max-age=604800".equals(asset.headers().firstValue("Cache-Control").orElse(null)),
-                "landing: ассеты /landing/assets/ кэшируются неделю, а не "
+            check("public, max-age=31536000, immutable".equals(asset.headers().firstValue("Cache-Control").orElse(null)),
+                "landing: ассеты /landing/assets/ — годовой immutable-кэш, а не "
                     + asset.headers().firstValue("Cache-Control").orElse("—"));
-            check("no-store".equals(land1.headers().firstValue("Cache-Control").orElse(null)),
-                "landing: страница лендинга — no-store");
+            check("no-cache".equals(land1.headers().firstValue("Cache-Control").orElse(null)),
+                "landing: страница лендинга (html-документ) — no-cache");
 
             /* 404 и HEAD просмотрами не считаются */
             check(get(portL, "/landing/nope.html").statusCode() == 404, "landing: отсутствующий файл — 404");
