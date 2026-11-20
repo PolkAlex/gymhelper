@@ -665,7 +665,7 @@ public class GymContractTest {
             int portCx = probeCx.getLocalPort();
             probeCx.close();
             wsCx.start(portCx);
-            String idCx = tgInitData("contract-test-token", 424249);
+            String idCx = tgInitData("contract-test-token", 424248);
             java.net.http.HttpResponse<String> rc1 = postSave(portCx, idCx, 0,
                 "{\"rev\":0,\"nextId\":1,\"customEx\":[" +
                     "{\"n\":\"Жим Свенда стоя\",\"tags\":[\"m:chest\",\"m:shoulders\"]}," +
@@ -693,7 +693,6 @@ public class GymContractTest {
                 "customEx merge: пустые списки замещают старые (удаление доезжает)");
         } catch (Exception cexErr) {
             throw new AssertionError("CONTRACT FAIL: customEx merge " + cexErr);
->>>>>>> 88175bf (exr-t13: свои упражнения (customEx) и Любимые (favs) в GymData/WebServer)
         }
 
         /* [ANA-T1] Stats: /stats за токеном (404 без токена/с неверным — не палим существование),
