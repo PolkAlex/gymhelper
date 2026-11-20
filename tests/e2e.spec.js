@@ -6021,4 +6021,49 @@ test.describe('UX-T40: разминка по дефолту', function () {
             throw new Error('разминка должна быть первым пустым упражнением: ' + JSON.stringify(exs));
         }
     });
+
+    test('выбор wcardio в селекторе → новая тренировка стартует с «Кардио-разминки» (ревью)', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        await card.locator('[role="switch"][aria-label="Разминка первым упражнением"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        /* лист селектора: тап по каталогному упражнению — значение в карточке = имя */
+        await card.locator('.arow', { hasText: 'Упражнение разминки' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.locator('.pli', { hasText: 'Кардио-разминка' }).click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(card.locator('.arow .aval')).toHaveText('Кардио-разминка (ходьба/лёгкий бег)', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupEx !== 'wcardio') throw new Error('warmupEx=wcardio не доехал до сервера: ' + st.warmupEx);
+        /* старт: разминка = каталогное упражнение (§2.4 — карточка/фото), первая пилюля */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('[data-act="closeSettings"]').click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Кардио-разминка (ходьба/лёгкий бег)', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st2 = await (await request.get('/api/state')).json();
+        if (st2.workouts[0].exercises[0].name !== 'Кардио-разминка (ходьба/лёгкий бег)') {
+            throw new Error('первое упражнение не Кардио-разминка: ' + JSON.stringify(st2.workouts[0].exercises));
+        }
+    });
+
+    test('устаревший warmupEx в данных → тихий резолв в «Разминку», старт без ошибок (ревью, E3)', async ({ page, request }) => {
+        /* id отсутствует в каталоге — сервер хранит строку как есть (§5), резолв при старте (§2.6) */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 1, del: [], warmupFirst: true, warmupEx: 'nonexistent', workouts: []
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Разминка', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupEx !== 'nonexistent') throw new Error('сервер должен хранить строку как есть (§5): ' + st.warmupEx);
+        if (st.workouts[0].exercises[0].name !== 'Разминка') {
+            throw new Error('устаревший id не резолвился в «Разминку»: ' + JSON.stringify(st.workouts[0].exercises));
+        }
+    });
 });

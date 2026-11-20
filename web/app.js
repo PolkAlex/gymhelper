@@ -3776,7 +3776,7 @@ function warmupPickerHtml() {
         '<div class="sh-title">Упражнение разминки</div>';
     h += '<button class="pli' + (cur.generic ? ' on' : '') + '" data-act="warmupSet" aria-label="Разминка">' +
         ico('warmup') + '<span class="nm">Разминка' +
-        '<small>' + (cur.generic ? 'по умолчанию · обобщённая запись' : 'обобщённая запись') + '</small></span>' +
+        (cur.generic ? '<small>по умолчанию</small>' : '') + '</span>' +
         (cur.generic ? '<span class="cur"></span>' : '') + '</button>';
     for (const c of list) {
         const on = !cur.generic && c.id === G.warmupEx;
