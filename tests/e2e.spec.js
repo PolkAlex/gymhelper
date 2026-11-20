@@ -6066,4 +6066,89 @@ test.describe('UX-T40: разминка по дефолту', function () {
             throw new Error('устаревший id не резолвился в «Разминку»: ' + JSON.stringify(st.workouts[0].exercises));
         }
     });
+
+    test('удалённая разминка не возвращается: в новой — ровно одна, в старой не появилась (§4.2)', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await sw.click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await page.locator('[data-act="closeSettings"]').click();
+
+        /* старт №1: разминка первым упражнением */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await expect(page.locator('.expill')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.expill .exname')).toHaveText('Разминка');
+
+        /* пользователь удаляет разминку из активной тренировки → сейв */
+        await page.locator('.expill .exhead [data-act="deleteExercise"]').click();
+        await page.locator('.modal.open [data-act="confirmYes"]').click();
+        await expect(page.locator('.expill')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+
+        /* завершить пустую нельзя (гвард) — пользователь добавляет реальное упражнение и завершает */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        await page.locator('.modal.open .excard', { hasText: 'Жим штанги лёжа' }).first().click();
+        await page.locator('#mWeight').fill('100');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('8-10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        const stOld = await (await request.get('/api/state')).json();
+        const oldW = (stOld.workouts || []).filter(function (w) { return w.finished; })[0];
+        const oldNames = (oldW && oldW.exercises || []).map(function (e) { return e.name; });
+        if (oldNames.length !== 1 || oldNames[0] !== 'Жим штанги лёжа' || oldNames.indexOf('Разминка') !== -1) {
+            throw new Error('в завершённой тренировке должна быть только «Жим…» без разминки: ' + JSON.stringify(oldNames));
+        }
+
+        /* старт №2 (есть история — выбор «С пустого списка»): разминка на месте РОВНО ОДНА */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="newBlank"]').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await expect(page.locator('.expill')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.expill .exname')).toHaveText('Разминка');
+        const st = await (await request.get('/api/state')).json();
+        const fresh = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        if (!fresh || fresh.exercises.length !== 1 || fresh.exercises[0].name !== 'Разминка' || fresh.exercises[0].sets.length !== 0) {
+            throw new Error('новая тренировка должна стартовать с одной пустой «Разминкой»: ' + JSON.stringify(fresh && fresh.exercises));
+        }
+        /* в старой (завершённой) разминка не появилась */
+        const oldW2 = (st.workouts || []).filter(function (w) { return w.finished; })[0];
+        const oldNames2 = (oldW2.exercises || []).map(function (e) { return e.name; });
+        if (oldNames2.length !== 1 || oldNames2.indexOf('Разминка') !== -1) {
+            throw new Error('разминка вернулась в старую тренировку: ' + JSON.stringify(oldNames2));
+        }
+    });
+
+    test('шаблон при включённом тоггле: список = шаблон, БЕЗ авто-добавки разминки (§4.3)', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], warmupFirst: true,
+            workouts: [],
+            templates: [{ id: 1, name: 'Спина и бицепс', createdAt: today + 'T10:35:00',
+                exercises: [{ name: 'Тяга верхнего блока', w: '60', s: 3, r: '10' }, { name: 'Подтягивания', w: '', s: 4, r: '8' }] }]
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        const m = page.locator('.modal.open');
+        await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
+        await m.locator('.tcard').click();
+        await expect(page.locator('.toast.show')).toHaveText('📋 Шаблон применён: 2 упражнения', { timeout: 5000 });
+        const names = page.locator('.expill .exname');
+        await expect(names.nth(0)).toHaveText('Тяга верхнего блока', { timeout: 5000 });
+        await expect(names.nth(1)).toHaveText('Подтягивания');
+        await expect(page.locator('.expill')).toHaveCount(2);
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst !== true) throw new Error('warmupFirst потерялся на сервере: ' + st.warmupFirst);
+        const fresh = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        const list = (fresh && fresh.exercises || []).map(function (e) { return e.name; });
+        if (list.length !== 2 || list[0] !== 'Тяга верхнего блока' || list[1] !== 'Подтягивания' || list.indexOf('Разминка') !== -1) {
+            throw new Error('старт из шаблона не должен добавлять разминку: ' + JSON.stringify(list));
+        }
+    });
 });
