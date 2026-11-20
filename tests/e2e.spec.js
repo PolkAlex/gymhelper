@@ -5436,7 +5436,10 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
                     app.__opened = [];
                     app.openTelegramLink = function (url) { app.__opened.push(url); };
                 }
-                if ((app && app.__mocked) || tries > 40) clearInterval(t);
+                /* окно 10с (было 1с = 40×25мс): на медленном CI telegram-web-app.js может
+                   исполниться позже первой секунды от document-start — мок не успевал
+                   установиться, и приложение звало vendor downloadFile (флейк UX-I14) */
+                if ((app && app.__mocked) || tries > 400) clearInterval(t);
             }, 25);
         });
         /* буфер: in-memory мок navigator.clipboard вместо grantPermissions — clipboard-*
@@ -5572,7 +5575,7 @@ test.describe('[UX-I14] шейринг картинкой', function () {
     }
 
     test('«Картинка» → canvas 1080×1920 → navigator.share с PNG; shareClick/shareOk', async ({ page, context, request }) => {
-        test.setTimeout(60000);
+        test.setTimeout(120000); /* canvas-рендеры ×2: на медленном CI 60с впритык (флейк UX-I14) */
         await mockWebShare(context);
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
@@ -5610,14 +5613,20 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(ev).not.toContain('shareDownload');
         /* кнопка разблокирована; повторный тап рендерит заново (edge 8.11 — не кешируется) */
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        /* [UX-B17 ревью] сетл после тяжёлого canvas-рендера: на медленном CI композитор
+           догоняет до повторного открытия шита; строка ждёт открытие явно (не съедая
+           остаток бюджета теста молча) */
+        await page.waitForTimeout(300);
         await page.locator('[data-act="shareSheet"]').click();
-        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const row2 = page.locator('.modal.open .shrow', { hasText: 'Картинка' });
+        await expect(row2).toBeVisible({ timeout: 20000 });
+        await row2.click();
         const sc2 = await scRendered(page, 2);
         expect(sc2.size).toBeGreaterThan(15000);
     });
 
     test('имя на картинке — только при opt-in тумблере', async ({ page, context, request }) => {
-        test.setTimeout(60000);
+        test.setTimeout(120000); /* canvas-рендеры ×4: на медленном CI 60с впритык (флейк UX-I14, PR #317) */
         await mockWebShare(context);
         /* имя берётся из initData Telegram (паттерн UX-I16: server-owned ПДн). В e2e юзер
            подкладывается в location.hash — telegram-web-app.js парсит #tgWebAppData= в
@@ -5726,7 +5735,10 @@ test.describe('[UX-I14] шейринг картинкой', function () {
                         app.__dlCalls.push({ url: p && p.url, name: p && p.file_name });
                     };
                 }
-                if ((app && app.__dlMock) || tries > 40) clearInterval(t);
+                /* окно 10с (было 1с = 40×25мс) — гонка с загрузкой telegram-web-app.js на
+                   медленном CI: мок не устанавливался → vendor downloadFile → __dlCalls
+                   пуст (воспроизведено локально 2/5 прогонов UX-I14) */
+                if ((app && app.__dlMock) || tries > 400) clearInterval(t);
             }, 25);
         });
         /* share/canShare нет — поток доходит до fallback-цепочки, где побеждает ветка Telegram */
@@ -5773,7 +5785,7 @@ test.describe('[UX-I14] шейринг картинкой', function () {
     });
 
     test('fallback мобильный без Telegram — инлайн-оверлей с картинкой, long-press-подсказка (UX-B15)', async ({ page, context, request }) => {
-        test.setTimeout(60000);
+        test.setTimeout(120000); /* canvas-рендеры ×2 + скачивание: на медленном CI 60с впритык */
         /* мобильный UA вне Telegram + share нет: a.download на мобильных тихо фейлится,
            а window.open(blob:) в in-app браузере Telegram вкладку не показывает (WebView
            без multi-window) — честная ветка [UX-B15]: инлайн-оверлей с <img>, long-press
@@ -5825,9 +5837,14 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         await page.locator('[data-act="cvClose"]').click();
         await expect(page.locator('#cardview.open')).toHaveCount(0);
         expect(await page.evaluate(function () { return window.__cvRevoked; })).toContain(src);
-        /* повторный поток: закрытие тапом по фону (края оверлея) — тоже revoke */
+        /* повторный поток: закрытие тапом по фону (края оверлея) — тоже revoke.
+           [UX-B17 ревью] сетл после a.download/закрытия оверлея + явное ожидание
+           строки шита (на медленном CI открытие может запаздывать — флейк UX-I14) */
+        await page.waitForTimeout(300);
         await page.locator('[data-act="shareSheet"]').click();
-        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        const row2 = page.locator('.modal.open .shrow', { hasText: 'Картинка' });
+        await expect(row2).toBeVisible({ timeout: 20000 });
+        await row2.click();
         await scRendered(page, 2);
         await expect(page.locator('#cardview.open')).toBeVisible();
         const src2 = String(await page.locator('#cvImg').getAttribute('src'));

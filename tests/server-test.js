@@ -20,6 +20,9 @@ function initialStore() {
     };
 }
 let store = initialStore();
+/* [UX-B17] кэш сырых и сжатых байтов статики (зеркало prod gzipCache): файлы меняются
+   только с релизом, инвалидация — рестарт процесса мока */
+const staticGzipCache = new Map();
 /* [ANA-T5] собранные события онбординга (прод: Stats.inc; здесь список для e2e-проверок) */
 let trackedEvents = [];
 
@@ -337,7 +340,10 @@ function handle(req, res) {
        Accept-Encoding — сырые байты; картинки и HEAD — без сжатия */
     const ct = types[path.extname(file).toLowerCase()] || 'application/octet-stream';
     const cc = ('/' + rel).endsWith('.html') ? 'no-cache' : 'public, max-age=31536000, immutable';
-    const staticRaw = fs.readFileSync(file);
+    /* gzipSync крупной статики блокирует однопоточный мок на каждый запрос (на CI —
+       десятки мс × десятки загрузок страниц) — байты из кэша, как в prod */
+    let staticRaw = staticGzipCache.get('raw:' + rel);
+    if (!staticRaw) { staticRaw = fs.readFileSync(file); staticGzipCache.set('raw:' + rel, staticRaw); }
     if (req.method === 'HEAD') {
         res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': cc, 'Vary': 'Accept-Encoding' });
         res.end();
@@ -347,15 +353,16 @@ function handle(req, res) {
     const gz = ae.indexOf('gzip') >= 0
         && (ct.indexOf('text/') === 0 || ct.indexOf('javascript') >= 0 || ct.indexOf('json') >= 0);
     if (gz) {
-        const body = zlib.gzipSync(staticRaw);
+        let gzBody = staticGzipCache.get('gz:' + rel);
+        if (!gzBody) { gzBody = zlib.gzipSync(staticRaw); staticGzipCache.set('gz:' + rel, gzBody); }
         res.writeHead(200, {
             'Content-Type': ct,
             'Cache-Control': cc,
             'Content-Encoding': 'gzip',
             'Vary': 'Accept-Encoding',
-            'Content-Length': body.length
+            'Content-Length': gzBody.length
         });
-        res.end(body);
+        res.end(gzBody);
         return;
     }
     res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': cc, 'Vary': 'Accept-Encoding' });
