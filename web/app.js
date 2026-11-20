@@ -596,6 +596,8 @@ async function reloadSilently(force, adoptServer) {
             if (!G.templates) G.templates = [];
             if (!G.goals) G.goals = []; /* [GOA-S1] старый файл без ключа goals */
             goalsAdopt(G.goals); /* [GOA-S1] протокол «ex» → клиентская модель exercise */
+            /* [EXR-T14] миграция localStorage — безвредна на повторах (ключи уже очищены) */
+            migrateCustomFavs();
             /* nextId не откатывается ниже локально известного — защита от id-коллизий */
             if (G.nextId < localNextId) G.nextId = localNextId;
             for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
@@ -1200,6 +1202,17 @@ const ACTIONS = {
     pickerCat: function (a) { if (PICKER) { PICKER.cat = PICKER.cat === a ? null : a; renderPickerChips(); renderPickerList(); } },
     pickCatEx: function (a) { pickCatEx(a); },
     customExerciseModal: function () { customExerciseModal(); },
+    /* [EXR-T14] тогл чипа группы мышц в модалке своего: точечная перерисовка ряда —
+       фокус и введённое название поля не теряются */
+    customMuscle: function (a) {
+        const k = CUSTOM_DRAFT.tags.indexOf(a);
+        if (k === -1) CUSTOM_DRAFT.tags.push(a); else CUSTOM_DRAFT.tags.splice(k, 1);
+        const row = document.getElementById('mCustomMuscles');
+        if (row) row.innerHTML = customMuscleChips();
+    },
+    /* [EXR-T14] «Отмена» в модалке своего возвращает В ПИКЕР (секция/поиск PICKER сохранены),
+       а не закрывает его целиком — фикс потери контекста */
+    backToPicker: function () { renderPickerModal(); },
     createCustom: function () { createCustom(); },
     openTech: function (a) { TECH.open = a; render(); },
     techBack: function () { TECH.open = null; render(); },
@@ -2823,30 +2836,52 @@ function techSheetToggle(a) {
     }
     techSheetApplySync();
 }
+/* карточка каталога в Технике (список + фолбэк Любимых): тап открывает технику, звезда тоглится */
+function techCatCardHtml(c) {
+    return '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + exVisual(c) +
+        '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div><div class="extags">' + exTagHashes(c) + '</div></span>' + starHtml(c.n) + '</div>';
+}
+/* [EXR-T15] карточка своего в Технике: некликабельна (детали техники для своих — вне
+    скоупа, решение 4), звезда кликабельна */
+function techOwnCardHtml(n) {
+    return '<div class="excard">' + ico('custom') +
+        '<span style="flex:1;min-width:0"><div class="exn">' + esc(n) + '</div><div class="extags">' + exCustomTagHashes(findCustom(n), 3) + '</div></span>' + starHtml(n) + '</div>';
+}
+/* избранные свои для секции «★ Любимые» Техники: фильтр по поиску, порядок добавления */
+function techFavOwnList() {
+    const q = (TECH.q || '').toLowerCase();
+    const favs = favsList();
+    return customNames().filter(n => favs.includes(n) && (!q || n.toLowerCase().includes(q)));
+}
 function techResultsHtml() {
-    /* [EXR-T4] «Своё»: собственные упражнения без категории, тег-фильтры не применяются */
+    /* [EXR-T4] «Своё»: собственные упражнения, тег-фильтры не применяются */
     if (techOwnMode()) {
         const q = (TECH.q || '').toLowerCase();
         const own = ownCustomNames().filter(n => !q || n.toLowerCase().includes(q));
         let h = '<div class="exgrid">';
-        for (const n of own) {
-            h += '<div class="excard">' + ico('custom') +
-                '<span style="flex:1;min-width:0"><div class="exn">' + esc(n) + '</div><div class="extags">#своё</div></span>' + starHtml(n) + '</div>';
-        }
+        for (const n of own) h += techOwnCardHtml(n);
         h += '</div>';
         if (!own.length) h += emptyFiltersHtml('Своих упражнений пока нет — добавь их из тренировки («✍️ Своё упражнение»)');
         return h;
     }
     const list = techFiltered();
+    /* [EXR-T15] секция «★ Любимые» включает избранные свои — после каталог-фавов (§9) */
+    const favOwn = TECH.section === 'fav' ? techFavOwnList() : [];
     let h = '<div class="exgrid">';
-    for (const c of list) {
-        /* [UX-T18] ⭐ в строке — тогл любимых; тап мимо звезды открывает упражнение.
-           [UX-T20] span с названием flex:1 — звезда прижата к правому краю строки */
-        h += '<div class="excard" data-act="openTech" data-a="' + c.id + '">' + exVisual(c) +
-            '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div><div class="extags">' + exTagHashes(c) + '</div></span>' + starHtml(c.n) + '</div>';
-    }
+    for (const c of list) h += techCatCardHtml(c);
+    for (const n of favOwn) h += techOwnCardHtml(n);
     h += '</div>';
-    if (!list.length) h += emptyFiltersHtml(null);
+    if (!list.length && !favOwn.length) {
+        /* [EXR-T15] пустая «★ Любимые» и фолбэк поиска — как в пикере (§7/§8), остальное — как было */
+        if (TECH.section === 'fav') {
+            const fb = favFallbackHtml(TECH.q, techCatCardHtml, techOwnCardHtml);
+            if (fb) h += fb;
+            else if ((TECH.q || '').trim()) h += '<p class="empty">Ничего не нашлось<br>Проверь написание — или добавь ✍️ Своё упражнение</p>';
+            else h += '<p class="empty">★ В Любимых пока пусто — отмечай ☆ на карточках упражнений</p>';
+        } else {
+            h += emptyFiltersHtml(null);
+        }
+    }
     return h;
 }
 /* пустой результат: «Ничего не найдено» + сброс фильтров */
@@ -3964,9 +3999,10 @@ function renderProfileTab() {
         '<div class="pf"><label for="pfWeight">Вес, кг</label><input id="pfWeight" type="number" inputmode="decimal" step="0.1" value="' + p.weight + '"></div>' +
         '<button class="btn pfsave" data-act="saveProfile">💾 Сохранить</button>' +
         '</div></div>';
-    /* [UX-T17] любимые упражнения: «Техника» с активным фильтром «★ Любимые» (gymFavs) */
+    /* [UX-T17] любимые упражнения: «Техника» с активным фильтром «★ Любимые» (gymFavs);
+        [EXR-T15] свои тоже входят в Любимые */
     h += '<div class="card"><p class="t1">⭐ Любимые упражнения</p>' +
-        '<p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>' +
+        '<p class="meta">Упражнения, отмеченные ★ — каталог и свои</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="openFavs">Открыть в технике</button></div></div>';
     /* [UX-T27] настройки (тема/fullscreen/фон/таймер/тренер) переехали в экран «Настройки» [UX-S4 §7] */
     /* [UX-T18] обёртка .prof: компактные карточки/поля (стиль токенов не менялся) */
@@ -4355,16 +4391,20 @@ function openPicker(wid) {
     PICKER = { wid, section: 'fav', cat: null, q: '' };
     renderPickerModal();
 }
-function favsList() {
-    try { return JSON.parse(localStorage.getItem('gymFavs') || '[]'); } catch (e) { return []; }
-}
+/* [EXR-T15] «Любимые» — серверные данные (G.favs), не localStorage: переносятся между
+   устройствами и переживают очистку (решение 1 спеки EXR-E3); миграция — §11 */
+function favsList() { return G.favs || []; }
 function isFav(n) { return favsList().includes(n); }
 function toggleFav(n) {
-    let f = favsList();
-    if (f.includes(n)) f = f.filter(x => x !== n); else f.push(n);
-    try { localStorage.setItem('gymFavs', JSON.stringify(f)); } catch (e) { /* noop */ }
-    /* в пикере список обновляется точечно; вне его (звезда в технике [UX-T13]) — перерисовка экрана */
-    if (document.getElementById('pickerList')) renderPickerList();
+    if (!G.favs) G.favs = [];
+    const k = G.favs.indexOf(n);
+    if (k !== -1) G.favs.splice(k, 1); else G.favs.push(n);
+    save(); /* ошибки показывает doSave */
+    /* в открытом пикере список обновляется точечно; вне его (звезда в технике [UX-T13]) —
+       перерисовка экрана. Закрытый пикер (hidden-модалка остаётся в DOM) не считается:
+       иначе звезда Техники обновит невидимый пикер вместо списка [EXR-T15] */
+    const modal = document.getElementById('modal');
+    if (modal && modal.classList.contains('open') && document.getElementById('pickerList')) renderPickerList();
     else render();
 }
 function mostUsed(n) {
@@ -4385,14 +4425,50 @@ function ownCustomNames() {
     }
     return Array.from(set);
 }
-function customBase() {
-    try { return JSON.parse(localStorage.getItem('gymCustomEx') || '[]'); } catch (e) { return []; }
+/* [EXR-T14] «Свои» — серверные данные (G.customEx): [{ n, tags: ['m:chest', …] }] */
+function customNames() { return (G.customEx || []).map(x => x.n); }
+function findCustom(name) {
+    const q = String(name || '').toLowerCase();
+    return (G.customEx || []).find(x => (x.n || '').toLowerCase() === q) || null;
 }
-function addCustomBase(n) {
-    const a = customBase();
-    if (a.includes(n)) return;
-    a.push(n);
-    try { localStorage.setItem('gymCustomEx', JSON.stringify(a)); } catch (e) { /* noop */ }
+function customBase() { return customNames(); }
+/* [EXR-T14] миграция localStorage (gymCustomEx/gymFavs) → сервер (сценарий G §11):
+   на сервере поля отсутствуют или пусты, а локально есть — имена, которых нет на
+   сервере, добавляются; ключи localStorage очищаются. Сервер приоритетен: при
+   непустых серверных полях локальное игнорируется (конфликт — побеждает серверная
+   запись с тегами). Имена, совпавшие с каталогом, не переносятся (они и так каталог). */
+function migrateCustomFavs() {
+    if (!G) return;
+    let lsC = [], lsF = [];
+    try { lsC = JSON.parse(localStorage.getItem('gymCustomEx') || '[]') || []; } catch (e) { lsC = []; }
+    try { lsF = JSON.parse(localStorage.getItem('gymFavs') || '[]') || []; } catch (e) { lsF = []; }
+    if (!Array.isArray(lsC)) lsC = [];
+    if (!Array.isArray(lsF)) lsF = [];
+    let migrated = false;
+    if ((!G.customEx || !G.customEx.length) && lsC.length) {
+        G.customEx = [];
+        for (const n of lsC) {
+            if (typeof n !== 'string') continue;
+            const name = n.trim();
+            if (!name || name.length > 60 || findCatalog(name) || findCustom(name)) continue;
+            G.customEx.push({ n: name, tags: [] });
+            migrated = true;
+        }
+    }
+    if ((!G.favs || !G.favs.length) && lsF.length) {
+        G.favs = [];
+        for (const n of lsF) {
+            if (typeof n !== 'string') continue;
+            const name = n.trim();
+            if (!name || G.favs.includes(name)) continue;
+            G.favs.push(name);
+            migrated = true;
+        }
+    }
+    if (migrated) {
+        try { localStorage.removeItem('gymCustomEx'); localStorage.removeItem('gymFavs'); } catch (e) { /* noop */ }
+        save(); /* ошибки показывает doSave */
+    }
 }
 /* [EXR-T9] карточки пикера: фото вместо иконки — тот же exVisual, что в Технике
    (записи каталога без img и «свои» — прежняя SVG-иконка); чипы категорий не тронуты */
@@ -4401,15 +4477,41 @@ function exCard(c) {
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div>' +
         '<div class="extags">' + exTagHashes(c, 3) + '</div></span>' + starHtml(c.n) + '</div>';
 }
+/* [EXR-T14] теги карточки своего: #своё + хеши групп m:* (лимит 3 общий — как у каталога
+   exCard); для старых своих без тегов — просто #своё; латынь в хешах — единый вид с каталогом */
+function exCustomTagHashes(cu, limit) {
+    const tags = ['#своё'].concat(((cu && cu.tags) || []).map(function (t) { return '#' + String(t).replace(/^[a-z]+:/, ''); }));
+    return (limit ? tags.slice(0, limit) : tags).join(' ');
+}
 function exCardByName(name) {
     const c = findCatalog(name);
-    const tags = c ? exTagHashes(c, 3) : '#своё';
+    const tags = c ? exTagHashes(c, 3) : exCustomTagHashes(findCustom(name), 3);
     return '<div class="excard" data-act="pickCatEx" data-a="' + esc(name) + '">' + (c ? exVisual(c) : ico('custom')) +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(name) + '</div><div class="extags">' + tags + '</div></span>' + starHtml(name) + '</div>';
 }
 function starHtml(name) {
     const fav = isFav(name);
     return '<span class="star' + (fav ? ' fav' : '') + '" data-fav="' + escAttr(name) + '" role="button" aria-label="' + (fav ? 'Из любимых' : 'В любимые') + '">' + (fav ? '★' : '☆') + '</span>';
+}
+/* [EXR-T15] фолбэк поиска в секции «★ Любимые» — общий хелпер пикера и Техники (§7):
+   среди избранных 0 совпадений по запросу q → янтарный hint-блок «Не нашлось в Любимых»
+   + совпадения по всем упражнениям (каталог в порядке каталога + свои в порядке добавления).
+   Тап ☆ в блоке добавляет в Любимые — списки пересчитываются, фолбэк исчезает.
+   '' — фолбэк не нужен: есть совпадение в Любимых, запрос пуст или совпадений нет нигде
+   (пустое состояние рисует вызывающий). renderCatCard(c)/renderOwnCard(n) — рендеры карточек. */
+function favFallbackHtml(q, renderCatCard, renderOwnCard) {
+    const nq = (q || '').toLowerCase();
+    if (!nq) return '';
+    if (favsList().some(n => n.toLowerCase().includes(nq))) return '';
+    const fbCat = CATALOG.filter(c => c.n.toLowerCase().includes(nq));
+    const fbOwn = customNames().filter(n => n.toLowerCase().includes(nq));
+    if (!fbCat.length && !fbOwn.length) return '';
+    let h = '<div class="hint" style="margin:6px 0"><span><b>Не нашлось в Любимых</b><br>Совпадения по всем упражнениям · ' + (fbCat.length + fbOwn.length) + '</span></div>';
+    h += '<div class="exgrid">';
+    for (const c of fbCat) h += renderCatCard(c);
+    for (const n of fbOwn) h += renderOwnCard(n);
+    h += '</div>';
+    return h;
 }
 function pickerChipsHtml() {
     let h = '';
@@ -4447,21 +4549,28 @@ function renderPickerList() {
     const q = (PICKER.q || '').toLowerCase();
     let h = '';
     if (PICKER.section === 'fav') {
-        const favs = favsList().filter(n => !q || n.toLowerCase().includes(q));
-        let list;
-        if (favs.length) {
-            list = CATALOG.filter(c => favs.includes(c.n));
-            h += '<div class="muted" style="margin:6px 0">★ Избранные</div>';
+        /* [EXR-T15] «★ Любимые» = избранные каталога + избранные свои (порядок: каталог,
+           затем свои в порядке добавления — стабильный); поиск с 0 совпадений среди
+           избранных → фолбэк по всем упражнениям (§7) */
+        const favs = favsList();
+        const favCat = CATALOG.filter(c => favs.includes(c.n) && (!q || c.n.toLowerCase().includes(q)));
+        const favOwn = customNames().filter(n => favs.includes(n) && (!q || n.toLowerCase().includes(q)));
+        if (favCat.length || favOwn.length) {
+            h += '<div class="muted" style="margin:6px 0">★ Любимые</div>';
             h += '<div class="exgrid">';
-            for (const c of list) h += exCard(c);
+            for (const c of favCat) h += exCard(c);
+            for (const n of favOwn) h += exCardByName(n);
             h += '</div>';
         } else {
-            h += '<p class="empty">★ Избранных пока нет — отмечай ☆ на карточках упражнений</p>';
+            const fb = favFallbackHtml(q, exCard, exCardByName);
+            if (fb) h += fb;
+            else if (q) h += '<p class="empty">Ничего не нашлось<br>Проверь написание — или добавь ✍️ Своё упражнение</p>';
+            else h += '<p class="empty">★ В Любимых пока пусто<br>Отмечай ☆ на карточках упражнений — они соберутся здесь. Свои упражнения тоже можно добавить в Любимые</p>';
         }
     } else if (PICKER.section === 'coll' && PICKER.cat === 'own') {
         const own = ownCustomNames().filter(n => !q || n.toLowerCase().includes(q));
         for (const n of own) h += exCardByName(n);
-        if (!own.length) h += '<p class="empty">Своих упражнений пока нет</p>';
+        if (!own.length) h += '<p class="empty">Своих упражнений пока нет — добавь первое через «✍️ Своё упражнение»</p>';
     } else {
         let list = CATALOG.slice();
         /* [EXR-T4 fix] теги айтема CATS (составные — OR; внутри exTagMatch — фолбэк legacy) */
@@ -4511,26 +4620,51 @@ function storage_after_pick(w, e) {
     closeModal();
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
 }
+/* [EXR-T14] модалка «✍️ Своё упражнение» (Э1/Э2): название + чипы групп мышц
+   (мультивыбор из FILTERS.muscle, можно пропустить — «Добавить» активна всегда);
+   выбранные группы держатся в локальном состоянии модалки */
+let CUSTOM_DRAFT = { tags: [] };
 function customExerciseModal() {
+    CUSTOM_DRAFT = { tags: [] };
     const w = findW(PICKER.wid);
-    const h = '<p class="mtitle">✍️ Своё упражнение</p>' +
-        '<label>Название (до 60 символов)</label><input id="mCustomName" type="text" maxlength="60">' +
+    let h = '<p class="mtitle">✍️ Своё упражнение</p>' +
+        '<label>Название (до 60 символов)</label><input id="mCustomName" type="text" maxlength="60" placeholder="Например: Жим Свенда стоя">' +
+        '<div class="flabel" style="margin:14px 0 6px">Группы мышц<span class="opt">необязательно</span></div>' +
+        '<div class="secrow" id="mCustomMuscles" style="margin:0 0 8px">' + customMuscleChips() + '</div>' +
+        '<p class="mhint">Можно выбрать несколько или пропустить — без группы упражнение останется видно в «Своих», «Все» и поиске</p>' +
         '<div class="btnrow"><button class="btn wide" data-act="createCustom">➕ Добавить</button>' +
-        '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>';
+        '<button class="btn sec wide" data-act="backToPicker">Отмена</button></div>';
     openModal(h);
     const inp = document.getElementById('mCustomName');
     if (inp) inp.focus();
     void w;
+}
+function customMuscleChips() {
+    let h = '';
+    for (const it of FILTERS.muscle.items) {
+        const on = CUSTOM_DRAFT.tags.indexOf(it.id) !== -1;
+        h += '<button class="chip' + (on ? ' on' : '') + '" data-act="customMuscle" data-a="' + escAttr(it.id) + '">' + esc(it.n) + '</button>';
+    }
+    return h;
 }
 function createCustom() {
     const w = findW(PICKER.wid);
     if (w && w.finished) { toast('Тренировка завершена — доступен просмотр', true); return; } /* [UX-B6] симметрия с pickCatEx */
     const name = String((document.getElementById('mCustomName') || {}).value || '').trim();
     if (!name || name.length > 60) { toast('Название от 1 до 60 символов', true); return; }
-    addCustomBase(name);
+    /* [EXR-T14] дубликат (каталог или своё, без учёта регистра): имя = ключ записи,
+       дубликаты ломают списки «Любимых» (имя-ориентированных) */
+    if (findCatalog(name) || findCustom(name)) {
+        toast('Упражнение с таким названием уже есть', true);
+        const inp = document.getElementById('mCustomName');
+        if (inp) inp.focus();
+        return;
+    }
+    if (!G.customEx) G.customEx = [];
+    G.customEx.push({ n: name, tags: CUSTOM_DRAFT.tags.slice() });
+    save(); /* создание уходит на сервер (§11); ошибки показывает doSave */
     closeCurrentExercise();
     const e = startExercise(w, name);
-    save();
     closeModal();
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
 }
@@ -6083,6 +6217,9 @@ async function init() {
             if (!G.templates) G.templates = [];
             if (!G.goals) G.goals = []; /* [GOA-S1] старый файл без ключа goals */
             goalsAdopt(G.goals); /* [GOA-S1] протокол «ex» → клиентская модель exercise */
+            /* [EXR-T14] localStorage gymCustomEx/gymFavs → сервер (однократно: ключи
+               очищаются); сервер приоритетен — при непустых полях миграции нет */
+            migrateCustomFavs();
             if (G.nextId < 1) G.nextId = 1;
             /* id из tombstone-списка нельзя выдавать заново — иначе новая тренировка мгновенно «удалится» */
             for (const d of G.del) if (d >= G.nextId) G.nextId = d + 1;
