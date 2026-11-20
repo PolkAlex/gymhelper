@@ -758,6 +758,13 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.card', { hasText: 'Мышечные группы · за всё время' })).toBeVisible();
         /* Эпли — вне периода: карточка не изменилась от смены пикера */
         await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toHaveText(eplBefore);
+        /* «3 месяца» — лейбл во всех подписях периода (решение владельца 20.11, без «квартала»);
+           квартал = окт–дек: сегодня + 1-е число, старая (май) не попадает */
+        await picker.locator('.chip', { hasText: '3 месяца' }).click();
+        const gridQ = page.locator('.statgrid');
+        await expect(gridQ.locator('.sg', { hasText: 'за 3 месяца' }).locator('b')).toHaveText('2', { timeout: 5000 });
+        await expect(page.locator('.reccard', { hasText: 'Рекорды 3 месяцев · ' + EX })).toBeVisible();
+        await expect(page.locator('.card', { hasText: 'Мышечные группы · эти 3 месяца' })).toBeVisible();
     });
 
     test('[ANA-T8] 320px: пикер в одну строку с h-скроллом; пустой период — заглушка, Эпли на месте', async ({ page, request }) => {
@@ -798,6 +805,42 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.reccard')).toHaveCount(0);
         await expect(page.locator('.statgrid')).toHaveCount(0);
         /* Эпли — вне периода: остаётся при пустом периоде */
+        await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toBeVisible();
+    });
+
+    test('[ANA-T8] все тренировки периода без started: ячейки «средняя» и «общее время» нет; пустой период — заглушка', async ({ page, request }) => {
+        /* ретро-ввод без started/ended: durationMin = null (спека §4.1) — тренировка сегодня,
+           период «Месяц» непустой во все дни календаря */
+        const today = isoDate(new Date());
+        const noStart = { id: 1, date: today, finished: true, title: '', nutrition: '',
+            exercises: [{ name: EX, sets: [{ w: '80', s: 3, r: '8', t: today + 'T09:32:00' }] }] };
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [noStart]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const grid = page.locator('.statgrid');
+        await expect(grid).toBeVisible({ timeout: 5000 });
+        await expect(grid.locator('.sg', { hasText: 'за месяц' }).locator('b')).toHaveText('1');
+        /* ни одной тренировки с длительностью: «≈ средняя» нет (§4.1), «общее время» нет (totalMin=0) */
+        await expect(grid.locator('.sg', { hasText: 'средняя' })).toHaveCount(0);
+        await expect(grid.locator('.sg', { hasText: 'общее время' })).toHaveCount(0);
+        await expect(grid.locator('.sg', { hasText: 'подходов' }).locator('b')).toHaveText('1');
+        /* смена фикстуры: тренировка 10 дней назад (всегда до понедельника текущей недели) —
+           «Неделя» пуста при любой дате → заглушка; Эпли остаётся (вне периода) */
+        const old = isoDate(new Date(Date.now() - 10 * 86400000));
+        await request.post('/api/save', { data: { initData: '', rev: 2, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: old, finished: true, title: '', nutrition: '',
+                exercises: [{ name: EX, sets: [{ w: '80', s: 3, r: '8', t: old + 'T09:32:00' }] }] }]
+        } } });
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        await page.locator('.perpicker .chip', { hasText: 'Неделя' }).click();
+        await expect(page.locator('.card.hero')).toContainText('За эту неделю тренировок нет');
+        await expect(page.locator('.statgrid')).toHaveCount(0);
         await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toBeVisible();
     });
 
