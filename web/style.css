@@ -154,13 +154,9 @@ button { font-family: inherit; }
     max-width: 536px;
     margin: 4px auto 12px;
 }
-/* [UX-B10][UX-B11] fullscreen: системная шапка Telegram («✕ Закрыть» слева,
-   «⌄ ⋮» справа) висит НАД контентом и перекрывала топбар (заголовок не читался,
-   шестерёнка не нажималась). Отступ сверху — фиксированные ~56px (эмпирика:
-   высота плашки «Закрыть» + запас; ПРОВЕРИТЬ НА ТЕЛЕФОНЕ), safe-area перекрывает,
-   если фактический inset больше. Вертикальные паддинги в fs компактнее —
-   пилюля ниже и уже. Вне fullscreen класс fs снят, геометрия прежняя (10px 12px) */
-body.fs .topbar { padding-top: max(56px, var(--fs-inset-top, 56px)); padding-bottom: 6px; }
+/* [UX-T43] полноэкранный режим удалён (решение владельца 20.11): правило body.fs .topbar
+   (padding-top max(56px, var(--fs-inset-top, 56px))) больше не нужно — шапка всегда
+   в обычной геометрии (10px 12px), safe-area обычного режима не зависит от fs */
 .tb-title {
     font-weight: 700;
     font-size: 17px;
@@ -1443,8 +1439,28 @@ summary .wip, .setrow .wip { font-size: 11.5px; font-weight: 400; color: var(--m
 .sw-ico.l { left: 6px; } .sw-ico.r { right: 6px; }
 .sw-ico svg { width: 14px; height: 14px; display: block; }
 .switch.on .sw-ico { color: rgba(20,18,10,.45); opacity: 1; } /* призрак на янтарном */
-.switch.locked { opacity: .45; pointer-events: none; }        /* disabled */
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
+
+/* ============ [UX-T42] свайп-навигация: индикатор жеста у края ============ */
+/* тонкая вертикальная полоска, проявляется при потягивании от края
+   (влево-от-левого-края = назад, вправо-от-правого = вперёд); сама навигация —
+   на touchend, анимации нет — только класс show */
+#navSwipeHint {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 56px;
+    border-radius: 2px;
+    background: var(--accent);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 80;
+    transition: opacity .12s;
+}
+#navSwipeHint.l { left: 0; }
+#navSwipeHint.r { right: 0; }
+#navSwipeHint.show { opacity: .45; }
 
 /* ============ шаблоны тренировок [UX-T6/T7] ============ */
 /* карточка шаблона в модалке старта: тап = немедленный старт, 🗑 — удалить */
