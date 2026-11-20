@@ -596,8 +596,10 @@ async function reloadSilently(force, adoptServer) {
             if (!G.templates) G.templates = [];
             if (!G.goals) G.goals = []; /* [GOA-S1] старый файл без ключа goals */
             goalsAdopt(G.goals); /* [GOA-S1] протокол «ex» → клиентская модель exercise */
-            /* [EXR-T14] миграция localStorage — безвредна на повторах (ключи уже очищены) */
-            migrateCustomFavs();
+            /* [EXR-T14] миграция localStorage — безвредна на повторах (ключи уже очищены).
+               adoptServer (409 после /delete_my_data): localStorage-миграция не запускается —
+               данные владельца удалены безвозвратно, ключи устройства не воскрешают их */
+            if (!adoptServer) migrateCustomFavs();
             /* nextId не откатывается ниже локально известного — защита от id-коллизий */
             if (G.nextId < localNextId) G.nextId = localNextId;
             for (const w of G.workouts) if (w.id >= G.nextId) G.nextId = w.id + 1;
@@ -2847,11 +2849,22 @@ function techOwnCardHtml(n) {
     return '<div class="excard">' + ico('custom') +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(n) + '</div><div class="extags">' + exCustomTagHashes(findCustom(n), 3) + '</div></span>' + starHtml(n) + '</div>';
 }
-/* избранные свои для секции «★ Любимые» Техники: фильтр по поиску, порядок добавления */
+/* избранные свои для секции «★ Любимые» Техники: фильтр по поиску + тег-фильтры тем же
+   правилом, что каталог (данные findCustom; свои без тегов при активном фильтре честно
+   отсеиваются — нет данных, не матчатся; режим «Своё» фильтры не применяет — отдельный путь) */
 function techFavOwnList() {
     const q = (TECH.q || '').toLowerCase();
     const favs = favsList();
-    return customNames().filter(n => favs.includes(n) && (!q || n.toLowerCase().includes(q)));
+    return customNames().filter(function (n) {
+        if (!favs.includes(n) || (q && !n.toLowerCase().includes(q))) return false;
+        /* [EXR-T15 ревью] свои с тегами групп находятся тег-фильтрами наравне с каталогом:
+           пустой фильтр группы не режет, непустой — мачится по exTagMatch на данных своего */
+        const cu = findCustom(n);
+        if (TECH.fMuscle.length && !TECH.fMuscle.some(id => fItemTags(id).some(t => exTagMatch(cu, t)))) return false;
+        if (TECH.fGear.length && !TECH.fGear.some(id => fItemTags(id).some(t => exTagMatch(cu, t)))) return false;
+        if (TECH.fCats.length && !TECH.fCats.some(id => catChipTags(id).some(t => exTagMatch(cu, t)))) return false;
+        return true;
+    });
 }
 function techResultsHtml() {
     /* [EXR-T4] «Своё»: собственные упражнения, тег-фильтры не применяются */
@@ -4439,9 +4452,13 @@ function customBase() { return customNames(); }
    запись с тегами). Имена, совпавшие с каталогом, не переносятся (они и так каталог). */
 function migrateCustomFavs() {
     if (!G) return;
+    let rawC = null, rawF = null;
+    try { rawC = localStorage.getItem('gymCustomEx'); } catch (e) { rawC = null; }
+    try { rawF = localStorage.getItem('gymFavs'); } catch (e) { rawF = null; }
+    if (rawC == null && rawF == null) return;
     let lsC = [], lsF = [];
-    try { lsC = JSON.parse(localStorage.getItem('gymCustomEx') || '[]') || []; } catch (e) { lsC = []; }
-    try { lsF = JSON.parse(localStorage.getItem('gymFavs') || '[]') || []; } catch (e) { lsF = []; }
+    try { lsC = JSON.parse(rawC || '[]') || []; } catch (e) { lsC = []; }
+    try { lsF = JSON.parse(rawF || '[]') || []; } catch (e) { lsF = []; }
     if (!Array.isArray(lsC)) lsC = [];
     if (!Array.isArray(lsF)) lsF = [];
     let migrated = false;
@@ -4465,9 +4482,20 @@ function migrateCustomFavs() {
             migrated = true;
         }
     }
-    if (migrated) {
+    /* [EXR-T14 ревью] ключи localStorage удаляются ПОСЛЕ подтверждённого сохранения
+       ('ok' от doSave); при 'err'/'conflict' ключи остаются — миграция повторится при
+       следующем init (идемпотентно: если save прошёл частично, вторая волна ничего
+       не добавит — серверные поля уже непусты). Если мигрировать нечего (серверные
+       поля непусты / ls пуст / битый JSON) — stale-ключи всё равно очищаются: данные
+       из них игнорируются (сервер приоритетен), а удаление предотвращает их
+       «воскрешение» при будущей полной очистке «Своих» на сервере. */
+    const clearKeys = function () {
         try { localStorage.removeItem('gymCustomEx'); localStorage.removeItem('gymFavs'); } catch (e) { /* noop */ }
-        save(); /* ошибки показывает doSave */
+    };
+    if (migrated) {
+        save().then(function (r) { if (r === 'ok') clearKeys(); }); /* ошибки показывает doSave */
+    } else {
+        clearKeys();
     }
 }
 /* [EXR-T9] карточки пикера: фото вместо иконки — тот же exVisual, что в Технике
@@ -4478,9 +4506,10 @@ function exCard(c) {
         '<div class="extags">' + exTagHashes(c, 3) + '</div></span>' + starHtml(c.n) + '</div>';
 }
 /* [EXR-T14] теги карточки своего: #своё + хеши групп m:* (лимит 3 общий — как у каталога
-   exCard); для старых своих без тегов — просто #своё; латынь в хешах — единый вид с каталогом */
+   exCard); для старых своих без тегов — просто #своё; латынь в хешах — единый вид с каталогом;
+   каждый хеш экранируется (теги приходят из пользовательских данных сервера) */
 function exCustomTagHashes(cu, limit) {
-    const tags = ['#своё'].concat(((cu && cu.tags) || []).map(function (t) { return '#' + String(t).replace(/^[a-z]+:/, ''); }));
+    const tags = ['#своё'].concat(((cu && cu.tags) || []).map(function (t) { return esc('#' + String(t).replace(/^[a-z]+:/, '')); }));
     return (limit ? tags.slice(0, limit) : tags).join(' ');
 }
 function exCardByName(name) {
@@ -4502,7 +4531,13 @@ function starHtml(name) {
 function favFallbackHtml(q, renderCatCard, renderOwnCard) {
     const nq = (q || '').toLowerCase();
     if (!nq) return '';
-    if (favsList().some(n => n.toLowerCase().includes(nq))) return '';
+    /* [EXR-T15 ревью] совпадение в Любимых ищется только среди СУЩЕСТВУЮЩИХ упражнений
+       (каталог + свои): dangling-фав (имя удалённого/переименованного своего) не глушит
+       фолбэк — иначе поиск даёт глухую пустоту при живых совпадениях в базе */
+    const favs = favsList();
+    const known = new Set(CATALOG.map(c => c.n));
+    for (const n of customNames()) known.add(n);
+    if (favs.some(n => known.has(n) && n.toLowerCase().includes(nq))) return '';
     const fbCat = CATALOG.filter(c => c.n.toLowerCase().includes(nq));
     const fbOwn = customNames().filter(n => n.toLowerCase().includes(nq));
     if (!fbCat.length && !fbOwn.length) return '';
@@ -4580,8 +4615,17 @@ function renderPickerList() {
         }
         if (q) list = list.filter(c => c.n.toLowerCase().includes(q));
         let customs = [];
-        if (!PICKER.cat && PICKER.section !== 'coll') {
-            customs = customBase().filter(n => !q || n.toLowerCase().includes(q));
+        if (PICKER.section !== 'coll') {
+            /* [EXR-T15 ревью] при выбранной категории свои матчатся тем же правилом, что
+               каталог («Мышцы» найдёт свои с соответствующей группой; «Инвентарь»/категории —
+               пусто: у своих нет e:/cat:-тегов — корректно); без категории — свои целиком,
+               как было */
+            customs = customNames().filter(function (n) {
+                if (q && !n.toLowerCase().includes(q)) return false;
+                if (!PICKER.cat) return true;
+                const catTags = pickerCatTags(PICKER.section, PICKER.cat);
+                return catTags.some(t => exTagMatch(findCustom(n), t));
+            });
         }
         h += '<div class="exgrid">';
         for (const c of list) h += exCard(c);
