@@ -5548,8 +5548,9 @@ function renderShareCard(w) {
    платформе: Telegram — карточка на сервер → нативный downloadFile с https-URL →
    инлайн-оверлей с картинкой (мобильный, [UX-B15]) → a.download (desktop), тост всегда
    отражает фактическое действие. shareClick пишется на тапе «Поделиться»
-   (ACTION shareSheet, точка входа воронки §5); shareOk/shareDownload — по факту
-   шторки/fallback-сохранения; отмена шторки (AbortError) — не событие. Ошибка
+   (ACTION shareSheet, точка входа воронки §5); shareOk — по факту шторки,
+   shareDownload — по факту показа fallback-пути (оверлей/скачивание запущены);
+   отмена шторки (AbortError) — не событие. Ошибка
    рендера/старый webview без File — тост + разблокировка кнопки (edge 8.10). */
 async function sharePictureGo(wid) {
     const btn = document.getElementById('shareBtn' + wid);
@@ -5723,6 +5724,8 @@ function cvSave() {
         document.body.appendChild(a);
         a.click();
         a.remove();
+        /* повторный тап — повторяем тост: a.download без колбэка, факт сохранения клиенту не виден */
+        toast('Картинка отправлена в загрузки');
     } catch (e) { /* a.download не сработал — long-press-подсказка остаётся честным путём */ }
 }
 
