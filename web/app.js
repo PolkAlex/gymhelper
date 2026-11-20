@@ -5361,9 +5361,10 @@ function renderShareCard(w) {
 }
 
 /* поток «Картинка» (§5, механика UX-I16 «буфер → действие»): рендер PNG → буфер →
-   navigator.share с файлом (шторка Telegram); fallback [UX-B15] — по платформе:
-   Telegram downloadFile → новая вкладка (мобильный) → a.download (desktop), тост
-   всегда отражает фактическое действие. shareClick пишется на тапе «Поделиться»
+   navigator.share с файлом (шторка Telegram); fallback [UX-B15]+[UX-T41] — по
+   платформе: Telegram — карточка на сервер → нативный downloadFile с https-URL →
+   новая вкладка (мобильный вне Telegram) → a.download (desktop), тост всегда
+   отражает фактическое действие. shareClick пишется на тапе «Поделиться»
    (ACTION shareSheet, точка входа воронки §5); shareOk/shareDownload — по факту
    шторки/fallback-сохранения; отмена шторки (AbortError) — не событие. Ошибка
    рендера/старый webview без File — тост + разблокировка кнопки (edge 8.10). */
@@ -5416,26 +5417,42 @@ async function sharePictureGo(wid) {
             /* отказ API — падаем в скачивание (fallback ниже) */
         }
     }
-    /* §5.4 fallback [UX-B15]: a.download не доносит файл до файловой системы в мобильных
-       WebView (Telegram Android игнорирует download-атрибут, мобильный Chrome часто тихо
-       фейлится) — тост «сохранена» врал. Цепочка по платформе, тост отражает фактическое
-       действие: 1) Telegram — нативный downloadFile (≥ 8.0; URL бракует по протоколу —
-       падаем в цепочку); 2) мобильный вне Telegram — картинка в новой вкладке, оттуда
-       «удерживайте → Скачать»; 3) desktop — a.download работает как раньше. */
+    /* §5.4 fallback [UX-B15]+[UX-T41]: a.download не доносит файл до файловой системы в
+       мобильных WebView, а vendor downloadFile бракует не-https URL по протоколу (blob:
+       → на реальном Android диалог не открывался вовсе). Цепочка по платформе, тост
+       отражает фактическое действие: 0) в Telegram — карточка на сервер (TTL 1 ч,
+       анонимный токен) → нативный downloadFile с https-URL → «Загрузки» Telegram;
+       1) мобильный вне Telegram — картинка в новой вкладке, оттуда «удерживайте →
+       Скачать»; 2) desktop — a.download работает как раньше. */
     const plat = tg ? String(tg.platform || '') : '';
     const inTg = !!plat && plat !== 'unknown' && plat !== 'web';
     const isMobile = inTg ? (plat === 'android' || plat === 'ios')
         : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
     const objUrl = URL.createObjectURL(card.blob);
     let saved = false;
-    if (tg && typeof tg.downloadFile === 'function') {
+    /* [UX-T41] ветка Telegram — прежде прочего: серверный https-URL единственный,
+       который нативный downloadFile принимает. Upload не удался / Telegram < 8.0 —
+       шаг цепочки ниже, как раньше */
+    if (inTg && typeof tg.downloadFile === 'function') {
+        let httpsUrl = null;
         try {
-            tg.downloadFile({ url: objUrl, file_name: fname });
-            setTimeout(function () { URL.revokeObjectURL(objUrl); }, 60000);
-            trackShare('shareDownload');
-            toast('Открыл диалог сохранения — подтвердите в Telegram');
-            saved = true;
-        } catch (e) { /* Telegram < 8.0 или blob-URL не принят — шаг цепочки ниже */ }
+            const r = await fetch('/api/card-upload', {
+                method: 'POST',
+                body: card.blob,
+                headers: { 'Content-Type': 'image/png', 'initData': INIT }
+            });
+            const j = await r.json();
+            if (r.ok && j.ok && j.url) httpsUrl = j.url;
+        } catch (e) { /* сеть/сервер — шаг цепочки ниже */ }
+        if (httpsUrl) {
+            try {
+                tg.downloadFile({ url: httpsUrl, file_name: fname });
+                URL.revokeObjectURL(objUrl);
+                trackShare('shareDownload');
+                toast('Файл сохранён в загрузки Telegram');
+                saved = true;
+            } catch (e) { /* Telegram < 8.0 или отказ — шаг цепочки ниже */ }
+        }
     }
     if (!saved && isMobile) {
         let wn = null;

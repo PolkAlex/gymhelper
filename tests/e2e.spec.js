@@ -5567,11 +5567,13 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts.some(function (t) { return /^4×8$/.test(String(t)); })).toBeTruthy();
     });
 
-    test('fallback Telegram — нативный downloadFile с objectURL + честный тост (UX-B15)', async ({ page, context, request }) => {
+    test('Telegram — карточка на сервере → нативный downloadFile с https-URL + честный тост (UX-T41/B15)', async ({ page, context, request }) => {
         test.setTimeout(60000);
         /* мок Telegram WebApp: telegram-web-app.js (загружается из index.html) ЗАМЕНЯЕТ
            window.Telegram.WebApp после init-скриптов — переустанавливаем downloadFile
-           на том же объекте (tg в app.js — const-ссылка на него; паттерн UX-I16) */
+           на том же объекте (tg в app.js — const-ссылка на него; паттерн UX-I16).
+           [UX-T41] платформа android из initParams (hash) — гейт ветки Telegram:
+           в реальном Telegram vendor downloadFile принимает только https-URL */
         await context.addInitScript(function () {
             let tries = 0;
             const t = setInterval(function () {
@@ -5598,19 +5600,32 @@ test.describe('[UX-I14] шейринг картинкой', function () {
             nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
             workouts: [doneWorkout(1, today, EX, '120', 3)]
         } } });
-        await openApp(page);
+        /* initData пуст (нет tgWebAppData) — мок /api/card-upload подпись не проверяет;
+           прод проверяет (контракт GymContractTest) */
+        await page.goto('/#tgWebAppPlatform=android');
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
         await page.locator('.pcard').first().click();
+        /* spy: PNG уходит на /api/card-upload прежде downloadFile (§5.4 [UX-T41]) */
+        let cardUploadHit = 0;
+        page.on('request', function (r) { if (r.url().split('?')[0].endsWith('/api/card-upload')) cardUploadHit++; });
         await page.locator('[data-act="shareSheet"]').click();
         await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
         await scRendered(page, 1);
-        /* downloadFile вызван ровно один раз с blob-objectURL канвы и именем файла (§5.4) */
+        /* downloadFile вызван ровно один раз с СЕРВЕРНЫМ URL карточки (не blob — vendor
+           бракует не-https по протоколу, [UX-B15]) и именем файла (§5.4) */
         const dl = await page.evaluate(function () { return window.Telegram.WebApp.__dlCalls; });
+        expect(cardUploadHit).toBe(1);
         expect(dl.length).toBe(1);
-        expect(String(dl[0].url).startsWith('blob:')).toBeTruthy();
+        expect(String(dl[0].url)).toMatch(/^https?:\/\/.+\/card\/[0-9a-zA-Z]{22}\.png$/);
         expect(dl[0].name).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
-        /* тост соответствует ветке — Telegram покажет свой диалог сохранения */
-        await expect(page.locator('.toast.show')).toContainText('подтвердите в Telegram', { timeout: 5000 });
-        /* ни скачивания (a.click), ни новой вкладки — нативная ветка перехватила сохранение */
+        /* карточка реально раздаётся сервером: публичный GET без initData — 200 image/png */
+        const img = await request.get(dl[0].url);
+        expect(img.status()).toBe(200);
+        expect(img.headers()['content-type']).toContain('image/png');
+        expect(img.headers()['content-disposition']).toContain('attachment');
+        /* тост соответствует ветке — файл сохраняется в «Загрузки» Telegram */
+        await expect(page.locator('.toast.show')).toContainText('Файл сохранён в загрузки Telegram', { timeout: 5000 });
+        /* ни новой вкладки, ни a.download — нативная ветка перехватила сохранение */
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).toContain('shareDownload');
         expect(ev).not.toContain('shareOk');
