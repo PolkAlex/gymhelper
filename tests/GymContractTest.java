@@ -561,6 +561,65 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: goals merge " + goalErr);
         }
 
+        /* [UX-T40] разминка по дефолту: GymData warmupFirst/warmupEx — legacy без ключей
+            читается (null = выкл/«Разминка»), round-trip без потерь, null/пустая строка
+            не пишутся в JSON; merge через /api/save: явный null «Разминки» доезжает до
+            сервера, клиент без ключей серверные значения не затирает. Реальный WebServer. */
+        check(d2.warmupFirst == null && d2.warmupEx == null,
+            "warmup: legacy без ключей читается (null = выкл/системная «Разминка»)");
+        check(!Json.write(d2.toJson()).contains("warmup"),
+            "warmup: toJson без настройки не пишет ключи (legacy байт-в-байт)");
+        GymData dw = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"warmupFirst\":true,\"warmupEx\":\"wcardio\",\"workouts\":[]}"));
+        check(Boolean.TRUE.equals(dw.warmupFirst) && "wcardio".equals(dw.warmupEx),
+            "warmup: тогл и id каталогного упражнения читаются");
+        GymData dw2 = GymData.fromJson((Map<String, Object>) Json.parse(Json.write(dw.toJson())));
+        check(Boolean.TRUE.equals(dw2.warmupFirst) && "wcardio".equals(dw2.warmupEx),
+            "warmup: round-trip тогл+id без потерь");
+        GymData dwn = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"warmupFirst\":false,\"warmupEx\":\"\",\"workouts\":[]}"));
+        check(Boolean.FALSE.equals(dwn.warmupFirst) && dwn.warmupEx == null,
+            "warmup: false читается, пустая строка id → null (системная «Разминка»)");
+        String warmNullOut = Json.write(dwn.toJson());
+        check(warmNullOut.contains("\"warmupFirst\":false") && !warmNullOut.contains("warmupEx"),
+            "warmup: toJson пишет false явно («выключил» переживает сохранение), null-id — ключа нет");
+        GymData dwb = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"warmupFirst\":\"да\",\"warmupEx\":42,\"workouts\":[]}"));
+        check(dwb.warmupFirst == null && dwb.warmupEx == null,
+            "warmup: мусор (не Boolean/не строка) игнорируется без падения");
+        try {
+            java.nio.file.Path tmpW = java.nio.file.Files.createTempDirectory("gymwarm");
+            Storage stW = new Storage(tmpW);
+            WebServer wsW = new WebServer("contract-test-token", stW, tmpW, new Stats(tmpW.resolve("stats.json")));
+            java.net.ServerSocket probeW = new java.net.ServerSocket(0);
+            int portW = probeW.getLocalPort();
+            probeW.close();
+            wsW.start(portW);
+            String idW = tgInitData("contract-test-token", 424248);
+            /* клиент включает настройку и выбирает каталогное упражнение */
+            java.net.http.HttpResponse<String> rw1 = postSave(portW, idW, 0,
+                "{\"rev\":0,\"nextId\":1,\"warmupFirst\":true,\"warmupEx\":\"wcardio\",\"workouts\":[]}");
+            check(rw1.statusCode() == 200, "warmup merge: save с настройкой — 200, а не " + rw1.statusCode());
+            GymData savedW = stW.load(424248);
+            check(Boolean.TRUE.equals(savedW.warmupFirst) && "wcardio".equals(savedW.warmupEx),
+                "warmup merge: тогл и id сохранены");
+            /* возврат к системной «Разминке» = явный null-ключ — сброс доезжает до сервера */
+            java.net.http.HttpResponse<String> rw2 = postSave(portW, idW, 1,
+                "{\"rev\":1,\"nextId\":1,\"warmupFirst\":true,\"warmupEx\":null,\"workouts\":[]}");
+            check(rw2.statusCode() == 200, "warmup merge: save с явным null — 200, а не " + rw2.statusCode());
+            GymData clearedW = stW.load(424248);
+            check(clearedW.warmupEx == null && !Json.write(clearedW.toJson()).contains("warmupEx"),
+                "warmup merge: явный null сбрасывает id (ключа в файле нет)");
+            /* старый кэш JS: ключей нет — включённый тоггл не теряется */
+            java.net.http.HttpResponse<String> rw3 = postSave(portW, idW, 2,
+                "{\"rev\":2,\"nextId\":1,\"workouts\":[]}");
+            check(rw3.statusCode() == 200, "warmup merge: save без ключей — 200, а не " + rw3.statusCode());
+            GymData mergedW = stW.load(424248);
+            check(Boolean.TRUE.equals(mergedW.warmupFirst), "warmup merge: клиент без ключей не затирает тогл");
+        } catch (Exception warmErr) {
+            throw new AssertionError("CONTRACT FAIL: warmup merge " + warmErr);
+        }
+
         /* [ANA-T1] Stats: /stats за токеном (404 без токена/с неверным — не палим существование),
            инкременты maInit/maSave/workoutsCreated/workoutsCompleted при init/save,
            недельные агрегаты ISO, файл stats.json и ротация недель.
@@ -1169,6 +1228,107 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: share " + shareErr);
         }
 
+        /* [UX-T41] карточка для нативного сохранения в Telegram: POST /api/card-upload
+           (initData в заголовке, тело — PNG-байты; 401 без/с мусорным initData, 400
+           не-PNG, 413 > 5 МБ), GET /card/<token>.png — публичная раздача (200 image/png,
+           attachment с именем gymhelper-dd.mm.yyyy.png, noindex, no-store, тело
+           байт-в-байт; несуществующий/мусорный токен и traversal — 404), TTL 1 ч
+           (ленивая чистка при upload: старый файл удалён, свежий живёт), счётчик
+           cardUpload. Прод-раскладка каталогов: root/web + root/data. */
+        try {
+            java.nio.file.Path rootCa = java.nio.file.Files.createTempDirectory("gymcard");
+            java.nio.file.Path webDirCa = rootCa.resolve("web");
+            java.nio.file.Files.createDirectories(webDirCa);
+            Storage stCa = new Storage(rootCa.resolve("data"));
+            Stats counterCa = new Stats(rootCa.resolve("stats.json"));
+            WebServer wsCa = new WebServer("contract-test-token", stCa, webDirCa, counterCa);
+            java.net.ServerSocket probeCa = new java.net.ServerSocket(0);
+            int portCa = probeCa.getLocalPort();
+            probeCa.close();
+            wsCa.start(portCa);
+            String idCa = tgInitData("contract-test-token", 424253);
+            byte[] png = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 1, 2, 3, 4, 5};
+
+            check(postBytes(portCa, "/api/card-upload", png).statusCode() == 401,
+                "card: upload без initData — 401");
+            check(postBytes(portCa, "/api/card-upload", png, "initData", "garbage").statusCode() == 401,
+                "card: upload с мусорным initData — 401");
+
+            java.net.http.HttpResponse<String> rUp = postBytes(portCa, "/api/card-upload", png, "initData", idCa);
+            check(rUp.statusCode() == 200, "card: upload с initData — 200, а не " + rUp.statusCode());
+            Map<String, Object> mUp = Json.map(Json.parse(rUp.body()));
+            String cardUrl = (String) mUp.get("url");
+            /* домен не матчится точно (ревью №4): на проде url строится из env GYM_WEBAPP_URL */
+            check(Boolean.TRUE.equals(mUp.get("ok")) && cardUrl != null
+                    && cardUrl.matches("https://[^/]+/card/[0-9a-zA-Z]{22}\\.png"),
+                "card: url = " + cardUrl);
+            String cardToken = cardUrl.substring(cardUrl.lastIndexOf('/') + 1, cardUrl.lastIndexOf('.'));
+            check(java.nio.file.Files.isRegularFile(
+                    rootCa.resolve("data").resolve("cards").resolve(cardToken + ".png")),
+                "card: файл data/cards/<token>.png записан");
+
+            java.net.http.HttpResponse<byte[]> rCard = getRaw(portCa, "/card/" + cardToken + ".png");
+            check(rCard.statusCode() == 200, "card: GET /card/<token>.png — 200, а не " + rCard.statusCode());
+            check("image/png".equals(rCard.headers().firstValue("Content-Type").orElse(null)),
+                "card: Content-Type image/png, а не " + rCard.headers().firstValue("Content-Type").orElse("—"));
+            check(java.util.Arrays.equals(rCard.body(), png), "card: тело GET = загруженным байтам");
+            String disp = rCard.headers().firstValue("Content-Disposition").orElse("");
+            check(disp.contains("attachment") && disp.matches("(?s).*gymhelper-\\d{2}\\.\\d{2}\\.\\d{4}\\.png\".*"),
+                "card: Content-Disposition attachment + gymhelper-dd.mm.yyyy.png, а не «" + disp + "»");
+            check("noindex, nofollow".equals(rCard.headers().firstValue("X-Robots-Tag").orElse(null)),
+                "card: X-Robots-Tag noindex, nofollow");
+            check("no-store".equals(rCard.headers().firstValue("Cache-Control").orElse(null)),
+                "card: Cache-Control no-store");
+            check("nosniff".equals(rCard.headers().firstValue("X-Content-Type-Options").orElse(null)),
+                "card: X-Content-Type-Options nosniff");
+            check(headStatus(portCa, "/card/" + cardToken + ".png") == 200, "card: HEAD — 200");
+
+            check(get(portCa, "/card/garbage0123456789abcdefgh.png").statusCode() == 404,
+                "card: несуществующий токен — 404");
+            check(get(portCa, "/card/short.png").statusCode() == 404, "card: короткий токен — 404");
+            check(get(portCa, "/card/@bad").statusCode() == 404, "card: не-токен — 404");
+            check(rawStatus(portCa, "/card/%2e%2e%2fsecret.png") == 404, "card: traversal — 404");
+
+            check(postBytes(portCa, "/api/card-upload", "не png".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    "initData", idCa).statusCode() == 400,
+                "card: не-PNG — 400");
+            check(postBytes(portCa, "/api/card-upload", new byte[5 * 1024 * 1024 + 1],
+                    "initData", idCa).statusCode() == 413,
+                "card: > 5 МБ — 413");
+
+            /* TTL: файл со старым mtime (2 ч) удаляется ленивой чисткой при следующем
+               upload; свежая карточка живёт (токен base62 ровно 22 символа) */
+            java.nio.file.Path oldCard = rootCa.resolve("data").resolve("cards")
+                .resolve("oldcardXXXXXXXXXXXXXXX.png");
+            java.nio.file.Files.write(oldCard, png);
+            java.nio.file.Files.setLastModifiedTime(oldCard,
+                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 2 * 60 * 60 * 1000));
+            check(postBytes(portCa, "/api/card-upload", png, "initData", idCa).statusCode() == 200,
+                "card: повторный upload — 200");
+            check(!java.nio.file.Files.exists(oldCard),
+                "card: TTL — файл старше 1 ч удалён при upload");
+            check(java.nio.file.Files.exists(
+                    rootCa.resolve("data").resolve("cards").resolve(cardToken + ".png")),
+                "card: свежая карточка не удалена чисткой");
+
+            Map<String, Object> snapCa = Json.map(Json.parse(get(portCa, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapCa.get("cardUpload")) == 2,
+                "card: cardUpload=2 (успешные uploads), а не " + Json.lng(snapCa.get("cardUpload")));
+
+            /* кап каталога (ревью №2): > CARD_DIR_MAX_FILES файлов — 503, файл не пишется,
+               счётчик cardUpload не растёт (успешных uploads по-прежнему 2) */
+            for (int i = 0; i < 1001; i++) {
+                java.nio.file.Files.write(rootCa.resolve("data").resolve("cards").resolve("cap" + i + ".png"), png);
+            }
+            java.net.http.HttpResponse<String> rCap = postBytes(portCa, "/api/card-upload", png, "initData", idCa);
+            check(rCap.statusCode() == 503,
+                "card: кап каталога >1000 файлов — 503, а не " + rCap.statusCode());
+            check(Json.lng(Json.map(Json.parse(get(portCa, "/stats?token=contract-test-token").body())).get("cardUpload")) == 2,
+                "card: кап-отказ не считается cardUpload");
+        } catch (Exception cardErr) {
+            throw new AssertionError("CONTRACT FAIL: card " + cardErr);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }
@@ -1235,6 +1395,17 @@ public class GymContractTest {
             .build();
         return java.net.http.HttpClient.newHttpClient()
             .send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+
+    /* POST сырых байтов с произвольными заголовками (для /api/card-upload [UX-T41]:
+       initData в заголовке, тело — бинарные PNG-байты, не JSON) */
+    static java.net.http.HttpResponse<String> postBytes(int port, String path, byte[] body, String... headers) throws Exception {
+        java.net.http.HttpRequest.Builder b = java.net.http.HttpRequest.newBuilder(
+                java.net.URI.create("http://127.0.0.1:" + port + path));
+        for (int i = 0; i + 1 < headers.length; i += 2) b.header(headers[i], headers[i + 1]);
+        b.POST(java.net.http.HttpRequest.BodyPublishers.ofByteArray(body));
+        return java.net.http.HttpClient.newHttpClient()
+            .send(b.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
     }
 
     /* POST /api/track в тестовый WebServer [ANA-T5]: eventsJson — JSON-массив имён событий */

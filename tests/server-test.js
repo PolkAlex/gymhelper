@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..', 'web');
+const os = require('os');
 function initialStore() {
     return {
         nextId: 5,
@@ -89,6 +90,34 @@ function share404Html() {
         '<meta name="robots" content="noindex, nofollow">\n<title>Тренировка недоступна</title>\n</head>\n<body>\n' +
         '<div class="wp"><div class="na-card"><h2>Тренировка недоступна</h2>' +
         '<p>Ссылка устарела, или владелец удалил тренировку и закрыл доступ.</p></div></div>\n</body>\n</html>';
+}
+
+/* [UX-T41] карточки для нативного сохранения: прод — data/cards + TTL 1 ч (WebServer);
+   здесь — tmpdir, та же ленивая чистка по mtime. Тело валидируем по PNG-магии,
+   лимит и токен — зеркало прода (контракт: GymContractTest) */
+const CARD_TTL_MS = 60 * 60 * 1000;
+const CARD_MAX_BYTES = 5 * 1024 * 1024;
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const cardsDir = path.join(os.tmpdir(), 'gymhelper-e2e-cards');
+function cardToken() {
+    const abc = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const bytes = crypto.randomBytes(22);
+    let s = '';
+    for (let i = 0; i < 22; i++) s += abc[bytes[i] % abc.length];
+    return s;
+}
+function cleanupCards() {
+    try {
+        if (!fs.existsSync(cardsDir)) return;
+        const now = Date.now();
+        for (const f of fs.readdirSync(cardsDir)) {
+            if (!f.endsWith('.png')) continue;
+            const p = path.join(cardsDir, f);
+            try {
+                if (now - fs.statSync(p).mtimeMs > CARD_TTL_MS) fs.unlinkSync(p);
+            } catch (e) { /* один файл — не помеха остальным */ }
+        }
+    } catch (e) { /* noop */ }
 }
 
 http.createServer(function (req, res) {
@@ -200,6 +229,54 @@ function handle(req, res) {
         res.end(shareWorkoutHtml(store, w));
         return;
     }
+    /* [UX-T41] мок POST /api/card-upload: PNG на диск (tmpdir) + https...http-URL для
+       downloadFile. Прод: initData в заголовке проверяется (401), тело — PNG-магия,
+       лимит 5 МБ, TTL-чистка; здесь подпись не проверяем (как /api/share) */
+    if (req.method === 'POST' && url === '/api/card-upload') {
+        const chunks = [];
+        req.on('data', function (ch) { chunks.push(ch); });
+        req.on('end', function () {
+            try {
+                const body = Buffer.concat(chunks);
+                if (body.length > CARD_MAX_BYTES) { sendJson(res, 413, { ok: false }); return; }
+                if (body.length < 8 || !body.subarray(0, 8).equals(PNG_MAGIC)) { sendJson(res, 400, { ok: false }); return; }
+                cleanupCards();
+                fs.mkdirSync(cardsDir, { recursive: true });
+                let token = cardToken();
+                while (fs.existsSync(path.join(cardsDir, token + '.png'))) token = cardToken();
+                fs.writeFileSync(path.join(cardsDir, token + '.png'), body);
+                sendJson(res, 200, { ok: true, url: 'http://' + (req.headers.host || '127.0.0.1:8099') + '/card/' + token + '.png' });
+            } catch (e) {
+                sendJson(res, 400, { ok: false });
+            }
+        });
+        return;
+    }
+    /* [UX-T41] мок GET /card/<token>.png: публичная раздача карточки — attachment,
+       image/png, noindex, no-store (зеркало прод-WebServer.handleCardGet) */
+    if (req.method === 'GET' && url.startsWith('/card/')) {
+        const name = url.slice(6);
+        if (!/^([0-9a-zA-Z]{22})\.png$/.test(name) || !fs.existsSync(path.join(cardsDir, name))) {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('not found');
+            return;
+        }
+        const p = path.join(cardsDir, name);
+        let stamp = '';
+        try {
+            const mt = fs.statSync(p).mtime;
+            stamp = String(mt.getDate()).padStart(2, '0') + '.' + String(mt.getMonth() + 1).padStart(2, '0') + '.' + mt.getFullYear();
+        } catch (e) { /* имя без даты */ }
+        res.writeHead(200, {
+            'Content-Type': 'image/png',
+            'Cache-Control': 'no-store',
+            'X-Robots-Tag': 'noindex, nofollow',
+            'X-Content-Type-Options': 'nosniff',
+            'Content-Disposition': 'attachment; filename="gymhelper-' + stamp + '.png"'
+        });
+        res.end(fs.readFileSync(p));
+        return;
+    }
     if (req.method === 'POST' && url === '/api/save') {
         let body = '';
         req.on('data', function (ch) { body += ch; });
@@ -216,6 +293,10 @@ function handle(req, res) {
                 /* restSec: merge-политика реального WebServer — null у клиента (ещё не настраивал)
                    серверное значение не затирает [UX-T4/T5, спека §0.1] */
                 if (typeof d.restSec === 'number') store.restSec = d.restSec;
+                /* [UX-T40] разминка по дефолту — merge как в проде: явный ключ применяется
+                   как есть (включая null «Разминки»), отсутствие ключей значение не трогает */
+                if ('warmupFirst' in d) store.warmupFirst = d.warmupFirst;
+                if ('warmupEx' in d) store.warmupEx = d.warmupEx;
                 if (typeof d.nextId === 'number') store.nextId = d.nextId;
                 if (Array.isArray(d.del)) store.del = d.del;
                 /* ⚠️ отличается от прода: прод делает selective-merge birth-полей ([UX-T29]);

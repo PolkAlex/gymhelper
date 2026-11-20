@@ -39,7 +39,10 @@ public final class Stats {
         "linkCreate", "linkCopy", "linkSend", "linkView",
         /* [UX-I14] воронка картинки-шеринга (§5): тап «Картинка», resolved navigator.share,
            fallback-скачивание — клиентские события через /api/track */
-        "shareClick", "shareOk", "shareDownload"
+        "shareClick", "shareOk", "shareDownload",
+        /* [UX-T41] загрузки карточек для нативного сохранения (POST /api/card-upload,
+            серверный агрегат по образцу linkCreate — технический шаг, не /api/track) */
+        "cardUpload"
     };
     /* сколько последних недель (ISO) хранить в weeks */
     public static final int WEEKS_TO_KEEP = 26;

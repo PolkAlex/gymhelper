@@ -632,12 +632,12 @@ test.describe('GymHelper e2e', function () {
         if (kcal.y + kcal.height > firstEx.y) throw new Error('пилюля ккал провалилась ниже карточки упражнения');
     });
 
-    test('статистика: карточка рекорда недели со шкалой', async ({ page, request }) => {
-        /* тренировка этой недели (жим 100) и старая тренировка 3 недели назад (личный рекорд 120) */
+    test('статистика: карточка рекорда периода со шкалой', async ({ page, request }) => {
+        /* тренировка этого месяца (жим 100) и старая тренировка прошлого месяца
+           (личный рекорд 120): [ANA-T8] дефолт пикера «Месяц», шкала % — по всей истории */
         const now = new Date();
-        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
         const weekDay = isoDate(now);
-        const oldDay = isoDate(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 21));
+        const oldDay = isoDate(new Date(now.getFullYear(), now.getMonth() - 1, 15));
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 3, del: [],
             profile: { sex: 'м', age: 30, height: 180, weight: 90 },
@@ -645,27 +645,27 @@ test.describe('GymHelper e2e', function () {
         } } });
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        const card = page.locator('.reccard', { hasText: 'Рекорд недели · ' + EX });
+        const card = page.locator('.reccard', { hasText: 'Рекорды месяца · ' + EX });
         await expect(card).toHaveCount(1, { timeout: 5000 });
         await expect(card.locator('.rec-num')).toContainText('100');
         await expect(card.locator('.rec-num')).toContainText('кг');
-        /* шкала = % от личного рекорда: 100 из 120 = 83% */
+        /* шкала = % от личного рекорда за ВСЮ историю: 100 из 120 = 83% */
         await expect(card.locator('.rec-bar i')).toHaveAttribute('style', /width:\s*83%/);
         const sub = card.locator('.rec-sub');
         await expect(sub).toContainText('личный рекорд: 120 кг');
         await expect(sub).toContainText('83%');
         /* тренировки не подряд: карточка серии (даже из одного дня) не показывается */
         await expect(page.locator('.strow')).toHaveCount(0);
-        /* мышечные группы этой недели: жим = грудь, 3 подхода */
+        /* мышечные группы периода: жим = грудь, 3 подхода */
         const mg = page.locator('.mg', { hasText: 'Грудь' });
         await expect(mg).toBeVisible({ timeout: 5000 });
         await expect(mg).toContainText('3 подх.');
-        /* старые блоки на месте в компактном виде */
-        await expect(page.locator('.statgrid')).toContainText('тренировок всего');
-        await expect(page.locator('.statgrid')).toContainText('подходов всего');
+        /* старые блоки на месте в компактном виде: сводка за период (дефолт «Месяц») */
+        await expect(page.locator('.statgrid')).toContainText('за месяц');
+        await expect(page.locator('.statgrid')).toContainText('подходов');
         await expect(page.locator('.card', { hasText: 'Тренды' })).toBeVisible();
         await expect(page.locator('.card', { hasText: 'Упражнения' })).toBeVisible();
-        /* [UX-T31] рекорд недели теперь только в Статистике: карточка видна здесь,
+        /* [UX-T31] рекорд периода теперь только в Статистике: карточка видна здесь,
            а в Истории больше не рендерится */
         await expect(card).toBeVisible();
         await page.locator('.nav button', { hasText: 'История' }).click();
@@ -673,36 +673,175 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard').first()).toBeVisible();
     });
 
-    test('статистика: серия из двух дней подряд и группы недели', async ({ page, request }) => {
+    test('статистика: серия из двух дней подряд и группы периода', async ({ page, request }) => {
         const now = new Date();
         const today = isoDate(now);
         const yesterday = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
         const DOWS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
         const dow = function (iso) { const p = iso.split('-'); return DOWS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; };
-        /* weekMuscleGroups считает только текущую неделю (Пн–Вс): в понедельник «вчера» —
-           прошлая неделя, и «Подтягивания» выпадали из групп (упало 09.11.2026, пн, на всех 4
-           устройствах). Фикс теста, не кода (по спеке группы — «эта неделя»): подтягивания
-           сидируем всегда в текущей неделе (в Пн — сегодня), день серии добирает тренировка
-           с именем вне каталога (findCatalog → null, группы не трогает). */
+        /* muscle-группы периода (дефолт «Месяц»): в понедельник «вчера» — прошлая неделя,
+           и «Подтягивания» выпадали из групп (упало 09.11.2026, пн). Фикс теста, не кода:
+           подтягивания сидируем в текущем месяце всегда (в Пн — сегодня), день серии
+           добирает тренировка с именем вне каталога (findCatalog → null, группы не трогает). */
         const isMonday = (now.getDay() + 6) % 7 === 0;
-        const pullDay = isMonday ? today : yesterday;
+        /* [ANA-T8] серия ищется в пределах календарного месяца (спека §3.1): 1-го числа
+           «вчера» — прошлый месяц, пару дней серии добираем «сегодня + завтра» */
+        const isFirst = now.getDate() === 1;
+        const day1 = isFirst ? today : yesterday;
+        const day2 = isFirst ? isoDate(new Date(now.getFullYear(), now.getMonth(), 2)) : today;
+        const pullDay = (isMonday || isFirst) ? today : yesterday;
         const FILLER = 'Разминка и растяжка';
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 4, del: [],
             profile: { sex: 'м', age: 30, height: 180, weight: 90 },
-            workouts: [doneWorkout(1, yesterday, FILLER, '0', 1), doneWorkout(2, pullDay, 'Подтягивания', '0', 4), doneWorkout(3, today, EX, '80', 4)]
+            workouts: [doneWorkout(1, day1, FILLER, '0', 1), doneWorkout(2, pullDay, 'Подтягивания', '0', 4), doneWorkout(3, day2, EX, '80', 4)]
         } } });
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
         const st = page.locator('.strow');
         await expect(st).toBeVisible({ timeout: 5000 });
-        /* серия по-прежнему из 2 дней; тренировок в ней 3 (filler + подтягивания + жим) в любой день недели */
+        /* серия по-прежнему из 2 дней; тренировок в ней 3 (filler + подтягивания + жим) */
         await expect(st.locator('b')).toContainText('Серия: 3 тренировки подряд');
-        /* дни недели серии в хронологическом порядке + «самая длинная за месяц» */
-        await expect(st).toContainText(dow(yesterday) + ' · ' + dow(today) + ' — самая длинная за месяц');
-        /* группы: жим = грудь, подтягивания = спина (в текущей неделе), по 4 подхода */
+        /* дни недели серии в хронологическом порядке + «самая длинная за месяц» (дефолт) */
+        await expect(st).toContainText(dow(day1) + ' · ' + dow(day2) + ' — самая длинная за месяц');
+        /* группы: жим = грудь, подтягивания = спина (в периоде «Месяц»), по 4 подхода */
         await expect(page.locator('.mg', { hasText: 'Грудь' })).toContainText('4 подх.', { timeout: 5000 });
         await expect(page.locator('.mg', { hasText: 'Спина' })).toContainText('4 подх.');
+    });
+
+    /* ===== [ANA-T8] пикер периода «Статистики» (docs/spec-ana-t7-periods.md) ===== */
+    test('[ANA-T8] пикер периода: дефолт «Месяц», «Всё время» = вся история, Эпли вне периода', async ({ page, request }) => {
+        const now = new Date();
+        const today = isoDate(now);
+        const firstDay = isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+        /* старая тренировка гарантированно вне текущего месяца: 15-е число 5 месяцев назад;
+           durationMin у всех = 60 мин (09:30→10:30) */
+        const oldDay = isoDate(new Date(now.getFullYear(), now.getMonth() - 5, 15));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 4, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [
+                doneWorkout(1, today, EX, '100', 3),
+                doneWorkout(2, firstDay, 'Приседания', '80', 2),
+                doneWorkout(3, oldDay, EX, '120', 3)
+            ]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        /* пикер виден, 6 пилюль, дефолт «Месяц» */
+        const picker = page.locator('.perpicker');
+        await expect(picker).toBeVisible({ timeout: 5000 });
+        await expect(picker.locator('.chip')).toHaveCount(6);
+        await expect(picker.locator('.chip.on')).toHaveText('Месяц');
+        /* сводка за месяц: 2 тренировки (сегодня + 1-е число), средняя ≈ 1 ч, подходов 2
+           (подходы считаются по записям-сетам, как и прежде) */
+        const grid = page.locator('.statgrid');
+        await expect(grid.locator('.sg', { hasText: 'за месяц' }).locator('b')).toHaveText('2');
+        await expect(grid.locator('.sg', { hasText: 'средняя' }).locator('b')).toHaveText('≈ 1 ч');
+        await expect(grid.locator('.sg', { hasText: 'подходов' }).locator('b')).toHaveText('2');
+        /* Эпли — по всей истории: лучший подход 120 кг из старой тренировки */
+        const epl = page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' });
+        const eplBefore = (await epl.textContent()).trim();
+        await expect(epl).toContainText('120');
+        /* тап «Всё время»: сводка = totals по всем finished */
+        await picker.locator('.chip', { hasText: 'Всё время' }).click();
+        const gridAll = page.locator('.statgrid');
+        await expect(gridAll.locator('.sg', { hasText: 'за всё время' }).locator('b')).toHaveText('3');
+        await expect(gridAll.locator('.sg', { hasText: 'средняя' }).locator('b')).toHaveText('≈ 1 ч');
+        await expect(gridAll.locator('.sg', { hasText: 'общее время' }).locator('b')).toHaveText('3 ч');
+        await expect(gridAll.locator('.sg', { hasText: 'подходов' }).locator('b')).toHaveText('3');
+        /* «Рекорды» теряют слово периода, топ-подход периода = 120 кг, шкала 100% */
+        const recAll = page.locator('.reccard', { hasText: 'Рекорды · ' + EX });
+        await expect(recAll.locator('.rec-num')).toContainText('120');
+        await expect(recAll.locator('.rec-sub')).toContainText('100%');
+        /* мышечные группы за всё время */
+        await expect(page.locator('.card', { hasText: 'Мышечные группы · за всё время' })).toBeVisible();
+        /* Эпли — вне периода: карточка не изменилась от смены пикера */
+        await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toHaveText(eplBefore);
+        /* «3 месяца» — лейбл во всех подписях периода (решение владельца 20.11, без «квартала»);
+           квартал = окт–дек: сегодня + 1-е число, старая (май) не попадает */
+        await picker.locator('.chip', { hasText: '3 месяца' }).click();
+        const gridQ = page.locator('.statgrid');
+        await expect(gridQ.locator('.sg', { hasText: 'за 3 месяца' }).locator('b')).toHaveText('2', { timeout: 5000 });
+        await expect(page.locator('.reccard', { hasText: 'Рекорды 3 месяцев · ' + EX })).toBeVisible();
+        await expect(page.locator('.card', { hasText: 'Мышечные группы · эти 3 месяца' })).toBeVisible();
+    });
+
+    test('[ANA-T8] 320px: пикер в одну строку с h-скроллом; пустой период — заглушка, Эпли на месте', async ({ page, request }) => {
+        /* тренировка 10 дней назад: всегда до понедельника текущей недели → период «Неделя» пуст */
+        const oldDay = isoDate(new Date(Date.now() - 10 * 86400000));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, oldDay, EX, '100', 3)]
+        } } });
+        await page.setViewportSize({ width: 320, height: 680 });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const picker = page.locator('.perpicker');
+        await expect(picker).toBeVisible({ timeout: 5000 });
+        const m = await picker.evaluate(function (el) {
+            const chips = Array.from(el.querySelectorAll('.chip'));
+            return {
+                ox: getComputedStyle(el).overflowX,
+                scroll: el.scrollWidth > el.clientWidth,
+                oneLine: chips.length > 1 && chips.every(function (c) { return c.offsetTop === chips[0].offsetTop; })
+            };
+        });
+        if (m.ox !== 'auto') throw new Error('overflow-x пикера не auto: ' + m.ox);
+        if (!m.scroll) throw new Error('на 320px пилюли не скроллятся');
+        if (!m.oneLine) throw new Error('пилюли переносятся на вторую строку');
+        /* активная пилюля (дефолт «Месяц») в видимой области (§2.1) */
+        const visible = await picker.evaluate(function (el) {
+            const on = el.querySelector('.chip.on');
+            return on.offsetLeft >= el.scrollLeft && on.offsetLeft + on.offsetWidth <= el.scrollLeft + el.clientWidth + 1;
+        });
+        if (!visible) throw new Error('активная пилюля вне видимой области');
+        /* тап «Неделя»: период пуст → заглушка с названием периода, периодные блоки скрыты */
+        await picker.locator('.chip', { hasText: 'Неделя' }).click();
+        await expect(page.locator('.card.hero')).toContainText('За эту неделю тренировок нет');
+        await expect(page.locator('.card.hero')).toContainText('Выбери другой период — вся история на месте.');
+        await expect(page.locator('.perpicker .chip.on')).toHaveText('Неделя');
+        await expect(page.locator('.reccard')).toHaveCount(0);
+        await expect(page.locator('.statgrid')).toHaveCount(0);
+        /* Эпли — вне периода: остаётся при пустом периоде */
+        await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toBeVisible();
+    });
+
+    test('[ANA-T8] все тренировки периода без started: ячейки «средняя» и «общее время» нет; пустой период — заглушка', async ({ page, request }) => {
+        /* ретро-ввод без started/ended: durationMin = null (спека §4.1) — тренировка сегодня,
+           период «Месяц» непустой во все дни календаря */
+        const today = isoDate(new Date());
+        const noStart = { id: 1, date: today, finished: true, title: '', nutrition: '',
+            exercises: [{ name: EX, sets: [{ w: '80', s: 3, r: '8', t: today + 'T09:32:00' }] }] };
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [noStart]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const grid = page.locator('.statgrid');
+        await expect(grid).toBeVisible({ timeout: 5000 });
+        await expect(grid.locator('.sg', { hasText: 'за месяц' }).locator('b')).toHaveText('1');
+        /* ни одной тренировки с длительностью: «≈ средняя» нет (§4.1), «общее время» нет (totalMin=0) */
+        await expect(grid.locator('.sg', { hasText: 'средняя' })).toHaveCount(0);
+        await expect(grid.locator('.sg', { hasText: 'общее время' })).toHaveCount(0);
+        await expect(grid.locator('.sg', { hasText: 'подходов' }).locator('b')).toHaveText('1');
+        /* смена фикстуры: тренировка 10 дней назад (всегда до понедельника текущей недели) —
+           «Неделя» пуста при любой дате → заглушка; Эпли остаётся (вне периода) */
+        const old = isoDate(new Date(Date.now() - 10 * 86400000));
+        await request.post('/api/save', { data: { initData: '', rev: 2, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: old, finished: true, title: '', nutrition: '',
+                exercises: [{ name: EX, sets: [{ w: '80', s: 3, r: '8', t: old + 'T09:32:00' }] }] }]
+        } } });
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        await page.locator('.perpicker .chip', { hasText: 'Неделя' }).click();
+        await expect(page.locator('.card.hero')).toContainText('За эту неделю тренировок нет');
+        await expect(page.locator('.statgrid')).toHaveCount(0);
+        await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toBeVisible();
     });
 
     test('запись не теряется, если сохранение на сервер не ушло', async ({ page }) => {
@@ -2761,27 +2900,108 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
     });
 });
 
-/* ===== [UX-T43] полноэкранный режим удалён целиком (решение владельца 20.11) ===== */
-test.describe('UX-T43: полноэкранный режим удалён', function () {
+/* ===== [UX-T25] полноэкранный режим: тогл в Настройках [UX-T27] ===== */
+test.describe('UX-T25: тогл полноэкранного режима в Настройках', function () {
 
-    test('в Настройках нет тогла «Полноэкранный режим», meta-подписей и «(в разработке)»', async ({ page }) => {
+    test('тогл «Полноэкранный режим»: клиент без API (мок без tg.requestFullscreen) — locked + подпись «Недоступно», тап не ставит флаг', async ({ page }) => {
+        /* [UX-S4 §12.5] клиент вообще без requestFullscreen (метода нет): locked-тогл.
+           Условие disabled — !(tg && tg.requestFullscreen), считается при каждом рендере */
+        await page.addInitScript(function () {
+            var t;
+            Object.defineProperty(window, 'Telegram', {
+                configurable: true,
+                get: function () { return t; },
+                set: function (v) {
+                    t = v;
+                    try {
+                        Object.defineProperty(v, 'WebApp', {
+                            configurable: true,
+                            get: function () { return this.__wa; },
+                            set: function (wa) {
+                                this.__wa = wa;
+                                if (wa) {
+                                    try { delete wa.requestFullscreen; } catch (e) { /* noop */ }
+                                }
+                            }
+                        });
+                    } catch (e) { /* noop */ }
+                }
+            });
+        });
         await openApp(page);
         await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
-        /* регресс реинтродукции: ни тогла, ни подписей, ни locked-версии */
-        const cnt = await page.getByText('Полноэкранный режим').count();
-        if (cnt > 0) throw new Error('«Полноэкранный режим» остался в Настройках: ' + cnt + ' экз.');
-        for (const dead of ['Автоматически разворачивает приложение', 'Недоступно: обнови Telegram до 8.0+', '(в разработке)']) {
-            const c = await page.getByText(dead).count();
-            if (c > 0) throw new Error('осталась подпись fullscreen-эпохи «' + dead + '»');
-        }
+        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
+        await expect(btn).toBeVisible({ timeout: 5000 });
+        /* locked: aria-disabled, meta-текст объясняет причину — тост и флаг не появляются */
+        await expect(btn).toHaveAttribute('aria-disabled', 'true');
+        await expect(page.locator('.card', { hasText: 'Полноэкранный режим' })).toContainText('Недоступно: обнови Telegram до 8.0+');
+        /* pointer-events:none на locked: тап уходит в hit-test мимо кнопки — ни тоста, ни флага;
+            повторный тап (двойной тап пользователя) после дедуп-окна — результат тот же */
+        await btn.click({ force: true });
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+        await page.waitForTimeout(450); /* дедуп-окно dispatchFromEl */
+        await btn.click({ force: true });
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+        const flag = await page.evaluate(function () {
+            try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; }
+        });
+        if (flag !== null) throw new Error('gymFullscreen выставлен без поддержки API: ' + flag);
     });
 
-    test('сохранённый gymFullscreen=1 не вызывает fullscreen API, класс fs не появляется, шапка обычная', async ({ page }) => {
-        /* синхронная заглушка API 8.0+ (патч WebApp в момент присвоения, до eval app.js):
-           если код fullscreen-эпохи вернулся, init попытается «тихо восстановить» режим */
+    /* клиент с vendor-скриптом v6.0 (метод есть, но бросает WebAppMethodUnsupported):
+       тогл активен, страховка [UX-T25] — тост «Не поддерживается этим Telegram» */
+    test('тогл «Полноэкранный режим»: клиент v6.0 (метод бросает) — тап даёт тост «Не поддерживается», флаг не ставится', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
+        await expect(btn).toBeVisible({ timeout: 5000 });
+        await btn.click();
+        await expect(page.locator('.toast.show')).toHaveText('Не поддерживается этим Telegram', { timeout: 5000 });
+        const flag = await page.evaluate(function () {
+            try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; }
+        });
+        if (flag !== null) throw new Error('gymFullscreen выставлен без поддержки API: ' + flag);
+    });
+
+    test('init с сохранённым gymFullscreen=1: тихая попытка без тоста, приложение грузится', async ({ page }) => {
+        /* синхронная заглушка API 8.0+: патчим WebApp в момент его присвоения (до eval app.js),
+           иначе init() уже отработает с настоящим v6.0-методом */
         await page.addInitScript(function () {
             try { localStorage.setItem('gymFullscreen', '1'); } catch (e) { /* noop */ }
+            var t;
+            Object.defineProperty(window, 'Telegram', {
+                configurable: true,
+                get: function () { return t; },
+                set: function (v) {
+                    t = v;
+                    try {
+                        Object.defineProperty(v, 'WebApp', {
+                            configurable: true,
+                            get: function () { return this.__wa; },
+                            set: function (wa) {
+                                this.__wa = wa;
+                                if (wa) {
+                                    try { wa.requestFullscreen = function () { window.__fsCalled = (window.__fsCalled || 0) + 1; }; } catch (e) { /* noop */ }
+                                }
+                            }
+                        });
+                    } catch (e) { /* noop */ }
+                }
+            });
+        });
+        await openApp(page);
+        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
+        /* восстановление «тихое»: никаких тостов на старте */
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+        const called = await page.evaluate(function () { return window.__fsCalled || 0; });
+        if (called !== 1) throw new Error('init не восстановил fullscreen: вызовов requestFullscreen ' + called);
+    });
+
+    /* на реальных клиентах 8.0+ isFullscreen обновляется асинхронно (fullscreenChanged):
+       успешный вызов ставит флаг сразу, без синхронной проверки isFullscreen */
+    test('[UX-T25] API есть и не бросает: флаг gymFullscreen=1 и тост «включён» сразу; выключение — exitFullscreen + «Обычный режим»', async ({ page }) => {
+        /* синхронная заглушка API 8.0+: requestFullscreen/exitFullscreen без ошибки (до eval app.js) */
+        await page.addInitScript(function () {
             var t;
             Object.defineProperty(window, 'Telegram', {
                 configurable: true,
@@ -2805,178 +3025,147 @@ test.describe('UX-T43: полноэкранный режим удалён', func
             });
         });
         await openApp(page);
-        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
-        const m = await page.evaluate(function () {
+        /* [UX-T27] тогл переехал из Профиля в Настройки */
+        await page.locator('[aria-label="Настройки"]').click();
+        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
+        /* включение: вызов принят -> флаг '1' + тост «включён», тогл ON */
+        await btn.click();
+        await expect(page.locator('.toast.show')).toHaveText('Полноэкранный режим включён', { timeout: 5000 });
+        await expect(btn).toHaveAttribute('aria-checked', 'true');
+        const on = await page.evaluate(function () {
+            return { called: window.__fsCalled || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
+        });
+        if (on.called !== 1) throw new Error('requestFullscreen не вызван (вызовов: ' + on.called + ')');
+        if (on.flag !== '1') throw new Error('флаг gymFullscreen: ' + on.flag + ', ожидался "1"');
+        /* дедап-окно dispatchFromEl 400 мс — реальный пользователь тапает повторно позже */
+        await page.waitForTimeout(500);
+        /* выключение: exitFullscreen + флаг '0' + тост «Обычный режим», тогл OFF */
+        await page.locator('[role="switch"][aria-label="Полноэкранный режим"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Обычный режим', { timeout: 5000 });
+        await expect(page.locator('[role="switch"][aria-label="Полноэкранный режим"]')).toHaveAttribute('aria-checked', 'false');
+        const off = await page.evaluate(function () {
+            return { exited: window.__fsExited || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
+        });
+        if (off.exited !== 1) throw new Error('exitFullscreen не вызван');
+        if (off.flag !== '0') throw new Error('флаг gymFullscreen: ' + off.flag + ', ожидался "0"');
+    });
+});
+
+/* ===== [UX-B10] fullscreen safe-area: шапка не зажата статус-баром ===== */
+test.describe('UX-B10: fullscreen safe-area шапки', function () {
+
+    /* клиент 8.0+ эмулируется через НАСТОЯЩУЮ вендорскую точку входа событий
+       TelegramGameProxy_receiveEvent (сестринский к UX-T25 приём: без подмены WebApp,
+       сквозь реальный пайплайн fullscreen_changed/safe_area_changed -> подписка tg.onEvent) */
+    test('вне fs: 10px и fs нет; вход + safe-area 44px: fs есть, паддинг 56px ([UX-B11] минимум под шапку Telegram), inset 64px побеждает; выход: fs снят', async ({ page }) => {
+        await openApp(page);
+        /* обычный режим: класс fs не ставится, геометрия шапки прежняя (padding 10px 12px) */
+        const normal = await page.evaluate(function () {
             return {
-                called: window.__fsCalled || 0,
-                exited: window.__fsExited || 0,
                 fs: document.body.classList.contains('fs'),
-                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop
+                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop,
+                padBottom: getComputedStyle(document.querySelector('.topbar')).paddingBottom
             };
         });
-        if (m.called || m.exited) throw new Error('fullscreen API вызван при старте: ' + JSON.stringify(m));
-        if (m.fs) throw new Error('класс fs на body после удаления режима');
-        if (m.pad !== '10px') throw new Error('padding-top .topbar: ' + m.pad + ', ожидался 10px (обычный режим)');
-    });
-});
-
-/* ===== [UX-T42] навигация: стек экранов + BackButton Telegram + свайпы (UX-I19) ===== */
-test.describe('UX-T42: навигация — BackButton Telegram', function () {
-    /* вендор имитирует BackButton локально; для show/hide/onClick нужен клиент 6.1+ —
-       поднимаем версию хэшем tgWebAppVersion (вендор читает init-параметры из location.hash) */
-    async function openAppModern(page) {
-        await page.goto('/#tgWebAppVersion=8.0');
-        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
-    }
-    const bbVis = function (page) {
-        return page.evaluate(function () {
-            try { return !!window.Telegram.WebApp.BackButton.isVisible; } catch (e) { return null; }
-        });
-    };
-    /* Android back: вендорский вход событий шлёт back_button_pressed → onClick → navBack */
-    const pressBack = function (page) {
-        return page.evaluate(function () {
-            window.TelegramGameProxy_receiveEvent('back_button_pressed');
-        });
-    };
-
-    test('BackButton скрыт на корневой вкладке, виден в Настройках, нажатие = «← Назад»', async ({ page }) => {
-        await openAppModern(page);
-        if (await bbVis(page) !== false) throw new Error('BackButton видим на корневой вкладке');
-        await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
-        if (await bbVis(page) !== true) throw new Error('BackButton скрыт на подэкране Настроек');
-        await pressBack(page);
-        await expect(page.locator('.tb-title')).toContainText('GymHelper ·', { timeout: 5000 });
-        await expect(page.locator('.tb-title')).not.toContainText('Настройки');
-        if (await bbVis(page) !== false) throw new Error('BackButton остался видимым после возврата на корень');
-    });
-
-    test('цепочка экранов: Календарь → Настройки → назад → назад → корень (стек LIFO)', async ({ page }) => {
-        await openAppModern(page);
-        await page.locator('[aria-label="Календарь"]').click();
-        await expect(page.locator('.tb-title')).toContainText('Календарь', { timeout: 5000 });
-        await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
-        await pressBack(page); /* Настройки закрываются, календарь жив под ними */
-        await expect(page.locator('.tb-title')).toContainText('Календарь', { timeout: 5000 });
-        await pressBack(page); /* календарь закрывается, вкладка-источник */
-        await expect(page.locator('.tb-title')).not.toContainText('Календарь', { timeout: 5000 });
-        if (await bbVis(page) !== false) throw new Error('BackButton не скрыт после полного разматывания стека');
-    });
-
-    test('карточка тренировки: BackButton виден, нажатие закрывает карточку (автосейв-выход)', async ({ page }) => {
-        await openAppModern(page);
-        await startWorkoutUi(page);
-        await expect(page.locator('.backbar .bb-back')).toBeVisible({ timeout: 5000 });
-        if (await bbVis(page) !== true) throw new Error('BackButton скрыт в карточке тренировки');
-        await pressBack(page);
-        await expect(page.locator('.backbar')).toHaveCount(0, { timeout: 5000 });
-        if (await bbVis(page) !== false) throw new Error('BackButton остался после закрытия карточки');
-    });
-
-    test('модалка поверх экрана: BackButton виден, нажатие закрывает модалку, стек не тронут', async ({ page }) => {
-        await openAppModern(page);
-        /* шит фильтров Техники — модалка, не зависящая от данных сервера (могут быть
-            чужие активные тренировки: FAB тогда открывает пикер поверх карточки) */
-        await page.locator('.nav button', { hasText: 'Техника' }).click();
-        await page.locator('[data-act="techFiltersMuscle"]').click();
-        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
-        if (await bbVis(page) !== true) throw new Error('BackButton скрыт при открытой модалке');
-        await pressBack(page);
-        await expect(page.locator('.modal.open')).toHaveCount(0, { timeout: 5000 });
-        /* шит фильтров открывался из каталога на корневой вкладке: модалка не навигация —
-            BackButton снова скрыт (карточка упражнения не открывалась) */
-        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
-        if (await bbVis(page) !== false) throw new Error('BackButton не скрыт после закрытия модалки на корне');
-    });
-});
-
-/* свайпы — только touch-проекты (android360/iphone13/pixel7): синтетический TouchEvent */
-test.describe('UX-T42: свайп-жесты назад/вперёд', function () {
-
-    test.skip(function () { return !test.info().project.use.hasTouch; }, 'нужен hasTouch-проект');
-
-    /* фабрика тач-событий, портируемая Chromium/WebKit: у WebKit нет конструктора
-        Touch и TouchEvent требует настоящие TouchList (document.createTouch(List)) */
-    const SWIPE_HELPERS = function () {
-        function mkTouch(target, x, y) {
-            if (typeof document.createTouch === 'function') {
-                return document.createTouch(window, target, 1, x, y, 0, 0);
-            }
-            return new Touch({ identifier: 1, target: target, clientX: x, clientY: y });
-        }
-        function mkList(arr) {
-            if (typeof document.createTouchList === 'function') return document.createTouchList.apply(document, arr);
-            return arr;
-        }
-        window.__gymSwipe = function (type, target, x, y) {
-            const t = mkTouch(target, x, y);
-            const changed = mkList([t]);
-            const touches = type === 'touchend' ? mkList([]) : changed;
-            document.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: touches, changedTouches: changed }));
-        };
-    };
-
-    /* свайп от края: side 'l' — от левого края вправо (назад), 'r' — от правого влево (вперёд) */
-    async function edgeSwipe(page, side) {
-        await page.evaluate(SWIPE_HELPERS);
-        await page.evaluate(function (arg) {
-            const vw = document.documentElement.clientWidth;
-            const y = 300;
-            const x0 = arg.side === 'l' ? 6 : vw - 6;
-            const dir = arg.side === 'l' ? 1 : -1;
-            window.__gymSwipe('touchstart', document.documentElement, x0, y);
-            window.__gymSwipe('touchmove', document.documentElement, x0 + dir * 30, y);
-            window.__gymSwipe('touchmove', document.documentElement, x0 + dir * 90, y);
-            window.__gymSwipe('touchend', document.documentElement, x0 + dir * 90, y);
-        }, { side: side });
-    }
-
-    test('свайп от левого края вправо закрывает Настройки; свайп от правого возвращает вперёд', async ({ page }) => {
-        await openApp(page);
-        await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
-        await edgeSwipe(page, 'l'); /* назад */
-        await expect(page.locator('.tb-title')).toContainText('GymHelper ·', { timeout: 5000 });
-        await expect(page.locator('.tb-title')).not.toContainText('Настройки');
-        await edgeSwipe(page, 'r'); /* вперёд — Настройки возвращаются */
-        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
-        await edgeSwipe(page, 'l'); /* снова назад — чистим за собой */
-        await expect(page.locator('.tb-title')).not.toContainText('Настройки', { timeout: 5000 });
-    });
-
-    test('вертикальный жест не переключает экраны (скролл списков не перехватывается)', async ({ page }) => {
-        await openApp(page);
-        await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
-        await page.evaluate(SWIPE_HELPERS);
+        if (normal.fs) throw new Error('класс fs на body в обычном режиме');
+        if (normal.pad !== '10px') throw new Error('padding-top .topbar вне fullscreen: ' + normal.pad + ', ожидался 10px');
+        if (normal.padBottom !== '10px') throw new Error('padding-bottom .topbar вне fullscreen: ' + normal.padBottom + ', ожидался 10px');
+        /* клиент сообщает safe-area ещё до входа fullscreen: переменная обновляется событием safeAreaChanged */
         await page.evaluate(function () {
-            const y0 = 200;
-            window.__gymSwipe('touchstart', document.documentElement, 6, y0);
-            window.__gymSwipe('touchmove', document.documentElement, 8, y0 + 40);
-            window.__gymSwipe('touchmove', document.documentElement, 10, y0 + 100);
-            window.__gymSwipe('touchend', document.documentElement, 10, y0 + 100);
+            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 44, bottom: 24, left: 0, right: 0 });
         });
-        /* |dx|=4 < |dy|=100 — вертикаль доминирует: Настройки остались открыты */
-        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+        const inset = await page.evaluate(function () {
+            return document.documentElement.style.getPropertyValue('--fs-inset-top');
+        });
+        if (inset !== '44px') throw new Error('--fs-inset-top: "' + inset + '", ожидалась 44px');
+        /* вход fullscreen (fullscreenChanged -> applyFsChrome): класс fs.
+           [UX-B11] системная шапка Telegram («✕ Закрыть», «⌄ ⋮») висит над контентом —
+           отступ минимум 56px (эмпирика, проверить на телефоне); inset 44 < 56 → 56px */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: true });
+        });
+        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+        const padFs = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padFs !== '56px') throw new Error('padding-top .topbar в fullscreen: ' + padFs + ', ожидался 56px ([UX-B11])');
+        /* [UX-B11] компакт по вертикали: нижний паддинг в fs 6px — пилюля ниже и уже */
+        const padBottomFs = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingBottom;
+        });
+        if (padBottomFs !== '6px') throw new Error('padding-bottom .topbar в fullscreen: ' + padBottomFs + ', ожидался 6px');
+        /* safe-area больше фиксированного минимума: фактический inset побеждает (max()) */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 64, bottom: 24, left: 0, right: 0 });
+        });
+        const padFs64 = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padFs64 !== '64px') throw new Error('padding-top .topbar в fullscreen (inset 64px): ' + padFs64 + ', ожидался 64px');
+        /* выход из fullscreen тем же событием (is_fullscreen=false): класс снят, геометрия прежняя */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: false });
+        });
+        await expect(page.locator('body.fs')).toHaveCount(0);
+        const padOut = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padOut !== '10px') throw new Error('padding-top .topbar после выхода из fullscreen: ' + padOut + ', ожидался 10px');
+        const padBottomOut = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingBottom;
+        });
+        if (padBottomOut !== '10px') throw new Error('padding-bottom .topbar после выхода из fullscreen: ' + padBottomOut + ', ожидался 10px');
     });
 
-    test('жест, стартовавший на кнопке, навигацию не запускает (пульт/backbar/табы) ', async ({ page }) => {
-        await openApp(page);
-        /* свайп от края экрана, но тач начался на кнопке нижней навигации */
-        await page.evaluate(SWIPE_HELPERS);
-        await page.evaluate(function () {
-            const btn = document.querySelector('.nav .nfab');
-            const r = btn.getBoundingClientRect();
-            const y = Math.round(r.top + r.height / 2);
-            window.__gymSwipe('touchstart', btn, 4, y);
-            window.__gymSwipe('touchmove', btn, 80, y);
-            window.__gymSwipe('touchend', btn, 80, y);
+    test('старт при восстановленном из сессии fullscreen: класс fs на body сразу, без событий клиента', async ({ page }) => {
+        /* вендор синхронно восстанавливает isFullscreen из sessionStorage (до eval app.js):
+           applyFsChrome() на init уже ставит fs — топбар не «прыгает» после загрузки */
+        await page.addInitScript(function () {
+            try { window.sessionStorage.setItem('__telegram__isFullscreen', '"yes"'); } catch (e) { /* noop */ }
         });
-        /* никаких экранов не открылось и не закрылось: календарь не открыт, тостов нет */
-        await expect(page.locator('.tb-title')).not.toContainText('Календарь', { timeout: 5000 });
-        await expect(page.locator('.toast.show')).toHaveCount(0);
+        await openApp(page);
+        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
+        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+    });
+
+    /* [UX-B11] узкий экран: в fullscreen topbar не ломается на 320px —
+       паддинг 56px, без горизонтального переполнения, шестерёнка кликабельна */
+    test('320px: в fullscreen topbar не ломается — паддинг 56px, без переполнения, шестерёнка кликабельна', async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 640 });
+        await openApp(page);
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 44, bottom: 24, left: 0, right: 0 });
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: true });
+        });
+        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+        const m = await page.evaluate(function () {
+            const tb = document.querySelector('.topbar').getBoundingClientRect();
+            const gear = document.querySelector('.topbar [aria-label="Настройки"]').getBoundingClientRect();
+            return {
+                vw: document.documentElement.clientWidth,
+                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop,
+                tb: { left: Math.round(tb.left), right: Math.round(tb.right) },
+                gear: { left: Math.round(gear.left), right: Math.round(gear.right) }
+            };
+        });
+        if (m.pad !== '56px') throw new Error('padding-top topbar в fs на 320px: ' + m.pad + ', ожидался 56px');
+        if (m.overflow) throw new Error('горизонтальное переполнение на 320px в fullscreen: ' + JSON.stringify(m));
+        if (m.tb.left < 0 || m.tb.right > m.vw) throw new Error('topbar шире вьюпорта 320px в fs: ' + JSON.stringify(m.tb));
+        if (m.gear.left < 0 || m.gear.right > m.vw) throw new Error('шестерёнка вылезает за 320px в fs: ' + JSON.stringify(m.gear));
+        /* тап без force: Playwright проверяет hit — в fs шестерёнка реально кликабельна */
+        await page.locator('.topbar [aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
+        /* выход из fs тем же событием: класс снят, геометрия обычного режима (регресс 10px на 320px) */
+        await page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: false });
+        });
+        await expect(page.locator('body.fs')).toHaveCount(0);
+        const padOut = await page.evaluate(function () {
+            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
+        });
+        if (padOut !== '10px') throw new Error('padding-top .topbar после выхода из fs на 320px: ' + padOut + ', ожидался 10px');
     });
 });
 
@@ -5517,11 +5706,13 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts.some(function (t) { return /^4×8$/.test(String(t)); })).toBeTruthy();
     });
 
-    test('fallback Telegram — нативный downloadFile с objectURL + честный тост (UX-B15)', async ({ page, context, request }) => {
+    test('Telegram — картинка на сервере → downloadFile с https-URL, тост «подтвердите» (UX-T41/B15)', async ({ page, context, request }) => {
         test.setTimeout(60000);
         /* мок Telegram WebApp: telegram-web-app.js (загружается из index.html) ЗАМЕНЯЕТ
            window.Telegram.WebApp после init-скриптов — переустанавливаем downloadFile
-           на том же объекте (tg в app.js — const-ссылка на него; паттерн UX-I16) */
+           на том же объекте (tg в app.js — const-ссылка на него; паттерн UX-I16).
+           [UX-T41] платформа android из initParams (hash) — гейт ветки Telegram:
+           в реальном Telegram vendor downloadFile принимает только https-URL */
         await context.addInitScript(function () {
             let tries = 0;
             const t = setInterval(function () {
@@ -5548,19 +5739,33 @@ test.describe('[UX-I14] шейринг картинкой', function () {
             nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
             workouts: [doneWorkout(1, today, EX, '120', 3)]
         } } });
-        await openApp(page);
+        /* initData пуст (нет tgWebAppData) — мок /api/card-upload подпись не проверяет;
+           прод проверяет (контракт GymContractTest) */
+        await page.goto('/#tgWebAppPlatform=android');
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
         await page.locator('.pcard').first().click();
+        /* spy: PNG уходит на /api/card-upload прежде downloadFile (§5.4 [UX-T41]) */
+        let cardUploadHit = 0;
+        page.on('request', function (r) { if (r.url().split('?')[0].endsWith('/api/card-upload')) cardUploadHit++; });
         await page.locator('[data-act="shareSheet"]').click();
         await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
         await scRendered(page, 1);
-        /* downloadFile вызван ровно один раз с blob-objectURL канвы и именем файла (§5.4) */
+        /* downloadFile вызван ровно один раз с СЕРВЕРНЫМ URL карточки (не blob — vendor
+           бракует не-https по протоколу, [UX-B15]) и именем файла (§5.4) */
         const dl = await page.evaluate(function () { return window.Telegram.WebApp.__dlCalls; });
+        expect(cardUploadHit).toBe(1);
         expect(dl.length).toBe(1);
-        expect(String(dl[0].url).startsWith('blob:')).toBeTruthy();
+        expect(String(dl[0].url)).toMatch(/^https?:\/\/.+\/card\/[0-9a-zA-Z]{22}\.png$/);
         expect(dl[0].name).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
-        /* тост соответствует ветке — Telegram покажет свой диалог сохранения */
+        /* карточка реально раздаётся сервером: публичный GET без initData — 200 image/png */
+        const img = await request.get(dl[0].url);
+        expect(img.status()).toBe(200);
+        expect(img.headers()['content-type']).toContain('image/png');
+        expect(img.headers()['content-disposition']).toContain('attachment');
+        /* честный тост (ревью №1): downloadFile без колбэка результата — юзер может
+           отменить нативный диалог, «сохранён» не утверждаем (урок UX-B15) */
         await expect(page.locator('.toast.show')).toContainText('подтвердите в Telegram', { timeout: 5000 });
-        /* ни скачивания (a.click), ни новой вкладки — нативная ветка перехватила сохранение */
+        /* ни новой вкладки, ни a.download — нативная ветка перехватила сохранение */
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).toContain('shareDownload');
         expect(ev).not.toContain('shareOk');
@@ -5763,3 +5968,187 @@ test.describe('[UX-I14] шейринг картинкой', function () {
     });
 });
 
+/* ===== [UX-T40] «Разминка по дефолту»: тоггл в Настройках + автодобавка при старте ===== */
+test.describe('UX-T40: разминка по дефолту', function () {
+    test('тоггл выкл по умолчанию: строки селектора нет, новая тренировка без разминки', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        await expect(card).toBeVisible({ timeout: 5000 });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await expect(sw).toHaveAttribute('aria-checked', 'false', { timeout: 5000 });
+        /* прогрессивное раскрытие (§3.2): при выключенном тоггле строки селектора нет */
+        await expect(card.locator('.arow')).toHaveCount(0);
+        /* старт с пустого списка — разминки нет (E1) */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        /* Настройки — оверлей поверх вкладки: «Назад» возвращает на открытую карточку */
+        await page.locator('[data-act="closeSettings"]').click();
+        await expect(page.locator('.expill')).toHaveCount(0, { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst != null) throw new Error('дефолт тоггла должен быть null (ключ не пишется): ' + st.warmupFirst);
+        if (!st.workouts || !st.workouts[0] || st.workouts[0].exercises.length !== 0) throw new Error('без тоггла разминка не должна добавляться');
+    });
+
+    test('вкл → новая тренировка стартует с «Разминка», настройка переживает перезагрузку', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        /* строка селектора появилась; значение — системная запись «Разминка · по умолчанию» */
+        await expect(card.locator('.arow .aval')).toHaveText('Разминка · по умолчанию', { timeout: 5000 });
+        /* GymData, не localStorage (§5): ждём тост сохранения и ключ на сервере */
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst !== true) throw new Error('warmupFirst не доехал до сервера: ' + st.warmupFirst);
+        /* перезагрузка MA: тоггл остаётся включённым (не localStorage) */
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('[role="switch"][aria-label="Разминка первым упражнением"]')).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        /* новая тренировка: первым упражнением «Разминка» (§4.1), ровно один раз */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('[data-act="closeSettings"]').click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Разминка', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st2 = await (await request.get('/api/state')).json();
+        const exs = st2.workouts[0].exercises;
+        if (exs.length !== 1 || exs[0].name !== 'Разминка' || exs[0].sets.length !== 0) {
+            throw new Error('разминка должна быть первым пустым упражнением: ' + JSON.stringify(exs));
+        }
+    });
+
+    test('выбор wcardio в селекторе → новая тренировка стартует с «Кардио-разминки» (ревью)', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        await card.locator('[role="switch"][aria-label="Разминка первым упражнением"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        /* лист селектора: тап по каталогному упражнению — значение в карточке = имя */
+        await card.locator('.arow', { hasText: 'Упражнение разминки' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.locator('.pli', { hasText: 'Кардио-разминка' }).click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(card.locator('.arow .aval')).toHaveText('Кардио-разминка (ходьба/лёгкий бег)', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupEx !== 'wcardio') throw new Error('warmupEx=wcardio не доехал до сервера: ' + st.warmupEx);
+        /* старт: разминка = каталогное упражнение (§2.4 — карточка/фото), первая пилюля */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('[data-act="closeSettings"]').click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Кардио-разминка (ходьба/лёгкий бег)', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st2 = await (await request.get('/api/state')).json();
+        if (st2.workouts[0].exercises[0].name !== 'Кардио-разминка (ходьба/лёгкий бег)') {
+            throw new Error('первое упражнение не Кардио-разминка: ' + JSON.stringify(st2.workouts[0].exercises));
+        }
+    });
+
+    test('устаревший warmupEx в данных → тихий резолв в «Разминку», старт без ошибок (ревью, E3)', async ({ page, request }) => {
+        /* id отсутствует в каталоге — сервер хранит строку как есть (§5), резолв при старте (§2.6) */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 1, del: [], warmupFirst: true, warmupEx: 'nonexistent', workouts: []
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Разминка', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupEx !== 'nonexistent') throw new Error('сервер должен хранить строку как есть (§5): ' + st.warmupEx);
+        if (st.workouts[0].exercises[0].name !== 'Разминка') {
+            throw new Error('устаревший id не резолвился в «Разминку»: ' + JSON.stringify(st.workouts[0].exercises));
+        }
+    });
+
+    test('удалённая разминка не возвращается: в новой — ровно одна, в старой не появилась (§4.2)', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await sw.click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await page.locator('[data-act="closeSettings"]').click();
+
+        /* старт №1: разминка первым упражнением */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await expect(page.locator('.expill')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.expill .exname')).toHaveText('Разминка');
+
+        /* пользователь удаляет разминку из активной тренировки → сейв */
+        await page.locator('.expill .exhead [data-act="deleteExercise"]').click();
+        await page.locator('.modal.open [data-act="confirmYes"]').click();
+        await expect(page.locator('.expill')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+
+        /* завершить пустую нельзя (гвард) — пользователь добавляет реальное упражнение и завершает */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        await page.locator('.modal.open .excard', { hasText: 'Жим штанги лёжа' }).first().click();
+        await page.locator('#mWeight').fill('100');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('8-10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        const stOld = await (await request.get('/api/state')).json();
+        const oldW = (stOld.workouts || []).filter(function (w) { return w.finished; })[0];
+        const oldNames = (oldW && oldW.exercises || []).map(function (e) { return e.name; });
+        if (oldNames.length !== 1 || oldNames[0] !== 'Жим штанги лёжа' || oldNames.indexOf('Разминка') !== -1) {
+            throw new Error('в завершённой тренировке должна быть только «Жим…» без разминки: ' + JSON.stringify(oldNames));
+        }
+
+        /* старт №2 (есть история — выбор «С пустого списка»): разминка на месте РОВНО ОДНА */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="newBlank"]').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await expect(page.locator('.expill')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.expill .exname')).toHaveText('Разминка');
+        const st = await (await request.get('/api/state')).json();
+        const fresh = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        if (!fresh || fresh.exercises.length !== 1 || fresh.exercises[0].name !== 'Разминка' || fresh.exercises[0].sets.length !== 0) {
+            throw new Error('новая тренировка должна стартовать с одной пустой «Разминкой»: ' + JSON.stringify(fresh && fresh.exercises));
+        }
+        /* в старой (завершённой) разминка не появилась */
+        const oldW2 = (st.workouts || []).filter(function (w) { return w.finished; })[0];
+        const oldNames2 = (oldW2.exercises || []).map(function (e) { return e.name; });
+        if (oldNames2.length !== 1 || oldNames2.indexOf('Разминка') !== -1) {
+            throw new Error('разминка вернулась в старую тренировку: ' + JSON.stringify(oldNames2));
+        }
+    });
+
+    test('шаблон при включённом тоггле: список = шаблон, БЕЗ авто-добавки разминки (§4.3)', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], warmupFirst: true,
+            workouts: [],
+            templates: [{ id: 1, name: 'Спина и бицепс', createdAt: today + 'T10:35:00',
+                exercises: [{ name: 'Тяга верхнего блока', w: '60', s: 3, r: '10' }, { name: 'Подтягивания', w: '', s: 4, r: '8' }] }]
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        const m = page.locator('.modal.open');
+        await expect(m).toContainText('Новая тренировка', { timeout: 5000 });
+        await m.locator('.tcard').click();
+        await expect(page.locator('.toast.show')).toHaveText('📋 Шаблон применён: 2 упражнения', { timeout: 5000 });
+        const names = page.locator('.expill .exname');
+        await expect(names.nth(0)).toHaveText('Тяга верхнего блока', { timeout: 5000 });
+        await expect(names.nth(1)).toHaveText('Подтягивания');
+        await expect(page.locator('.expill')).toHaveCount(2);
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst !== true) throw new Error('warmupFirst потерялся на сервере: ' + st.warmupFirst);
+        const fresh = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
+        const list = (fresh && fresh.exercises || []).map(function (e) { return e.name; });
+        if (list.length !== 2 || list[0] !== 'Тяга верхнего блока' || list[1] !== 'Подтягивания' || list.indexOf('Разминка') !== -1) {
+            throw new Error('старт из шаблона не должен добавлять разминку: ' + JSON.stringify(list));
+        }
+    });
+});

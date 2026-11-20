@@ -21,6 +21,11 @@ public final class GymData {
        (дефолт — ПДн-минимализм §5.2 спеки); shareOwner — имя, хранится только при opt-in */
     public Boolean shareName;
     public String shareOwner;
+    /* [UX-T40] «Разминка по дефолту»: warmupFirst null/false = выкл (дефолт, прежнее
+       поведение); warmupEx null = системная запись «Разминка» (дефолт), иначе id строки
+       CATALOG Mini App (устаревший id отфильтрует резолв при старте — §2.6 спеки) */
+    public Boolean warmupFirst;
+    public String warmupEx;
 
     public Workout active() {
         for (Workout w : workouts) {
@@ -136,6 +141,13 @@ public final class GymData {
         if (sn instanceof Boolean) d.shareName = (Boolean) sn;
         Object soVal = m.get("shareOwner");
         if (soVal instanceof String && !((String) soVal).isEmpty()) d.shareOwner = (String) soVal;
+        /* [UX-T40] разминка по дефолту: ключа нет → null (выкл / системная «Разминка»,
+            старые файлы ок); только реальные типы — мусор не валит чтение файла;
+            id валидируется резолвом при старте (§2.6), здесь сохраняем как есть */
+        Object wf = m.get("warmupFirst");
+        if (wf instanceof Boolean) d.warmupFirst = (Boolean) wf;
+        Object wx = m.get("warmupEx");
+        if (wx instanceof String && !((String) wx).isEmpty()) d.warmupEx = (String) wx;
         for (Object o : Json.list(m.get("workouts"))) {
             Map<String, Object> w = Json.map(o);
             Workout workout = new Workout();
@@ -304,6 +316,11 @@ public final class GymData {
            файл анонимного пользователя (opt-in выкл.) остаётся без новых ключей */
         if (shareName != null) m.put("shareName", shareName);
         if (shareOwner != null) m.put("shareOwner", shareOwner);
+        /* [UX-T40] разминка по дефолту — конец карты, пишутся только когда заданы:
+            тоггл пишет true/false явно (иначе «выключил» не пережил бы сохранение),
+            файл с настройками по умолчанию остаётся без новых ключей (аналог goalRemind) */
+        if (warmupFirst != null) m.put("warmupFirst", warmupFirst);
+        if (warmupEx != null) m.put("warmupEx", warmupEx);
         return m;
     }
 }
