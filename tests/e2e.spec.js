@@ -1415,6 +1415,132 @@ test.describe('GymHelper e2e', function () {
         }
     });
 
+    /* ---------- [EXR-T16/T17] acceptance coverage: acc#5 acc#7 acc#15 acc#16 ---------- */
+
+    test('EXR-T16 acc#5: svoe bez grupp - teg-filtr Tekhniki ne nakhodit; poisk pikera nakhodit', async ({ page }) => {
+        const K_ALL = 'Все';
+        const K_TECH = 'Техника';
+        const K_BENCH = 'Жим штанги лёжа';
+        void K_ALL; void K_TECH;
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Farmer Walk');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('#pickerQ').fill('farmer');
+        await expect(page.locator('#pickerList .excard', { hasText: 'Farmer Walk' }).first()).toBeVisible({ timeout: 5000 });
+        await page.locator('#pickerQ').fill('');
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await page.locator('.card .secrow .chip[data-act="techSection"][data-a="all"]').click();
+        await page.locator('.card .secrow .chip[data-act="techFiltersMuscle"]').click();
+        await page.locator('.modal.open .frow[data-act="techSheetToggle"][data-a="muscle:m:chest"]').click();
+        await page.locator('.modal.open #sheetApply').click();
+        await expect(page.locator('#techList .excard', { hasText: K_BENCH }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Farmer Walk' })).toHaveCount(0);
+    });
+
+    test('EXR-T16 acc#7: migratsiya - save-error derzhit klyuchi localStorage; retry chistit i zalivaet na server', async ({ page, request }) => {
+        await page.context().addInitScript(function () {
+            try {
+                localStorage.setItem('gymCustomEx', JSON.stringify(['Svend Press']));
+                localStorage.setItem('gymFavs', JSON.stringify(['Подтягивания']));
+            } catch (e) { /* noop */ }
+        });
+        let failSave = true;
+        await page.route('/api/save', async function (route) {
+            if (failSave) await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+            else await route.continue();
+        });
+        await openApp(page);
+        const keys1 = await page.evaluate(function () {
+            return String(localStorage.getItem('gymCustomEx')) + '|' + String(localStorage.getItem('gymFavs'));
+        });
+        if (keys1 === 'null|null') throw new Error('keys must survive save-error');
+        const st1 = await request.get('/api/state');
+        const sj1 = await st1.json();
+        if ((sj1.customEx || []).length !== 0) throw new Error('data must not reach server on save-error');
+        failSave = false;
+        await page.reload();
+        await openApp(page);
+        await expect.poll(async function () {
+            return await page.evaluate(function () {
+                return String(localStorage.getItem('gymCustomEx')) + '|' + String(localStorage.getItem('gymFavs'));
+            });
+        }, { timeout: 8000 }).toBe('null|null');
+        await expect.poll(async function () {
+            const r = await request.get('/api/state');
+            const j = await r.json();
+            return (j.customEx || []).map(function (x) { return x.n; }).join(',');
+        }, { timeout: 8000 }).toBe('Svend Press');
+    });
+
+    test('EXR-T17 acc#15: profil - meta katalog+i-svoi; otkryt v tekhnike otkryvaet fav so svoim', async ({ page }) => {
+        const K_PULLUP = 'Подтягивания';
+        const K_FAV_CARD = '⭐ Любимые упражнения';
+        const K_FAV_META = 'Упражнения, отмеченные ★ — каталог и свои';
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip[data-act="pickerSection"][data-a="all"]').click();
+        await page.locator('#pickerList .excard', { hasText: K_PULLUP }).first().locator('.star').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Farmer Walk');
+        await page.locator('#mCustomMuscles .chip[data-a="m:chest"]').click();
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip[data-act="pickerSection"][data-a="coll"]').click();
+        await page.locator('.modal.open #pickerCats .chip[data-act="pickerCat"][data-a="own"]').click();
+        await page.locator('#pickerList .excard', { hasText: 'Farmer Walk' }).first().locator('.star').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="profile"]').click();
+        const card = page.locator('.card', { hasText: K_FAV_CARD });
+        await expect(card).toBeVisible({ timeout: 5000 });
+        await expect(card).toContainText(K_FAV_META);
+        await card.locator('[data-act="openFavs"]').click();
+        await expect(page.locator('.card .secrow .chip[data-act="techSection"][data-a="fav"]')).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: K_PULLUP }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Farmer Walk' }).first()).toBeVisible();
+    });
+
+    test('EXR-T17 acc#16: net na-etom-ustroystve / lokalno na klyuchevykh ekranakh', async ({ page }) => {
+        const K_TECH = 'Техника';
+        const K_FAV_CHIP = '★ Любимые';
+        const K_FAV_CARD = '⭐ Любимые упражнения';
+        const K_FAV_EMPTY = '★ В Любимых пока пусто';
+        const K_ON_DEVICE = 'на этом устройстве';
+        const K_LOCAL = 'локально';
+        const rx = new RegExp(K_ON_DEVICE + '|' + K_LOCAL, 'i');
+        const noForbidden = function (txt, where) {
+            if (rx.test(txt)) throw new Error('forbidden wording on ' + where);
+        };
+        void K_TECH; void K_FAV_CHIP;
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        noForbidden(await page.locator('.modal.open').innerText(), 'custom-exercise modal');
+        await page.locator('[data-act="backToPicker"]').click();
+        noForbidden(await page.locator('.modal.open').innerText(), 'picker');
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await page.locator('.card .secrow .chip[data-act="techSection"][data-a="fav"]').click();
+        await expect(page.locator('#techList .empty', { hasText: K_FAV_EMPTY })).toBeVisible({ timeout: 5000 });
+        noForbidden(await page.evaluate(function () { return document.body.innerText; }), 'tech tab');
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="profile"]').click();
+        await expect(page.locator('.card', { hasText: K_FAV_CARD })).toBeVisible({ timeout: 5000 });
+        noForbidden(await page.evaluate(function () { return document.body.innerText; }), 'profile tab');
+    });
+
     test('нижняя панель: 4 таба, янтарная FAB, закреплена при скролле', async ({ page }) => {
         await openApp(page);
         const nav = page.locator('.nav');
