@@ -644,6 +644,11 @@ function dispatchFromEl(el, ev) {
         if (!ev || ev.target === el) wnClose();
         return;
     }
+    /* [UX-B15] тап по фону инлайн-карточки закрывает её; тапы по картинке и кнопкам — нет */
+    if (act === 'cvBackdrop') {
+        if (!ev || ev.target === el) cvClose();
+        return;
+    }
     const fn = ACTIONS[act];
     if (typeof fn === 'function') {
         fn(el.getAttribute('data-a'), el.getAttribute('data-b'), el.getAttribute('data-c'));
@@ -1311,6 +1316,11 @@ const ACTIONS = {
     },
     /* [UX-I14] поток «Картинка»: canvas-рендер 9:16 → системная шторка/скачивание (§5) */
     sharePic: function (a) { sharePictureGo(+a); },
+    /* [UX-B15] инлайн-карточка (мобильный вне полноценного Telegram): «Скачать» —
+       a.download; «Закрыть» и фоновый тап (cvBackdrop перехватывается в dispatchFromEl) —
+       закрытие с освобождением objectURL */
+    cvSave: function () { cvSave(); },
+    cvClose: function () { cvClose(); },
     /* [ONB-T2] политика конфиденциальности: openLink внутри Telegram, иначе обычная вкладка */
     openPrivacy: function () {
         const url = 'https://gym-helper.com/privacy.html';
@@ -5536,7 +5546,7 @@ function renderShareCard(w) {
 /* поток «Картинка» (§5, механика UX-I16 «буфер → действие»): рендер PNG → буфер →
    navigator.share с файлом (шторка Telegram); fallback [UX-B15]+[UX-T41] — по
    платформе: Telegram — карточка на сервер → нативный downloadFile с https-URL →
-   новая вкладка (мобильный вне Telegram) → a.download (desktop), тост всегда
+   инлайн-оверлей с картинкой (мобильный, [UX-B15]) → a.download (desktop), тост всегда
    отражает фактическое действие. shareClick пишется на тапе «Поделиться»
    (ACTION shareSheet, точка входа воронки §5); shareOk/shareDownload — по факту
    шторки/fallback-сохранения; отмена шторки (AbortError) — не событие. Ошибка
@@ -5593,10 +5603,12 @@ async function sharePictureGo(wid) {
     /* §5.4 fallback [UX-B15]+[UX-T41]: a.download не доносит файл до файловой системы в
        мобильных WebView, а vendor downloadFile бракует не-https URL по протоколу (blob:
        → на реальном Android диалог не открывался вовсе). Цепочка по платформе, тост
-       отражает фактическое действие: 0) в Telegram — карточка на сервер (TTL 1 ч,
-       анонимный токен) → нативный downloadFile с https-URL → «Загрузки» Telegram;
-       1) мобильный вне Telegram — картинка в новой вкладке, оттуда «удерживайте →
-       Скачать»; 2) desktop — a.download работает как раньше. */
+       отражает фактическое действие: 0) полноценный Telegram WebApp (платформа известна
+       И downloadFile доступен) — карточка на сервер (TTL 1 ч, анонимный токен) → нативный
+       downloadFile с https-URL → «Загрузки» Telegram; 1) мобильный вне Telegram — и в
+       in-app браузере Telegram, где WebApp урезан (downloadFile недоступен) — карточка
+       инлайн в оверлее приложения: long-press по <img> → «Скачать изображение» (работает
+       в любом WebView), кнопка «Скачать» — a.download; 2) desktop — a.download как раньше. */
     const plat = tg ? String(tg.platform || '') : '';
     const inTg = !!plat && plat !== 'unknown' && plat !== 'web';
     const isMobile = inTg ? (plat === 'android' || plat === 'ios')
@@ -5631,14 +5643,14 @@ async function sharePictureGo(wid) {
         }
     }
     if (!saved && isMobile) {
-        let wn = null;
-        try { wn = window.open(objUrl, '_blank'); } catch (e) { wn = null; }
-        if (wn) {
-            setTimeout(function () { URL.revokeObjectURL(objUrl); }, 60000);
-            trackShare('shareDownload');
-            toast('Открыл картинку — удерживайте её и выберите „Скачать“');
-            saved = true;
-        }
+        /* [UX-B15] инлайн-карточка: window.open(blob:) в in-app браузере Telegram вкладку
+           не показывает (WebView без multi-window) — тост «Открыл картинку» врал. Вместо
+           этого карточка видна в самом приложении: long-press по <img> в любом WebView
+           открывает нативное меню «Скачать изображение», «Скачать» — a.download (Chrome) */
+        cvOpen(objUrl, fname);
+        trackShare('shareDownload');
+        toast('Удерживайте картинку и выберите „Скачать изображение“');
+        saved = true;
     }
     if (!saved && !isMobile) {
         try {
@@ -5659,6 +5671,59 @@ async function sharePictureGo(wid) {
         toast('Не получилось подготовить картинку', true);
     }
     setBusy(false);
+}
+
+/* ---------- [UX-B15] инлайн-просмотр карточки (мобильный вне полноценного Telegram) ---------- */
+/* оверлей #cardview вне #app (index.html, слой 55 — переживает render()): in-app браузер
+   Telegram не показывает вкладку window.open(blob:) (WebView без multi-window), а
+   downloadFile там недоступен — карточку показываем в самом приложении. Long-press по
+   <img> открывает нативное меню WebView («Скачать изображение» — файл в «Загрузки»,
+   работает в любом Android WebView), кнопка «Скачать» — a.download (срабатывает в
+   Chrome), закрытие по фону или кнопке освобождает objectURL. */
+let cvUrl = null;
+let cvName = '';
+/* разметка оверлея постоянна — заполняется один раз при init (паттерн #modalBox);
+   long-press по картинке не блокируем (без user-select/touch-callout) — иначе нативное
+   меню WebView («Скачать изображение») не откроется */
+function cvInit() {
+    const cv = document.getElementById('cardview');
+    if (!cv || cv.__gymInit) return;
+    cv.__gymInit = true;
+    cv.innerHTML =
+        '<div class="cvbox">' +
+        '<div class="cvhint">Удерживайте картинку и выберите „Скачать изображение“</div>' +
+        '<div class="cvimgwrap"><img id="cvImg" alt="Карточка тренировки" draggable="false"></div>' +
+        '<div class="btnrow"><button class="btn prime wide" data-act="cvSave">⬇ Скачать</button>' +
+        '<button class="btn sec wide" data-act="cvClose">Закрыть</button></div>' +
+        '</div>';
+}
+function cvOpen(objUrl, fname) {
+    if (cvUrl) URL.revokeObjectURL(cvUrl); /* защитно: повторное открытие не течёт */
+    cvUrl = objUrl;
+    cvName = fname;
+    document.getElementById('cvImg').src = objUrl;
+    document.getElementById('cardview').classList.remove('hidden');
+    document.getElementById('cardview').classList.add('open');
+}
+function cvClose() {
+    const cv = document.getElementById('cardview');
+    if (!cv || !cv.classList.contains('open')) return;
+    cv.classList.remove('open');
+    cv.classList.add('hidden');
+    document.getElementById('cvImg').removeAttribute('src');
+    if (cvUrl) { URL.revokeObjectURL(cvUrl); cvUrl = null; }
+    cvName = '';
+}
+function cvSave() {
+    if (!cvUrl) return;
+    try {
+        const a = document.createElement('a');
+        a.href = cvUrl;
+        a.download = cvName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    } catch (e) { /* a.download не сработал — long-press-подсказка остаётся честным путём */ }
 }
 
 /* [ANA-T5] события онбординга (спека ANA-S2 г2): имена — белый список сервера, доставка —
@@ -5912,6 +5977,7 @@ async function init() {
     loadTheme();
     loadBg();
     initBgPicker();
+    cvInit(); /* [UX-B15] разметка инлайн-карточки — один раз, элемент вне #app */
     restInitState(); /* таймер независим от сети: восстанавливается до /api/init */
     if (tg) {
         try { tg.ready(); tg.expand(); } catch (e) { /* noop */ }

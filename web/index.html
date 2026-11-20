@@ -5,15 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>🏋️ Дневник тренировок</title>
 <script src="telegram-web-app.js"></script>
-<link rel="stylesheet" href="style.css?v=44">
+<link rel="stylesheet" href="style.css?v=45">
 </head>
 <body>
 <div id="app"><p class="loading">Загрузка…</p></div>
 <div id="restbar" class="restbar hidden"></div>
 <div id="modal" class="modal hidden" data-act="modalBackdrop"><div class="modal-box" id="modalBox"></div></div>
+<!-- [UX-B15] инлайн-просмотр карточки: слой над модалками, вне #app — переживает render();
+     содержимое заполняет app.js при init (паттерн #modalBox) -->
+<div id="cardview" class="cvwrap hidden" data-act="cvBackdrop"></div>
 <div id="toast" class="toast"></div>
 <input id="bgFile" type="file" accept="image/*" style="display:none">
 <script src="catalog.js?v=27"></script>
-<script src="app.js?v=52"></script>
+<script src="app.js?v=53"></script>
 </body>
 </html>
