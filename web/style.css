@@ -1653,20 +1653,16 @@ html.has-bg body::after {
 }
 
 /* ============ [UX-I17] мультивидовый календарь: пикер вида + сеточный движок ============
-   источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 3; T1 —
-   состояние/пикер/Неделя (7 колонок, высота часа 44px); T2 — День (1 колонка, 56px)
-   и 3 дня (3 колонки, 48px) на том же движке; T3 — Год (сетка мини-месяцев ниже) */
+   источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 4; T1 —
+   состояние/пикер/Неделя (7 колонок), T2 — День (1 колонка) и 3 дня (3 колонки)
+   на том же движке; T3 — Год (сетка мини-месяцев ниже); рев. 4 [UX-B14] —
+   полоса дней = окно (1/3/7), winpill удалена, высота часа ×2 (88/112/96) */
 
-/* полоса дней: 7 ячеек Пн–Вс; капсула окна winpill — во всех сеточных видах [§2.4, §12.7] */
-.wk-days { position: relative; display: grid; grid-template-columns: repeat(7, 1fr); margin-top: 9px; }
-.winpill {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background: var(--nested);
-    border: 1px solid var(--nested-brd);
-    border-radius: 14px;
-}
+/* полоса дней: ТОЛЬКО дни окна вида (1/3/7 — решение владельца 20.11 [UX-B14], §12.10),
+   каждая ровно над своей колонкой сетки: отступ слева равен гуттеру .wk-inner (30px),
+   число колонок — inline grid-template-columns:repeat(N,1fr); капсула winpill удалена
+   (окно = вся полоса); сегодня — glow-круг, якорь — обводка-круг [§2.4] */
+.wk-days { position: relative; display: grid; margin-left: 30px; margin-top: 9px; }
 .wd {
     position: relative;
     z-index: 1;
@@ -1818,11 +1814,12 @@ html.has-bg body::after {
     background: var(--accent);
 }
 
-/* полоса «без времени»: капсулы старых записей без started; появляется при наличии [§3.5] */
+/* полоса «без времени»: капсулы старых записей без started; появляется при наличии
+   [§3.5]; колонки = 30px-гуттер + дни окна (1/3/7) — inline grid-template-columns,
+   выравнивание с полосой дней и сеткой */
 .wk-allday {
     position: relative;
     display: grid;
-    grid-template-columns: 30px repeat(7, 1fr);
     gap: 2px;
     margin-top: 9px;
     align-items: center;
@@ -1862,8 +1859,7 @@ html.has-bg body::after {
     white-space: nowrap;
 }
 /* [T2 §3.5] вид «День»: полоса «без времени» одной колонкой — капсула крупнее и слева
-   (макет, экран 6) */
-.wk-allday.one { grid-template-columns: 30px 1fr; }
+   (макет, экран 6); колонки полосы — inline (30px + N ячеек) */
 .wk-ad.one { justify-content: flex-start; }
 .wk-ad.one .adpill { font-size: 11px; padding: 4px 12px; }
 /* [§10.8] на 320px подпись гуттера скрывается */

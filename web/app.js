@@ -43,12 +43,13 @@ let GW = null;
 const MIN_MONTH = '2020-01';
 const MAX_MONTH = '2030-12';
 /* [UX-I17] пределы листания дат (аналог MIN_MONTH/MAX_MONTH) [§2.3]; высота часа сеточных
-   видов [§2.2, решение владельца §12.4]: Неделя=44 (T1), День=56, 3 дня=48 (T2, один движок) */
+   видов [§2.2, рев.4 — решение владельца 20.11 §12.11, [UX-T41]]: ×2 к прежним 44/56/48 →
+   Неделя=88, День=112, 3 дня=96 — блок 1ч читабелен (время + название) даже в «Неделе» */
 const MIN_DATE = '2020-01-01';
 const MAX_DATE = '2030-12-31';
-const WK_HOUR = 44;
-const DAY_HOUR = 56;
-const D3_HOUR = 48;
+const WK_HOUR = 88;
+const DAY_HOUR = 112;
+const D3_HOUR = 96;
 /* [UX-I17] scrollTop сеточного вида: запоминается при уходе в карточку (тап по блоку),
    восстанавливается при возврате «← Назад» — тот же вид/период/позиция [§3.2] */
 let wkScroll = { key: '', top: 0 };
@@ -1943,7 +1944,7 @@ function calPickerHtml() {
 }
 /* ---------- [UX-I17] сеточные виды «День»/«3 дня»/«Неделя» — один движок [§2.2, §3] ----------
    T2: вид берётся из CAL.view, всё остальное — параметры движка: колонки (1/3/7), высота
-   часа (56/48/44), шаг стрелок (±1/±3/±7), заголовок, капсула окна, пилюля «Сегодня» */
+   часа (112/96/88), шаг стрелок (±1/±3/±7), заголовок, полоса дней окна, пилюля «Сегодня» */
 /* колонки периода по виду [§2.2]: День = [date], 3 дня = окно [date, +1, +2], Неделя = Пн–Вс */
 function gridDaysOf(iso) {
     if (CAL.view === 'day') return [iso];
@@ -1988,8 +1989,9 @@ function renderGrid() {
         '<div class="cal-title">' + title + '</div>' +
         '<button class="cal-navbtn' + (atMax ? ' dim' : '') + '" data-act="calNext" title="' + nextTitle + '" aria-label="' + nextTitle + '"' + (atMax ? ' disabled aria-disabled="true"' : '') + '>' + CAL_CHEV_R + '</button>' +
         '</div>';
-    /* полоса дней Пн–Вс недели якоря + капсула окна (1/3/7 ячейки — решение владельца §12.7) */
-    h += dayStripHtml(mode);
+    /* полоса дней = ТОЛЬКО дни окна, каждая ровно над своей колонкой
+       (решение владельца 20.11 [UX-B14], §12.10) */
+    h += dayStripHtml();
     /* полоса «без времени» — только при наличии таких тренировок [§3.5] */
     h += alldayHtml(days, byDate, mode);
     /* скролл-сетка 24 × hour: блоки/дорожки/линия «сейчас» [§3.2–3.4] */
@@ -2004,35 +2006,33 @@ function renderGrid() {
     }
     return h;
 }
-/* полоса дней: всегда 7 ячеек Пн–Вс недели якоря (не скроллится) [§2.4]; сегодня — glow-круг,
-   якорь (CAL.date) — обводка; капсула окна winpill — во всех сеточных видах [§12.7]:
-   День — ячейка выбранного дня, 3 дня — окно (видимая часть недели, капсула не вылезает
-   за полосу), Неделя — вся полоса; позиция left/width кратно 1/7 [§2.4] */
-function winPct(cells) { return (cells * 100 / 7).toFixed(3).replace(/\.?0+$/, '') + '%'; }
-function dayStripHtml(mode) {
-    const days = weekDaysOf(CAL.date);
+/* полоса дней = ТОЛЬКО дни окна вида, растянутые над сеткой — каждая ячейка ровно над
+   своей колонкой (решение владельца 20.11 [UX-B14], §12.10): «День» — 1 ячейка,
+   «3 дня» — 3, «Неделя» — 7; капсула winpill удалена (окно = вся полоса). Отступ слева
+   = гуттеру сетки (30px, CSS) — центры ячеек совпадают с центрами колонок 1:1
+   (число колонок — inline repeat(N,1fr)). Сегодня — glow-круг, якорь (CAL.date) —
+   обводка; буквы/числа вычисляются по дате (окно «3 дней» может переходить через
+   неделю: СБ, ВС, ПН…); тап по ячейке — прежнее поведение wkDay [§2.4] */
+function dayStripHtml() {
+    const days = gridDaysOf(CAL.date);
     const todayIso = todayISO();
-    const startIdx = (parseDateISO(CAL.date).getDay() + 6) % 7;
-    let pillLeft = 0, pillW = 7;
-    if (mode === 'day') { pillLeft = startIdx; pillW = 1; }
-    else if (mode === 'd3') { pillLeft = startIdx; pillW = Math.min(3, 7 - startIdx); }
-    let h = '<div class="wk-days">';
-    h += '<i class="winpill" style="left:' + winPct(pillLeft) + ';width:' + winPct(pillW) + '" aria-hidden="true"></i>';
-    for (let i = 0; i < days.length; i++) {
-        const iso = days[i];
+    let h = '<div class="wk-days" style="grid-template-columns:repeat(' + days.length + ',1fr)">';
+    for (const iso of days) {
         const d = parseDateISO(iso);
+        const di = (d.getDay() + 6) % 7;
         const cls = 'wd' + (iso === todayIso ? ' today' : '') + (iso === CAL.date ? ' sel' : '');
-        h += '<button class="' + cls + '" data-act="wkDay" data-a="' + iso + '" aria-label="' + DOW_FULL[i] + ', ' + d.getDate() + ' ' + MONTHS_GEN[d.getMonth()] + '">' +
-            '<span class="dw">' + DOW[i] + '</span>' +
+        h += '<button class="' + cls + '" data-act="wkDay" data-a="' + iso + '" aria-label="' + DOW_FULL[di] + ', ' + d.getDate() + ' ' + MONTHS_GEN[d.getMonth()] + '">' +
+            '<span class="dw">' + DOW[di] + '</span>' +
             '<span class="cir"><span class="dn">' + d.getDate() + '</span></span></button>';
     }
     h += '</div>';
     return h;
 }
 /* аллдей-полоса: тренировки периода с пустым/битым started — капсулы по дням,
-   тап → карточка; рендерится только при наличии [§3.5]. Сетка недельных видов —
-   7 колонок (выравнивание с полосой дней), капсулы только в днях периода («3 дня» —
-   окно); в «Дне» — one: одна колонка, капсула крупнее и слева (макет, экран 6) */
+   тап → карточка; рендерится только при наличии [§3.5]. Колонки = дни окна
+   (1/3/7 — выравнивание с полосой дней и сеткой, число — inline), капсулы
+   только в днях окна; в «Дне» — one: одна колонка, капсула крупнее и слева
+   (макет, экран 6) */
 function alldayHtml(days, byDate, mode) {
     const pill = function (w) {
         return '<button class="adpill" data-act="wkOpen" data-a="' + w.id + '">' + esc(dayRowName(w)) + '</button>';
@@ -2041,20 +2041,18 @@ function alldayHtml(days, byDate, mode) {
     if (mode === 'day') {
         const list = (byDate[days[0]] || []).filter(noTime);
         if (!list.length) return '';
-        return '<div class="wk-allday one"><span class="wk-adlab">без времени</span>' +
+        return '<div class="wk-allday one" style="grid-template-columns:30px 1fr"><span class="wk-adlab">без времени</span>' +
             '<span class="wk-ad one">' + list.map(pill).join('') + '</span></div>';
     }
-    const inPeriod = {};
-    for (const iso of days) inPeriod[iso] = true;
-    const cells = [];
     let any = false;
-    for (const iso of weekDaysOf(CAL.date)) {
-        const list = inPeriod[iso] ? (byDate[iso] || []).filter(noTime) : [];
+    const cells = [];
+    for (const iso of days) {
+        const list = (byDate[iso] || []).filter(noTime);
         cells.push(list);
         if (list.length) any = true;
     }
     if (!any) return '';
-    let h = '<div class="wk-allday"><span class="wk-adlab">без времени</span>';
+    let h = '<div class="wk-allday" style="grid-template-columns:30px repeat(' + cells.length + ',1fr)"><span class="wk-adlab">без времени</span>';
     for (const list of cells) {
         h += '<span class="wk-ad">' + list.map(pill).join('') + '</span>';
     }
@@ -2152,7 +2150,8 @@ function geoCol(cols, col, k, track) {
     }
     return { left: left + ')', width: width };
 }
-/* блок тренировки [§3.3]: время + название; высота ≥26px, <36px — название скрыто;
+/* блок тренировки [§3.3]: время + название; высота ≥32px, <44px — название скрыто
+   (пороги рев.4 [UX-B14] под высоту часа ×2: полчаса и длиннее — с названием);
    активная — контур (live). Время: в «Дне» диапазон «11:00–12:30» (активная «с 19:05»;
    конец clamp на полночь — 23:30 без ended даёт «23:30–24:00», не «24:30» [UX-T39]),
    в узких видах — старт. Дорожка <34px (withText=false) — полоса .wbar без текста:
@@ -2163,7 +2162,7 @@ function geoCol(cols, col, k, track) {
 function gridBlockHtml(b, k, geo, hourHeight, withText, containsToday, mode) {
     const w = b.w;
     const top = Math.round(b.s / 60 * hourHeight);
-    const hPx = Math.max(26, Math.round((b.e - b.s) / 60 * hourHeight));
+    const hPx = Math.max(32, Math.round((b.e - b.s) / 60 * hourHeight));
     const d = parseDateISO(w.date);
     const dwName = d ? DOW_FULL[(d.getDay() + 6) % 7] : '';
     const startHM = hmOf(b.s);
@@ -2177,7 +2176,7 @@ function gridBlockHtml(b, k, geo, hourHeight, withText, containsToday, mode) {
     const wide = mode === 'day';
     const tm = wide ? (liveNow ? 'с ' + startHM : startHM + '–' + endHM) : (liveNow ? 'с ' + startHM : startHM);
     let inner = '<span class="bt">' + tm + '</span>';
-    if (hPx >= 36) inner += '<span class="bn">' + esc(name) + '</span>';
+    if (hPx >= 44) inner += '<span class="bn">' + esc(name) + '</span>';
     const aria = liveNow ? (dwName + ', с ' + startHM + ' идёт тренировка') : (dwName + ', ' + tm + ', ' + name);
     return '<button class="wblk' + (wide ? ' wide' : '') + (mode === 'd3' ? ' c2' : '') + (w.finished ? '' : ' live') + '" style="left:' + geo.left + ';top:' + top + 'px;width:' + geo.width + ';height:' + hPx + 'px"' +
         ' data-act="wkOpen" data-a="' + w.id + '" aria-label="' + escAttr(aria) + '">' + inner + '</button>';
