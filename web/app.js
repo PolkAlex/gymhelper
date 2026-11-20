@@ -1009,6 +1009,7 @@ function loadTheme() {
    (карточка упражнения). Подлинное состояние живёт в прежних флагах (settingsOpen,
    calOpen и т.д.) — «назад» выполняет тот же ACTION, что видимая кнопка «← Назад»,
    поэтому стек никогда не расходится с тем, что видит пользователь. */
+    /* Известное исключение: plain openHistory() (startBlank/createFromList/conflictKeep/startWorkout) идёт мимо navPush('workout') — navBack действует по фактическому экрану, поведение корректно; стек самолечится в render(). */
 let NAV_BACK = [];
 let NAV_FWD = [];
 
