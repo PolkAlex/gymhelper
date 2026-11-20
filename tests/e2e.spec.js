@@ -5567,7 +5567,7 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts.some(function (t) { return /^4×8$/.test(String(t)); })).toBeTruthy();
     });
 
-    test('Telegram — карточка на сервере → нативный downloadFile с https-URL + честный тост (UX-T41/B15)', async ({ page, context, request }) => {
+    test('Telegram — картинка на сервере → downloadFile с https-URL, тост «подтвердите» (UX-T41/B15)', async ({ page, context, request }) => {
         test.setTimeout(60000);
         /* мок Telegram WebApp: telegram-web-app.js (загружается из index.html) ЗАМЕНЯЕТ
            window.Telegram.WebApp после init-скриптов — переустанавливаем downloadFile
@@ -5623,8 +5623,9 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(img.status()).toBe(200);
         expect(img.headers()['content-type']).toContain('image/png');
         expect(img.headers()['content-disposition']).toContain('attachment');
-        /* тост соответствует ветке — файл сохраняется в «Загрузки» Telegram */
-        await expect(page.locator('.toast.show')).toContainText('Файл сохранён в загрузки Telegram', { timeout: 5000 });
+        /* честный тост (ревью №1): downloadFile без колбэка результата — юзер может
+           отменить нативный диалог, «сохранён» не утверждаем (урок UX-B15) */
+        await expect(page.locator('.toast.show')).toContainText('подтвердите в Telegram', { timeout: 5000 });
         /* ни новой вкладки, ни a.download — нативная ветка перехватила сохранение */
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).toContain('shareDownload');

@@ -19,7 +19,9 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -66,10 +68,12 @@ public final class WebServer {
     private static final String SHARE_URL_BASE = "https://app.gym-helper.com/w/";
     private final SecureRandom shareRandom = new SecureRandom();
     /* [UX-T41] карточка шеринга для нативного сохранения: лимит 5 МБ, TTL 1 час,
-       токен = 22 символа base62 (как shareId), PNG-магия для валидации тела */
+       токен = 22 символа base62 (как shareId), PNG-магия для валидации тела,
+       кап каталога 1000 файлов (ревью №2) */
     private static final int CARD_MAX_BYTES = 5 * 1024 * 1024;
     private static final long CARD_TTL_MS = 60L * 60 * 1000;
     private static final int CARD_TOKEN_LEN = 22;
+    private static final int CARD_DIR_MAX_FILES = 1000;
     private static final byte[] PNG_MAGIC = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
     /* [UX-T41] https-база карточек (downloadFile принимает только https): env
        GYM_WEBAPP_URL, не задан/не https — домен Mini App из SHARE_URL_BASE (прод) */
@@ -725,8 +729,12 @@ public final class WebServer {
             return;
         }
         cleanupCards();
-        Path file = newCardFile();
-        Files.write(file, body);
+        /* кап каталога (ревью №2): переполнение data/cards (злоупотреб/сбой) — 503 */
+        if (countCards() > CARD_DIR_MAX_FILES) {
+            sendJson(ex, 503, Map.of("ok", false, "error", "Слишком много картинок, попробуйте позже"));
+            return;
+        }
+        Path file = newCardFile(body);
         stats.inc("cardUpload");
         System.out.println("[card-upload] user " + userId + " " + file.getFileName() + " " + body.length + "B");
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -742,20 +750,35 @@ public final class WebServer {
         return (parent == null ? webDir : parent).resolve("data").resolve("cards");
     }
 
-    /* случайный токен = имя файла; коллизию при 62^22 исключаем проверкой существования */
-    private Path newCardFile() throws IOException {
+    /* случайный токен = имя файла; запись через CREATE_NEW — атомарна: гонка коллизии
+       токена между проверкой и записью не перезапишет чужой файл (ревью №6), занятый
+       токен — молчаливая перегенерация */
+    private Path newCardFile(byte[] body) throws IOException {
         Path dir = cardsDir();
         Files.createDirectories(dir);
         StringBuilder b = new StringBuilder(CARD_TOKEN_LEN);
-        Path file;
-        do {
+        while (true) {
             b.setLength(0);
             for (int i = 0; i < CARD_TOKEN_LEN; i++) {
                 b.append(SHARE_ALPHABET.charAt(shareRandom.nextInt(SHARE_ALPHABET.length())));
             }
-            file = dir.resolve(b + ".png");
-        } while (Files.exists(file));
-        return file;
+            Path file = dir.resolve(b + ".png");
+            try {
+                Files.write(file, body, StandardOpenOption.CREATE_NEW);
+                return file;
+            } catch (FileAlreadyExistsException e) {
+                /* токен занят — следующая итерация */
+            }
+        }
+    }
+
+    /* число файлов в data/cards (кап каталога, ревью №2); недоступен каталог — 0 */
+    private long countCards() {
+        try (java.util.stream.Stream<Path> s = Files.list(cardsDir())) {
+            return s.count();
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     private static boolean isPng(byte[] b) {

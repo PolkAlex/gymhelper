@@ -1199,8 +1199,9 @@ public class GymContractTest {
             check(rUp.statusCode() == 200, "card: upload с initData — 200, а не " + rUp.statusCode());
             Map<String, Object> mUp = Json.map(Json.parse(rUp.body()));
             String cardUrl = (String) mUp.get("url");
+            /* домен не матчится точно (ревью №4): на проде url строится из env GYM_WEBAPP_URL */
             check(Boolean.TRUE.equals(mUp.get("ok")) && cardUrl != null
-                    && cardUrl.matches("https://app\\.gym-helper\\.com/card/[0-9a-zA-Z]{22}\\.png"),
+                    && cardUrl.matches("https://[^/]+/card/[0-9a-zA-Z]{22}\\.png"),
                 "card: url = " + cardUrl);
             String cardToken = cardUrl.substring(cardUrl.lastIndexOf('/') + 1, cardUrl.lastIndexOf('.'));
             check(java.nio.file.Files.isRegularFile(
@@ -1254,6 +1255,17 @@ public class GymContractTest {
             Map<String, Object> snapCa = Json.map(Json.parse(get(portCa, "/stats?token=contract-test-token").body()));
             check(Json.lng(snapCa.get("cardUpload")) == 2,
                 "card: cardUpload=2 (успешные uploads), а не " + Json.lng(snapCa.get("cardUpload")));
+
+            /* кап каталога (ревью №2): > CARD_DIR_MAX_FILES файлов — 503, файл не пишется,
+               счётчик cardUpload не растёт (успешных uploads по-прежнему 2) */
+            for (int i = 0; i < 1001; i++) {
+                java.nio.file.Files.write(rootCa.resolve("data").resolve("cards").resolve("cap" + i + ".png"), png);
+            }
+            java.net.http.HttpResponse<String> rCap = postBytes(portCa, "/api/card-upload", png, "initData", idCa);
+            check(rCap.statusCode() == 503,
+                "card: кап каталога >1000 файлов — 503, а не " + rCap.statusCode());
+            check(Json.lng(Json.map(Json.parse(get(portCa, "/stats?token=contract-test-token").body())).get("cardUpload")) == 2,
+                "card: кап-отказ не считается cardUpload");
         } catch (Exception cardErr) {
             throw new AssertionError("CONTRACT FAIL: card " + cardErr);
         }

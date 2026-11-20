@@ -5439,17 +5439,20 @@ async function sharePictureGo(wid) {
             const r = await fetch('/api/card-upload', {
                 method: 'POST',
                 body: card.blob,
-                headers: { 'Content-Type': 'image/png', 'initData': INIT }
+                headers: { 'Content-Type': 'image/png', 'initData': INIT },
+                signal: AbortSignal.timeout(15000) /* сеть/сервер висят — шаг цепочки ниже */
             });
             const j = await r.json();
             if (r.ok && j.ok && j.url) httpsUrl = j.url;
-        } catch (e) { /* сеть/сервер — шаг цепочки ниже */ }
+        } catch (e) { /* сеть/сервер/таймаут — шаг цепочки ниже */ }
         if (httpsUrl) {
             try {
                 tg.downloadFile({ url: httpsUrl, file_name: fname });
                 URL.revokeObjectURL(objUrl);
                 trackShare('shareDownload');
-                toast('Файл сохранён в загрузки Telegram');
+                /* честный тост: downloadFile без колбэка результата — юзер может
+                   отменить нативный диалог, «сохранён» не утверждаем (урок UX-B15) */
+                toast('Открыл диалог сохранения — подтвердите в Telegram');
                 saved = true;
             } catch (e) { /* Telegram < 8.0 или отказ — шаг цепочки ниже */ }
         }
