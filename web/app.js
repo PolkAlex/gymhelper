@@ -5639,14 +5639,18 @@ async function sharePictureGo(wid) {
         : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
     const objUrl = URL.createObjectURL(card.blob);
     let saved = false;
+    /* upload — один результат на тап: TG-ветка грузит первой, мобильная берёт готовый
+       httpsUrl (в т.ч. после падения downloadFile — upload уже ок, повторять не нужно);
+       после неудачного upload повторный тап — новая попытка, это легально */
+    let uploaded = null;
     /* [UX-T41] ветка Telegram — прежде прочего: серверный https-URL единственный,
        который нативный downloadFile принимает. Upload не удался / Telegram < 8.0 —
        шаг цепочки ниже, как раньше */
     if (inTg && typeof tg.downloadFile === 'function') {
-        const httpsUrl = await cardUploadUrl(card.blob);
-        if (httpsUrl) {
+        uploaded = uploaded ?? await cardUploadUrl(card.blob);
+        if (uploaded) {
             try {
-                tg.downloadFile({ url: httpsUrl, file_name: fname });
+                tg.downloadFile({ url: uploaded, file_name: fname });
                 URL.revokeObjectURL(objUrl);
                 trackShare('shareDownload');
                 /* честный тост: downloadFile без колбэка результата — юзер может
@@ -5662,7 +5666,7 @@ async function sharePictureGo(wid) {
            открывает нативное меню, «Загрузка» сохраняет файл через DownloadManager;
            «Скачать» — вкладка с https (там системное скачивание работает). Upload не
            удался — blob-оверлей остаётся для ПРОСМОТРА, без обещаний скачивания */
-        const httpsUrl = await cardUploadUrl(card.blob);
+        const httpsUrl = uploaded ?? await cardUploadUrl(card.blob);
         if (httpsUrl) {
             URL.revokeObjectURL(objUrl); /* blob не нужен — картинка на сервере */
             cvOpen(httpsUrl, fname, true);
@@ -5751,12 +5755,11 @@ function cvClose() {
 function cvSave() {
     if (!cvUrl) return;
     if (cvHttps) {
-        /* https — вкладка: в in-app браузере Telegram и в Chrome там работает
-           системное скачивание («⋮ → Скачать»); window.open из тапа может быть
-           заблокирован — тост честный по факту */
         let wn = null;
         try { wn = window.open(cvUrl, '_blank'); } catch (e) { wn = null; }
-        if (wn) toast('Открыл картинку в новой вкладке — там „⋮ → Скачать“');
+        /* /card/ отдаётся с attachment-Disposition → файл уже идёт в загрузки;
+           вкладка — юзер скачает сам. window.open заблокирован — честный тост */
+        if (wn) toast('Картинка отправлена в загрузки');
         else toast('Не получилось открыть вкладку — удерживайте картинку и выберите „Загрузка“');
         return;
     }

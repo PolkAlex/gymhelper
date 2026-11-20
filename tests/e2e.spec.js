@@ -5846,11 +5846,11 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         const revoked = await page.evaluate(function () { return window.__cvRevoked; });
         expect(revoked).toHaveLength(1);
         expect(String(revoked[0]).startsWith('blob:')).toBeTruthy();
-        /* «Скачать» — window.open ровно с этим https-URL (вкладка/скачивание);
-           spy возвращает truthy-объект — тост успеха честен по факту вызова */
+        /* «Скачать» — window.open ровно с этим https-URL; /card/ идёт с attachment-
+           Disposition → файл сразу уходит в загрузки (вкладка — юзер скачает сам) */
         await page.locator('[data-act="cvSave"]').click();
         expect(await page.evaluate(function () { return window.__openUrls; })).toEqual([src]);
-        await expect(page.locator('.toast.show')).toContainText('в новой вкладке', { timeout: 5000 });
+        await expect(page.locator('.toast.show')).toContainText('Картинка отправлена в загрузки', { timeout: 5000 });
         /* закрытие кнопкой — оверлей скрыт, https не отзывается */
         await page.locator('[data-act="cvClose"]').click();
         await expect(page.locator('#cardview.open')).toHaveCount(0);
