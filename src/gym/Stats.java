@@ -85,6 +85,10 @@ public final class Stats {
        дублирующая проверка validSrc — защита от прямых вызовов и ручных правок файла */
     public synchronized void incStartSrc(String src) {
         if (!validSrc(src)) return;
+        /* [ANA-T10 ревью] кап на inc-пути: после START_SRC_MAX разных источников новые
+           молча не считаются (существующие продолжают инкрементироваться), map и файл
+           не растут до рестарта */
+        if (startSrc.size() >= START_SRC_MAX && !startSrc.containsKey(src)) return;
         startSrc.merge(src, 1L, Long::sum);
         flush();
     }

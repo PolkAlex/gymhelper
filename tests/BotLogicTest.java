@@ -1058,6 +1058,18 @@ public class BotLogicTest {
             Map<String, Object> jsrc = Json.map(junkStats.snapshot().get("startSrc"));
             check(jsrc != null && jsrc.size() == 1 && Json.lng(jsrc.get("ok")) == 2,
                 "startSrc: мусорные ключи/значения пропускаются, валидные читаются");
+
+            /* [ANA-T10 ревью] кап START_SRC_MAX на inc-пути: 200 разных источников заполняют
+               bucket — новые валидные payload'ы молча не считаются, существующий
+               инкрементируется */
+            Stats capStats = new Stats(tmp.resolve("cap-stats.json"));
+            for (int i = 0; i < 200; i++) capStats.incStartSrc("src" + i);
+            capStats.incStartSrc("brand_new");
+            capStats.incStartSrc("src5");
+            Map<String, Object> srcCap = Json.map(capStats.snapshot().get("startSrc"));
+            check(srcCap != null && srcCap.size() == 200, "startSrc: кап 200 — bucket не растёт сверх капа");
+            check(Json.lng(srcCap.get("brand_new")) == 0, "startSrc: brand_new после капа не добавляется");
+            check(Json.lng(srcCap.get("src5")) == 2, "startSrc: существующий источник после капа инкрементируется (1+1)");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: startSrc-сценарий " + e);
         }
