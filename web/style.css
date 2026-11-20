@@ -1934,6 +1934,13 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
 .pli .nm { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 600; color: var(--text); }
 .pli .cur { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 .pli.on svg { color: var(--accent); }
+/* [UX-T40] подпись пункта листа «Упражнение разминки»: у системной записи — «по умолчанию» */
+.pli .nm small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 500; margin-top: 1px; }
+/* [UX-T40] строка-селектор «Упражнение разминки» в карточке настроек: значение
+   прижато к правому краю, шеврон следом (.arow-ряд как «Помощь и FAQ») */
+.arow .aval { color: var(--muted); font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.arow .aright { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; min-width: 0; }
+.arow .aright .chevr { margin-left: 0; }
 
 /* ============ [UX-I17][UX-T38] вид «Год» — 12 мини-месяцев 3×4 [§8] ============ */
 /* сетка в потоке карточки — весь год в кадре без внутреннего скролла (§12.1) */

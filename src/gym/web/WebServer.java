@@ -404,6 +404,12 @@ public final class WebServer {
             current.goals.addAll(data.goals);
         }
         if (data.goalRemind != null) current.goalRemind = data.goalRemind;
+        /* [UX-T40] разминка по дефолту: ключа нет → серверное значение не трогаем (старый
+           кэш JS — не затираем, по образцу templates/goals «замещаем если клиент прислал
+           ключ»); явный ключ применяется как есть, включая null — «возврат к системной
+           Разминке» обязан пережить сохранение (§5 спеки) */
+        if (dataJson.containsKey("warmupFirst")) current.warmupFirst = data.warmupFirst;
+        if (dataJson.containsKey("warmupEx")) current.warmupEx = data.warmupEx;
         data = current;
         /* nextId монотонно растёт: max(серверный, клиентский, max(id)+1) — иначе коллизии id затирают данные */
         data.nextId = Math.max(current.nextId, incomingNextId);

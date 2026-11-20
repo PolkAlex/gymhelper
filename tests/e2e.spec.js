@@ -5967,3 +5967,103 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts.some(function (t) { return String(t).indexOf('Эпли') >= 0; })).toBeFalsy(); /* 1ПМ у калистеники нет */
     });
 });
+
+/* ===== [UX-T40] «Разминка по дефолту»: тоггл в Настройках + автодобавка при старте ===== */
+test.describe('UX-T40: разминка по дефолту', function () {
+    test('тоггл выкл по умолчанию: строки селектора нет, новая тренировка без разминки', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        await expect(card).toBeVisible({ timeout: 5000 });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await expect(sw).toHaveAttribute('aria-checked', 'false', { timeout: 5000 });
+        /* прогрессивное раскрытие (§3.2): при выключенном тоггле строки селектора нет */
+        await expect(card.locator('.arow')).toHaveCount(0);
+        /* старт с пустого списка — разминки нет (E1) */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        /* Настройки — оверлей поверх вкладки: «Назад» возвращает на открытую карточку */
+        await page.locator('[data-act="closeSettings"]').click();
+        await expect(page.locator('.expill')).toHaveCount(0, { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst != null) throw new Error('дефолт тоггла должен быть null (ключ не пишется): ' + st.warmupFirst);
+        if (!st.workouts || !st.workouts[0] || st.workouts[0].exercises.length !== 0) throw new Error('без тоггла разминка не должна добавляться');
+    });
+
+    test('вкл → новая тренировка стартует с «Разминка», настройка переживает перезагрузку', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        /* строка селектора появилась; значение — системная запись «Разминка · по умолчанию» */
+        await expect(card.locator('.arow .aval')).toHaveText('Разминка · по умолчанию', { timeout: 5000 });
+        /* GymData, не localStorage (§5): ждём тост сохранения и ключ на сервере */
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst !== true) throw new Error('warmupFirst не доехал до сервера: ' + st.warmupFirst);
+        /* перезагрузка MA: тоггл остаётся включённым (не localStorage) */
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('[role="switch"][aria-label="Разминка первым упражнением"]')).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        /* новая тренировка: первым упражнением «Разминка» (§4.1), ровно один раз */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('[data-act="closeSettings"]').click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Разминка', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st2 = await (await request.get('/api/state')).json();
+        const exs = st2.workouts[0].exercises;
+        if (exs.length !== 1 || exs[0].name !== 'Разминка' || exs[0].sets.length !== 0) {
+            throw new Error('разминка должна быть первым пустым упражнением: ' + JSON.stringify(exs));
+        }
+    });
+
+    test('выбор wcardio в селекторе → новая тренировка стартует с «Кардио-разминки» (ревью)', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        await card.locator('[role="switch"][aria-label="Разминка первым упражнением"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        /* лист селектора: тап по каталогному упражнению — значение в карточке = имя */
+        await card.locator('.arow', { hasText: 'Упражнение разминки' }).click();
+        const sheet = page.locator('.modal.open');
+        await sheet.locator('.pli', { hasText: 'Кардио-разминка' }).click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(card.locator('.arow .aval')).toHaveText('Кардио-разминка (ходьба/лёгкий бег)', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupEx !== 'wcardio') throw new Error('warmupEx=wcardio не доехал до сервера: ' + st.warmupEx);
+        /* старт: разминка = каталогное упражнение (§2.4 — карточка/фото), первая пилюля */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('[data-act="closeSettings"]').click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Кардио-разминка (ходьба/лёгкий бег)', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st2 = await (await request.get('/api/state')).json();
+        if (st2.workouts[0].exercises[0].name !== 'Кардио-разминка (ходьба/лёгкий бег)') {
+            throw new Error('первое упражнение не Кардио-разминка: ' + JSON.stringify(st2.workouts[0].exercises));
+        }
+    });
+
+    test('устаревший warmupEx в данных → тихий резолв в «Разминку», старт без ошибок (ревью, E3)', async ({ page, request }) => {
+        /* id отсутствует в каталоге — сервер хранит строку как есть (§5), резолв при старте (§2.6) */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 1, del: [], warmupFirst: true, warmupEx: 'nonexistent', workouts: []
+        } } });
+        await openApp(page);
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Разминка', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupEx !== 'nonexistent') throw new Error('сервер должен хранить строку как есть (§5): ' + st.warmupEx);
+        if (st.workouts[0].exercises[0].name !== 'Разминка') {
+            throw new Error('устаревший id не резолвился в «Разминку»: ' + JSON.stringify(st.workouts[0].exercises));
+        }
+    });
+});

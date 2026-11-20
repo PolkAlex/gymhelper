@@ -438,6 +438,21 @@ function isWarmupName(name) {
     return c ? exTagMatch(c, 'cat:warmup') : /^разминка/i.test(name);
 }
 
+/* ============ [UX-T40] «Разминка по дефолту» (docs/spec-ux-t40-warmup-toggle.md) ============ */
+/* системная запись «Разминка» (§2.1/§2.2): точного упражнения «Разминка» в CATALOG нет —
+   обобщённая запись без каталогной карточки; справочный MET 2.5 константой (средний
+   разминочных каталога) — чтобы fallback exMet()=4.0 никогда не применялся к «Разминке» */
+const WARMUP_GENERIC = { name: 'Разминка', met: 2.5 };
+/* резолв значения настройки в имя (§2.6) — в момент использования, без кэширования:
+   правки каталога подхватываются сразу, устаревший id тихо падает в «Разминку» */
+function warmupResolved() {
+    if (G.warmupEx) {
+        const c = CATALOG.find(function (x) { return x.id === G.warmupEx; });
+        if (c) return { name: c.n, generic: false };
+    }
+    return { name: WARMUP_GENERIC.name, generic: true };
+}
+
 /* ============ тайминг и калории ============ */
 function closeCurrentExercise() {
     if (!CUR) return;
@@ -1257,6 +1272,23 @@ const ACTIONS = {
     restCustomSave: function () { restCustomSave(); },
     restSound: function (a) {
         try { localStorage.setItem('gymRestSound', a === 'off' ? 'off' : 'on'); } catch (e) { /* noop */ }
+        render();
+    },
+    /* ============ [UX-T40] «Разминка по дефолту» ============ */
+    /* тогл: true/false пишутся явно + GymData (§5) — «выключил» переживает сохранение;
+       значение селектора не сбрасываем, оно пригодится при повторном включении */
+    warmupFirstToggle: function () {
+        G.warmupFirst = !(G.warmupFirst === true);
+        save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); render(); });
+    },
+    openWarmupPicker: function () { openModal(warmupPickerHtml()); },
+    /* выбор в листе: null (системная «Разминка») или живой id из списка (валидация §7,
+       прочее — тихий игнор); смена значения закрывает лист и сразу перерисовывает (§3.2) */
+    warmupSet: function (a) {
+        if (a != null && !CATALOG.some(function (c) { return c.id === a && exTagMatch(c, 'cat:warmup'); })) return;
+        G.warmupEx = a || null;
+        closeModal();
+        save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); });
         render();
     },
     closeModal: function () { closeModal(); },
@@ -3731,6 +3763,29 @@ function swToggleHtml(on, act, arg, label, knobIco, ghostIco, ghostSide) {
     return '<button class="switch' + (on ? ' on' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') +
         '" aria-label="' + escAttr(label) + '" data-act="' + act + '"' + (arg != null ? ' data-a="' + escAttr(arg) + '"' : '') + '>' + inner + '</button>';
 }
+/* нижний лист «Упражнение разминки» [UX-T40 §2.3] — стиль пикера вида календаря
+   (calPickerHtml: строки .pli, у выбранного янтарная отметка-точка): первый пункт —
+   системная запись «Разминка» (подпись «по умолчанию» — пока выбран дефолт), далее
+   каталог с cat:warmup по возрастанию met; категории warmup/warmcool не участвуют —
+   не упражнения (у них нет met) */
+function warmupPickerHtml() {
+    const cur = warmupResolved();
+    const list = CATALOG.filter(function (c) { return exTagMatch(c, 'cat:warmup') && c.met != null; })
+        .sort(function (a, b) { return a.met - b.met; });
+    let h = '<div role="dialog" aria-modal="true" aria-label="Упражнение разминки">' +
+        '<div class="sh-title">Упражнение разминки</div>';
+    h += '<button class="pli' + (cur.generic ? ' on' : '') + '" data-act="warmupSet" aria-label="Разминка">' +
+        ico('warmup') + '<span class="nm">Разминка' +
+        (cur.generic ? '<small>по умолчанию</small>' : '') + '</span>' +
+        (cur.generic ? '<span class="cur"></span>' : '') + '</button>';
+    for (const c of list) {
+        const on = !cur.generic && c.id === G.warmupEx;
+        h += '<button class="pli' + (on ? ' on' : '') + '" data-act="warmupSet" data-a="' + escAttr(c.id) +
+            '" aria-label="' + escAttr(c.n) + '">' + ico(c.i) + '<span class="nm">' + esc(c.n) + '</span>' +
+            (on ? '<span class="cur"></span>' : '') + '</button>';
+    }
+    return h + '</div>';
+}
 function renderSettings() {
     /* 🎨 Оформление: тогл темы (ON = тёмная) + тогл fullscreen + фон [UX-S4 §6] */
     const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
@@ -3785,6 +3840,23 @@ function renderSettings() {
     const snd = restSoundOn();
     h += '<div class="setrow"><span class="lbl">Звук по окончании</span>' +
         swToggleHtml(snd, 'restSound', snd ? 'off' : 'on', 'Звук по окончании') + '</div></div>';
+    /* 🏋️ Тренировка [UX-T40] (спека §3): тогл «Разминка первым упражнением» (дефолт выкл —
+       прежнее поведение) + строка селектора упражнения разминки, видна ТОЛЬКО при вкл
+       (прогрессивное раскрытие §3.2 — не пугаем выключившего лишней строкой) */
+    const wfOn = G.warmupFirst === true;
+    const wfVal = warmupResolved();
+    h += '<div class="card"><p class="t1">🏋️ Тренировка</p>' +
+        '<div class="setrow"><span class="lbl">Разминка первым упражнением</span>' +
+        swToggleHtml(wfOn, 'warmupFirstToggle', null, 'Разминка первым упражнением') + '</div>' +
+        '<p class="meta">При старте новой тренировки первым добавится выбранное упражнение разминки</p>';
+    if (wfOn) {
+        h += '<div class="hr"></div>' +
+            '<button class="arow" data-act="openWarmupPicker" aria-label="Выбор упражнения разминки">' +
+            '<span>Упражнение разминки</span>' +
+            '<span class="aright"><span class="aval">' + esc(wfVal.generic ? 'Разминка · по умолчанию' : wfVal.name) + '</span>' +
+            '<span class="chevr">' + ICONS.chevR + '</span></span></button>';
+    }
+    h += '</div>';
     /* 🧑‍🏫 Персональный тренер — перенос как есть; switchTab закрывает Настройки [UX-S4 §6] */
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
@@ -3982,6 +4054,12 @@ function startBlank() {
     activeConflictAsk(function () {
         const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '', exercises: [] };
         if (G.nextId < 1) G.nextId = 1;
+        /* [UX-T40] разминка первым упражнением — РОВНО ОДИН РАЗ при создании (§4.1):
+            способом startExercise, но без установки CUR; удалил пользователь её сам —
+            не возвращаем (проверок «а есть ли разминка» при рендере/сейве нет, §4.2) */
+        if (G.warmupFirst === true) {
+            w.exercises.push({ name: warmupResolved().name, sets: [], st: nowLocalISO(), en: '' });
+        }
         G.workouts.push(w);
         save().then(function (r) {
             /* [UX-T28] при 409 (conflict) тост «Данные были удалены...» уже от doSave */
