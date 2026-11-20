@@ -982,7 +982,23 @@ public class GymContractTest {
                 "share: кастомное название и питание НЕ утекают (§5.2)");
             check(rp.body().contains("&lt;img src=x onerror=alert(1)&gt;") && !rp.body().contains("<img src=x"),
                 "share: XSS-имя упражнения экранировано, не исполняется (§8.2)");
-            check(rp.body().contains("t.me/GymHelper_bot/app"), "share: sticky CTA на бота");
+            /* [UX-B14] CTA /w/<id>: фолбэк (env не задан) — настоящий юзернейм бота
+               MyHelperGymBot; старый GymHelper_bot — чужой бот */
+            check(rp.body().contains("t.me/MyHelperGymBot/app"), "share: sticky CTA — фолбэк на нашего бота MyHelperGymBot (UX-B14)");
+            /* [UX-B14] заданный username (env в JVM-процессе неизменяем — инжект вторым
+               конструктором) вытесняет фолбэк: кнопка /w/<id> ведёт на заданного бота.
+               Stats отдельный — GET /w/<id> не должен трогать счётчики linkView выше;
+               shareIndex у этого сервера пуст → сработает ленивый скан data/*.json */
+            Stats counterBt = new Stats(root.resolve("stats-bt.json"));
+            WebServer wsBt = new WebServer("contract-test-token", stSh, webDir, counterBt, "ContractBot");
+            java.net.ServerSocket probeBt = new java.net.ServerSocket(0);
+            int portBt = probeBt.getLocalPort();
+            probeBt.close();
+            wsBt.start(portBt);
+            java.net.http.HttpResponse<String> rpBt = get(portBt, "/w/" + sid);
+            check(rpBt.statusCode() == 200, "share: GET /w/<id> на сервере с заданным username — 200");
+            check(rpBt.body().contains("t.me/ContractBot/app"), "share: CTA использует заданный botUsername (env/инжект)");
+            check(!rpBt.body().contains("t.me/MyHelperGymBot/app"), "share: заданный botUsername вытесняет фолбэк");
             /* HEAD — заголовки без тела, linkView не растёт */
             check(headStatus(portSh, "/w/" + sid) == 200, "share: HEAD /w/<id> — 200");
 

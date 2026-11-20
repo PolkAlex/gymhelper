@@ -81,7 +81,7 @@ function shareWorkoutHtml(store, w) {
         '<div class="hero-num">' + hero + '</div></div>' +
         '<div class="glass">' + exHtml + '</div>' +
         '<p class="privline">🔒 Карточка видна только по этой ссылке — без входа и без имени.</p>' +
-        '</div><div class="cta"><a class="btn" href="https://t.me/GymHelper_bot/app">🏋️ Попробовать в Telegram</a></div>' +
+        '</div><div class="cta"><a class="btn" href="https://t.me/MyHelperGymBot/app">🏋️ Попробовать в Telegram</a></div>' +
         '</div>\n</body>\n</html>';
 }
 function share404Html() {

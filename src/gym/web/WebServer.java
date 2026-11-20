@@ -46,7 +46,8 @@ public final class WebServer {
     /* [ANA-T1] токен /stats: env GYM_ADMIN_TOKEN, не задан — токен бота */
     private final String adminToken;
     /* [ONB-T6] username бота для deep-link «Написать разработчику» (?start=feedback):
-       env GYM_BOT_USERNAME, не задан — GymHelper_bot; отдаётся клиенту в /api/init */
+       env GYM_BOT_USERNAME, не задан — MyHelperGymBot (настоящий юзернейм бота;
+       старый фолбэк GymHelper_bot — ЧУЖОЙ бот, [UX-B14]); отдаётся клиенту в /api/init */
     private final String botUsername;
     private final long startedAt = System.currentTimeMillis();
     /* [EXR-T7] кэш сжатых gzip-байтов крупной статики (app/catalog/style/index ~600 KB):
@@ -67,14 +68,19 @@ public final class WebServer {
     private HttpServer server;
 
     public WebServer(String token, Storage storage, Path webDir, Stats stats) {
+        this(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"));
+    }
+
+    /* [UX-B14] инжект username для контракт-теста (env JVM-процесса поменять нельзя);
+       прод использует конструктор выше с env GYM_BOT_USERNAME */
+    public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername) {
         this.token = token;
         this.storage = storage;
         this.stats = stats;
         this.webDir = webDir.toAbsolutePath().normalize();
         String at = System.getenv("GYM_ADMIN_TOKEN");
         this.adminToken = (at == null || at.isBlank()) ? token : at.trim();
-        String bu = System.getenv("GYM_BOT_USERNAME");
-        this.botUsername = (bu == null || bu.isBlank()) ? "GymHelper_bot" : bu.trim();
+        this.botUsername = (botUsername == null || botUsername.isBlank()) ? "MyHelperGymBot" : botUsername.trim();
     }
 
     public void start(int port) throws IOException {
