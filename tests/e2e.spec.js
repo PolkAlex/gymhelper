@@ -1042,7 +1042,8 @@ test.describe('GymHelper e2e', function () {
         /* [UX-T30] дефолт пикера — «★ Любимые»: пустые избранные видны сразу, чип подсвечен, «Все» — нет */
         await expect(page.locator('.modal.open #pickerSections .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
         await expect(page.locator('.modal.open #pickerSections .chip', { hasText: 'Все' })).toHaveClass('chip');
-        await expect(page.locator('#pickerList')).toContainText('Избранных пока нет', { timeout: 5000 });
+        /* [EXR-T15] терминология «Любимые» + пустое состояние Э5 */
+        await expect(page.locator('#pickerList')).toContainText('В Любимых пока пусто', { timeout: 5000 });
         await expect(page.locator('#pickerList .excard')).toHaveCount(0);
 
         await page.locator('.modal.open #pickerSections .chip', { hasText: 'Все' }).first().click();
@@ -1095,6 +1096,449 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
         await expect(page.locator('#pickerList .excard')).toHaveCount(1);
         await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' })).toBeVisible();
+    });
+
+    /* ---------- [EXR-T14] модалка «✍️ Своё упражнение»: группы мышц, сервер ---------- */
+
+    test('своё [EXR-T14]: 8 чипов групп, тогл чипов, «Отмена» возвращает в пикер с секцией', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        /* секция по умолчанию «★ Любимые» — после «Отмены» она должна остаться активной */
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await expect(page.locator('#mCustomName')).toBeVisible({ timeout: 5000 });
+        const chips = page.locator('#mCustomMuscles .chip');
+        await expect(chips).toHaveCount(8);
+        /* бейдж «необязательно» у секции групп; подсказка под чипами */
+        await expect(page.locator('.modal.open .flabel', { hasText: 'Группы мышц' })).toContainText('необязательно');
+        await expect(page.locator('.modal.open .mhint')).toContainText('Можно выбрать несколько или пропустить');
+        /* тап чипов вкл/выкл: 2 выбранных — янтарные */
+        await chips.filter({ hasText: 'Грудь' }).click();
+        await chips.filter({ hasText: 'Плечи' }).click();
+        await expect(chips.filter({ hasText: 'Грудь' })).toHaveClass(/on/);
+        await expect(chips.filter({ hasText: 'Плечи' })).toHaveClass(/on/);
+        await chips.filter({ hasText: 'Плечи' }).click();
+        await expect(chips.filter({ hasText: 'Плечи' })).toHaveClass(/chip/);
+        await chips.filter({ hasText: 'Плечи' }).click();
+        /* «Отмена» — возврат В ПИКЕР (не закрытие): список жив, секция «★ Любимые» активна */
+        await page.locator('[data-act="backToPicker"]').click();
+        await expect(page.locator('.modal.open #pickerList')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.modal.open #pickerSections .chip', { hasText: '★ Любимые' })).toHaveClass(/on/);
+    });
+
+    test('своё [EXR-T14]: создание с группами — теги #своё #chest #shoulders, переживает перезагрузку (сервер)', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Жим Свенда стоя');
+        await page.locator('#mCustomMuscles .chip', { hasText: 'Грудь' }).click();
+        await page.locator('#mCustomMuscles .chip', { hasText: 'Плечи' }).click();
+        await page.locator('[data-act="createCustom"]').click();
+        /* после добавления — сразу окно записи нового упражнения */
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('30');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        const card = page.locator('#pickerList .excard', { hasText: 'Жим Свенда стоя' }).first();
+        await expect(card).toBeVisible({ timeout: 5000 });
+        await expect(card).toContainText('#своё #chest #shoulders');
+        /* сервер: после перезагрузки страницы (пере-/api/init) карточка на месте */
+        await page.reload();
+        await openApp(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим Свенда стоя' }).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    test('своё [EXR-T14]: дубликат имени (каталог, без учёта регистра) — тост, записи нет; без групп — карточка с #своё', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        /* дубликат каталога в нижнем регистре */
+        await page.locator('#mCustomName').fill('жим штанги лёжа');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('.toast.show', { hasText: 'Упражнение с таким названием уже есть' })).toBeVisible({ timeout: 5000 });
+        /* модалка осталась: имя правится, добавляем без групп (пауза — дедуп кнопки 400 мс) */
+        await page.waitForTimeout(450);
+        await page.locator('#mCustomName').fill('Фермерская прогулка');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('24');
+        await page.locator('#mSets').fill('2');
+        await page.locator('#mReps').fill('12');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        const card = page.locator('#pickerList .excard', { hasText: 'Фермерская прогулка' }).first();
+        await expect(card).toBeVisible({ timeout: 5000 });
+        await expect(card).toContainText('#своё');
+        await expect(card).not.toContainText('#chest');
+        /* «Свои» пикера: пустое состояние до создания больше не показывается */
+        await expect(page.locator('#pickerList .excard', { hasText: 'жим штанги лёжа' })).toHaveCount(0);
+    });
+
+    /* ---------- [EXR-T15] «★ Любимые»: свои в списках, фолбэк поиска ---------- */
+
+    test('любимые [EXR-T15]: своё в «★ Любимые» пикера после каталог-фавов и в Технике (некликабельно)', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        /* каталог-фав: «Подтягивания» */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        await page.locator('#pickerList .excard', { hasText: 'Подтягивания' }).first().locator('.star').click();
+        /* своё без групп + звезда на карточке в «Свои» */
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Фермерская прогулка');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('24');
+        await page.locator('[data-act="closeModal"]').first().click();
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        await page.locator('#pickerList .excard', { hasText: 'Фермерская прогулка' }).first().locator('.star').click();
+        /* секция «★ Любимые»: каталог-фавы, затем свои; заголовок «★ Любимые» */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
+        const grid = page.locator('#pickerList .exgrid');
+        await expect(grid.locator('.excard')).toHaveCount(2);
+        await expect(grid.locator('.excard').first()).toContainText('Подтягивания');
+        await expect(grid.locator('.excard', { hasText: 'Фермерская прогулка' })).toBeVisible();
+        await expect(page.locator('#pickerList')).toContainText('★ Любимые');
+
+        /* Техника, чип «★ Любимые»: своё в списке, некликабельно, звезда тоглится.
+           Локаторы — строго #techList: закрытый пикер остаётся в DOM (hidden-модалка) */
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: '★ Любимые' }).click();
+        const techOwn = page.locator('#techList .excard', { hasText: 'Фермерская прогулка' }).first();
+        await expect(techOwn).toBeVisible({ timeout: 5000 });
+        /* у карточки своего нет data-act (нет перехода в деталь) */
+        const act = await techOwn.getAttribute('data-act');
+        if (act) throw new Error('карточка своего в Технике должна быть некликабельной, data-act=' + act);
+        await techOwn.click();
+        await expect(page.locator('#techList .excard', { hasText: 'Фермерская прогулка' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.exhead', { hasText: 'Техника упражнений' })).toBeVisible();
+        /* тап ★ — карточка исчезает из «Любимых» без перезагрузки */
+        await techOwn.locator('.star').click();
+        await expect(page.locator('#techList .excard', { hasText: 'Фермерская прогулка' })).toHaveCount(0, { timeout: 5000 });
+    });
+
+    test('любимые [EXR-T15]: фолбэк «жим» — совпадения по всем (каталог + свои); тап ☆ убирает фолбэк', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        /* своё «Жим Свенда стоя» (в тренировку не добавляем — закрываем окно записи) */
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Жим Свенда стоя');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        /* каталог-фав без «жим» в названии */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Все' }).first().click();
+        await page.locator('#pickerList .excard', { hasText: 'Подтягивания' }).first().locator('.star').click();
+        /* секция «★ Любимые», поиск «жим»: 0 среди избранных → фолбэк */
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Любимые' }).click();
+        await page.locator('#pickerQ').fill('жим');
+        await expect(page.locator('#pickerList .hint', { hasText: 'Не нашлось в Любимых' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#pickerList .hint')).toContainText('Совпадения по всем упражнениям');
+        /* в выдаче каталог («Жим штанги лёжа») + свои («Жим Свенда стоя») */
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first()).toBeVisible();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим Свенда стоя' }).first()).toBeVisible();
+        /* тап по карточке каталога в фолбэке добавляет в тренировку */
+        await page.locator('#pickerList .excard', { hasText: 'Жим штанги лёжа' }).first().locator('.exn').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        /* снова пикер «★ Любимые» + «жим»: 0 среди избранных → фолбэк */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('#pickerQ').fill('жим');
+        await expect(page.locator('#pickerList .hint', { hasText: 'Не нашлось в Любимых' })).toBeVisible({ timeout: 5000 });
+        /* тап ☆ в фолбэке → совпадение появляется в Любимых, фолбэк исчезает */
+        await page.locator('#pickerList .excard', { hasText: 'Жим Свенда стоя' }).first().locator('.star').click();
+        await expect(page.locator('#pickerList .hint')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим Свенда стоя' }).first()).toBeVisible();
+    });
+
+    test('любимые [EXR-T15]: поиск без совпадений нигде — «Ничего не нашлось»', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('#pickerQ').fill('жмаааввв');
+        await expect(page.locator('#pickerList .empty', { hasText: 'Ничего не нашлось' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#pickerList .empty')).toContainText('✍️ Своё упражнение');
+    });
+
+    test('миграция [EXR-T14]: localStorage gymCustomEx/gymFavs → сервер, ключи очищаются; сервер приоритетен', async ({ page, request }) => {
+        await page.context().addInitScript(function () {
+            try {
+                localStorage.setItem('gymCustomEx', JSON.stringify(['Жим Свенда стоя', 'Фермерская прогулка']));
+                localStorage.setItem('gymFavs', JSON.stringify(['Фермерская прогулка', 'Подтягивания']));
+            } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        /* данные уехали на сервер (мок /api/state) */
+        await expect.poll(async function () {
+            const r = await request.get('/api/state');
+            const j = await r.json();
+            return (j.customEx || []).map(x => x.n).sort().join(',');
+        }, { timeout: 8000 }).toBe('Жим Свенда стоя,Фермерская прогулка');
+        await expect.poll(async function () {
+            const r = await request.get('/api/state');
+            const j = await r.json();
+            return (j.favs || []).slice().sort().join(',');
+        }, { timeout: 8000 }).toBe('Подтягивания,Фермерская прогулка');
+        /* ключи localStorage очищены — теперь ПОСЛЕ подтверждённого 'ok' от doSave [EXR-T14 ревью] */
+        await expect.poll(async function () {
+            return await page.evaluate(function () {
+                return String(localStorage.getItem('gymCustomEx')) + '|' + String(localStorage.getItem('gymFavs'));
+            });
+        }, { timeout: 8000 }).toBe('null|null');
+        /* сценарий G.2: перезагрузка — источник сервер, дубликатов миграция не создаёт */
+        await page.reload();
+        await openApp(page);
+        await expect.poll(async function () {
+            const r = await request.get('/api/state');
+            const j = await r.json();
+            return (j.customEx || []).length + ':' + (j.favs || []).length;
+        }, { timeout: 8000 }).toBe('2:2');
+    });
+
+    /* ---------- [EXR-T15 ревью] свои с тегами групп находятся тег-фильтрами ---------- */
+
+    test('своё с группой находится тег-фильтром: секция «Мышцы» пикера; своё без групп — нет', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        /* своё с группами (Грудь+Плечи) и своё без групп */
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Жим Свенда стоя');
+        await page.locator('#mCustomMuscles .chip', { hasText: 'Грудь' }).click();
+        await page.locator('#mCustomMuscles .chip', { hasText: 'Плечи' }).click();
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Фермерская прогулка');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        /* секция «Мышцы» → «Грудь»: своё с m:chest найдено, своё без тегов — не найдено */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Мышцы' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Грудь' }).click();
+        await expect(page.locator('#pickerList .excard', { hasText: 'Жим Свенда стоя' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#pickerList .excard', { hasText: 'Фермерская прогулка' })).toHaveCount(0);
+    });
+
+    test('своё с группой находится тег-фильтром в fav-секции Техники; своё без групп отсеивается', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        /* создать оба своих: с группой Грудь и без групп */
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Жим Свенда стоя');
+        await page.locator('#mCustomMuscles .chip', { hasText: 'Грудь' }).click();
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Фермерская прогулка');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        /* звёздить оба в «Коллекции → Свои» */
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        await page.locator('#pickerList .excard', { hasText: 'Жим Свенда стоя' }).first().locator('.star').click();
+        await page.locator('#pickerList .excard', { hasText: 'Фермерская прогулка' }).first().locator('.star').click();
+        /* Техника → «★ Любимые»: оба видны без фильтров */
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn', { hasText: 'Техника' }).click();
+        await page.locator('.card .secrow .chip', { hasText: '★ Любимые' }).click();
+        await expect(page.locator('#techList .excard', { hasText: 'Жим Свенда стоя' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Фермерская прогулка' }).first()).toBeVisible();
+        /* шит «Группы мышц» → «Грудь»: своё с m:chest осталось, своё без тегов отсеялось */
+        await page.locator('.card .secrow .chip', { hasText: 'Группы мышц' }).click();
+        await page.locator('.modal.open .frow', { hasText: 'Грудь' }).click();
+        await page.locator('.modal.open .btnrow .btn', { hasText: 'Применить' }).click();
+        await expect(page.locator('#techList .excard', { hasText: 'Жим Свенда стоя' }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Фермерская прогулка' })).toHaveCount(0);
+    });
+
+    test('миграция [EXR-T14 ревью]: при непустом сервере stale-ключи localStorage всё равно очищаются', async ({ page, request }) => {
+        /* сервер уже имеет свои/любимые */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], workouts: [], customEx: [{ n: 'Есть на сервере', tags: [] }], favs: ['Есть на сервере'] } } });
+        await page.context().addInitScript(function () {
+            try {
+                localStorage.setItem('gymCustomEx', JSON.stringify(['Старое локальное']));
+                localStorage.setItem('gymFavs', JSON.stringify(['Старый локальный фав']));
+            } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        /* stale-ключи удалены: данные из них игнорируются (сервер приоритетен) */
+        await expect.poll(async function () {
+            return await page.evaluate(function () {
+                return String(localStorage.getItem('gymCustomEx')) + '|' + String(localStorage.getItem('gymFavs'));
+            });
+        }, { timeout: 8000 }).toBe('null|null');
+        /* серверные данные миграцией не менялись */
+        const r = await request.get('/api/state');
+        const j = await r.json();
+        if ((j.customEx || []).length !== 1 || (j.favs || []).length !== 1
+            || j.customEx[0].n !== 'Есть на сервере') {
+            throw new Error('серверные данные не должны меняться: ' + JSON.stringify(j));
+        }
+    });
+
+    /* ---------- [EXR-T16/T17] acceptance coverage: acc#5 acc#7 acc#15 acc#16 ---------- */
+
+    test('EXR-T16 acc#5: svoe bez grupp - teg-filtr Tekhniki ne nakhodit; poisk pikera nakhodit', async ({ page }) => {
+        const K_ALL = 'Все';
+        const K_TECH = 'Техника';
+        const K_BENCH = 'Жим штанги лёжа';
+        void K_ALL; void K_TECH;
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Farmer Walk');
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('#pickerQ').fill('farmer');
+        await expect(page.locator('#pickerList .excard', { hasText: 'Farmer Walk' }).first()).toBeVisible({ timeout: 5000 });
+        await page.locator('#pickerQ').fill('');
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await page.locator('.card .secrow .chip[data-act="techSection"][data-a="all"]').click();
+        await page.locator('.card .secrow .chip[data-act="techFiltersMuscle"]').click();
+        await page.locator('.modal.open .frow[data-act="techSheetToggle"][data-a="muscle:m:chest"]').click();
+        await page.locator('.modal.open #sheetApply').click();
+        await expect(page.locator('#techList .excard', { hasText: K_BENCH }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Farmer Walk' })).toHaveCount(0);
+    });
+
+    test('EXR-T16 acc#7: migratsiya - save-error derzhit klyuchi localStorage; retry chistit i zalivaet na server', async ({ page, request }) => {
+        await page.context().addInitScript(function () {
+            try {
+                localStorage.setItem('gymCustomEx', JSON.stringify(['Svend Press']));
+                localStorage.setItem('gymFavs', JSON.stringify(['Подтягивания']));
+            } catch (e) { /* noop */ }
+        });
+        let failSave = true;
+        await page.route('/api/save', async function (route) {
+            if (failSave) await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+            else await route.continue();
+        });
+        await openApp(page);
+        const keys1 = await page.evaluate(function () {
+            return String(localStorage.getItem('gymCustomEx')) + '|' + String(localStorage.getItem('gymFavs'));
+        });
+        if (keys1 === 'null|null') throw new Error('keys must survive save-error');
+        const st1 = await request.get('/api/state');
+        const sj1 = await st1.json();
+        if ((sj1.customEx || []).length !== 0) throw new Error('data must not reach server on save-error');
+        failSave = false;
+        await page.reload();
+        await openApp(page);
+        await expect.poll(async function () {
+            return await page.evaluate(function () {
+                return String(localStorage.getItem('gymCustomEx')) + '|' + String(localStorage.getItem('gymFavs'));
+            });
+        }, { timeout: 8000 }).toBe('null|null');
+        await expect.poll(async function () {
+            const r = await request.get('/api/state');
+            const j = await r.json();
+            return (j.customEx || []).map(function (x) { return x.n; }).join(',');
+        }, { timeout: 8000 }).toBe('Svend Press');
+    });
+
+    test('EXR-T17 acc#15: profil - meta katalog+i-svoi; otkryt v tekhnike otkryvaet fav so svoim', async ({ page }) => {
+        const K_PULLUP = 'Подтягивания';
+        const K_FAV_CARD = '⭐ Любимые упражнения';
+        const K_FAV_META = 'Упражнения, отмеченные ★ — каталог и свои';
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip[data-act="pickerSection"][data-a="all"]').click();
+        await page.locator('#pickerList .excard', { hasText: K_PULLUP }).first().locator('.star').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill('Farmer Walk');
+        await page.locator('#mCustomMuscles .chip[data-a="m:chest"]').click();
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="closeModal"]').first().click();
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('.modal.open .secrow .chip[data-act="pickerSection"][data-a="coll"]').click();
+        await page.locator('.modal.open #pickerCats .chip[data-act="pickerCat"][data-a="own"]').click();
+        await page.locator('#pickerList .excard', { hasText: 'Farmer Walk' }).first().locator('.star').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="profile"]').click();
+        const card = page.locator('.card', { hasText: K_FAV_CARD });
+        await expect(card).toBeVisible({ timeout: 5000 });
+        await expect(card).toContainText(K_FAV_META);
+        await card.locator('[data-act="openFavs"]').click();
+        await expect(page.locator('.card .secrow .chip[data-act="techSection"][data-a="fav"]')).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: K_PULLUP }).first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Farmer Walk' }).first()).toBeVisible();
+    });
+
+    test('EXR-T17 acc#16: net na-etom-ustroystve / lokalno na klyuchevykh ekranakh', async ({ page }) => {
+        const K_TECH = 'Техника';
+        const K_FAV_CHIP = '★ Любимые';
+        const K_FAV_CARD = '⭐ Любимые упражнения';
+        const K_FAV_EMPTY = '★ В Любимых пока пусто';
+        const K_ON_DEVICE = 'на этом устройстве';
+        const K_LOCAL = 'локально';
+        const rx = new RegExp(K_ON_DEVICE + '|' + K_LOCAL, 'i');
+        const noForbidden = function (txt, where) {
+            if (rx.test(txt)) throw new Error('forbidden wording on ' + where);
+        };
+        void K_TECH; void K_FAV_CHIP;
+        await openApp(page);
+        await startWorkoutUi(page);
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        noForbidden(await page.locator('.modal.open').innerText(), 'custom-exercise modal');
+        await page.locator('[data-act="backToPicker"]').click();
+        noForbidden(await page.locator('.modal.open').innerText(), 'picker');
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await page.locator('.card .secrow .chip[data-act="techSection"][data-a="fav"]').click();
+        await expect(page.locator('#techList .empty', { hasText: K_FAV_EMPTY })).toBeVisible({ timeout: 5000 });
+        noForbidden(await page.evaluate(function () { return document.body.innerText; }), 'tech tab');
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="profile"]').click();
+        await expect(page.locator('.card', { hasText: K_FAV_CARD })).toBeVisible({ timeout: 5000 });
+        noForbidden(await page.evaluate(function () { return document.body.innerText; }), 'profile tab');
     });
 
     test('нижняя панель: 4 таба, янтарная FAB, закреплена при скролле', async ({ page }) => {
@@ -2367,7 +2811,7 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         await expect(bar).not.toHaveClass(/raised/);
     });
 
-    test('звезда в списке «Техника»: у правого края строки, тоглится, сохраняется в gymFavs и не открывает упражнение', async ({ page }) => {
+    test('звезда в списке «Техника»: у правого края строки, тоглится, сохраняется на сервере (favs) и не открывает упражнение', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
         const card = page.locator('#techList .excard', { hasText: EX }).first();
@@ -2390,9 +2834,12 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         const star2 = page.locator('#techList .excard', { hasText: EX }).first().locator('.star');
         await expect(star2).toHaveClass(/fav/, { timeout: 5000 });
         await expect(star2).toHaveAttribute('aria-label', 'Из любимых');
-        /* сохранено в localStorage gymFavs */
-        const favs = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymFavs') || '[]'); });
-        if (!favs.includes(EX)) throw new Error('gymFavs не сохранил: ' + JSON.stringify(favs));
+        /* сохранено на сервере (favs) [EXR-T13] */
+        await expect.poll(async function () {
+            const r = await request.get('/api/state');
+            const j = await r.json();
+            return (j.favs || []).join(',');
+        }, { timeout: 8000 }).toContain(EX);
         /* переживает перезагрузку (после reload приложение открывается на «Истории») */
         await page.reload();
         await page.locator('.nav button', { hasText: 'Техника' }).click();
@@ -2569,12 +3016,11 @@ test.describe('EXR-T4: фильтры-мультивыбор «Техники»'
         if (restored !== total) throw new Error('после выключения список не восстановился: ' + restored + ' из ' + total);
     });
 
-    test('«Своё» поверх фильтров: свои упражнения без категории', async ({ page }) => {
+    test('«Своё» поверх фильтров: свои упражнения без категории', async ({ page, request }) => {
+        /* сеем своё упражнение на сервере до входа — /api/init читает при рендере [EXR-T13] */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], workouts: [], customEx: [{ n: 'Моё упражнение', tags: [] }] } } });
         await openApp(page);
-        /* сеем своё упражнение до входа в «Технику» — читается из localStorage при рендере */
-        await page.evaluate(function () {
-            try { localStorage.setItem('gymCustomEx', '["Моё упражнение"]'); } catch (e) { /* noop */ }
-        });
         await page.locator('.nav button', { hasText: 'Техника' }).click();
         await page.locator('.card .secrow .chip', { hasText: 'Своё' }).click();
         await expect(page.locator('.card .secrow .chip', { hasText: 'Своё' })).toHaveClass(/on/, { timeout: 5000 });
@@ -2692,12 +3138,10 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
         const total = await page.locator('#techList .excard').count();
         if (total < 60) throw new Error('на входе «Техника» показывает ' + total + ' упражнений, ожидался весь каталог');
         await expect(page.locator('.empty')).toHaveCount(0);
-        /* пустой favourites-набор даёт «Ничего не найдено» + кнопку «Сбросить фильтры» [EXR-T4] */
+        /* пустой favourites-набор даёт понятное пустое состояние [EXR-T15 §8, Э7] */
         await page.locator('.card .secrow .chip', { hasText: '★ Любимые' }).click();
-        await expect(page.locator('.empty', { hasText: 'Ничего не найдено' })).toHaveCount(1, { timeout: 5000 });
-        await expect(page.locator('.empty [data-act="techResetFilters"]')).toBeVisible();
-        await page.locator('.empty [data-act="techResetFilters"]').click();
-        await expect(page.locator('.card .secrow .chip', { hasText: 'Все' })).toHaveClass(/on/, { timeout: 5000 });
+        await expect(page.locator('.empty', { hasText: 'В Любимых пока пусто' })).toHaveCount(1, { timeout: 5000 });
+        await page.locator('.card .secrow .chip', { hasText: 'Все' }).click();
         await expect(page.locator('.empty')).toHaveCount(0);
         await expect(page.locator('#techList .excard').first()).toBeVisible();
         /* повторный вход через навигацию снова открывает «Все» — фильтры сброшены [EXR-T4] */
@@ -4573,12 +5017,11 @@ test.describe('UX-T32: фото упражнений в Истории и Ста
 /* ===== [EXR-T9] пикер: фото вместо иконок в карточках каталога ===== */
 test.describe('EXR-T9: фото упражнений в пикере', function () {
 
-    test('карточка каталога с img — фото (naturalWidth>0), «своё» — прежняя иконка; в «★ Любимых» — тоже фото', async ({ page }) => {
+    test('карточка каталога с img — фото (naturalWidth>0), «своё» — прежняя иконка; в «★ Любимых» — тоже фото', async ({ page, request }) => {
+        /* сеем своё упражнение на сервере до старта — /api/init читается при рендере [EXR-T13] */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], workouts: [], customEx: [{ n: 'Моё упражнение', tags: [] }] } } });
         await openApp(page);
-        /* сеём своё упражнение до старта — customBase() читается из localStorage при рендере */
-        await page.evaluate(function () {
-            try { localStorage.setItem('gymCustomEx', '["Моё упражнение"]'); } catch (e) { /* noop */ }
-        });
         await startWorkoutUi(page);
         await openActiveDetail(page);
         await page.locator('[data-act="openPicker"]').click();
@@ -4896,7 +5339,7 @@ test.describe('[ONB-T6] контакты и проверка сервера', fu
         await openApp(page);
         await page.locator('[aria-label="Настройки"]').click();
         await page.locator('#app button', { hasText: 'Помощь и FAQ' }).click();
-        await expect(page.locator('.wn-foot')).toContainText('GymHelper 1.35');
+        await expect(page.locator('.wn-foot')).toContainText('GymHelper 1.41');
         /* deep-link: вне Telegram tg.openLink — подменяем и ловим URL (fallback window.open тоже) */
         await page.evaluate(function () {
             window.__openUrls = [];

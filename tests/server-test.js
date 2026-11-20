@@ -296,6 +296,9 @@ function handle(req, res) {
                    при наличии ключа (старый кэш JS — не трогаем); goalRemind — значением */
                 if (Array.isArray(d.goals)) store.goals = d.goals;
                 if (typeof d.goalRemind === 'boolean') store.goalRemind = d.goalRemind;
+                /* [EXR-T13] «Свои»/«Любимые» — merge по образцу goals (замещение при наличии ключа) */
+                if (Array.isArray(d.customEx)) store.customEx = d.customEx;
+                if (Array.isArray(d.favs)) store.favs = d.favs;
                 /* restSec: merge-политика реального WebServer — null у клиента (ещё не настраивал)
                    серверное значение не затирает [UX-T4/T5, спека §0.1] */
                 if (typeof d.restSec === 'number') store.restSec = d.restSec;

@@ -1,9 +1,11 @@
 package gym;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class GymData {
     public long nextId = 1;
@@ -26,6 +28,11 @@ public final class GymData {
        CATALOG Mini App (устаревший id отфильтрует резолв при старте — §2.6 спеки) */
     public Boolean warmupFirst;
     public String warmupEx;
+    /* [EXR-T13] «Свои» упражнения (имя + теги групп m:*) и «Любимые» (имена): ключей нет
+       → пустые списки (старые файлы ок); имя — уникальный ключ (дубликаты пропускаются
+       при чтении), пишутся только когда непустые — файл без «Своих»/«Любимых» прежний */
+    public final List<CustomExercise> customEx = new ArrayList<>();
+    public final List<String> favs = new ArrayList<>();
 
     public Workout active() {
         for (Workout w : workouts) {
@@ -148,6 +155,48 @@ public final class GymData {
         if (wf instanceof Boolean) d.warmupFirst = (Boolean) wf;
         Object wx = m.get("warmupEx");
         if (wx instanceof String && !((String) wx).isEmpty()) d.warmupEx = (String) wx;
+        /* [EXR-T13] «Свои» упражнения: битые элементы пропускаются (как у шаблонов);
+            имя — уникальный ключ (дубликаты без учёта регистра игнорируются, §11 спеки),
+            валидность — имя 1..60 после среза пробелов; теги — непустые строки ≤ 40,
+            максимум 16 на запись; кап списка — 500 (защита от раздутого payload) */
+        List<Object> cexList = Json.list(m.get("customEx"));
+        if (cexList != null) {
+            Set<String> seen = new HashSet<>();
+            for (Object o : cexList) {
+                if (d.customEx.size() >= 500) break;
+                if (!(o instanceof Map)) continue;
+                Map<String, Object> c = Json.map(o);
+                if (c == null) continue;
+                String name = Json.str(c, "n");
+                if (name == null) continue;
+                name = name.strip();
+                if (name.isEmpty() || name.length() > 60 || !seen.add(name.toLowerCase())) continue;
+                CustomExercise ce = new CustomExercise();
+                ce.n = name;
+                List<Object> tagList = Json.list(c.get("tags"));
+                if (tagList != null) {
+                    for (Object t : tagList) {
+                        if (ce.tags.size() >= 16) break;
+                        if (!(t instanceof String)) continue;
+                        String tag = ((String) t).strip();
+                        if (!tag.isEmpty() && tag.length() <= 40) ce.tags.add(tag);
+                    }
+                }
+                d.customEx.add(ce);
+            }
+        }
+        /* [EXR-T13] «Любимые» — имена упражнений: только непустые строки, без дублей */
+        List<Object> favList = Json.list(m.get("favs"));
+        if (favList != null) {
+            Set<String> seenFav = new HashSet<>();
+            for (Object o : favList) {
+                if (d.favs.size() >= 500) break;
+                if (!(o instanceof String)) continue;
+                String name = ((String) o).strip();
+                if (name.isEmpty() || !seenFav.add(name)) continue;
+                d.favs.add(name);
+            }
+        }
         for (Object o : Json.list(m.get("workouts"))) {
             Map<String, Object> w = Json.map(o);
             Workout workout = new Workout();
@@ -321,6 +370,21 @@ public final class GymData {
             файл с настройками по умолчанию остаётся без новых ключей (аналог goalRemind) */
         if (warmupFirst != null) m.put("warmupFirst", warmupFirst);
         if (warmupEx != null) m.put("warmupEx", warmupEx);
+        /* [EXR-T13] «Свои» и «Любимые» — конец карты, пишутся только когда непустые:
+           файл пользователя без них остаётся байт-в-байт прежним */
+        if (!customEx.isEmpty()) {
+            List<Object> cs = new ArrayList<>();
+            for (CustomExercise c : customEx) {
+                Map<String, Object> cm = new LinkedHashMap<>();
+                cm.put("n", c.n);
+                List<Object> ts = new ArrayList<>();
+                for (String t : c.tags) ts.add(t);
+                cm.put("tags", ts);
+                cs.add(cm);
+            }
+            m.put("customEx", cs);
+        }
+        if (!favs.isEmpty()) m.put("favs", new ArrayList<Object>(favs));
         return m;
     }
 }
