@@ -632,12 +632,12 @@ test.describe('GymHelper e2e', function () {
         if (kcal.y + kcal.height > firstEx.y) throw new Error('пилюля ккал провалилась ниже карточки упражнения');
     });
 
-    test('статистика: карточка рекорда недели со шкалой', async ({ page, request }) => {
-        /* тренировка этой недели (жим 100) и старая тренировка 3 недели назад (личный рекорд 120) */
+    test('статистика: карточка рекорда периода со шкалой', async ({ page, request }) => {
+        /* тренировка этого месяца (жим 100) и старая тренировка прошлого месяца
+           (личный рекорд 120): [ANA-T8] дефолт пикера «Месяц», шкала % — по всей истории */
         const now = new Date();
-        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
         const weekDay = isoDate(now);
-        const oldDay = isoDate(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() - 21));
+        const oldDay = isoDate(new Date(now.getFullYear(), now.getMonth() - 1, 15));
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 3, del: [],
             profile: { sex: 'м', age: 30, height: 180, weight: 90 },
@@ -645,27 +645,27 @@ test.describe('GymHelper e2e', function () {
         } } });
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        const card = page.locator('.reccard', { hasText: 'Рекорд недели · ' + EX });
+        const card = page.locator('.reccard', { hasText: 'Рекорды месяца · ' + EX });
         await expect(card).toHaveCount(1, { timeout: 5000 });
         await expect(card.locator('.rec-num')).toContainText('100');
         await expect(card.locator('.rec-num')).toContainText('кг');
-        /* шкала = % от личного рекорда: 100 из 120 = 83% */
+        /* шкала = % от личного рекорда за ВСЮ историю: 100 из 120 = 83% */
         await expect(card.locator('.rec-bar i')).toHaveAttribute('style', /width:\s*83%/);
         const sub = card.locator('.rec-sub');
         await expect(sub).toContainText('личный рекорд: 120 кг');
         await expect(sub).toContainText('83%');
         /* тренировки не подряд: карточка серии (даже из одного дня) не показывается */
         await expect(page.locator('.strow')).toHaveCount(0);
-        /* мышечные группы этой недели: жим = грудь, 3 подхода */
+        /* мышечные группы периода: жим = грудь, 3 подхода */
         const mg = page.locator('.mg', { hasText: 'Грудь' });
         await expect(mg).toBeVisible({ timeout: 5000 });
         await expect(mg).toContainText('3 подх.');
-        /* старые блоки на месте в компактном виде */
-        await expect(page.locator('.statgrid')).toContainText('тренировок всего');
-        await expect(page.locator('.statgrid')).toContainText('подходов всего');
+        /* старые блоки на месте в компактном виде: сводка за период (дефолт «Месяц») */
+        await expect(page.locator('.statgrid')).toContainText('за месяц');
+        await expect(page.locator('.statgrid')).toContainText('подходов');
         await expect(page.locator('.card', { hasText: 'Тренды' })).toBeVisible();
         await expect(page.locator('.card', { hasText: 'Упражнения' })).toBeVisible();
-        /* [UX-T31] рекорд недели теперь только в Статистике: карточка видна здесь,
+        /* [UX-T31] рекорд периода теперь только в Статистике: карточка видна здесь,
            а в Истории больше не рендерится */
         await expect(card).toBeVisible();
         await page.locator('.nav button', { hasText: 'История' }).click();
@@ -673,36 +673,132 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.pcard').first()).toBeVisible();
     });
 
-    test('статистика: серия из двух дней подряд и группы недели', async ({ page, request }) => {
+    test('статистика: серия из двух дней подряд и группы периода', async ({ page, request }) => {
         const now = new Date();
         const today = isoDate(now);
         const yesterday = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1));
         const DOWS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
         const dow = function (iso) { const p = iso.split('-'); return DOWS[new Date(+p[0], +p[1] - 1, +p[2]).getDay()]; };
-        /* weekMuscleGroups считает только текущую неделю (Пн–Вс): в понедельник «вчера» —
-           прошлая неделя, и «Подтягивания» выпадали из групп (упало 09.11.2026, пн, на всех 4
-           устройствах). Фикс теста, не кода (по спеке группы — «эта неделя»): подтягивания
-           сидируем всегда в текущей неделе (в Пн — сегодня), день серии добирает тренировка
-           с именем вне каталога (findCatalog → null, группы не трогает). */
+        /* muscle-группы периода (дефолт «Месяц»): в понедельник «вчера» — прошлая неделя,
+           и «Подтягивания» выпадали из групп (упало 09.11.2026, пн). Фикс теста, не кода:
+           подтягивания сидируем в текущем месяце всегда (в Пн — сегодня), день серии
+           добирает тренировка с именем вне каталога (findCatalog → null, группы не трогает). */
         const isMonday = (now.getDay() + 6) % 7 === 0;
-        const pullDay = isMonday ? today : yesterday;
+        /* [ANA-T8] серия ищется в пределах календарного месяца (спека §3.1): 1-го числа
+           «вчера» — прошлый месяц, пару дней серии добираем «сегодня + завтра» */
+        const isFirst = now.getDate() === 1;
+        const day1 = isFirst ? today : yesterday;
+        const day2 = isFirst ? isoDate(new Date(now.getFullYear(), now.getMonth(), 2)) : today;
+        const pullDay = (isMonday || isFirst) ? today : yesterday;
         const FILLER = 'Разминка и растяжка';
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 4, del: [],
             profile: { sex: 'м', age: 30, height: 180, weight: 90 },
-            workouts: [doneWorkout(1, yesterday, FILLER, '0', 1), doneWorkout(2, pullDay, 'Подтягивания', '0', 4), doneWorkout(3, today, EX, '80', 4)]
+            workouts: [doneWorkout(1, day1, FILLER, '0', 1), doneWorkout(2, pullDay, 'Подтягивания', '0', 4), doneWorkout(3, day2, EX, '80', 4)]
         } } });
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
         const st = page.locator('.strow');
         await expect(st).toBeVisible({ timeout: 5000 });
-        /* серия по-прежнему из 2 дней; тренировок в ней 3 (filler + подтягивания + жим) в любой день недели */
+        /* серия по-прежнему из 2 дней; тренировок в ней 3 (filler + подтягивания + жим) */
         await expect(st.locator('b')).toContainText('Серия: 3 тренировки подряд');
-        /* дни недели серии в хронологическом порядке + «самая длинная за месяц» */
-        await expect(st).toContainText(dow(yesterday) + ' · ' + dow(today) + ' — самая длинная за месяц');
-        /* группы: жим = грудь, подтягивания = спина (в текущей неделе), по 4 подхода */
+        /* дни недели серии в хронологическом порядке + «самая длинная за месяц» (дефолт) */
+        await expect(st).toContainText(dow(day1) + ' · ' + dow(day2) + ' — самая длинная за месяц');
+        /* группы: жим = грудь, подтягивания = спина (в периоде «Месяц»), по 4 подхода */
         await expect(page.locator('.mg', { hasText: 'Грудь' })).toContainText('4 подх.', { timeout: 5000 });
         await expect(page.locator('.mg', { hasText: 'Спина' })).toContainText('4 подх.');
+    });
+
+    /* ===== [ANA-T8] пикер периода «Статистики» (docs/spec-ana-t7-periods.md) ===== */
+    test('[ANA-T8] пикер периода: дефолт «Месяц», «Всё время» = вся история, Эпли вне периода', async ({ page, request }) => {
+        const now = new Date();
+        const today = isoDate(now);
+        const firstDay = isoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+        /* старая тренировка гарантированно вне текущего месяца: 15-е число 5 месяцев назад;
+           durationMin у всех = 60 мин (09:30→10:30) */
+        const oldDay = isoDate(new Date(now.getFullYear(), now.getMonth() - 5, 15));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 4, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [
+                doneWorkout(1, today, EX, '100', 3),
+                doneWorkout(2, firstDay, 'Приседания', '80', 2),
+                doneWorkout(3, oldDay, EX, '120', 3)
+            ]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        /* пикер виден, 6 пилюль, дефолт «Месяц» */
+        const picker = page.locator('.perpicker');
+        await expect(picker).toBeVisible({ timeout: 5000 });
+        await expect(picker.locator('.chip')).toHaveCount(6);
+        await expect(picker.locator('.chip.on')).toHaveText('Месяц');
+        /* сводка за месяц: 2 тренировки (сегодня + 1-е число), средняя ≈ 1 ч, подходов 2
+           (подходы считаются по записям-сетам, как и прежде) */
+        const grid = page.locator('.statgrid');
+        await expect(grid.locator('.sg', { hasText: 'за месяц' }).locator('b')).toHaveText('2');
+        await expect(grid.locator('.sg', { hasText: 'средняя' }).locator('b')).toHaveText('≈ 1 ч');
+        await expect(grid.locator('.sg', { hasText: 'подходов' }).locator('b')).toHaveText('2');
+        /* Эпли — по всей истории: лучший подход 120 кг из старой тренировки */
+        const epl = page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' });
+        const eplBefore = (await epl.textContent()).trim();
+        await expect(epl).toContainText('120');
+        /* тап «Всё время»: сводка = totals по всем finished */
+        await picker.locator('.chip', { hasText: 'Всё время' }).click();
+        const gridAll = page.locator('.statgrid');
+        await expect(gridAll.locator('.sg', { hasText: 'за всё время' }).locator('b')).toHaveText('3');
+        await expect(gridAll.locator('.sg', { hasText: 'средняя' }).locator('b')).toHaveText('≈ 1 ч');
+        await expect(gridAll.locator('.sg', { hasText: 'общее время' }).locator('b')).toHaveText('3 ч');
+        await expect(gridAll.locator('.sg', { hasText: 'подходов' }).locator('b')).toHaveText('3');
+        /* «Рекорды» теряют слово периода, топ-подход периода = 120 кг, шкала 100% */
+        const recAll = page.locator('.reccard', { hasText: 'Рекорды · ' + EX });
+        await expect(recAll.locator('.rec-num')).toContainText('120');
+        await expect(recAll.locator('.rec-sub')).toContainText('100%');
+        /* мышечные группы за всё время */
+        await expect(page.locator('.card', { hasText: 'Мышечные группы · за всё время' })).toBeVisible();
+        /* Эпли — вне периода: карточка не изменилась от смены пикера */
+        await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toHaveText(eplBefore);
+    });
+
+    test('[ANA-T8] 320px: пикер в одну строку с h-скроллом; пустой период — заглушка, Эпли на месте', async ({ page, request }) => {
+        /* тренировка 10 дней назад: всегда до понедельника текущей недели → период «Неделя» пуст */
+        const oldDay = isoDate(new Date(Date.now() - 10 * 86400000));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, oldDay, EX, '100', 3)]
+        } } });
+        await page.setViewportSize({ width: 320, height: 680 });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Статистика' }).click();
+        const picker = page.locator('.perpicker');
+        await expect(picker).toBeVisible({ timeout: 5000 });
+        const m = await picker.evaluate(function (el) {
+            const chips = Array.from(el.querySelectorAll('.chip'));
+            return {
+                ox: getComputedStyle(el).overflowX,
+                scroll: el.scrollWidth > el.clientWidth,
+                oneLine: chips.length > 1 && chips.every(function (c) { return c.offsetTop === chips[0].offsetTop; })
+            };
+        });
+        if (m.ox !== 'auto') throw new Error('overflow-x пикера не auto: ' + m.ox);
+        if (!m.scroll) throw new Error('на 320px пилюли не скроллятся');
+        if (!m.oneLine) throw new Error('пилюли переносятся на вторую строку');
+        /* активная пилюля (дефолт «Месяц») в видимой области (§2.1) */
+        const visible = await picker.evaluate(function (el) {
+            const on = el.querySelector('.chip.on');
+            return on.offsetLeft >= el.scrollLeft && on.offsetLeft + on.offsetWidth <= el.scrollLeft + el.clientWidth + 1;
+        });
+        if (!visible) throw new Error('активная пилюля вне видимой области');
+        /* тап «Неделя»: период пуст → заглушка с названием периода, периодные блоки скрыты */
+        await picker.locator('.chip', { hasText: 'Неделя' }).click();
+        await expect(page.locator('.card.hero')).toContainText('За эту неделю тренировок нет');
+        await expect(page.locator('.card.hero')).toContainText('Выбери другой период — вся история на месте.');
+        await expect(page.locator('.perpicker .chip.on')).toHaveText('Неделя');
+        await expect(page.locator('.reccard')).toHaveCount(0);
+        await expect(page.locator('.statgrid')).toHaveCount(0);
+        /* Эпли — вне периода: остаётся при пустом периоде */
+        await expect(page.locator('.card', { hasText: 'Оценка 1ПМ · Эпли' })).toBeVisible();
     });
 
     test('запись не теряется, если сохранение на сервер не ушло', async ({ page }) => {

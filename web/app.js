@@ -28,6 +28,10 @@ let settingsOpen = false;
    не пишется (§2.1, решение владельца §12.8) */
 let calOpen = false;
 let CAL = { view: 'week', date: '', panel: false };
+/* [ANA-S2]/[ANA-T8] пикер периода «Статистики» (docs/spec-ana-t7-periods.md §2): память
+   сессии, НЕ localStorage и НЕ GymData (§2.3 — «прикидка на взгляд», после переоткрытия
+   честный дефолт «Месяц») */
+let STATS = { period: 'month' };
 /* [UX-S6] вкладка-источник календаря: «← Назад» возвращает на неё [ред. 5, §3.4] */
 let calFromTab = 'history';
 /* [GOA-S1] экран «Цели»: подэкран-оверлей как Настройки/Календарь (спека §8.1);
@@ -1188,6 +1192,14 @@ const ACTIONS = {
         render();
     },
     techCat: function (a) { TECH.cat = TECH.cat === a ? null : a; render(); },
+    /* [ANA-T8] пикер периода «Статистики» (§7): валидация ключа §3.1, неизвестный —
+       тихий игнор (остаётся предыдущий); save() не нужен — данные не менялись (§2.3) */
+    statsPeriod: function (a) {
+        if (!STATS_PERIODS.some(function (p) { return p.key === a; })) return;
+        if (STATS.period === a) return;
+        STATS.period = a;
+        render();
+    },
     /* [EXR-T4] фильтры-мультивыбор: шиты чекбоксов, одиночные категории, мини-чипы */
     techFiltersMuscle: function () { openModal(techSheetHtml('muscle')); },
     techFiltersGear: function () { openModal(techSheetHtml('gear')); },
@@ -1436,6 +1448,8 @@ function render() {
     }
     /* [UX-T29] живая строка возраста: change на select-ах даты рождения */
     if (tab === 'profile') pfBirthBind();
+    /* [ANA-T8 §2.1] активная пилюля периода «Статистики» в видимой области при каждом рендере */
+    if (tab === 'stats') statsScrollPill();
     /* [UX-I17 §3.2] автоскролл/восстановление scrollTop сеточного вида календаря
        (в месячном виде сетки нет — no-op внутри) */
     if (calVisible()) calGridScrollPost();
@@ -1525,17 +1539,21 @@ function topbarHtml() {
         tutPairSpot + '</span></div>';
 }
 
-/* ---------- карточка рекорда недели ---------- */
-/* топ-упражнений недели (Пн–Вс): наибольший подход с весом по каждому упражнению;
-   all — личный рекорд этого упражнения за всю историю (для шкалы %) */
-function weekRecords(limit) {
+/* ---------- карточка рекорда периода ---------- */
+/* топ-упражнений периода: наибольший подход с весом по каждому упражнению;
+   all — личный рекорд этого упражнения за всю историю (для шкалы %).
+   [ANA-T8] from — нижняя граница периода (спека §3.1); без параметра — неделя Пн–Вс,
+   как раньше (дефолт = старое поведение, §7) */
+function weekRecords(limit, from) {
     const now = new Date();
-    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    const monday = from === undefined
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7))
+        : from; /* null = без границы («Всё время») */
     const byEx = {};
     for (const w of G.workouts) {
         if (!w.finished) continue;
         const d = parseDateISO(w.date);
-        if (!d || d < monday) continue;
+        if (!d || (monday && d < monday)) continue;
         for (const e of (w.exercises || [])) {
             for (const s of e.sets) {
                 const mw = maxNum(s.w);
@@ -1554,10 +1572,10 @@ function weekRecords(limit) {
     list.sort(function (a, b) { return b.w - a.w; });
     return list.slice(0, limit || 3);
 }
-function recordCardHtml(rec) {
+function recordCardHtml(rec, recTitle) {
     const pct = Math.max(1, Math.min(100, Math.round(rec.w / rec.all * 100)));
     return '<div class="reccard glow">' +
-        '<div class="rec-l">Рекорд недели · ' + esc(rec.name) + '</div>' +
+        '<div class="rec-l">' + esc(recTitle || 'Рекорд недели') + ' · ' + esc(rec.name) + '</div>' +
         '<div class="rec-num">' + fmtW(rec.w) + ' <small>кг</small></div>' +
         '<div class="rec-bar"><i style="width:' + pct + '%"></i></div>' +
         '<div class="rec-sub"><span>личный рекорд: ' + fmtW(rec.all) + ' кг</span><span>' + pct + '%</span></div>' +
@@ -2845,14 +2863,18 @@ function trainWord(n) {
     if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'тренировки';
     return 'тренировок';
 }
-function monthStreak() {
+/* [ANA-T8] стрик в пределах периода (спека §5.1): from — нижняя граница; без параметра —
+   скользящие 30 дней, как раньше (постер-футер §8.6 — вызов без аргументов не меняется) */
+function monthStreak(from) {
     const now = new Date();
-    const monthAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+    const monthAgo = from === undefined
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30)
+        : from; /* null = без границы («Всё время») */
     const perDay = {};
     for (const w of G.workouts) {
         if (!w.finished) continue;
         const d = parseDateISO(w.date);
-        if (!d || d < monthAgo) continue;
+        if (!d || (monthAgo && d < monthAgo)) continue;
         perDay[w.date.slice(0, 10)] = (perDay[w.date.slice(0, 10)] || 0) + 1;
     }
     const sorted = Object.keys(perDay).sort();
@@ -2869,11 +2891,11 @@ function monthStreak() {
     }
     return best;
 }
-function streakCardHtml(st) {
+function streakCardHtml(st, streakLabel) {
     const dows = st.days.map(function (iso) { return DOW[(parseDateISO(iso).getDay() + 6) % 7]; });
     return '<div class="card strow"><span class="mgc mgc-fire">🔥</span>' +
         '<span class="sttxt"><b>Серия: ' + st.n + ' ' + trainWord(st.n) + ' подряд</b>' +
-        '<span class="tn">' + dows.join(' · ') + ' — самая длинная за месяц</span></span></div>';
+        '<span class="tn">' + dows.join(' · ') + ' — самая длинная ' + esc(streakLabel || 'за месяц') + '</span></span></div>';
 }
 
 /* мышечные группы недели: источник — каталог упражнений (первый мышечный тег);
@@ -2907,14 +2929,17 @@ function mgTagKey(tag) {
     const t = tag.replace(/^[a-z]+:/, '');
     return MG_ALIAS[t] || t;
 }
-function weekMuscleGroups() {
+function weekMuscleGroups(from) {
     const now = new Date();
-    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+    /* [ANA-T8] from — нижняя граница периода (§3.1); без параметра — неделя Пн–Вс, как раньше */
+    const monday = from === undefined
+        ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7))
+        : from; /* null = без границы («Всё время») */
     const byGroup = {};
     for (const w of G.workouts) {
         if (!w.finished) continue;
         const d = parseDateISO(w.date);
-        if (!d || d < monday) continue;
+        if (!d || (monday && d < monday)) continue;
         for (const e of (w.exercises || [])) {
             if (!e.sets.length) continue;
             const c = findCatalog(e.name);
@@ -2929,8 +2954,8 @@ function weekMuscleGroups() {
         return { id: g, n: meta.n, icon: meta.icon, sets: byGroup[g] };
     }).sort(function (a, b) { return b.sets - a.sets; });
 }
-function muscleGroupsCardHtml(groups) {
-    let h = '<div class="card"><div class="rec-l">Мышечные группы · эта неделя</div><div class="mgroups">';
+function muscleGroupsCardHtml(groups, title) {
+    let h = '<div class="card"><div class="rec-l">Мышечные группы · ' + esc(title || 'эта неделя') + '</div><div class="mgroups">';
     for (const g of groups) {
         /* [UX-T32] фото группы в цветном круге (.mgc остаётся подложкой/кольцом); нет фото — иконка */
         h += '<div class="mg"><span class="mgc" style="background:' + MG_STYLE[g.id] + '">' + mgVisual(g) + '</span>' +
@@ -2939,68 +2964,138 @@ function muscleGroupsCardHtml(groups) {
     return h + '</div></div>';
 }
 
+/* ============ [ANA-T8] пикер периода «Статистики» (docs/spec-ana-t7-periods.md) ============ */
+/* календарные периоды (§3): неделя Пн–Вс, месяц с 1-го, «3 месяца» = календарный квартал,
+   «Полгода» = последние 6 календарных месяцев (с 1-го числа, 5 месяцев назад — решение
+   владельца 19.11), год с 1 янв, всё время; лейбл «3 месяца» — решение владельца 20.11.
+   Подписи-заголовки — §3.1/§5.1, текст заглушки подставляет название периода (§6) */
+const STATS_PERIODS = [
+    { key: 'week', pill: 'Неделя', rec: 'Рекорды недели', mg: 'эта неделя', streak: 'за неделю', za: 'за неделю', stub: 'За эту неделю' },
+    { key: 'month', pill: 'Месяц', rec: 'Рекорды месяца', mg: 'этот месяц', streak: 'за месяц', za: 'за месяц', stub: 'За этот месяц' },
+    { key: 'quarter', pill: '3 месяца', rec: 'Рекорды квартала', mg: 'этот квартал', streak: 'за квартал', za: 'за квартал', stub: 'За эти 3 месяца' },
+    { key: 'half', pill: 'Полгода', rec: 'Рекорды за 6 мес.', mg: 'последние 6 месяцев', streak: 'за 6 месяцев', za: 'за 6 месяцев', stub: 'За последние 6 месяцев' },
+    { key: 'year', pill: 'Год', rec: 'Рекорды года', mg: 'этот год', streak: 'за год', za: 'за год', stub: 'За этот год' },
+    { key: 'all', pill: 'Всё время', rec: 'Рекорды', mg: 'за всё время', streak: 'за всё время', za: 'за всё время', stub: 'За всё время' }
+];
+/* нижняя граница периода (§3.1 → §7): верхняя всегда «сегодня» — фильтр d <= today
+   неявно выполнен, будущих дат в данных нет */
+function periodRange(p) {
+    const now = new Date();
+    if (p === 'week') return { from: new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)) };
+    if (p === 'month') return { from: new Date(now.getFullYear(), now.getMonth(), 1) };
+    if (p === 'quarter') return { from: new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1) };
+    if (p === 'half') return { from: new Date(now.getFullYear(), now.getMonth() - 5, 1) };
+    if (p === 'year') return { from: new Date(now.getFullYear(), 0, 1) };
+    return { from: null }; /* all — вся история */
+}
+/* пикер — первый ряд вкладки: чипы с h-скроллом (§2.1); aria-label — §7 */
+function statsPickerHtml() {
+    let h = '<div class="perpicker" role="group" aria-label="Период статистики">';
+    for (const p of STATS_PERIODS) {
+        h += '<button class="chip' + (STATS.period === p.key ? ' on' : '') + '" data-act="statsPeriod" data-a="' + p.key + '">' + p.pill + '</button>';
+    }
+    return h + '</div>';
+}
+/* активная пилюля в видимой области при каждом рендере (§2.1): «Месяц» (дефолт, вторая
+   слева) видна без скролла даже на 320px — не дёргаем; остальные — scrollLeft к активной */
+function statsScrollPill() {
+    const row = document.querySelector('.perpicker');
+    const on = row && row.querySelector('.chip.on');
+    if (!row || !on) return;
+    const left = on.offsetLeft - (row.clientWidth - on.offsetWidth) / 2;
+    if (left > 0) row.scrollLeft = left;
+}
+
 function renderStatsTab() {
     const fin = G.workouts.filter(w => w.finished);
     if (!fin.length) {
-        /* пустое состояние как в истории */
+        /* пустое состояние как в истории; пикера нет — выбирать период не из чего (§6) */
         return '<div class="card hero"><p class="t1">Пока пусто 💪</p>' +
             '<p class="muted">Начни первую тренировку — кнопка ниже или «+» в нижнем меню.</p>' +
             '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
     }
-    const month = todayISO().slice(0, 7);
-    let monthCount = 0, totalMin = 0, totalSets = 0;
-    const byEx = {};
+    const per = STATS_PERIODS.find(function (p) { return p.key === STATS.period; }) || STATS_PERIODS[1];
+    const range = periodRange(per.key);
+    const finP = range.from ? fin.filter(function (w) {
+        const d = parseDateISO(w.date);
+        return d && d >= range.from;
+    }) : fin;
+    /* сводка периода + byExP (питает Тренды и Упражнения, §7); byEx — ВСЯ история,
+       питает только Эпли: e1RM и Цели вне периода, не фильтруются (§5.2) */
+    let totalMin = 0, durCnt = 0, totalSets = 0;
+    const byEx = {}, byExP = {};
     for (const w of fin) {
-        if ((w.date || '').startsWith(month)) monthCount++;
+        const d = parseDateISO(w.date);
+        const inP = !range.from || (d && d >= range.from);
         const m = durationMin(w);
-        if (m != null) totalMin += m;
+        if (inP) {
+            if (m != null) { totalMin += m; durCnt++; }
+            for (const e of (w.exercises || [])) {
+                totalSets += e.sets.length;
+                const s = byExP[e.name] = byExP[e.name] || { sessions: 0, maxW: 0, hasW: false, last: '', lastDate: '', lastW: 0 };
+                s.sessions++;
+                for (const b of e.sets) {
+                    const mw = maxNum(b.w);
+                    if (mw > s.maxW) s.maxW = mw;
+                    if (mw > 0) s.hasW = true;
+                    s.last = entryLine(b);
+                    s.lastDate = w.date;
+                    s.lastW = mw;
+                }
+            }
+        }
         for (const e of (w.exercises || [])) {
-            totalSets += e.sets.length;
-            const s = byEx[e.name] = byEx[e.name] || { sessions: 0, maxW: 0, hasW: false, last: '', lastDate: '', e1rm: 0, best: null };
-            s.sessions++;
+            const s = byEx[e.name] = byEx[e.name] || { e1rm: 0, best: null };
             for (const b of e.sets) {
-                const mw = maxNum(b.w);
-                if (mw > s.maxW) s.maxW = mw;
-                if (mw > 0) s.hasW = true;
                 const er = e1rmOf(b);
                 if (er > s.e1rm) { s.e1rm = er; s.best = b; }
-                s.last = entryLine(b);
-                s.lastDate = w.date;
             }
         }
     }
-    const names = Object.keys(byEx).sort((a, b) => byEx[b].sessions - byEx[a].sessions);
-    /* новые блоки: рекорды недели, оценка 1ПМ (Эпли), серия, мышечные группы */
-    let h = '';
-    for (const rec of weekRecords(3)) h += recordCardHtml(rec);
+    const namesP = Object.keys(byExP).sort((a, b) => byExP[b].sessions - byExP[a].sessions);
+    let h = statsPickerHtml();
+    if (!finP.length) {
+        /* пустой период (§6): пикер остаётся — им же пользователь уходит из пустоты;
+           периодные блоки скрыты, Эпли и Цели остаются (вне периода) */
+        h += '<div class="card hero"><p class="t1">📭 ' + esc(per.stub) + ' тренировок нет</p>' +
+            '<p class="muted">Выбери другой период — вся история на месте.</p></div>';
+        h += e1rmCardHtml(byEx);
+        h += goalHintCardHtml();
+        h += goalsWidgetHtml();
+        return h;
+    }
+    /* периодные блоки: рекорды периода — топ-3 по макс. весу подхода; шкала % и подпись
+       «личный рекорд» — по всей истории (§5.1, иначе на коротких периодах % теряет смысл) */
+    for (const rec of weekRecords(3, range.from)) h += recordCardHtml(rec, per.rec);
     h += e1rmCardHtml(byEx);
     /* [GOA-S1] подсказка цели по истории (§5) — сразу под карточкой Эпли (макет GOA-1) */
     h += goalHintCardHtml();
     /* [GOA-S1] виджет «🎯 Цели» — сразу ПОСЛЕ «Оценка 1ПМ · Эпли» (§7, решение 12.11 —
        вариант А; иконки 🎯 в topbar нет); вход на подэкран «Цели» */
     h += goalsWidgetHtml();
-    const st = monthStreak();
-    if (st && st.days.length >= 2) h += streakCardHtml(st);
-    const groups = weekMuscleGroups();
-    if (groups.length) h += muscleGroupsCardHtml(groups);
-    /* старые блоки ниже — компактно, состав решит владелец */
+    const st = monthStreak(range.from);
+    if (st && st.days.length >= 2) h += streakCardHtml(st, per.streak);
+    const groups = weekMuscleGroups(range.from);
+    if (groups.length) h += muscleGroupsCardHtml(groups, per.mg);
+    /* сводка = РОВНО 4 ячейки за период (§5.3, решение владельца 19.11): «N · за <период>»,
+       «≈ X · средняя» (новая метрика §4: Σ durationMin ÷ число тренировок с durationMin),
+       «общее время» (по правилу totalMin > 0), «подходов» */
     h += '<div class="card"><div class="rec-l">Тренировки</div><div class="statgrid">' +
-        '<div class="sg"><b>' + fin.length + '</b><span>тренировок всего</span></div>' +
-        '<div class="sg"><b>' + monthCount + '</b><span>в этом месяце</span></div>' +
+        '<div class="sg"><b>' + finP.length + '</b><span>' + esc(per.za) + '</span></div>' +
+        (durCnt > 0 ? '<div class="sg"><b>≈ ' + durationText(Math.round(totalMin / durCnt)) + '</b><span>средняя</span></div>' : '') +
         (totalMin > 0 ? '<div class="sg"><b>' + durationText(totalMin) + '</b><span>общее время</span></div>' : '') +
-        '<div class="sg"><b>' + totalSets + '</b><span>подходов всего</span></div>' +
+        '<div class="sg"><b>' + totalSets + '</b><span>подходов</span></div>' +
         '</div></div>';
     h += '<div class="card"><p class="t1">📈 Тренды</p>';
-    const trendNames = names.slice(0, 5);
-    for (const name of trendNames) {
-        const series = maxWeightSeries(name);
+    /* «последний результат» = последний подход в пределах периода (§5.1) */
+    for (const name of namesP.slice(0, 5)) {
         h += '<div class="trendline"><span style="flex:1;min-width:0"><b>' + esc(name) + '</b><br><span class="tn">' +
-            fmtW(series[series.length - 1] || 0) + ' кг — последний результат</span></span></div>';
+            fmtW(byExP[name].lastW) + ' кг — последний результат</span></span></div>';
     }
-    if (!trendNames.length) h += '<p class="muted">Нет данных</p>';
+    if (!namesP.length) h += '<p class="muted">Нет данных</p>';
     h += '</div><div class="card"><p class="t1">🏆 Упражнения</p>';
-    for (const name of names.slice(0, 15)) {
-        const s = byEx[name];
+    for (const name of namesP.slice(0, 15)) {
+        const s = byExP[name];
         h += '<div class="statline"><b>' + esc(name) + '</b> (' + s.sessions + ' раз.)</div>' +
             '<div class="tn">Рекорд веса: ' + (s.hasW ? fmtW(s.maxW) + ' кг' : 'без веса') + '</div>' +
             '<div class="tn">Последний: ' + esc(s.last) + (s.lastDate ? ' (' + esc(s.lastDate.split('-').reverse().slice(0, 2).join('-')) + ')' : '') + '</div>';

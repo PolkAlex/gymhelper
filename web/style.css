@@ -336,6 +336,20 @@ body.fs .topbar { padding-top: max(56px, var(--fs-inset-top, 56px)); padding-bot
 }
 .chip:active { background: var(--btn-pressed); }
 
+/* [ANA-T8] пикер периода «Статистики»: один ряд чипов с горизонтальным скроллом
+   (спека §2.1 — nowrap, полоса прокрутки скрыта, как в остальных местах приложения) */
+.perpicker {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 7px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding: 2px 2px 8px;
+    margin: 0 -2px 4px;
+}
+.perpicker::-webkit-scrollbar { display: none; }
+.perpicker .chip { flex: none; white-space: nowrap; }
+
 /* ============ [EXR-T4] фильтры «Техники»: счётчик, мини-чипы выбранных, шит-чекбоксы ============ */
 /* счётчик выбранных на чипе группы и в шапке шита (показывается только на янтарном .on) */
 .cnt {
