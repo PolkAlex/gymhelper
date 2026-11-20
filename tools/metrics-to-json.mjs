@@ -66,8 +66,30 @@ const tickets = tableAfter(/^### Реестр тикетов/).map((c) => {
   return t;
 });
 
-/* --- журнал переходов --- */
-const transitions = tableAfter(/^### Журнал переходов/).map((c) => {
+/* --- журнал переходов: ВСЕ разделы «### Журнал переходов …» (один на спринт) --- */
+function tablesAfterAll(headingRe) {
+  const lines = md.split(/\r?\n/);
+  const rows = [];
+  let i = 0;
+  while (true) {
+    i = lines.findIndex((l, idx) => idx > i && headingRe.test(l));
+    if (i < 0) break;
+    let headerSkipped = false;
+    for (i = i + 1; i < lines.length; i++) {
+      const l = lines[i].trim();
+      if (!l.startsWith("|")) {
+        if (headerSkipped) break; // таблица закончилась
+        continue; // пустые строки до таблицы
+      }
+      const cells = l.split("|").slice(1, -1).map(clean);
+      if (cells.every((c) => /^[-: ]*$/.test(c))) continue; // разделитель
+      if (!headerSkipped) { headerSkipped = true; continue; } // шапка
+      rows.push(cells);
+    }
+  }
+  return rows;
+}
+const transitions = tablesAfterAll(/^### Журнал переходов/).map((c) => {
   const [date, tick, from, to, note] = c;
   return {
     date: isoDate(date), tickets: tick,
