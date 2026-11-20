@@ -388,6 +388,9 @@ public class BotLogicTest {
         /* === 15. Обратная связь [ONB-T8]: deep-link → режим → пересылка владельцу === */
         runFeedbackScenario();
 
+        /* === 17. Источники привлечения [ANA-T10]: /start <payload> → bucket startSrc === */
+        runStartSrcScenario();
+
         /* === 16. Снятие reply-клавиатуры [UX-T33]: /start webapp → remove_keyboard + меню,
             /menu и /start feedback без снятия, webAppUrl == null — регрессия === */
         runKeyboardRemoveScenario();
@@ -976,13 +979,97 @@ public class BotLogicTest {
         }
     }
 
+    /* [ANA-T10] источники привлечения: deep-link «/start <payload>» (?start=<src> из
+       кампаний/пабликов, Telegram присылает payload текстом). Payload санитизируется
+       (trim/lowercase/только [a-z0-9_]/длина ≤32) и считается в stats bucket startSrc —
+       разбивка по источникам видна владельцу в /stats. Невалидный/пустой/без-пробела —
+       без события; «/start feedback» уходит в feedback-ветку (раньше) и startSrc не пишет.
+       Юзеру во всех случаях — обычное меню, как и без payload. Совместимость stats.json:
+       старый файл без ключа читается (bucket пуст, ключ не пишется), файл с startSrc
+       читается (мусорные ключи/значения пропускаются, валидные читаются). */
+    static void runStartSrcScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymstartsrc");
+            Storage storage = new Storage(tmp);
+            Stats stats = new Stats(tmp.resolve("stats.json"));
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0, stats);
+            long chat = 9005;
+
+            /* валидные payload'ы: меню как обычно, события посчитаны */
+            logic.handle(msgUpdate(chat, "/start vcru"));
+            check(api.any("Мой дневник"), "startSrc: /start vcru — обычное меню");
+            check(logic.states.get(chat).mode == UserState.Mode.MENU, "startSrc: режим MENU");
+            logic.handle(msgUpdate(chat, "/start vcru"));
+            logic.handle(msgUpdate(chat, "/START VCRU"));
+            logic.handle(msgUpdate(chat, "/start Pikabu_2026"));
+            Map<String, Object> snap = stats.snapshot();
+            Map<String, Object> src = Json.map(snap.get("startSrc"));
+            check(src != null && Json.lng(src.get("vcru")) == 3,
+                "startSrc: vcru=3 (регистр и повторные запуски суммируются)");
+            check(src != null && Json.lng(src.get("pikabu_2026")) == 1,
+                "startSrc: pikabu_2026=1 ([a-z0-9_] валидны)");
+            check(src != null && src.size() == 2, "startSrc: ровно 2 источника");
+
+            /* без события: чистый /start, без пробела, два слова, длиннее 32, мусор, пустые */
+            int before = src.size();
+            long vcruBefore = Json.lng(src.get("vcru"));
+            logic.handle(msgUpdate(chat, "/start"));
+            logic.handle(msgUpdate(chat, "/startvcru"));
+            logic.handle(msgUpdate(chat, "/start vcru extra"));
+            logic.handle(msgUpdate(chat, "/start " + "a".repeat(33)));
+            logic.handle(msgUpdate(chat, "/start bad-src!"));
+            logic.handle(msgUpdate(chat, "/start    "));
+            check(api.any("Мой дневник"), "startSrc: на все вариации — обычное меню");
+            Map<String, Object> snap2 = stats.snapshot();
+            Map<String, Object> src2 = Json.map(snap2.get("startSrc"));
+            check(src2 != null && src2.size() == before, "startSrc: невалидные payload'ы не считаются");
+            check(Json.lng(src2.get("vcru")) == vcruBefore, "startSrc: счётчик vcru не изменился");
+
+            /* feedback обрабатывается раньше и в источники не попадает (6-арг конструктор:
+               ownerChatId=0 — фича off, юзеру «Канал связи временно недоступен») */
+            logic.handle(msgUpdate(chat, "/start feedback"));
+            check(api.last().contains("Канал связи"), "startSrc: feedback-ветка отработала раньше /start-ветки");
+            Map<String, Object> src3 = Json.map(stats.snapshot().get("startSrc"));
+            check(src3 != null && src3.size() == before, "startSrc: feedback не попадает в источники");
+
+            /* bucket переживает перечитывание файла */
+            Stats reloaded = new Stats(tmp.resolve("stats.json"));
+            Map<String, Object> srcR = Json.map(reloaded.snapshot().get("startSrc"));
+            check(srcR != null && Json.lng(srcR.get("vcru")) == vcruBefore
+                    && Json.lng(srcR.get("pikabu_2026")) == 1,
+                "startSrc: bucket переживает перечитывание stats.json");
+
+            /* совместимость: старый stats.json без ключа startSrc читается, ключ не пишется */
+            java.nio.file.Path legacy = tmp.resolve("legacy-stats.json");
+            java.nio.file.Files.writeString(legacy,
+                "{\"maInit\":7,\"weeks\":{\"2026-W46\":{\"maInit\":3}}}");
+            Stats legacyStats = new Stats(legacy);
+            check(Json.lng(legacyStats.snapshot().get("maInit")) == 7,
+                "startSrc: legacy stats.json — maInit читается");
+            check(legacyStats.snapshot().get("startSrc") == null,
+                "startSrc: legacy без ключа — пустой bucket и ключ не пишется");
+
+            /* совместимость: мусорные записи пропускаются, валидные читаются */
+            java.nio.file.Path junk = tmp.resolve("junk-stats.json");
+            java.nio.file.Files.writeString(junk,
+                "{\"maInit\":1,\"startSrc\":{\"BAD KEY\":5,\"ok\":2,\"num\":\"x\",\"UPPER\":3}}");
+            Stats junkStats = new Stats(junk);
+            Map<String, Object> jsrc = Json.map(junkStats.snapshot().get("startSrc"));
+            check(jsrc != null && jsrc.size() == 1 && Json.lng(jsrc.get("ok")) == 2,
+                "startSrc: мусорные ключи/значения пропускаются, валидные читаются");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: startSrc-сценарий " + e);
+        }
+    }
+
     /* [UX-T33] клавиатура «Открыть приложение» убрана: при webAppUrl != null /start перед
-       меню шлёт разовое сообщение с reply_keyboard_remove (снятие приклеенной у существующих
-       пользователей клавиатуры); /menu ничего не снимает; deep-link «/start feedback»
-       обрабатывается раньше /start и тоже не снимает; при webAppUrl == null (конфигурация
-       всех прежних сценариев этого файла) снимающего вызова нет. Заодно проверяется новая
-       подсказка меню («кнопка ☰ «🏋️ Дневник» … или команда /app») вместо старой
-       «кнопка «🏋️ Открыть приложение» внизу». */
+        меню шлёт разовое сообщение с reply_keyboard_remove (снятие приклеенной у существующих
+        пользователей клавиатуры); /menu ничего не снимает; deep-link «/start feedback»
+        обрабатывается раньше /start и тоже не снимает; при webAppUrl == null (конфигурация
+        всех прежних сценариев этого файла) снимающего вызова нет. Заодно проверяется новая
+        подсказка меню («кнопка ☰ «🏋️ Дневник» … или команда /app») вместо старой
+        «кнопка «🏋️ Открыть приложение» внизу». */
     static void runKeyboardRemoveScenario() {
         try {
             java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymkbremove");

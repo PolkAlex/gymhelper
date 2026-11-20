@@ -42,12 +42,22 @@ public final class Stats {
            и для чтения истории stats.json */
         "shareClick", "shareOk", "shareDownload"
     };
+    /* верхняя граница числа источников в bucket startSrc (защита от раздутого файла) */
+    private static final int START_SRC_MAX = 200;
+    /* верхняя граница длины санитизированного payload источника */
+    private static final int START_SRC_MAX_LEN = 32;
     /* сколько последних недель (ISO) хранить в weeks */
     public static final int WEEKS_TO_KEEP = 26;
     private static final WeekFields ISO = WeekFields.ISO;
 
     private final Path file;
     private final Map<String, Long> totals = new LinkedHashMap<>();
+    /* [ANA-T10] источники привлечения: deep-link payload (?start=<src> из кампаний/пабликов,
+       Telegram присылает текстом «/start <payload>»). Динамический bucket (вне KEYS —
+       источники заводятся владельцем произвольно), формат в stats.json и /stats:
+       «startSrc»: {"vcru": 3, "pikabu_2026": 1}. Ключи санитизированы (sanitizeSrc);
+       в старых файлах ключа нет → пустой bucket (ANA-S1-совместимость) */
+    private final Map<String, Long> startSrc = new LinkedHashMap<>();
     /* ключ недели «2026-W46» → счётчики недели; недели добавляются строго по возрастанию */
     private final Map<String, Map<String, Long>> weeks = new LinkedHashMap<>();
 
@@ -70,6 +80,32 @@ public final class Stats {
         flush();
     }
 
+    /* [ANA-T10] +1 к bucket'у источников: startSrc.<src> += 1 (только totals — источники
+       считаются пожизненно, недельная разбивка не ведётся). src обязан пройти sanitizeSrc;
+       дублирующая проверка validSrc — защита от прямых вызовов и ручных правок файла */
+    public synchronized void incStartSrc(String src) {
+        if (!validSrc(src)) return;
+        startSrc.merge(src, 1L, Long::sum);
+        flush();
+    }
+
+    /* [ANA-T10] санитизация payload источника: trim → lowercase → только [a-z0-9_],
+       длина 1..32; невалидный/пустой → null (событие не считается, юзеру — обычное меню) */
+    public static String sanitizeSrc(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim().toLowerCase();
+        return validSrc(s) ? s : null;
+    }
+
+    private static boolean validSrc(String s) {
+        if (s == null || s.isEmpty() || s.length() > START_SRC_MAX_LEN) return false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_')) return false;
+        }
+        return true;
+    }
+
     /* снимок для /stats и файла: все ключи (нулями) + weeks; LinkedHashMap — порядок стабилен */
     public synchronized Map<String, Object> snapshot() {
         Map<String, Object> m = counters(totals);
@@ -78,6 +114,9 @@ public final class Stats {
             ws.put(e.getKey(), counters(e.getValue()));
         }
         m.put("weeks", ws);
+        /* [ANA-T10] bucket источников пишется только когда непустой — файлы/ответы /stats
+           без источников остаются прежними */
+        if (!startSrc.isEmpty()) m.put("startSrc", new LinkedHashMap<>(startSrc));
         return m;
     }
 
@@ -128,6 +167,19 @@ public final class Stats {
             for (String k : KEYS) {
                 Object v = m.get(k);
                 if (v instanceof Number) totals.put(k, ((Number) v).longValue());
+            }
+            /* [ANA-T10] bucket источников: только валидные санитизированные ключи и числовые
+               значения, мусор пропускается; кап числа записей (START_SRC_MAX) */
+            Map<String, Object> ss = Json.map(m.get("startSrc"));
+            if (ss != null) {
+                int n = 0;
+                for (Map.Entry<String, Object> e : ss.entrySet()) {
+                    if (n >= START_SRC_MAX) break;
+                    if (!(e.getValue() instanceof Number)) continue;
+                    if (!validSrc(e.getKey())) continue;
+                    startSrc.put(e.getKey(), ((Number) e.getValue()).longValue());
+                    n++;
+                }
             }
             Map<String, Object> ws = Json.map(m.get("weeks"));
             if (ws == null) return;
