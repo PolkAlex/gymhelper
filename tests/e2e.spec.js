@@ -4325,6 +4325,32 @@ test.describe('[UX-I17] T4: пикер видов, сеточные виды, Г
         await expect(page.locator('.adpill', { hasText: 'Кардио' })).toHaveCount(1);
     });
 
+    test('T4.6б [UX-B14] сценарий владельца: d3 окно 19–21 (середина недели), блок 17:34 ровно под ячейкой «ЧТ 19»', async ({ page, request }) => {
+        await seedCal(request, [
+            calW(1, '2026-02-19', '17:34:00', '18:34:00', 'Вечерний бег')
+        ]);
+        await openApp(page);
+        await page.evaluate(function () {
+            localStorage.setItem('gymCalView', 'd3');
+            localStorage.setItem('gymCalDate', '2026-02-19'); /* четверг — окно в середине недели */
+        });
+        await openCalAny(page);
+        await expect(page.locator('.cal-title')).toHaveText('19–21 февраля');
+        /* полоса = окно: ровно 3 ячейки ЧТ 19 / ПТ 20 / СБ 21 [§12.10] */
+        await expect(page.locator('.wd')).toHaveCount(3);
+        await expect(page.locator('.wd .dw')).toHaveText(['Чт', 'Пт', 'Сб']);
+        await expect(page.locator('.wd.sel')).toHaveAttribute('data-a', '2026-02-19');
+        /* winpill удалена [UX-B14] — страховка от реинтродукции [§2.4] */
+        await expect(page.locator('.winpill')).toHaveCount(0);
+        /* канвас = 24 × 96 (§2.2) */
+        const canvas = await page.locator('.wk-inner').boundingBox();
+        expect(canvas.height).toBe(24 * 96);
+        /* выравнивание 1:1: центр блока 17:34 = центр ячейки «ЧТ 19» (delta ≤ 3px) [UX-B14] */
+        const cell = await page.locator('.wd.sel').boundingBox();
+        const blk = await page.locator('.wblk').boundingBox();
+        expect(Math.abs(cell.x + cell.width / 2 - (blk.x + blk.width / 2))).toBeLessThanOrEqual(3);
+    });
+
     test('T4.7 скролл: Неделя — тап соседнего дня той же недели сохраняет ручной скролл; возврат из карточки — та же позиция', async ({ page, request }) => {
         await page.setViewportSize({ width: 360, height: 740 });
         const now = new Date();
