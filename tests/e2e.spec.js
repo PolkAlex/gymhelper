@@ -5391,7 +5391,7 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         test.setTimeout(60000);
         /* старый webview / десктоп без API (§5.4): share/canShare отсутствуют;
            [UX-B15] UA форсируем десктопный — на мобильных проектах (iphone13) реальный UA
-           увёл бы поток в мобильную ветку «новая вкладка», а эта проверка — про a.download */
+           увёл бы поток в мобильную ветку «инлайн-оверлей», а эта проверка — про a.download */
         await context.addInitScript(function () {
             try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
             try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
@@ -5509,10 +5509,12 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
     });
 
-    test('fallback мобильный без Telegram — картинка в новой вкладке + честный тост (UX-B15)', async ({ page, context, request }) => {
+    test('fallback мобильный без Telegram — инлайн-оверлей с картинкой, long-press-подсказка (UX-B15)', async ({ page, context, request }) => {
         test.setTimeout(60000);
-        /* мобильный UA вне Telegram + share нет: a.download на мобильных тихо фейлится —
-           честная ветка: window.open(objectURL) и тост «удерживайте → Скачать» */
+        /* мобильный UA вне Telegram + share нет: a.download на мобильных тихо фейлится,
+           а window.open(blob:) в in-app браузере Telegram вкладку не показывает (WebView
+           без multi-window) — честная ветка [UX-B15]: инлайн-оверлей с <img>, long-press
+           по которому в любом WebView открывает нативное «Скачать изображение» */
         await context.addInitScript(function () {
             try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
             try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
@@ -5522,6 +5524,10 @@ test.describe('[UX-I14] шейринг картинкой', function () {
                     value: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
                 });
             } catch (e) { /* на iphone13 UA и так мобильный */ }
+            /* spy revoke: закрытие оверлея обязано освободить objectURL */
+            const orig = URL.revokeObjectURL.bind(URL);
+            window.__cvRevoked = [];
+            URL.revokeObjectURL = function (u) { window.__cvRevoked.push(String(u)); return orig(u); };
         });
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
@@ -5530,17 +5536,41 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         } } });
         await openApp(page);
         await page.locator('.pcard').first().click();
-        const popupPromise = context.waitForEvent('page');
+        /* новой вкладки быть не должно: оверлей открывается в том же окне */
+        let popupOpened = false;
+        context.on('page', function () { popupOpened = true; });
         await page.locator('[data-act="shareSheet"]').click();
         await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
-        const popup = await popupPromise;
-        /* открылась новая вкладка с blob-URL картинки */
-        expect(String(popup.url()).startsWith('blob:')).toBeTruthy();
-        await expect(page.locator('.toast.show')).toContainText('удерживайте её и выберите', { timeout: 5000 });
+        await scRendered(page, 1);
+        /* инлайн-оверлей: blob-картинка в <img> + long-press-подсказка на виду */
+        const cv = page.locator('#cardview.open');
+        await expect(cv).toBeVisible();
+        const src = String(await page.locator('#cvImg').getAttribute('src'));
+        expect(src.startsWith('blob:')).toBeTruthy();
+        await expect(cv).toContainText('Удерживайте картинку и выберите „Скачать изображение“');
+        await expect(page.locator('.toast.show')).toContainText('Удерживайте картинку и выберите', { timeout: 5000 });
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).toContain('shareDownload');
         expect(ev).not.toContain('shareOk');
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        expect(popupOpened).toBeFalsy();
+        /* «Скачать» — a.download с прежним именем файла (§5.4) */
+        const dl = page.waitForEvent('download');
+        await page.locator('[data-act="cvSave"]').click();
+        expect((await dl).suggestedFilename()).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
+        /* закрытие кнопкой — оверлей скрыт, objectURL освобождён */
+        await page.locator('[data-act="cvClose"]').click();
+        await expect(page.locator('#cardview.open')).toHaveCount(0);
+        expect(await page.evaluate(function () { return window.__cvRevoked; })).toContain(src);
+        /* повторный поток: закрытие тапом по фону (края оверлея) — тоже revoke */
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        await scRendered(page, 2);
+        await expect(page.locator('#cardview.open')).toBeVisible();
+        const src2 = String(await page.locator('#cvImg').getAttribute('src'));
+        await page.locator('#cardview').click({ position: { x: 4, y: 4 } });
+        await expect(page.locator('#cardview.open')).toHaveCount(0);
+        expect(await page.evaluate(function () { return window.__cvRevoked; })).toContain(src2);
     });
 
     test('рекорд: равный вес — без плашки (герой = объём); 125 после базы 120 — герой «Вес подхода»', async ({ page, context, request }) => {
