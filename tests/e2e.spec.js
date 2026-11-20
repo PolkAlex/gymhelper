@@ -4163,6 +4163,8 @@ test.describe('[UX-I17] T4: пикер видов, сеточные виды, Г
         await expect(page.locator('.wd')).toHaveCount(7);
         await expect(page.locator('.wd.sel')).toHaveAttribute('data-a', isoDate(now));
         await expect(page.locator('.wd.today')).toHaveAttribute('data-a', isoDate(now));
+        /* winpill удалена рев. 4 [UX-B14] — страховка от реинтродукции [§2.4] */
+        await expect(page.locator('.winpill')).toHaveCount(0);
         /* канвас = 24 × 88 (§2.2) */
         const canvas = await page.locator('.wk-inner').boundingBox();
         expect(canvas.height).toBe(24 * 88);
@@ -4283,6 +4285,8 @@ test.describe('[UX-I17] T4: пикер видов, сеточные виды, Г
            неделю; капсула и её clamp у края недели больше не существуют (полоса = окно) [§12.10] */
         const cells = page.locator('.wd');
         await expect(cells).toHaveCount(3);
+        /* winpill удалена рев. 4 [UX-B14] — страховка от реинтродукции [§2.4] */
+        await expect(page.locator('.winpill')).toHaveCount(0);
         await expect(cells.nth(0)).toHaveAttribute('data-a', '2026-02-14');
         await expect(cells.nth(1)).toHaveAttribute('data-a', '2026-02-15');
         await expect(cells.nth(2)).toHaveAttribute('data-a', '2026-02-16');
