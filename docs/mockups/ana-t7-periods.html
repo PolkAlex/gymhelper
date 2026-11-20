@@ -183,8 +183,28 @@ body.w320 .phone { max-width: 320px; }
 .hero .big { font-size: 30px; margin-bottom: 6px; }
 .hero .t1 { margin-bottom: 4px; }
 
-/* нижняя навигация/FAB в макете НЕ изображается и кодом фичи НЕ изменяется
-   (решение владельца 20.11.2026: «не трогать вообще») — см. спеку §1 не-цели */
+/* ---- нижняя навигация ---- */
+.nav {
+    position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 40;
+    display: flex; align-items: center; gap: 4px;
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94));
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--glassbrd); border-radius: 20px; padding: 8px 10px;
+}
+.nbtn {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    border: none; background: none; cursor: default; font-family: inherit;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 4px 0;
+}
+.nbtn .ni { font-size: 17px; line-height: 1; }
+.nbtn.on { color: var(--accent); }
+.nfab {
+    flex: none; width: 52px; height: 52px; margin: -18px 2px 0; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 6px 18px rgba(255,194,32,.35);
+}
 
 .footblock {
     margin: 40px auto 0; max-width: 460px; padding: 14px 16px; border: 1px solid #23262c; border-radius: 14px;
@@ -199,7 +219,7 @@ body.w320 .phone { max-width: 320px; }
 
     <div class="h1">[ANA-T7] #289 · <span>Периодная статистика</span></div>
     <p class="intro">
-        Пикер периода вверху вкладки «Статистика»: <b>Неделя · Месяц · 3 месяца · Полгода · Год · Всё время</b> (лейбл «3 месяца» — решение владельца 20.11.2026).
+        Пикер периода вверху вкладки «Статистика»: <b>Неделя · Месяц · Квартал · Полгода · Год · Всё время</b>.
         Период пересчитывает все периодные блоки вкладки (решение владельца 19.11.2026), кроме
         «Оценка 1ПМ · Эпли» и «Целей» — они вне периода. Новая ячейка <b>«≈ средняя»</b> — среднее время
         тренировки за период. Дефолт — <b>«Месяц»</b>. Спецификация: <code>docs/spec-ana-t7-periods.md</code>.
@@ -229,7 +249,7 @@ body.w320 .phone { max-width: 320px; }
         <div class="perpicker">
             <div class="pchip">Неделя</div>
             <div class="pchip on">Месяц</div>
-            <div class="pchip">3 месяца</div>
+            <div class="pchip">Квартал</div>
             <div class="pchip">Полгода</div>
             <div class="pchip">Год</div>
             <div class="pchip">Всё время</div>
@@ -306,6 +326,13 @@ body.w320 .phone { max-width: 320px; }
             <div class="tn">Последний: 15 кг, 4 подхода по 8 повторений (16.11)</div>
         </div>
 
+        <div class="nav">
+            <button class="nbtn"><span class="ni">📓</span>Дневник</button>
+            <button class="nbtn"><span class="ni">🕘</span>История</button>
+            <button class="nbtn on"><span class="ni">📊</span>Статистика</button>
+            <button class="nbtn"><span class="ni">👤</span>Профиль</button>
+            <div class="nfab">+</div>
+        </div>
 
     </div></div>
 
@@ -313,7 +340,7 @@ body.w320 .phone { max-width: 320px; }
     <div class="caption">2 · Пустой период <span>Неделя без тренировок</span></div>
     <p class="note">Пикер остаётся — им же пользователь уходит из пустоты. Под ним одна заглушка;
         все периодные блоки скрыты. <b>«Цели» остаются</b> — блок вне периода (как и Эпли, выше за кадром).
-        Текст заглушки подставляет название периода: «За эту неделю / За этот месяц / За эти 3 месяца…».</p>
+        Текст заглушки подставляет название периода: «За эту неделю / За этот месяц / За этот квартал…».</p>
 
     <div class="phone"><div class="p">
 
@@ -325,7 +352,7 @@ body.w320 .phone { max-width: 320px; }
         <div class="perpicker">
             <div class="pchip on">Неделя</div>
             <div class="pchip">Месяц</div>
-            <div class="pchip">3 месяца</div>
+            <div class="pchip">Квартал</div>
             <div class="pchip">Полгода</div>
             <div class="pchip">Год</div>
             <div class="pchip">Всё время</div>
@@ -343,6 +370,13 @@ body.w320 .phone { max-width: 320px; }
             <button class="allbtn">Все цели →</button>
         </div>
 
+        <div class="nav">
+            <button class="nbtn"><span class="ni">📓</span>Дневник</button>
+            <button class="nbtn"><span class="ni">🕘</span>История</button>
+            <button class="nbtn on"><span class="ni">📊</span>Статистика</button>
+            <button class="nbtn"><span class="ni">👤</span>Профиль</button>
+            <div class="nfab">+</div>
+        </div>
 
     </div></div>
 
@@ -363,7 +397,7 @@ body.w320 .phone { max-width: 320px; }
         <div class="perpicker">
             <div class="pchip">Неделя</div>
             <div class="pchip">Месяц</div>
-            <div class="pchip">3 месяца</div>
+            <div class="pchip">Квартал</div>
             <div class="pchip">Полгода</div>
             <div class="pchip">Год</div>
             <div class="pchip on">Всё время</div>
@@ -392,6 +426,13 @@ body.w320 .phone { max-width: 320px; }
             <span class="tn">ПН · ВТ · ЧТ · ПТ · ПН · ВТ — самая длинная за всё время</span></span>
         </div>
 
+        <div class="nav">
+            <button class="nbtn"><span class="ni">📓</span>Дневник</button>
+            <button class="nbtn"><span class="ni">🕘</span>История</button>
+            <button class="nbtn on"><span class="ni">📊</span>Статистика</button>
+            <button class="nbtn"><span class="ni">👤</span>Профиль</button>
+            <div class="nfab">+</div>
+        </div>
 
     </div></div>
 
