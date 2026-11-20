@@ -201,9 +201,10 @@ final class SharePage {
         b.append("</span></span></div>\n");
     }
 
-    /* 7 · sticky CTA (§2.1): у юзера откроется его дневник, у остальных — бот */
+    /* 7 · sticky CTA (§2.1): у юзера откроется его дневник, у остальных — бот.
+       [UX-B14] фолбэк — настоящий юзернейм бота (старый GymHelper_bot — чужой бот) */
     private static void cta(StringBuilder b, String botUsername) {
-        String bot = (botUsername == null || botUsername.isEmpty()) ? "GymHelper_bot" : botUsername;
+        String bot = (botUsername == null || botUsername.isEmpty()) ? "MyHelperGymBot" : botUsername;
         b.append("<div class=\"cta\">")
             .append("<a class=\"btn\" href=\"https://t.me/").append(esc(bot)).append("/app\">🏋️ Попробовать в Telegram</a>")
             .append("<p class=\"already\">Уже пользуетесь? Откроется ваш дневник.</p>")
