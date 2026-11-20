@@ -6268,6 +6268,20 @@ test.describe('UX-B17: кэш и gzip статики', function () {
         if (privacy.headers()['cache-control'] !== 'no-cache') {
             throw new Error('/privacy.html cache-control: ' + JSON.stringify(privacy.headers()['cache-control']) + ', ожидался no-cache');
         }
+        /* API — no-store, как раньше (прод: sendJson → send с "no-store"); мок зеркалит прод
+           (расхождение найдено в предрелизном цикле: у мока заголовка не было вовсе) */
+        const apiGet = await request.get('/api/state');
+        if (apiGet.headers()['cache-control'] !== 'no-store') {
+            throw new Error('/api/state cache-control: ' + JSON.stringify(apiGet.headers()['cache-control']) + ', ожидался no-store');
+        }
+        const apiPost = await request.post('/api/init', { data: {} });
+        if (apiPost.headers()['cache-control'] !== 'no-store') {
+            throw new Error('/api/init cache-control: ' + JSON.stringify(apiPost.headers()['cache-control']) + ', ожидался no-store');
+        }
+        const apiHealth = await request.get('/health');
+        if (apiHealth.headers()['cache-control'] !== 'no-store') {
+            throw new Error('/health cache-control: ' + JSON.stringify(apiHealth.headers()['cache-control']) + ', ожидался no-store');
+        }
     });
 
     test('HEAD на статику — 200 без тела, заголовки на месте', async ({ request }) => {

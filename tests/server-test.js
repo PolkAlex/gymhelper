@@ -37,7 +37,9 @@ const types = {
 };
 
 function sendJson(res, code, obj) {
-    res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+    /* [UX-B17] зеркало прод-sendJson (WebServer: send(..., "no-store")) — все API-ответы
+       no-store; политика кэша менялась только у статики, API не тронуты */
+    res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(obj));
 }
 
