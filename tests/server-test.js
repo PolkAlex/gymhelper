@@ -293,6 +293,10 @@ function handle(req, res) {
                 /* restSec: merge-политика реального WebServer — null у клиента (ещё не настраивал)
                    серверное значение не затирает [UX-T4/T5, спека §0.1] */
                 if (typeof d.restSec === 'number') store.restSec = d.restSec;
+                /* [UX-T40] разминка по дефолту — merge как в проде: явный ключ применяется
+                   как есть (включая null «Разминки»), отсутствие ключей значение не трогает */
+                if ('warmupFirst' in d) store.warmupFirst = d.warmupFirst;
+                if ('warmupEx' in d) store.warmupEx = d.warmupEx;
                 if (typeof d.nextId === 'number') store.nextId = d.nextId;
                 if (Array.isArray(d.del)) store.del = d.del;
                 /* ⚠️ отличается от прода: прод делает selective-merge birth-полей ([UX-T29]);

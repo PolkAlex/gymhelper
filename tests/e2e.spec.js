@@ -5967,3 +5967,58 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts.some(function (t) { return String(t).indexOf('Эпли') >= 0; })).toBeFalsy(); /* 1ПМ у калистеники нет */
     });
 });
+
+/* ===== [UX-T40] «Разминка по дефолту»: тоггл в Настройках + автодобавка при старте ===== */
+test.describe('UX-T40: разминка по дефолту', function () {
+    test('тоггл выкл по умолчанию: строки селектора нет, новая тренировка без разминки', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        await expect(card).toBeVisible({ timeout: 5000 });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await expect(sw).toHaveAttribute('aria-checked', 'false', { timeout: 5000 });
+        /* прогрессивное раскрытие (§3.2): при выключенном тоггле строки селектора нет */
+        await expect(card.locator('.arow')).toHaveCount(0);
+        /* старт с пустого списка — разминки нет (E1) */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        /* Настройки — оверлей поверх вкладки: «Назад» возвращает на открытую карточку */
+        await page.locator('[data-act="closeSettings"]').click();
+        await expect(page.locator('.expill')).toHaveCount(0, { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst != null) throw new Error('дефолт тоггла должен быть null (ключ не пишется): ' + st.warmupFirst);
+        if (!st.workouts || !st.workouts[0] || st.workouts[0].exercises.length !== 0) throw new Error('без тоггла разминка не должна добавляться');
+    });
+
+    test('вкл → новая тренировка стартует с «Разминка», настройка переживает перезагрузку', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        const card = page.locator('.card', { hasText: '🏋️ Тренировка' });
+        const sw = card.locator('[role="switch"][aria-label="Разминка первым упражнением"]');
+        await sw.click();
+        await expect(sw).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        /* строка селектора появилась; значение — системная запись «Разминка · по умолчанию» */
+        await expect(card.locator('.arow .aval')).toHaveText('Разминка · по умолчанию', { timeout: 5000 });
+        /* GymData, не localStorage (§5): ждём тост сохранения и ключ на сервере */
+        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        if (st.warmupFirst !== true) throw new Error('warmupFirst не доехал до сервера: ' + st.warmupFirst);
+        /* перезагрузка MA: тоггл остаётся включённым (не localStorage) */
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('[role="switch"][aria-label="Разминка первым упражнением"]')).toHaveAttribute('aria-checked', 'true', { timeout: 5000 });
+        /* новая тренировка: первым упражнением «Разминка» (§4.1), ровно один раз */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        await page.locator('[data-act="closeSettings"]').click();
+        const pill = page.locator('.expill').first();
+        await expect(pill).toContainText('Разминка', { timeout: 5000 });
+        await expect(page.locator('.expill')).toHaveCount(1);
+        const st2 = await (await request.get('/api/state')).json();
+        const exs = st2.workouts[0].exercises;
+        if (exs.length !== 1 || exs[0].name !== 'Разминка' || exs[0].sets.length !== 0) {
+            throw new Error('разминка должна быть первым пустым упражнением: ' + JSON.stringify(exs));
+        }
+    });
+});

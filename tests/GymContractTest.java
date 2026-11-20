@@ -561,6 +561,65 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: goals merge " + goalErr);
         }
 
+        /* [UX-T40] разминка по дефолту: GymData warmupFirst/warmupEx — legacy без ключей
+            читается (null = выкл/«Разминка»), round-trip без потерь, null/пустая строка
+            не пишутся в JSON; merge через /api/save: явный null «Разминки» доезжает до
+            сервера, клиент без ключей серверные значения не затирает. Реальный WebServer. */
+        check(d2.warmupFirst == null && d2.warmupEx == null,
+            "warmup: legacy без ключей читается (null = выкл/системная «Разминка»)");
+        check(!Json.write(d2.toJson()).contains("warmup"),
+            "warmup: toJson без настройки не пишет ключи (legacy байт-в-байт)");
+        GymData dw = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"warmupFirst\":true,\"warmupEx\":\"wcardio\",\"workouts\":[]}"));
+        check(Boolean.TRUE.equals(dw.warmupFirst) && "wcardio".equals(dw.warmupEx),
+            "warmup: тогл и id каталогного упражнения читаются");
+        GymData dw2 = GymData.fromJson((Map<String, Object>) Json.parse(Json.write(dw.toJson())));
+        check(Boolean.TRUE.equals(dw2.warmupFirst) && "wcardio".equals(dw2.warmupEx),
+            "warmup: round-trip тогл+id без потерь");
+        GymData dwn = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"warmupFirst\":false,\"warmupEx\":\"\",\"workouts\":[]}"));
+        check(Boolean.FALSE.equals(dwn.warmupFirst) && dwn.warmupEx == null,
+            "warmup: false читается, пустая строка id → null (системная «Разминка»)");
+        String warmNullOut = Json.write(dwn.toJson());
+        check(warmNullOut.contains("\"warmupFirst\":false") && !warmNullOut.contains("warmupEx"),
+            "warmup: toJson пишет false явно («выключил» переживает сохранение), null-id — ключа нет");
+        GymData dwb = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"warmupFirst\":\"да\",\"warmupEx\":42,\"workouts\":[]}"));
+        check(dwb.warmupFirst == null && dwb.warmupEx == null,
+            "warmup: мусор (не Boolean/не строка) игнорируется без падения");
+        try {
+            java.nio.file.Path tmpW = java.nio.file.Files.createTempDirectory("gymwarm");
+            Storage stW = new Storage(tmpW);
+            WebServer wsW = new WebServer("contract-test-token", stW, tmpW, new Stats(tmpW.resolve("stats.json")));
+            java.net.ServerSocket probeW = new java.net.ServerSocket(0);
+            int portW = probeW.getLocalPort();
+            probeW.close();
+            wsW.start(portW);
+            String idW = tgInitData("contract-test-token", 424248);
+            /* клиент включает настройку и выбирает каталогное упражнение */
+            java.net.http.HttpResponse<String> rw1 = postSave(portW, idW, 0,
+                "{\"rev\":0,\"nextId\":1,\"warmupFirst\":true,\"warmupEx\":\"wcardio\",\"workouts\":[]}");
+            check(rw1.statusCode() == 200, "warmup merge: save с настройкой — 200, а не " + rw1.statusCode());
+            GymData savedW = stW.load(424248);
+            check(Boolean.TRUE.equals(savedW.warmupFirst) && "wcardio".equals(savedW.warmupEx),
+                "warmup merge: тогл и id сохранены");
+            /* возврат к системной «Разминке» = явный null-ключ — сброс доезжает до сервера */
+            java.net.http.HttpResponse<String> rw2 = postSave(portW, idW, 1,
+                "{\"rev\":1,\"nextId\":1,\"warmupFirst\":true,\"warmupEx\":null,\"workouts\":[]}");
+            check(rw2.statusCode() == 200, "warmup merge: save с явным null — 200, а не " + rw2.statusCode());
+            GymData clearedW = stW.load(424248);
+            check(clearedW.warmupEx == null && !Json.write(clearedW.toJson()).contains("warmupEx"),
+                "warmup merge: явный null сбрасывает id (ключа в файле нет)");
+            /* старый кэш JS: ключей нет — включённый тоггл не теряется */
+            java.net.http.HttpResponse<String> rw3 = postSave(portW, idW, 2,
+                "{\"rev\":2,\"nextId\":1,\"workouts\":[]}");
+            check(rw3.statusCode() == 200, "warmup merge: save без ключей — 200, а не " + rw3.statusCode());
+            GymData mergedW = stW.load(424248);
+            check(Boolean.TRUE.equals(mergedW.warmupFirst), "warmup merge: клиент без ключей не затирает тогл");
+        } catch (Exception warmErr) {
+            throw new AssertionError("CONTRACT FAIL: warmup merge " + warmErr);
+        }
+
         /* [ANA-T1] Stats: /stats за токеном (404 без токена/с неверным — не палим существование),
            инкременты maInit/maSave/workoutsCreated/workoutsCompleted при init/save,
            недельные агрегаты ISO, файл stats.json и ротация недель.
