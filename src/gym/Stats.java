@@ -37,12 +37,10 @@ public final class Stats {
         /* [UX-I16] воронка шеринга ссылки (§7.3 спеки): create — POST /api/share,
            copy/send — клиентские события через /api/track, view — GET /w/<shareId> 200 */
         "linkCreate", "linkCopy", "linkSend", "linkView",
-        /* [UX-I14] воронка картинки-шеринга (§5): тап «Картинка», resolved navigator.share,
-           fallback-скачивание — клиентские события через /api/track */
-        "shareClick", "shareOk", "shareDownload",
-        /* [UX-T41] загрузки карточек для нативного сохранения (POST /api/card-upload,
-            серверный агрегат по образцу linkCreate — технический шаг, не /api/track) */
-        "cardUpload"
+        /* [UX-I14] события картинки-шеринга (§5): фича вырезана 20.11 решением владельца,
+           ключи оставлены в белом списке /api/track для старых клиентов в кэше
+           и для чтения истории stats.json */
+        "shareClick", "shareOk", "shareDownload"
     };
     /* сколько последних недель (ISO) хранить в weeks */
     public static final int WEEKS_TO_KEEP = 26;

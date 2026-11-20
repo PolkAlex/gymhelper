@@ -366,14 +366,6 @@ function setsWord(n) {
     if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'подхода';
     return 'подходов';
 }
-/* склонение повторений для постера [UX-I14]: «21 повторение / 3 повторения / 108 повторений» */
-function repsWord(n) {
-    n = Math.abs(+n || 0);
-    const m10 = n % 10, m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return 'повторение';
-    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'повторения';
-    return 'повторений';
-}
 /* [UX-T29] дата рождения: возраст вычисляется, склонения, бейдж месяца рождения */
 const MONTHS_FULL = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 function ageOf(p, now) {
@@ -654,11 +646,6 @@ function dispatchFromEl(el, ev) {
     /* [ONB-T7] тап по фону модалки «Что нового» закрывает её (решение 9) */
     if (act === 'wnBackdrop') {
         if (!ev || ev.target === el) wnClose();
-        return;
-    }
-    /* [UX-B15] тап по фону инлайн-карточки закрывает её; тапы по картинке и кнопкам — нет */
-    if (act === 'cvBackdrop') {
-        if (!ev || ev.target === el) cvClose();
         return;
     }
     const fn = ACTIONS[act];
@@ -1465,26 +1452,20 @@ const ACTIONS = {
        там же перерисовка после закрытия шита фильтров Техники */
     modalBackdrop: function () { closeModal(); },
     /* ============ [UX-I16] шейринг тренировки по ссылке ============ */
-    /* шит выбора «Картинка / Телеграм» на завершённой тренировке (спека §7);
-       shareClick (§5) — на тап «Поделиться», как точка входа воронки шеринг-картинки */
+    /* шит «Телеграм» на завершённой тренировке (спека §7); «Картинка» [UX-I14]
+       вырезана 20.11 решением владельца — шеринг только ссылочный;
+       shareClick — на тап «Поделиться», точка входа воронки шеринга */
     shareSheet: function (a) { trackShare('shareClick'); shareSheet(+a); },
     /* поток «Телеграм» (§7.2): POST /api/share → буфер → выбор чата → тост */
     shareTg: function (a) { shareTelegramGo(+a); },
-    /* opt-in имени в OG-превью и на картинке (§11.1): тогл в шите, состояние в G.shareName */
+    /* opt-in имени в OG-превью ссылки (§11.1): тогл в шите, состояние в G.shareName */
     shareNameToggle: function (a) {
         G.shareName = !G.shareName;
-        /* [UX-I14 §10.2] персист opt-in на устройстве: дефолт выключен, выбор
+        /* персист opt-in на устройстве: дефолт выключен, выбор
            переживает перезапуск; серверная копия перечитывается каждым POST /api/share */
         lsSet('gymShareName', G.shareName ? '1' : '0');
         shareSheet(+a); /* перерисовка шита с новым состоянием тогла */
     },
-    /* [UX-I14] поток «Картинка»: canvas-рендер 9:16 → системная шторка/скачивание (§5) */
-    sharePic: function (a) { sharePictureGo(+a); },
-    /* [UX-B15] инлайн-карточка (мобильный вне полноценного Telegram): «Скачать» —
-       a.download; «Закрыть» и фоновый тап (cvBackdrop перехватывается в dispatchFromEl) —
-       закрытие с освобождением objectURL */
-    cvSave: function () { cvSave(); },
-    cvClose: function () { cvClose(); },
     /* [ONB-T2] политика конфиденциальности: openLink внутри Telegram, иначе обычная вкладка */
     openPrivacy: function () {
         const url = 'https://gym-helper.com/privacy.html';
@@ -2573,11 +2554,11 @@ function workoutCard(w) {
         h += '</div>';
     });
     /* [UX-I16] одна кнопка «Поделиться» — тело карточки завершённой тренировки
-       (спека §7.1, правило UX-I14: finished && setsTotal > 0); тап открывает шит
-       выбора «Картинка / Телеграм» */
+       (спека §7.1: finished && setsTotal > 0); тап открывает шит «Телеграм»
+       («Картинка» вырезана 20.11, решение владельца — UX-I14) */
     const setsTotalAll = exs.reduce((a, e) => a + setsCount(e), 0);
     if (w.finished && setsTotalAll > 0) {
-        h += '<div class="btnrow"><button class="btn wide share-new" id="shareBtn' + w.id + '" data-act="shareSheet" data-a="' + w.id + '">📤 Поделиться<span class="tag">выбор</span></button></div>';
+        h += '<div class="btnrow"><button class="btn wide share-new" id="shareBtn' + w.id + '" data-act="shareSheet" data-a="' + w.id + '">📤 Поделиться</button></div>';
     }
     /* [UX-T22] «Добавить упражнение» — кнопка на всю ширину под упражнениями
        (➕ из шапки убрана); только у активной */
@@ -5422,26 +5403,21 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* noop *
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* noop */ } }
 
 /* ============ [UX-I16] шейринг тренировки по ссылке ============ */
-/* шит выбора «Картинка / Телеграм» (макет экран 3); «Картинка» — постер [UX-I14],
-   поток sharePictureGo ниже */
+/* шит «Телеграм» (макет экран 3, ред. 2); «Картинка» [UX-I14] вырезана 20.11
+   решением владельца — шеринг только ссылочный */
 const TG_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#ffffff" aria-hidden="true"><path d="M21.7 3.3c.3-.2.7-.2 1 .1.2.3.3.6.2 1l-3.1 14.4c-.2.9-.9 1.3-1.7.9l-4.9-3.6-2.5 2.4c-.6.6-1.5.4-1.8-.4l-1.7-5.4-4.6-1.4c-.9-.3-.9-1.3.1-1.7l18.4-7.1c.2-.1.4-.2.6-.2zM8.9 13.2l.3 3.1 1.9-1.8 4.9 3.6c.3.2.6.1.7-.3l2.9-13.5-10.7 8.9z"/></svg>';
 
 function shareSheet(wid) {
     const nameOn = !!G.shareName;
     let h = '<div class="mtitle-row"><p class="mtitle">Поделиться тренировкой</p>' +
         '<button class="barebtn" data-act="closeModal" aria-label="Закрыть">✕</button></div>';
-    /* [UX-I14] «Картинка» — canvas-постер 9:16: рендер на устройстве → шторка/скачивание (§5) */
-    h += '<button class="shrow" data-act="sharePic" data-a="' + wid + '">' +
-        '<span class="sic2">🖼</span>' +
-        '<span class="st"><b>Картинка</b>' +
-        '<span class="ssub">Постер для сторис и каналов</span></span></button>';
     h += '<button class="shrow tg" data-act="shareTg" data-a="' + wid + '">' +
         '<span class="sic2 tg2">' + TG_SVG + '</span>' +
         '<span class="st"><b>Телеграм</b>' +
         '<span class="ssub">Отправить в любой чат — откроется выбор чата, ссылка также скопируется</span></span></button>';
-    /* opt-in имени (§11.1): по умолчанию выключено — картинка и ссылка анонимны */
+    /* opt-in имени (§11.1): по умолчанию выключено — ссылка анонимна */
     h += '<div class="shname"><span class="st"><b>Показывать моё имя при шеринге</b>' +
-        '<span class="ssub">' + (nameOn ? 'Имя из Telegram увидят получатели картинки и ссылки' : 'Выключено — картинка и ссылка без вашего имени') + '</span></span>' +
+        '<span class="ssub">' + (nameOn ? 'Имя из Telegram увидят получатели ссылки' : 'Выключено — ссылка без вашего имени') + '</span></span>' +
         swToggleHtml(nameOn, 'shareNameToggle', String(wid), 'Показывать моё имя при шеринге') + '</div>';
     h += '<p class="snote">🔒 Ссылку видят только те, кому вы её отправили.</p>';
     openModal(h);
@@ -5456,7 +5432,7 @@ async function shareTelegramGo(wid) {
     const setBusy = function (busy) {
         if (!btn) return;
         btn.disabled = busy;
-        btn.innerHTML = busy ? '⏳ Готовим ссылку…' : '📤 Поделиться<span class="tag">выбор</span>';
+        btn.innerHTML = busy ? '⏳ Готовим ссылку…' : '📤 Поделиться';
     };
     closeModal();
     setBusy(true);
@@ -5508,603 +5484,6 @@ function trackShare(name) {
         fetch('/api/track', { method: 'POST', body: JSON.stringify({ initData: INIT, events: [name] }), keepalive: true })
             .catch(function () { /* аналитика не роняет шеринг */ });
     } catch (e) { /* noop */ }
-}
-
-/* ============ [UX-I14] виральная карточка тренировки картинкой ============ */
-/* канва 1080×1920 (9:16) по макету «Amber Glass» (docs/mockups/ux-i14-share-card.html,
-   координаты — система макета 390×693 × K). Рендер фиксированно тёмный — тема приложения
-   на картинку не влияет (§4). Числа — те же функции, что у карточки приложения:
-   расхождение исключено (§3). Рекорд — реальным весом подхода, Эпли вторичной строкой
-   (ред. 2, решение владельца 19.11), агрегаты — три отдельные карточки время/ккал/подходы. */
-
-/* группировка тысяч: 5340 → «5 340» (как SharePage.fmtNum) */
-function fmtCardNum(n) {
-    const raw = String(Math.max(Math.round(+n || 0), 0));
-    return raw.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-}
-/* вес для показа: строку храним как есть («82.5» → «82,5») — как SharePage.weightText */
-function shareWeightText(w) { return String(w == null ? '' : w).trim().replace('.', ','); }
-/* сумма повторений тренировки — герой калистеники (edge 8 §5.1/§9.8, как SharePage.totalReps) */
-function shareTotalReps(w) {
-    let n = 0;
-    for (const e of (w.exercises || [])) for (const s of e.sets) n += Math.max(+s.s || 0, 0) * repsAvg(s.r);
-    return n;
-}
-/* строка упражнения «120 кг × 3×8-10» — компактнее entryLine, как setLine SharePage;
-   берём запись с максимальным весом (без весов — первую), формат веса — как написан */
-function shareExLine(e) {
-    let best = null, bestW = -1;
-    for (const s of e.sets) {
-        const w = avgNum(s.w);
-        if (w > bestW) { bestW = w; best = s; }
-    }
-    if (!best) return '';
-    const wt = shareWeightText(best.w);
-    return (wt ? wt + ' кг × ' : '') + Math.max(+best.s || 0, 0) +
-        (best.r && String(best.r).trim() ? '×' + String(best.r).trim() : '');
-}
-/* склонение для «+ N упражнений» (edge 8.4) */
-function shareExWord(n) {
-    const m10 = n % 10, m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return 'упражнение';
-    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'упражнения';
-    return 'упражнений';
-}
-/* рекорд тренировки (ред. 2 §3, решение владельца 19.11): силовой — максимальный
-   РЕАЛЬНЫЙ вес подхода, строго побивший все прошлые тренировки СВОЕГО упражнения
-   (база — только прошлые, как в prChipSetIdx; первое выполнение и равный — не рекорд;
-   проверяется каждое упражнение — глобально самый тяжёлый подход может и не быть
-   рекордом: жим 100 при базе 130 рядом с приседом 80 при базе 60 → рекорд у приседа);
-   Эпли — вторичной оценкой мелко (расчёт не должен выглядеть фактом). Калистеника
-   без весов — рекорд по объёму повторений без 1ПМ (edge 8.1). null — рекорда нет */
-function shareRecord(w) {
-    const idx = G.workouts.indexOf(w);
-    if (idx < 0) return null;
-    let best = null;
-    for (const e of (w.exercises || [])) {
-        let exW = 0, exSet = null;
-        for (const s of e.sets) {
-            const v = avgNum(s.w);
-            if (v > exW) { exW = v; exSet = s; }
-        }
-        if (!(exW > 0)) continue;
-        const nl = e.name.toLowerCase();
-        let baseHas = false, baseMax = 0;
-        for (let i = 0; i < idx; i++) {
-            for (const pe of (G.workouts[i].exercises || [])) {
-                if (pe.name.toLowerCase() !== nl || !pe.sets.length) continue;
-                for (const s of pe.sets) {
-                    const v = avgNum(s.w);
-                    if (v > 0) { baseHas = true; if (v > baseMax) baseMax = v; }
-                }
-            }
-        }
-        if (baseHas && exW > baseMax && (!best || exW > best.wNum)) {
-            best = { ex: e.name, wNum: exW, epley: Math.round(e1rmOf(exSet)) };
-        }
-    }
-    if (best) return best;
-    /* калистеника: объём повторений (подходы × повторения) этой тренировки vs база */
-    let bestVol = 0, bestEx = null;
-    for (const e of (w.exercises || [])) {
-        const nl = e.name.toLowerCase();
-        const here = workoutExMetrics(w, nl);
-        if (!here.hasSets || here.hasW || here.vol <= bestVol) continue;
-        let baseHas = false, baseMax = 0;
-        for (let i = 0; i < idx; i++) {
-            const m = workoutExMetrics(G.workouts[i], nl);
-            if (m.hasSets) { baseHas = true; if (m.vol > baseMax) baseMax = m.vol; }
-        }
-        if (baseHas && here.vol > baseMax) { bestVol = here.vol; bestEx = e.name; }
-    }
-    return bestEx ? { ex: bestEx, vol: bestVol } : null;
-}
-
-/* канва-постер: Promise<{blob, texts, w, h}> — texts = нарисованные строки (крюк e2e:
-   window.__gym.scLast, содержимое канвы текстом не прочитать). Всё по макету концепта A:
-   шапка бренд+дата, герой-тоннаж (калистеника — сумма повторений), агрегаты раздельными
-   карточками, плашка рекорда, список первых 3 упражнений, серия, футер с t.me-ссылкой. */
-let scSeq = 0; /* номер рендера — e2e ждёт завершения конкретного рендера (toBlob асинхронный) */
-function renderShareCard(w) {
-    return new Promise(function (resolve, reject) {
-        try {
-            const cv = document.createElement('canvas');
-            cv.width = 1080;
-            cv.height = 1920;
-            const ctx = cv.getContext('2d');
-            const K = 1080 / 390, W = 390, H = cv.height / K; /* ≈ 693 */
-            const PX = 28, CW = W - PX * 2; /* поля ≥ 56px в финальном масштабе (§4) */
-            const FONT = '-apple-system, "Segoe UI", Roboto, sans-serif';
-            const C = { text: '#f2f3f5', muted: '#9aa0aa', mut2: '#b6bac2', amber: '#ffc220' };
-            const texts = [];
-            ctx.scale(K, K);
-
-            function rr(x, y, ww, hh, r) {
-                ctx.beginPath();
-                ctx.moveTo(x + r, y);
-                ctx.arcTo(x + ww, y, x + ww, y + hh, r);
-                ctx.arcTo(x + ww, y + hh, x, y + hh, r);
-                ctx.arcTo(x, y + hh, x, y, r);
-                ctx.arcTo(x, y, x + ww, y, r);
-                ctx.closePath();
-            }
-            function glass(x, y, ww, hh, glow) {
-                rr(x, y, ww, hh, 18);
-                ctx.fillStyle = 'rgba(255,255,255,.055)';
-                ctx.fill();
-                ctx.lineWidth = 1;
-                ctx.strokeStyle = glow ? 'rgba(255,194,32,.28)' : 'rgba(255,255,255,.10)';
-                ctx.stroke();
-            }
-            function setFont(size, weight, ls) {
-                ctx.font = weight + ' ' + size + 'px ' + FONT;
-                if ('letterSpacing' in ctx) ctx.letterSpacing = (ls || 0) + 'px';
-            }
-            function measure(s, size, weight, ls) { setFont(size, weight, ls); return ctx.measureText(s).width; }
-            function txt(s, x, y, size, weight, color, align, ls) {
-                setFont(size, weight, ls);
-                ctx.fillStyle = color;
-                ctx.textAlign = align || 'left';
-                ctx.textBaseline = 'alphabetic';
-                ctx.fillText(s, x, y);
-                texts.push(s);
-            }
-            /* обрезка с многоточием по ширине (edge 8.3 — длинные названия) */
-            function ellip(s, size, weight, maxW) {
-                if (measure(s, size, weight) <= maxW) return s;
-                let out = s;
-                while (out.length > 1 && measure(out + '…', size, weight) > maxW) out = out.slice(0, -1);
-                return out + '…';
-            }
-            /* перенос на до 2 строк, вторая — с многоточием при переполнении */
-            function wrap2(s, size, weight, maxW) {
-                s = String(s);
-                if (measure(s, size, weight) <= maxW) return [s];
-                const words = s.split(/\s+/);
-                const l1 = [];
-                let i = 0;
-                for (; i < words.length; i++) {
-                    const t = l1.length ? l1.join(' ') + ' ' + words[i] : words[i];
-                    if (measure(t, size, weight) > maxW && l1.length) break;
-                    l1.push(words[i]);
-                }
-                const rest = words.slice(i).join(' ');
-                if (!rest) return [l1.join(' ')];
-                if (measure(rest, size, weight) <= maxW) return [l1.join(' '), rest];
-                return [l1.join(' '), ellip(rest, size, weight, maxW)];
-            }
-            /* янтарная засветка фона (radial из макета .sg-a) */
-            function glow(cx, cy, rx, ry, rgba) {
-                ctx.save();
-                ctx.translate(cx, cy);
-                ctx.scale(1, ry / rx);
-                const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
-                g.addColorStop(0, rgba);
-                g.addColorStop(1, 'rgba(16,17,20,0)');
-                ctx.fillStyle = g;
-                ctx.fillRect(-rx, -rx, rx * 2, rx * 2);
-                ctx.restore();
-            }
-
-            /* фон: тёмный Amber Glass независимо от темы приложения (§4) */
-            ctx.fillStyle = '#101114';
-            ctx.fillRect(0, 0, W, H);
-            glow(W * 0.92, -30, 340, 240, 'rgba(255,178,32,.17)');
-            glow(-50, H * 0.26, 300, 250, 'rgba(255,138,60,.10)');
-            glow(W * 1.12, H * 0.86, 360, 300, 'rgba(150,92,25,.22)');
-
-            /* шапка: бренд слева, дата (без года) справа; имя — только при opt-in (§10.2),
-               источник — initData Telegram, как в шапке Профиля (server-owned паттерн UX-I16) */
-            let y = 26;
-            const brandW = measure('GymHelper', 15, '800', 0.3);
-            txt('GymHelper', PX, y + 14, 15, '800', C.amber, 'left', 0.3);
-            const d = parseDateISO(w.date);
-            const dateStr = d ? d.getDate() + ' ' + MONTHS_GEN[d.getMonth()] + ' · ' + DOW_FULL[(d.getDay() + 6) % 7].toLowerCase() : String(w.date || '');
-            let right = dateStr;
-            if (G.shareName && tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                const nm = String(tg.initDataUnsafe.user.first_name || '').trim().slice(0, 60);
-                if (nm) right = nm + ' · ' + dateStr;
-            }
-            txt(ellip(right, 13, '600', W - PX * 2 - brandW - 12), W - PX, y + 13, 13, '600', C.muted, 'right');
-            y += 34 + 20;
-
-            /* рекорд нужен раньше героя: при нём герой = реальный вес подхода (ред. 2 §3) */
-            const rec = shareRecord(w);
-
-            /* герой-слот (§3): при рекорде — вес, который реально жал («120 кг», НЕ e1RM);
-               обычная силовая — объём кг; калистеника (объём 0) — сумма повторений (edge 8.1) */
-            const vol = Math.round(workoutVolume(w));
-            let heroLbl = 'Объём тренировки', heroNum, heroUnit = 'кг', epleyStr = null;
-            if (rec && rec.wNum > 0) {
-                heroLbl = 'Вес подхода';
-                heroNum = fmtCardNum(rec.wNum);
-                if (rec.epley > 0) epleyStr = 'оценка 1ПМ по Эпли ≈ ' + fmtCardNum(rec.epley) + ' кг';
-            } else if (vol > 0) {
-                heroNum = fmtCardNum(vol);
-            } else {
-                heroLbl = 'Сумма повторений';
-                heroNum = fmtCardNum(shareTotalReps(w));
-                heroUnit = repsWord(shareTotalReps(w)); /* «21 повторение» / «108 повторений» */
-            }
-            const heroH = 20 + 11 + 8 + 66 + (epleyStr ? 18 : 0) + 18;
-            glass(PX, y, CW, heroH, true);
-            txt(heroLbl.toUpperCase(), PX + 22, y + 20 + 11, 11, '700', C.muted, 'left', 2.2);
-            const numW = measure(heroNum, 64, '800', 0.5);
-            setFont(64, '800', 0.5);
-            const grad = ctx.createLinearGradient(PX, 0, PX + CW, 0);
-            grad.addColorStop(0, '#ffb000');
-            grad.addColorStop(1, '#ffc220');
-            ctx.fillStyle = grad;
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'alphabetic';
-            ctx.fillText(heroNum, PX + 22, y + 20 + 11 + 8 + 52);
-            texts.push(heroNum);
-            txt(heroUnit, PX + 22 + numW + 8, y + 20 + 11 + 8 + 52, 22, '700', C.muted);
-            if (epleyStr) txt(epleyStr, PX + 22, y + 20 + 11 + 8 + 52 + 20, 11, '400', C.muted);
-            y += heroH + 12;
-
-            /* агрегаты — ТРИ отдельные стеклянные карточки в ряд (ред. 2, решение
-               владельца 19.11: полоса-стрип слеплялась): значение крупно, подпись ПОД
-               значением; ккал янтарным, как wpill wp-k; профиль без веса — 2 карточки (edge 8.5) */
-            const mins = durationMin(w);
-            const setsTotalAll = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
-            const kcalRes = calcWorkoutKcal(G.profile, w);
-            const aggs = [];
-            if (mins != null) aggs.push({ n: Math.floor(mins / 60) + ':' + pad2(mins % 60), l: 'время', k: false });
-            if (kcalRes && kcalRes.total > 0) aggs.push({ n: String(kcalRes.total), l: 'ккал', k: true });
-            if (setsTotalAll > 0) aggs.push({ n: String(setsTotalAll), l: setsWord(setsTotalAll), k: false });
-            if (aggs.length) {
-                const gap = 10, aw = (CW - gap * (aggs.length - 1)) / aggs.length, ah = 58;
-                aggs.forEach(function (a, i) {
-                    const ax = PX + i * (aw + gap);
-                    glass(ax, y, aw, ah, false);
-                    txt(a.n, ax + aw / 2, y + 13 + 16, 21, '800', a.k ? C.amber : C.text, 'center');
-                    txt(a.l, ax + aw / 2, y + 13 + 16 + 6 + 9, 10.5, '600', C.muted, 'center', 0.4);
-                });
-                y += ah + 12;
-            }
-
-            /* плашка рекорда (§3 строка 4, макет sc-pr): «НОВЫЙ РЕКОРД · УПРАЖНЕНИЕ» +
-               крупно реальный вес янтарным + мелкая подстрока; Эпли уже мелко в герое.
-               Калистеника — «РЕКОРД · УПРАЖНЕНИЕ» по объёму повторений, без 1ПМ (edge 8.1) */
-            if (rec) {
-                const isVol = rec.vol != null;
-                const headLines = wrap2(((isVol ? 'Рекорд · ' : 'Новый рекорд · ') + rec.ex).toUpperCase(),
-                    10.5, '800', CW - 16 * 2 - 26 - 13);
-                const valNum = isVol ? String(rec.vol) : fmtCardNum(rec.wNum); /* «75-175» → «125» (edge 8.14) */
-                const valUnit = isVol ? 'повт.' : 'кг';
-                const subStr = isVol ? 'объём повторений' : 'реальный вес подхода';
-                const recH = 14 + headLines.length * 13 + 6 + 26 + 4 + 11 + 14;
-                glass(PX, y, CW, recH, true);
-                setFont(26, '400');
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'alphabetic';
-                ctx.fillStyle = C.text;
-                ctx.fillText('🏆', PX + 16, y + recH / 2 + 9);
-                texts.push('🏆');
-                let ry = y + 14;
-                for (const ln of headLines) {
-                    txt(ln, PX + 16 + 26 + 13, ry + 10, 10.5, '800', C.muted, 'left', 1.6);
-                    ry += 13;
-                }
-                ry += 6;
-                const grad2 = ctx.createLinearGradient(PX, 0, PX + CW, 0);
-                grad2.addColorStop(0, '#ffb000');
-                grad2.addColorStop(1, '#ffc220');
-                setFont(26, '800', 0.3);
-                ctx.fillStyle = grad2;
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'alphabetic';
-                ctx.fillText(valNum, PX + 16 + 26 + 13, ry + 21);
-                texts.push(valNum + ' ' + valUnit);
-                const vnW = measure(valNum, 26, '800', 0.3);
-                txt(valUnit, PX + 16 + 26 + 13 + vnW + 6, ry + 21, 13, '700', C.muted);
-                ry += 26 + 4;
-                txt(subStr, PX + 16 + 26 + 13, ry + 9, 11, '400', C.muted);
-                y += recH + 12;
-            }
-
-            /* список упражнений: первые 3 (edge 8.4), у записи-рекордсмена янтарный 🏆 */
-            const exs = (w.exercises || []).slice(0, 3);
-            if (exs.length) {
-                const listTop = y;
-                let ly = y + 6;
-                const nmMax = CW - 16 * 2 - 90; /* под значение справа — как в макете */
-                exs.forEach(function (e, i) {
-                    const lines = wrap2(e.name, 13.5, '600', nmMax);
-                    const val = shareExLine(e);
-                    const isRec = rec && e.name.toLowerCase() === rec.ex.toLowerCase();
-                    const rowH = 10 + lines.length * 17.5 + 10;
-                    let ny = ly + 10;
-                    lines.forEach(function (ln) { txt(ln, PX + 16, ny + 13, 13.5, '600', C.text); ny += 17.5; });
-                    const vy = ly + 10 + (lines.length - 1) * 17.5 + 13;
-                    const vStr = val + (isRec ? '  🏆' : '');
-                    txt(vStr, W - PX - 16, vy, 13, '400', C.mut2, 'right');
-                    ly += rowH;
-                    if (i < exs.length - 1) {
-                        ctx.strokeStyle = 'rgba(255,255,255,.06)';
-                        ctx.lineWidth = 1;
-                        ctx.beginPath();
-                        ctx.moveTo(PX + 16, ly);
-                        ctx.lineTo(W - PX - 16, ly);
-                        ctx.stroke();
-                    }
-                });
-                const listH = ly + 6 - listTop;
-                glass(PX, listTop, CW, listH, false);
-                y += listH + 8;
-            }
-            /* футер всегда физически внизу: бренд-строка + пилюля t.me (§6) */
-            const st = monthStreak();
-            const footH = 14 + 12 + 10 + 40;
-            const sepY = H - 22 - footH;
-            const more = (w.exercises || []).length - exs.length;
-            if (more > 0 && y + 24 < sepY) { /* не наезжаем на футер (edge 8.13) */
-                txt('+ ' + more + ' ' + shareExWord(more), PX, y + 12, 12.5, '400', C.muted);
-                y += 24;
-            }
-            if (st && st.n >= 2 && y + 30 < sepY) { /* серия < 2 не рисуется (edge 8.6) */
-                txt('🔥 Серия: ' + st.n + ' ' + trainWord(st.n) + ' подряд', PX, Math.min(y + 22, sepY - 16), 13.5, '700', C.text);
-            }
-            ctx.strokeStyle = 'rgba(255,255,255,.10)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(PX, sepY);
-            ctx.lineTo(W - PX, sepY);
-            ctx.stroke();
-            txt('GymHelper · дневник тренировок в Telegram', W / 2, sepY + 14 + 10, 12, '600', C.muted, 'center');
-            const link = 't.me/MyHelperGymBot/app';
-            const pw = measure(link, 15, '800') + 44, ph = 40;
-            rr((W - pw) / 2, sepY + 14 + 12 + 10, pw, ph, 20);
-            ctx.fillStyle = 'rgba(255,194,32,.07)';
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255,194,32,.32)';
-            ctx.stroke();
-            setFont(15, '800');
-            ctx.fillStyle = C.amber;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(link, W / 2, sepY + 14 + 12 + 10 + ph / 2);
-            texts.push(link);
-
-            cv.toBlob(function (b) {
-                if (b) resolve({ blob: b, texts: texts, w: cv.width, h: cv.height });
-                else reject(new Error('toBlob вернул null'));
-            }, 'image/png');
-        } catch (e) { reject(e); }
-    });
-}
-
-/* [UX-T41]/[UX-B15] карточка на сервер: PNG → POST /api/card-upload → анонимный
-   https-URL /card/<token>.png (TTL 1 ч, подпись initData прод проверяет). https —
-   единственная схема, которую нативно принимают downloadFile Telegram и
-   DownloadManager/WebView: blob: бракуется по протоколу (урок UX-B15, итерация 3 —
-   в in-app браузере Telegram мертвы ВСЕ blob-механизмы: a.download, long-press
-   «Загрузка», «Открыть В…»). Ошибка сети/лимита/таймаута — null, ветка fallback. */
-async function cardUploadUrl(blob) {
-    try {
-        const r = await fetch('/api/card-upload', {
-            method: 'POST',
-            body: blob,
-            headers: { 'Content-Type': 'image/png', 'initData': INIT },
-            signal: AbortSignal.timeout(15000) /* сеть/сервер висят — не блокируем поток */
-        });
-        const j = await r.json();
-        if (r.ok && j.ok && j.url) return j.url;
-    } catch (e) { /* сеть/сервер/таймаут/лимит — null */ }
-    return null;
-}
-
-/* поток «Картинка» (§5, механика UX-I16 «буфер → действие»): рендер PNG → буфер →
-   navigator.share с файлом (шторка Telegram); fallback [UX-B15]+[UX-T41] — по
-   платформе: Telegram — карточка на сервер → нативный downloadFile с https-URL →
-   мобильный — карточка на сервер → инлайн-оверлей с https-картинкой (long-press
-   «Загрузка» через DownloadManager) → a.download (desktop), тост всегда
-   отражает фактическое действие. shareClick пишется на тапе «Поделиться»
-   (ACTION shareSheet, точка входа воронки §5); shareOk — по факту шторки,
-   shareDownload — по факту показа fallback-пути (оверлей/скачивание запущены);
-   отмена шторки (AbortError) — не событие. Ошибка
-   рендера/старый webview без File — тост + разблокировка кнопки (edge 8.10). */
-async function sharePictureGo(wid) {
-    const btn = document.getElementById('shareBtn' + wid);
-    const setBusy = function (busy) {
-        if (!btn) return;
-        btn.disabled = busy;
-        btn.innerHTML = busy ? '⏳ Готовим картинку…' : '📤 Поделиться<span class="tag">выбор</span>';
-    };
-    closeModal();
-    setBusy(true);
-    const w = findW(wid);
-    if (!w) { setBusy(false); return; }
-    let card = null;
-    try { card = await renderShareCard(w); } catch (e) { /* edge 10 — тост ниже */ }
-    if (!card) {
-        toast('Не получилось подготовить картинку', true);
-        setBusy(false);
-        return;
-    }
-    /* крюк e2e: содержимое канвы текстом не прочитать — отдаём нарисованные строки;
-       n = номер рендера (повторный тап рендерит заново, edge 8.11) */
-    if (globalThis.__gym) {
-        scSeq++;
-        globalThis.__gym.scLast = { n: scSeq, w: card.w, h: card.h, texts: card.texts, size: card.blob.size };
-    }
-    const d = parseDateISO(w.date);
-    /* имя файла без персонального формата дата-время (§8.12): gymhelper-16-11.png */
-    const fname = 'gymhelper-' + (d ? d.getDate() + '-' + (d.getMonth() + 1) : String(w.id)) + '.png';
-    /* буфер (механика UX-I16 «сначала буфер»): картинка остаётся у пользователя при
-       любом повороте сценария; нет API / отказ разрешения — не ошибка, идём дальше */
-    if (navigator.clipboard && window.ClipboardItem) {
-        try {
-            await navigator.clipboard.write([new ClipboardItem({ 'image/png': card.blob })]);
-            toast('Картинка также скопирована в буфер');
-        } catch (e) { /* отказ буфера — не ошибка */ }
-    }
-    /* §5.3: Web Share API Level 2 — системная шторка Telegram с готовой PNG;
-       File в старом webview может отсутствовать — тогда сразу fallback-скачивание */
-    const file = (typeof File !== 'undefined') ? new File([card.blob], fname, { type: 'image/png' }) : null;
-    if (file && navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-            await navigator.share({ files: [file] });
-            trackShare('shareOk'); /* resolved — картинка ушла в шторку */
-            setBusy(false);
-            return;
-        } catch (e) {
-            if (e && e.name === 'AbortError') { setBusy(false); return; } /* шторку закрыли */
-            /* отказ API — падаем в скачивание (fallback ниже) */
-        }
-    }
-    /* §5.4 fallback [UX-B15]+[UX-T41]: a.download не доносит файл до файловой системы в
-       мобильных WebView, а blob: бракуется по протоколу ВЕЗДЕ (vendor downloadFile, и
-       итерация 3: в in-app браузере Telegram мертвы все blob-механизмы — a.download,
-       long-press «Загрузка», «Открыть В…»). Цепочка по платформе, тост отражает
-       фактическое действие: 0) полноценный Telegram WebApp (платформа известна
-       И downloadFile доступен) — карточка на сервер → нативный downloadFile с https-URL →
-       «Загрузки» Telegram; 1) мобильный вне Telegram — и в in-app браузере Telegram, где
-       WebApp урезан — карточка на сервер → инлайн-оверлей с https-картинкой: long-press
-       → «Загрузка» (https DownloadManager ест нативно), «Скачать» — вкладка с https;
-       upload не удался (сеть/401/лимит) — blob-оверлей без обещаний скачивания;
-       2) desktop — a.download как раньше. */
-    const plat = tg ? String(tg.platform || '') : '';
-    const inTg = !!plat && plat !== 'unknown' && plat !== 'web';
-    const isMobile = inTg ? (plat === 'android' || plat === 'ios')
-        : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-    const objUrl = URL.createObjectURL(card.blob);
-    let saved = false;
-    /* upload — один результат на тап: TG-ветка грузит первой, мобильная берёт готовый
-       httpsUrl (в т.ч. после падения downloadFile — upload уже ок, повторять не нужно);
-       после неудачного upload повторный тап — новая попытка, это легально */
-    let uploaded = null;
-    /* [UX-T41] ветка Telegram — прежде прочего: серверный https-URL единственный,
-       который нативный downloadFile принимает. Upload не удался / Telegram < 8.0 —
-       шаг цепочки ниже, как раньше */
-    if (inTg && typeof tg.downloadFile === 'function') {
-        uploaded = uploaded ?? await cardUploadUrl(card.blob);
-        if (uploaded) {
-            try {
-                tg.downloadFile({ url: uploaded, file_name: fname });
-                URL.revokeObjectURL(objUrl);
-                trackShare('shareDownload');
-                /* честный тост: downloadFile без колбэка результата — юзер может
-                   отменить нативный диалог, «сохранён» не утверждаем (урок UX-B15) */
-                toast('Открыл диалог сохранения — подтвердите в Telegram');
-                saved = true;
-            } catch (e) { /* Telegram < 8.0 или отказ — шаг цепочки ниже */ }
-        }
-    }
-    if (!saved && isMobile) {
-        /* [UX-B15] итерация 3: blob мёртв в in-app браузере Telegram (тосты и подсказки
-           врали) — работаем через серверный https-URL: long-press по <img src=https>
-           открывает нативное меню, «Загрузка» сохраняет файл через DownloadManager;
-           «Скачать» — вкладка с https (там системное скачивание работает). Upload не
-           удался — blob-оверлей остаётся для ПРОСМОТРА, без обещаний скачивания */
-        const httpsUrl = uploaded ?? await cardUploadUrl(card.blob);
-        if (httpsUrl) {
-            URL.revokeObjectURL(objUrl); /* blob не нужен — картинка на сервере */
-            cvOpen(httpsUrl, fname, true);
-            trackShare('shareDownload');
-            toast('Удерживайте картинку и выберите „Загрузка“');
-        } else {
-            cvOpen(objUrl, fname, false);
-            trackShare('shareDownload');
-            toast('Не получилось подготовить сохранение — показываю картинку');
-        }
-        saved = true;
-    }
-    if (!saved && !isMobile) {
-        try {
-            const a = document.createElement('a');
-            a.href = objUrl;
-            a.download = fname;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
-            setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
-            trackShare('shareDownload');
-            toast('Картинка сохранена в загрузки');
-            saved = true;
-        } catch (e) { /* dead-end ниже */ }
-    }
-    if (!saved) {
-        URL.revokeObjectURL(objUrl);
-        toast('Не получилось подготовить картинку', true);
-    }
-    setBusy(false);
-}
-
-/* ---------- [UX-B15] инлайн-просмотр карточки (мобильный вне полноценного Telegram) ---------- */
-/* оверлей #cardview вне #app (index.html, слой 55 — переживает render()). Итерация 3:
-   blob в in-app браузере Telegram мёртв (a.download, long-press «Загрузка», «Открыть
-   В…» — ничего не сохраняет, DownloadManager бракует blob: по протоколу), поэтому
-   оверлей открывается с СЕРВЕРНЫМ https-URL: long-press по <img src=https> даёт
-   нативное меню, «Загрузка» кладёт файл в «Загрузки» через DownloadManager; кнопка
-   «Скачать» открывает вкладку с https (там системное скачивание работает). Fallback
-   при неудачном upload — blob-оверлей для просмотра, БЕЗ обещаний скачивания. */
-let cvUrl = null;
-let cvName = '';
-let cvHttps = false;
-/* разметка оверлея постоянна — заполняется один раз при init (паттерн #modalBox);
-   long-press по картинке не блокируем (без user-select/touch-callout) — иначе нативное
-   меню WebView («Загрузка») не откроется */
-function cvInit() {
-    const cv = document.getElementById('cardview');
-    if (!cv || cv.__gymInit) return;
-    cv.__gymInit = true;
-    cv.innerHTML =
-        '<div class="cvbox">' +
-        '<div class="cvhint" id="cvHint">Удерживайте картинку и выберите „Загрузка“</div>' +
-        '<div class="cvimgwrap"><img id="cvImg" alt="Карточка тренировки" draggable="false"></div>' +
-        '<div class="btnrow"><button class="btn prime wide" data-act="cvSave">⬇ Скачать</button>' +
-        '<button class="btn sec wide" data-act="cvClose">Закрыть</button></div>' +
-        '</div>';
-}
-function cvOpen(url, fname, https) {
-    if (cvUrl && !cvHttps) URL.revokeObjectURL(cvUrl); /* защитно: повторное открытие blob не течёт */
-    cvUrl = url;
-    cvName = fname;
-    cvHttps = !!https;
-    document.getElementById('cvImg').src = url;
-    /* честные подсказки: https — long-press реально сохраняет; blob (fallback) —
-       только просмотр, без обещаний (DownloadManager blob не берёт) */
-    document.getElementById('cvHint').textContent = cvHttps
-        ? 'Удерживайте картинку и выберите „Загрузка“'
-        : 'Просмотр картинки';
-    document.getElementById('cardview').classList.remove('hidden');
-    document.getElementById('cardview').classList.add('open');
-}
-function cvClose() {
-    const cv = document.getElementById('cardview');
-    if (!cv || !cv.classList.contains('open')) return;
-    cv.classList.remove('open');
-    cv.classList.add('hidden');
-    document.getElementById('cvImg').removeAttribute('src');
-    /* revoke только blob: https-URL серверный (TTL 1 ч на сервере), revoke на него не действует */
-    if (cvUrl && !cvHttps) { URL.revokeObjectURL(cvUrl); }
-    cvUrl = null;
-    cvName = '';
-    cvHttps = false;
-}
-function cvSave() {
-    if (!cvUrl) return;
-    if (cvHttps) {
-        let wn = null;
-        try { wn = window.open(cvUrl, '_blank'); } catch (e) { wn = null; }
-        /* /card/ отдаётся с attachment-Disposition → файл уже идёт в загрузки;
-           вкладка — юзер скачает сам. window.open заблокирован — честный тост */
-        if (wn) toast('Картинка отправлена в загрузки');
-        else toast('Не получилось открыть вкладку — удерживайте картинку и выберите „Загрузка“');
-        return;
-    }
-    try {
-        const a = document.createElement('a');
-        a.href = cvUrl;
-        a.download = cvName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        /* повторный тап — повторяем тост: a.download без колбэка, факт сохранения клиенту не виден */
-        toast('Картинка отправлена в загрузки');
-    } catch (e) { /* a.download не сработал (WebView) — оверлей остаётся для просмотра */ }
 }
 
 /* [ANA-T5] события онбординга (спека ANA-S2 г2): имена — белый список сервера, доставка —
@@ -6360,7 +5739,6 @@ async function init() {
     loadTheme();
     loadBg();
     initBgPicker();
-    cvInit(); /* [UX-B15] разметка инлайн-карточки — один раз, элемент вне #app */
     restInitState(); /* таймер независим от сети: восстанавливается до /api/init */
     if (tg) {
         try { tg.ready(); tg.expand(); } catch (e) { /* noop */ }
