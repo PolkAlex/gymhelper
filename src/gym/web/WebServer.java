@@ -410,6 +410,17 @@ public final class WebServer {
            Разминке» обязан пережить сохранение (§5 спеки) */
         if (dataJson.containsKey("warmupFirst")) current.warmupFirst = data.warmupFirst;
         if (dataJson.containsKey("warmupEx")) current.warmupEx = data.warmupEx;
+        /* [EXR-T13] «Свои»/«Любимые» Mini App сохраняет целиком со своим G — замещаем только
+            если клиент прислал ключ (старый кэш JS — не трогаем, по образцу templates/goals);
+            дубликаты имён уже отсеяны при GymData.fromJson (имя — уникальный ключ, §11) */
+        if (dataJson.containsKey("customEx")) {
+            current.customEx.clear();
+            current.customEx.addAll(data.customEx);
+        }
+        if (dataJson.containsKey("favs")) {
+            current.favs.clear();
+            current.favs.addAll(data.favs);
+        }
         data = current;
         /* nextId монотонно растёт: max(серверный, клиентский, max(id)+1) — иначе коллизии id затирают данные */
         data.nextId = Math.max(current.nextId, incomingNextId);
