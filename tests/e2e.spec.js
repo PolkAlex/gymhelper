@@ -5521,12 +5521,13 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
     });
 
-    test('fallback мобильный без Telegram — инлайн-оверлей с картинкой, long-press-подсказка (UX-B15)', async ({ page, context, request }) => {
-        test.setTimeout(120000); /* canvas-рендеры ×2 + скачивание: на медленном CI 60с впритык */
-        /* мобильный UA вне Telegram + share нет: a.download на мобильных тихо фейлится,
-           а window.open(blob:) в in-app браузере Telegram вкладку не показывает (WebView
-           без multi-window) — честная ветка [UX-B15]: инлайн-оверлей с <img>, long-press
-           по которому в любом WebView открывает нативное «Скачать изображение» */
+    test('fallback мобильный без Telegram — оверлей с серверной https-картинкой, «Скачать» — вкладка (UX-B15)', async ({ page, context, request }) => {
+        test.setTimeout(120000); /* canvas-рендеры ×2 + upload + скачивание: на медленном CI 60с впритык */
+        /* мобильный UA вне Telegram + share нет: итерация 3 — blob в in-app браузере
+           Telegram мёртв (a.download, long-press «Загрузка», «Открыть В…» ничего не
+           сохраняют, DownloadManager бракует blob: по протоколу) — честная ветка
+           [UX-B15]: карточка на сервер → оверлей с <img src=https>, long-press →
+           нативное меню, «Загрузка» сохраняет через DownloadManager */
         await context.addInitScript(function () {
             try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
             try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
@@ -5536,10 +5537,14 @@ test.describe('[UX-I14] шейринг картинкой', function () {
                     value: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
                 });
             } catch (e) { /* на iphone13 UA и так мобильный */ }
-            /* spy revoke: закрытие оверлея обязано освободить objectURL */
+            /* spy revoke: blob в https-ветке отзывается сразу (не нужен), https — нет */
             const orig = URL.revokeObjectURL.bind(URL);
             window.__cvRevoked = [];
             URL.revokeObjectURL = function (u) { window.__cvRevoked.push(String(u)); return orig(u); };
+            /* spy window.open: реальную вкладку/скачивание WebView в e2e не смоделировать —
+               ассертим сам факт и переданный URL (паттерн deep-link теста [UX-B14]) */
+            window.__openUrls = [];
+            window.open = function (u) { window.__openUrls.push(String(u)); return { gymSpy: true }; };
         });
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
@@ -5548,33 +5553,46 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         } } });
         await openApp(page);
         await page.locator('.pcard').first().click();
-        /* новой вкладки быть не должно: оверлей открывается в том же окне */
+        /* до тапа «Скачать» реальных вкладок быть не должно (spy перехватывает window.open) */
         let popupOpened = false;
         context.on('page', function () { popupOpened = true; });
+        let uploadHit = 0;
+        page.on('request', function (r) { if (r.url().split('?')[0].endsWith('/api/card-upload')) uploadHit++; });
         await page.locator('[data-act="shareSheet"]').click();
         await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
         await scRendered(page, 1);
-        /* инлайн-оверлей: blob-картинка в <img> + long-press-подсказка на виду */
+        /* инлайн-оверлей: <img> с СЕРВЕРНЫМ /card/-URL — blob в WebView мёртв, https нет */
         const cv = page.locator('#cardview.open');
         await expect(cv).toBeVisible();
         const src = String(await page.locator('#cvImg').getAttribute('src'));
-        expect(src.startsWith('blob:')).toBeTruthy();
-        await expect(cv).toContainText('Удерживайте картинку и выберите „Скачать изображение“');
-        await expect(page.locator('.toast.show')).toContainText('Удерживайте картинку и выберите', { timeout: 5000 });
+        expect(src).toMatch(/^https?:\/\/.+\/card\/[0-9a-zA-Z]{22}\.png$/);
+        await expect(cv).toContainText('Удерживайте картинку и выберите „Загрузка“');
+        await expect(page.locator('.toast.show')).toContainText('Удерживайте картинку и выберите „Загрузка“', { timeout: 5000 });
+        /* upload ровно один; воронка как раньше */
+        expect(uploadHit).toBe(1);
         const ev = await (await request.get('/api/track-events')).json();
         expect(ev).toContain('shareDownload');
         expect(ev).not.toContain('shareOk');
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
         expect(popupOpened).toBeFalsy();
-        /* «Скачать» — a.download с прежним именем файла (§5.4) */
-        const dl = page.waitForEvent('download');
+        /* карточка реально раздаётся сервером: публичный GET — 200 image/png (§5.4) */
+        const img = await request.get(src);
+        expect(img.status()).toBe(200);
+        expect(img.headers()['content-type']).toContain('image/png');
+        /* blob отозван сразу после upload (не нужен), https — НЕ отзывается (серверный) */
+        const revoked = await page.evaluate(function () { return window.__cvRevoked; });
+        expect(revoked).toHaveLength(1);
+        expect(String(revoked[0]).startsWith('blob:')).toBeTruthy();
+        /* «Скачать» — window.open ровно с этим https-URL; /card/ идёт с attachment-
+           Disposition → файл сразу уходит в загрузки (вкладка — юзер скачает сам) */
         await page.locator('[data-act="cvSave"]').click();
-        expect((await dl).suggestedFilename()).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
-        /* закрытие кнопкой — оверлей скрыт, objectURL освобождён */
+        expect(await page.evaluate(function () { return window.__openUrls; })).toEqual([src]);
+        await expect(page.locator('.toast.show')).toContainText('Картинка отправлена в загрузки', { timeout: 5000 });
+        /* закрытие кнопкой — оверлей скрыт, https не отзывается */
         await page.locator('[data-act="cvClose"]').click();
         await expect(page.locator('#cardview.open')).toHaveCount(0);
-        expect(await page.evaluate(function () { return window.__cvRevoked; })).toContain(src);
-        /* повторный поток: закрытие тапом по фону (края оверлея) — тоже revoke.
+        expect(await page.evaluate(function () { return window.__cvRevoked; })).toHaveLength(1);
+        /* повторный поток: upload снова, закрытие тапом по фону — revoke-счётчик не растёт от https.
            [UX-B17 ревью] сетл после a.download/закрытия оверлея + явное ожидание
            строки шита (на медленном CI открытие может запаздывать — флейк UX-I14) */
         await page.waitForTimeout(300);
@@ -5584,10 +5602,57 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         await row2.click();
         await scRendered(page, 2);
         await expect(page.locator('#cardview.open')).toBeVisible();
-        const src2 = String(await page.locator('#cvImg').getAttribute('src'));
         await page.locator('#cardview').click({ position: { x: 4, y: 4 } });
         await expect(page.locator('#cardview.open')).toHaveCount(0);
-        expect(await page.evaluate(function () { return window.__cvRevoked; })).toContain(src2);
+        const revoked2 = await page.evaluate(function () { return window.__cvRevoked; });
+        expect(revoked2).toHaveLength(2); /* два неиспользованных blob, ни одного https */
+    });
+
+    test('мобильный: upload упал (503) — blob-оверлей для просмотра + честный тост без обещаний (UX-B15)', async ({ page, context, request }) => {
+        test.setTimeout(60000);
+        /* нет сети / 401 / лимит / 503: https-ветка недоступна — остаётся blob-оверлей
+           для ПРОСМОТРА; подсказка нейтральная, тост честный (blob в TG WebView мёртв —
+           обещать скачивание нельзя, урок итерации 2) */
+        await context.addInitScript(function () {
+            try { Object.defineProperty(navigator, 'share', { configurable: true, value: undefined }); } catch (e) {}
+            try { Object.defineProperty(navigator, 'canShare', { configurable: true, value: undefined }); } catch (e) {}
+            try {
+                Object.defineProperty(navigator, 'userAgent', {
+                    configurable: true,
+                    value: 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36'
+                });
+            } catch (e) { /* на iphone13 UA и так мобильный */ }
+            const orig = URL.revokeObjectURL.bind(URL);
+            window.__cvRevoked = [];
+            URL.revokeObjectURL = function (u) { window.__cvRevoked.push(String(u)); return orig(u); };
+        });
+        await page.route('**/api/card-upload', function (route) {
+            return route.fulfill({ status: 503, contentType: 'application/json', body: '{"ok":false}' });
+        });
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        await scRendered(page, 1);
+        const cv = page.locator('#cardview.open');
+        await expect(cv).toBeVisible();
+        const src = String(await page.locator('#cvImg').getAttribute('src'));
+        expect(src.startsWith('blob:')).toBeTruthy();
+        await expect(cv).toContainText('Просмотр картинки');
+        await expect(page.locator('.toast.show')).toContainText('Не получилось подготовить сохранение — показываю картинку', { timeout: 5000 });
+        /* «Скачать» (a.download) в blob-режиме доступен: на обычном Chrome сохраняет */
+        const dl = page.waitForEvent('download');
+        await page.locator('[data-act="cvSave"]').click();
+        expect((await dl).suggestedFilename()).toMatch(/^gymhelper-\d{1,2}-\d{1,2}\.png$/);
+        /* закрытие кнопкой — blob отзывается */
+        await page.locator('[data-act="cvClose"]').click();
+        await expect(page.locator('#cardview.open')).toHaveCount(0);
+        expect(await page.evaluate(function () { return window.__cvRevoked; })).toContain(src);
     });
 
     test('рекорд: равный вес — без плашки (герой = объём); 125 после базы 120 — герой «Вес подхода»', async ({ page, context, request }) => {
@@ -6144,6 +6209,20 @@ test.describe('UX-B17: кэш и gzip статики', function () {
         const privacy = await request.get('/privacy.html');
         if (privacy.headers()['cache-control'] !== 'no-cache') {
             throw new Error('/privacy.html cache-control: ' + JSON.stringify(privacy.headers()['cache-control']) + ', ожидался no-cache');
+        }
+        /* API — no-store, как раньше (прод: sendJson → send с "no-store"); мок зеркалит прод
+           (расхождение найдено в предрелизном цикле: у мока заголовка не было вовсе) */
+        const apiGet = await request.get('/api/state');
+        if (apiGet.headers()['cache-control'] !== 'no-store') {
+            throw new Error('/api/state cache-control: ' + JSON.stringify(apiGet.headers()['cache-control']) + ', ожидался no-store');
+        }
+        const apiPost = await request.post('/api/init', { data: {} });
+        if (apiPost.headers()['cache-control'] !== 'no-store') {
+            throw new Error('/api/init cache-control: ' + JSON.stringify(apiPost.headers()['cache-control']) + ', ожидался no-store');
+        }
+        const apiHealth = await request.get('/health');
+        if (apiHealth.headers()['cache-control'] !== 'no-store') {
+            throw new Error('/health cache-control: ' + JSON.stringify(apiHealth.headers()['cache-control']) + ', ожидался no-store');
         }
     });
 

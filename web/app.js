@@ -5689,10 +5689,31 @@ function renderShareCard(w) {
     });
 }
 
+/* [UX-T41]/[UX-B15] карточка на сервер: PNG → POST /api/card-upload → анонимный
+   https-URL /card/<token>.png (TTL 1 ч, подпись initData прод проверяет). https —
+   единственная схема, которую нативно принимают downloadFile Telegram и
+   DownloadManager/WebView: blob: бракуется по протоколу (урок UX-B15, итерация 3 —
+   в in-app браузере Telegram мертвы ВСЕ blob-механизмы: a.download, long-press
+   «Загрузка», «Открыть В…»). Ошибка сети/лимита/таймаута — null, ветка fallback. */
+async function cardUploadUrl(blob) {
+    try {
+        const r = await fetch('/api/card-upload', {
+            method: 'POST',
+            body: blob,
+            headers: { 'Content-Type': 'image/png', 'initData': INIT },
+            signal: AbortSignal.timeout(15000) /* сеть/сервер висят — не блокируем поток */
+        });
+        const j = await r.json();
+        if (r.ok && j.ok && j.url) return j.url;
+    } catch (e) { /* сеть/сервер/таймаут/лимит — null */ }
+    return null;
+}
+
 /* поток «Картинка» (§5, механика UX-I16 «буфер → действие»): рендер PNG → буфер →
    navigator.share с файлом (шторка Telegram); fallback [UX-B15]+[UX-T41] — по
    платформе: Telegram — карточка на сервер → нативный downloadFile с https-URL →
-   инлайн-оверлей с картинкой (мобильный, [UX-B15]) → a.download (desktop), тост всегда
+   мобильный — карточка на сервер → инлайн-оверлей с https-картинкой (long-press
+   «Загрузка» через DownloadManager) → a.download (desktop), тост всегда
    отражает фактическое действие. shareClick пишется на тапе «Поделиться»
    (ACTION shareSheet, точка входа воронки §5); shareOk — по факту шторки,
    shareDownload — по факту показа fallback-пути (оверлей/скачивание запущены);
@@ -5748,38 +5769,34 @@ async function sharePictureGo(wid) {
         }
     }
     /* §5.4 fallback [UX-B15]+[UX-T41]: a.download не доносит файл до файловой системы в
-       мобильных WebView, а vendor downloadFile бракует не-https URL по протоколу (blob:
-       → на реальном Android диалог не открывался вовсе). Цепочка по платформе, тост
-       отражает фактическое действие: 0) полноценный Telegram WebApp (платформа известна
-       И downloadFile доступен) — карточка на сервер (TTL 1 ч, анонимный токен) → нативный
-       downloadFile с https-URL → «Загрузки» Telegram; 1) мобильный вне Telegram — и в
-       in-app браузере Telegram, где WebApp урезан (downloadFile недоступен) — карточка
-       инлайн в оверлее приложения: long-press по <img> → «Скачать изображение» (работает
-       в любом WebView), кнопка «Скачать» — a.download; 2) desktop — a.download как раньше. */
+       мобильных WebView, а blob: бракуется по протоколу ВЕЗДЕ (vendor downloadFile, и
+       итерация 3: в in-app браузере Telegram мертвы все blob-механизмы — a.download,
+       long-press «Загрузка», «Открыть В…»). Цепочка по платформе, тост отражает
+       фактическое действие: 0) полноценный Telegram WebApp (платформа известна
+       И downloadFile доступен) — карточка на сервер → нативный downloadFile с https-URL →
+       «Загрузки» Telegram; 1) мобильный вне Telegram — и в in-app браузере Telegram, где
+       WebApp урезан — карточка на сервер → инлайн-оверлей с https-картинкой: long-press
+       → «Загрузка» (https DownloadManager ест нативно), «Скачать» — вкладка с https;
+       upload не удался (сеть/401/лимит) — blob-оверлей без обещаний скачивания;
+       2) desktop — a.download как раньше. */
     const plat = tg ? String(tg.platform || '') : '';
     const inTg = !!plat && plat !== 'unknown' && plat !== 'web';
     const isMobile = inTg ? (plat === 'android' || plat === 'ios')
         : /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
     const objUrl = URL.createObjectURL(card.blob);
     let saved = false;
+    /* upload — один результат на тап: TG-ветка грузит первой, мобильная берёт готовый
+       httpsUrl (в т.ч. после падения downloadFile — upload уже ок, повторять не нужно);
+       после неудачного upload повторный тап — новая попытка, это легально */
+    let uploaded = null;
     /* [UX-T41] ветка Telegram — прежде прочего: серверный https-URL единственный,
        который нативный downloadFile принимает. Upload не удался / Telegram < 8.0 —
        шаг цепочки ниже, как раньше */
     if (inTg && typeof tg.downloadFile === 'function') {
-        let httpsUrl = null;
-        try {
-            const r = await fetch('/api/card-upload', {
-                method: 'POST',
-                body: card.blob,
-                headers: { 'Content-Type': 'image/png', 'initData': INIT },
-                signal: AbortSignal.timeout(15000) /* сеть/сервер висят — шаг цепочки ниже */
-            });
-            const j = await r.json();
-            if (r.ok && j.ok && j.url) httpsUrl = j.url;
-        } catch (e) { /* сеть/сервер/таймаут — шаг цепочки ниже */ }
-        if (httpsUrl) {
+        uploaded = uploaded ?? await cardUploadUrl(card.blob);
+        if (uploaded) {
             try {
-                tg.downloadFile({ url: httpsUrl, file_name: fname });
+                tg.downloadFile({ url: uploaded, file_name: fname });
                 URL.revokeObjectURL(objUrl);
                 trackShare('shareDownload');
                 /* честный тост: downloadFile без колбэка результата — юзер может
@@ -5790,13 +5807,22 @@ async function sharePictureGo(wid) {
         }
     }
     if (!saved && isMobile) {
-        /* [UX-B15] инлайн-карточка: window.open(blob:) в in-app браузере Telegram вкладку
-           не показывает (WebView без multi-window) — тост «Открыл картинку» врал. Вместо
-           этого карточка видна в самом приложении: long-press по <img> в любом WebView
-           открывает нативное меню «Скачать изображение», «Скачать» — a.download (Chrome) */
-        cvOpen(objUrl, fname);
-        trackShare('shareDownload');
-        toast('Удерживайте картинку и выберите „Скачать изображение“');
+        /* [UX-B15] итерация 3: blob мёртв в in-app браузере Telegram (тосты и подсказки
+           врали) — работаем через серверный https-URL: long-press по <img src=https>
+           открывает нативное меню, «Загрузка» сохраняет файл через DownloadManager;
+           «Скачать» — вкладка с https (там системное скачивание работает). Upload не
+           удался — blob-оверлей остаётся для ПРОСМОТРА, без обещаний скачивания */
+        const httpsUrl = uploaded ?? await cardUploadUrl(card.blob);
+        if (httpsUrl) {
+            URL.revokeObjectURL(objUrl); /* blob не нужен — картинка на сервере */
+            cvOpen(httpsUrl, fname, true);
+            trackShare('shareDownload');
+            toast('Удерживайте картинку и выберите „Загрузка“');
+        } else {
+            cvOpen(objUrl, fname, false);
+            trackShare('shareDownload');
+            toast('Не получилось подготовить сохранение — показываю картинку');
+        }
         saved = true;
     }
     if (!saved && !isMobile) {
@@ -5821,34 +5847,42 @@ async function sharePictureGo(wid) {
 }
 
 /* ---------- [UX-B15] инлайн-просмотр карточки (мобильный вне полноценного Telegram) ---------- */
-/* оверлей #cardview вне #app (index.html, слой 55 — переживает render()): in-app браузер
-   Telegram не показывает вкладку window.open(blob:) (WebView без multi-window), а
-   downloadFile там недоступен — карточку показываем в самом приложении. Long-press по
-   <img> открывает нативное меню WebView («Скачать изображение» — файл в «Загрузки»,
-   работает в любом Android WebView), кнопка «Скачать» — a.download (срабатывает в
-   Chrome), закрытие по фону или кнопке освобождает objectURL. */
+/* оверлей #cardview вне #app (index.html, слой 55 — переживает render()). Итерация 3:
+   blob в in-app браузере Telegram мёртв (a.download, long-press «Загрузка», «Открыть
+   В…» — ничего не сохраняет, DownloadManager бракует blob: по протоколу), поэтому
+   оверлей открывается с СЕРВЕРНЫМ https-URL: long-press по <img src=https> даёт
+   нативное меню, «Загрузка» кладёт файл в «Загрузки» через DownloadManager; кнопка
+   «Скачать» открывает вкладку с https (там системное скачивание работает). Fallback
+   при неудачном upload — blob-оверлей для просмотра, БЕЗ обещаний скачивания. */
 let cvUrl = null;
 let cvName = '';
+let cvHttps = false;
 /* разметка оверлея постоянна — заполняется один раз при init (паттерн #modalBox);
    long-press по картинке не блокируем (без user-select/touch-callout) — иначе нативное
-   меню WebView («Скачать изображение») не откроется */
+   меню WebView («Загрузка») не откроется */
 function cvInit() {
     const cv = document.getElementById('cardview');
     if (!cv || cv.__gymInit) return;
     cv.__gymInit = true;
     cv.innerHTML =
         '<div class="cvbox">' +
-        '<div class="cvhint">Удерживайте картинку и выберите „Скачать изображение“</div>' +
+        '<div class="cvhint" id="cvHint">Удерживайте картинку и выберите „Загрузка“</div>' +
         '<div class="cvimgwrap"><img id="cvImg" alt="Карточка тренировки" draggable="false"></div>' +
         '<div class="btnrow"><button class="btn prime wide" data-act="cvSave">⬇ Скачать</button>' +
         '<button class="btn sec wide" data-act="cvClose">Закрыть</button></div>' +
         '</div>';
 }
-function cvOpen(objUrl, fname) {
-    if (cvUrl) URL.revokeObjectURL(cvUrl); /* защитно: повторное открытие не течёт */
-    cvUrl = objUrl;
+function cvOpen(url, fname, https) {
+    if (cvUrl && !cvHttps) URL.revokeObjectURL(cvUrl); /* защитно: повторное открытие blob не течёт */
+    cvUrl = url;
     cvName = fname;
-    document.getElementById('cvImg').src = objUrl;
+    cvHttps = !!https;
+    document.getElementById('cvImg').src = url;
+    /* честные подсказки: https — long-press реально сохраняет; blob (fallback) —
+       только просмотр, без обещаний (DownloadManager blob не берёт) */
+    document.getElementById('cvHint').textContent = cvHttps
+        ? 'Удерживайте картинку и выберите „Загрузка“'
+        : 'Просмотр картинки';
     document.getElementById('cardview').classList.remove('hidden');
     document.getElementById('cardview').classList.add('open');
 }
@@ -5858,11 +5892,23 @@ function cvClose() {
     cv.classList.remove('open');
     cv.classList.add('hidden');
     document.getElementById('cvImg').removeAttribute('src');
-    if (cvUrl) { URL.revokeObjectURL(cvUrl); cvUrl = null; }
+    /* revoke только blob: https-URL серверный (TTL 1 ч на сервере), revoke на него не действует */
+    if (cvUrl && !cvHttps) { URL.revokeObjectURL(cvUrl); }
+    cvUrl = null;
     cvName = '';
+    cvHttps = false;
 }
 function cvSave() {
     if (!cvUrl) return;
+    if (cvHttps) {
+        let wn = null;
+        try { wn = window.open(cvUrl, '_blank'); } catch (e) { wn = null; }
+        /* /card/ отдаётся с attachment-Disposition → файл уже идёт в загрузки;
+           вкладка — юзер скачает сам. window.open заблокирован — честный тост */
+        if (wn) toast('Картинка отправлена в загрузки');
+        else toast('Не получилось открыть вкладку — удерживайте картинку и выберите „Загрузка“');
+        return;
+    }
     try {
         const a = document.createElement('a');
         a.href = cvUrl;
@@ -5872,7 +5918,7 @@ function cvSave() {
         a.remove();
         /* повторный тап — повторяем тост: a.download без колбэка, факт сохранения клиенту не виден */
         toast('Картинка отправлена в загрузки');
-    } catch (e) { /* a.download не сработал — long-press-подсказка остаётся честным путём */ }
+    } catch (e) { /* a.download не сработал (WebView) — оверлей остаётся для просмотра */ }
 }
 
 /* [ANA-T5] события онбординга (спека ANA-S2 г2): имена — белый список сервера, доставка —
