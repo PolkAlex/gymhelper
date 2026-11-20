@@ -4,6 +4,7 @@ const http = require('http');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib'); /* [UX-B17] gzip текстовой статики — зеркало прод-WebServer */
 
 const root = path.join(__dirname, '..', 'web');
 const os = require('os');
@@ -327,13 +328,36 @@ function handle(req, res) {
         res.end('not found');
         return;
     }
-    /* [EXR-T8] прод-логика Cache-Control [EXR-T6]: GET /img/ — public, max-age=604800
-       (фото неизменяемы), остальная статика — no-store; раньше мок отдавал всегда no-store.
-       [CNT-T1] ассеты лендинга /landing/assets/ — тоже неделя (зеркало прод-WebServer) */
-    const img = req.method === 'GET' && (('/' + rel).startsWith('/img/') || ('/' + rel).startsWith('/landing/assets/'));
-    res.writeHead(200, {
-        'Content-Type': types[path.extname(file).toLowerCase()] || 'application/octet-stream',
-        'Cache-Control': img ? 'public, max-age=604800' : 'no-store'
-    });
-    res.end(fs.readFileSync(file));
+    /* [UX-B17] прод-логика Cache-Control: HTML-документы — no-cache (в index.html ссылки
+       на ?v= версионной статики), остальная статика — годовой immutable (JS/CSS с ?v=-бампом
+       + неизменяемые img/ассеты); раньше: /img/ и /landing/assets/ — неделя [EXR-T6],
+       прочее — no-store.
+       [EXR-T7] зеркало прод-gzip: клиенту с Accept-Encoding: gzip текстовая статика
+       сжимается (Content-Encoding: gzip + Vary, Content-Length — сжатого размера), без
+       Accept-Encoding — сырые байты; картинки и HEAD — без сжатия */
+    const ct = types[path.extname(file).toLowerCase()] || 'application/octet-stream';
+    const cc = ('/' + rel).endsWith('.html') ? 'no-cache' : 'public, max-age=31536000, immutable';
+    const staticRaw = fs.readFileSync(file);
+    if (req.method === 'HEAD') {
+        res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': cc, 'Vary': 'Accept-Encoding' });
+        res.end();
+        return;
+    }
+    const ae = String(req.headers['accept-encoding'] || '');
+    const gz = ae.indexOf('gzip') >= 0
+        && (ct.indexOf('text/') === 0 || ct.indexOf('javascript') >= 0 || ct.indexOf('json') >= 0);
+    if (gz) {
+        const body = zlib.gzipSync(staticRaw);
+        res.writeHead(200, {
+            'Content-Type': ct,
+            'Cache-Control': cc,
+            'Content-Encoding': 'gzip',
+            'Vary': 'Accept-Encoding',
+            'Content-Length': body.length
+        });
+        res.end(body);
+        return;
+    }
+    res.writeHead(200, { 'Content-Type': ct, 'Cache-Control': cc, 'Vary': 'Accept-Encoding' });
+    res.end(staticRaw);
 }
