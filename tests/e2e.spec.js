@@ -2761,108 +2761,27 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
     });
 });
 
-/* ===== [UX-T25] полноэкранный режим: тогл в Настройках [UX-T27] ===== */
-test.describe('UX-T25: тогл полноэкранного режима в Настройках', function () {
+/* ===== [UX-T43] полноэкранный режим удалён целиком (решение владельца 20.11) ===== */
+test.describe('UX-T43: полноэкранный режим удалён', function () {
 
-    test('тогл «Полноэкранный режим»: клиент без API (мок без tg.requestFullscreen) — locked + подпись «Недоступно», тап не ставит флаг', async ({ page }) => {
-        /* [UX-S4 §12.5] клиент вообще без requestFullscreen (метода нет): locked-тогл.
-           Условие disabled — !(tg && tg.requestFullscreen), считается при каждом рендере */
-        await page.addInitScript(function () {
-            var t;
-            Object.defineProperty(window, 'Telegram', {
-                configurable: true,
-                get: function () { return t; },
-                set: function (v) {
-                    t = v;
-                    try {
-                        Object.defineProperty(v, 'WebApp', {
-                            configurable: true,
-                            get: function () { return this.__wa; },
-                            set: function (wa) {
-                                this.__wa = wa;
-                                if (wa) {
-                                    try { delete wa.requestFullscreen; } catch (e) { /* noop */ }
-                                }
-                            }
-                        });
-                    } catch (e) { /* noop */ }
-                }
-            });
-        });
+    test('в Настройках нет тогла «Полноэкранный режим», meta-подписей и «(в разработке)»', async ({ page }) => {
         await openApp(page);
         await page.locator('[aria-label="Настройки"]').click();
-        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
-        await expect(btn).toBeVisible({ timeout: 5000 });
-        /* locked: aria-disabled, meta-текст объясняет причину — тост и флаг не появляются */
-        await expect(btn).toHaveAttribute('aria-disabled', 'true');
-        await expect(page.locator('.card', { hasText: 'Полноэкранный режим' })).toContainText('Недоступно: обнови Telegram до 8.0+');
-        /* pointer-events:none на locked: тап уходит в hit-test мимо кнопки — ни тоста, ни флага;
-            повторный тап (двойной тап пользователя) после дедуп-окна — результат тот же */
-        await btn.click({ force: true });
-        await expect(page.locator('.toast.show')).toHaveCount(0);
-        await page.waitForTimeout(450); /* дедуп-окно dispatchFromEl */
-        await btn.click({ force: true });
-        await expect(page.locator('.toast.show')).toHaveCount(0);
-        const flag = await page.evaluate(function () {
-            try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; }
-        });
-        if (flag !== null) throw new Error('gymFullscreen выставлен без поддержки API: ' + flag);
+        await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
+        /* регресс реинтродукции: ни тогла, ни подписей, ни locked-версии */
+        const cnt = await page.getByText('Полноэкранный режим').count();
+        if (cnt > 0) throw new Error('«Полноэкранный режим» остался в Настройках: ' + cnt + ' экз.');
+        for (const dead of ['Автоматически разворачивает приложение', 'Недоступно: обнови Telegram до 8.0+', '(в разработке)']) {
+            const c = await page.getByText(dead).count();
+            if (c > 0) throw new Error('осталась подпись fullscreen-эпохи «' + dead + '»');
+        }
     });
 
-    /* клиент с vendor-скриптом v6.0 (метод есть, но бросает WebAppMethodUnsupported):
-       тогл активен, страховка [UX-T25] — тост «Не поддерживается этим Telegram» */
-    test('тогл «Полноэкранный режим»: клиент v6.0 (метод бросает) — тап даёт тост «Не поддерживается», флаг не ставится', async ({ page }) => {
-        await openApp(page);
-        await page.locator('[aria-label="Настройки"]').click();
-        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
-        await expect(btn).toBeVisible({ timeout: 5000 });
-        await btn.click();
-        await expect(page.locator('.toast.show')).toHaveText('Не поддерживается этим Telegram', { timeout: 5000 });
-        const flag = await page.evaluate(function () {
-            try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; }
-        });
-        if (flag !== null) throw new Error('gymFullscreen выставлен без поддержки API: ' + flag);
-    });
-
-    test('init с сохранённым gymFullscreen=1: тихая попытка без тоста, приложение грузится', async ({ page }) => {
-        /* синхронная заглушка API 8.0+: патчим WebApp в момент его присвоения (до eval app.js),
-           иначе init() уже отработает с настоящим v6.0-методом */
+    test('сохранённый gymFullscreen=1 не вызывает fullscreen API, класс fs не появляется, шапка обычная', async ({ page }) => {
+        /* синхронная заглушка API 8.0+ (патч WebApp в момент присвоения, до eval app.js):
+           если код fullscreen-эпохи вернулся, init попытается «тихо восстановить» режим */
         await page.addInitScript(function () {
             try { localStorage.setItem('gymFullscreen', '1'); } catch (e) { /* noop */ }
-            var t;
-            Object.defineProperty(window, 'Telegram', {
-                configurable: true,
-                get: function () { return t; },
-                set: function (v) {
-                    t = v;
-                    try {
-                        Object.defineProperty(v, 'WebApp', {
-                            configurable: true,
-                            get: function () { return this.__wa; },
-                            set: function (wa) {
-                                this.__wa = wa;
-                                if (wa) {
-                                    try { wa.requestFullscreen = function () { window.__fsCalled = (window.__fsCalled || 0) + 1; }; } catch (e) { /* noop */ }
-                                }
-                            }
-                        });
-                    } catch (e) { /* noop */ }
-                }
-            });
-        });
-        await openApp(page);
-        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
-        /* восстановление «тихое»: никаких тостов на старте */
-        await expect(page.locator('.toast.show')).toHaveCount(0);
-        const called = await page.evaluate(function () { return window.__fsCalled || 0; });
-        if (called !== 1) throw new Error('init не восстановил fullscreen: вызовов requestFullscreen ' + called);
-    });
-
-    /* на реальных клиентах 8.0+ isFullscreen обновляется асинхронно (fullscreenChanged):
-       успешный вызов ставит флаг сразу, без синхронной проверки isFullscreen */
-    test('[UX-T25] API есть и не бросает: флаг gymFullscreen=1 и тост «включён» сразу; выключение — exitFullscreen + «Обычный режим»', async ({ page }) => {
-        /* синхронная заглушка API 8.0+: requestFullscreen/exitFullscreen без ошибки (до eval app.js) */
-        await page.addInitScript(function () {
             var t;
             Object.defineProperty(window, 'Telegram', {
                 configurable: true,
@@ -2886,147 +2805,178 @@ test.describe('UX-T25: тогл полноэкранного режима в Н�
             });
         });
         await openApp(page);
-        /* [UX-T27] тогл переехал из Профиля в Настройки */
-        await page.locator('[aria-label="Настройки"]').click();
-        const btn = page.locator('[role="switch"][aria-label="Полноэкранный режим"]');
-        /* включение: вызов принят -> флаг '1' + тост «включён», тогл ON */
-        await btn.click();
-        await expect(page.locator('.toast.show')).toHaveText('Полноэкранный режим включён', { timeout: 5000 });
-        await expect(btn).toHaveAttribute('aria-checked', 'true');
-        const on = await page.evaluate(function () {
-            return { called: window.__fsCalled || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
+        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
+        const m = await page.evaluate(function () {
+            return {
+                called: window.__fsCalled || 0,
+                exited: window.__fsExited || 0,
+                fs: document.body.classList.contains('fs'),
+                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop
+            };
         });
-        if (on.called !== 1) throw new Error('requestFullscreen не вызван (вызовов: ' + on.called + ')');
-        if (on.flag !== '1') throw new Error('флаг gymFullscreen: ' + on.flag + ', ожидался "1"');
-        /* дедап-окно dispatchFromEl 400 мс — реальный пользователь тапает повторно позже */
-        await page.waitForTimeout(500);
-        /* выключение: exitFullscreen + флаг '0' + тост «Обычный режим», тогл OFF */
-        await page.locator('[role="switch"][aria-label="Полноэкранный режим"]').click();
-        await expect(page.locator('.toast.show')).toHaveText('Обычный режим', { timeout: 5000 });
-        await expect(page.locator('[role="switch"][aria-label="Полноэкранный режим"]')).toHaveAttribute('aria-checked', 'false');
-        const off = await page.evaluate(function () {
-            return { exited: window.__fsExited || 0, flag: (function () { try { return localStorage.getItem('gymFullscreen'); } catch (e) { return null; } })() };
-        });
-        if (off.exited !== 1) throw new Error('exitFullscreen не вызван');
-        if (off.flag !== '0') throw new Error('флаг gymFullscreen: ' + off.flag + ', ожидался "0"');
+        if (m.called || m.exited) throw new Error('fullscreen API вызван при старте: ' + JSON.stringify(m));
+        if (m.fs) throw new Error('класс fs на body после удаления режима');
+        if (m.pad !== '10px') throw new Error('padding-top .topbar: ' + m.pad + ', ожидался 10px (обычный режим)');
     });
 });
 
-/* ===== [UX-B10] fullscreen safe-area: шапка не зажата статус-баром ===== */
-test.describe('UX-B10: fullscreen safe-area шапки', function () {
+/* ===== [UX-T42] навигация: стек экранов + BackButton Telegram + свайпы (UX-I19) ===== */
+test.describe('UX-T42: навигация — BackButton Telegram', function () {
+    /* вендор имитирует BackButton локально; для show/hide/onClick нужен клиент 6.1+ —
+       поднимаем версию хэшем tgWebAppVersion (вендор читает init-параметры из location.hash) */
+    async function openAppModern(page) {
+        await page.goto('/#tgWebAppVersion=8.0');
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+    }
+    const bbVis = function (page) {
+        return page.evaluate(function () {
+            try { return !!window.Telegram.WebApp.BackButton.isVisible; } catch (e) { return null; }
+        });
+    };
+    /* Android back: вендорский вход событий шлёт back_button_pressed → onClick → navBack */
+    const pressBack = function (page) {
+        return page.evaluate(function () {
+            window.TelegramGameProxy_receiveEvent('back_button_pressed');
+        });
+    };
 
-    /* клиент 8.0+ эмулируется через НАСТОЯЩУЮ вендорскую точку входа событий
-       TelegramGameProxy_receiveEvent (сестринский к UX-T25 приём: без подмены WebApp,
-       сквозь реальный пайплайн fullscreen_changed/safe_area_changed -> подписка tg.onEvent) */
-    test('вне fs: 10px и fs нет; вход + safe-area 44px: fs есть, паддинг 56px ([UX-B11] минимум под шапку Telegram), inset 64px побеждает; выход: fs снят', async ({ page }) => {
-        await openApp(page);
-        /* обычный режим: класс fs не ставится, геометрия шапки прежняя (padding 10px 12px) */
-        const normal = await page.evaluate(function () {
-            return {
-                fs: document.body.classList.contains('fs'),
-                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop,
-                padBottom: getComputedStyle(document.querySelector('.topbar')).paddingBottom
-            };
-        });
-        if (normal.fs) throw new Error('класс fs на body в обычном режиме');
-        if (normal.pad !== '10px') throw new Error('padding-top .topbar вне fullscreen: ' + normal.pad + ', ожидался 10px');
-        if (normal.padBottom !== '10px') throw new Error('padding-bottom .topbar вне fullscreen: ' + normal.padBottom + ', ожидался 10px');
-        /* клиент сообщает safe-area ещё до входа fullscreen: переменная обновляется событием safeAreaChanged */
-        await page.evaluate(function () {
-            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 44, bottom: 24, left: 0, right: 0 });
-        });
-        const inset = await page.evaluate(function () {
-            return document.documentElement.style.getPropertyValue('--fs-inset-top');
-        });
-        if (inset !== '44px') throw new Error('--fs-inset-top: "' + inset + '", ожидалась 44px');
-        /* вход fullscreen (fullscreenChanged -> applyFsChrome): класс fs.
-           [UX-B11] системная шапка Telegram («✕ Закрыть», «⌄ ⋮») висит над контентом —
-           отступ минимум 56px (эмпирика, проверить на телефоне); inset 44 < 56 → 56px */
-        await page.evaluate(function () {
-            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: true });
-        });
-        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
-        const padFs = await page.evaluate(function () {
-            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
-        });
-        if (padFs !== '56px') throw new Error('padding-top .topbar в fullscreen: ' + padFs + ', ожидался 56px ([UX-B11])');
-        /* [UX-B11] компакт по вертикали: нижний паддинг в fs 6px — пилюля ниже и уже */
-        const padBottomFs = await page.evaluate(function () {
-            return getComputedStyle(document.querySelector('.topbar')).paddingBottom;
-        });
-        if (padBottomFs !== '6px') throw new Error('padding-bottom .topbar в fullscreen: ' + padBottomFs + ', ожидался 6px');
-        /* safe-area больше фиксированного минимума: фактический inset побеждает (max()) */
-        await page.evaluate(function () {
-            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 64, bottom: 24, left: 0, right: 0 });
-        });
-        const padFs64 = await page.evaluate(function () {
-            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
-        });
-        if (padFs64 !== '64px') throw new Error('padding-top .topbar в fullscreen (inset 64px): ' + padFs64 + ', ожидался 64px');
-        /* выход из fullscreen тем же событием (is_fullscreen=false): класс снят, геометрия прежняя */
-        await page.evaluate(function () {
-            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: false });
-        });
-        await expect(page.locator('body.fs')).toHaveCount(0);
-        const padOut = await page.evaluate(function () {
-            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
-        });
-        if (padOut !== '10px') throw new Error('padding-top .topbar после выхода из fullscreen: ' + padOut + ', ожидался 10px');
-        const padBottomOut = await page.evaluate(function () {
-            return getComputedStyle(document.querySelector('.topbar')).paddingBottom;
-        });
-        if (padBottomOut !== '10px') throw new Error('padding-bottom .topbar после выхода из fullscreen: ' + padBottomOut + ', ожидался 10px');
+    test('BackButton скрыт на корневой вкладке, виден в Настройках, нажатие = «← Назад»', async ({ page }) => {
+        await openAppModern(page);
+        if (await bbVis(page) !== false) throw new Error('BackButton видим на корневой вкладке');
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+        if (await bbVis(page) !== true) throw new Error('BackButton скрыт на подэкране Настроек');
+        await pressBack(page);
+        await expect(page.locator('.tb-title')).toContainText('GymHelper ·', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).not.toContainText('Настройки');
+        if (await bbVis(page) !== false) throw new Error('BackButton остался видимым после возврата на корень');
     });
 
-    test('старт при восстановленном из сессии fullscreen: класс fs на body сразу, без событий клиента', async ({ page }) => {
-        /* вендор синхронно восстанавливает isFullscreen из sessionStorage (до eval app.js):
-           applyFsChrome() на init уже ставит fs — топбар не «прыгает» после загрузки */
-        await page.addInitScript(function () {
-            try { window.sessionStorage.setItem('__telegram__isFullscreen', '"yes"'); } catch (e) { /* noop */ }
-        });
-        await openApp(page);
-        await expect(page.locator('.tb-title')).toContainText('GymHelper', { timeout: 5000 });
-        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
+    test('цепочка экранов: Календарь → Настройки → назад → назад → корень (стек LIFO)', async ({ page }) => {
+        await openAppModern(page);
+        await page.locator('[aria-label="Календарь"]').click();
+        await expect(page.locator('.tb-title')).toContainText('Календарь', { timeout: 5000 });
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+        await pressBack(page); /* Настройки закрываются, календарь жив под ними */
+        await expect(page.locator('.tb-title')).toContainText('Календарь', { timeout: 5000 });
+        await pressBack(page); /* календарь закрывается, вкладка-источник */
+        await expect(page.locator('.tb-title')).not.toContainText('Календарь', { timeout: 5000 });
+        if (await bbVis(page) !== false) throw new Error('BackButton не скрыт после полного разматывания стека');
     });
 
-    /* [UX-B11] узкий экран: в fullscreen topbar не ломается на 320px —
-       паддинг 56px, без горизонтального переполнения, шестерёнка кликабельна */
-    test('320px: в fullscreen topbar не ломается — паддинг 56px, без переполнения, шестерёнка кликабельна', async ({ page }) => {
-        await page.setViewportSize({ width: 320, height: 640 });
+    test('карточка тренировки: BackButton виден, нажатие закрывает карточку (автосейв-выход)', async ({ page }) => {
+        await openAppModern(page);
+        await startWorkoutUi(page);
+        await expect(page.locator('.backbar .bb-back')).toBeVisible({ timeout: 5000 });
+        if (await bbVis(page) !== true) throw new Error('BackButton скрыт в карточке тренировки');
+        await pressBack(page);
+        await expect(page.locator('.backbar')).toHaveCount(0, { timeout: 5000 });
+        if (await bbVis(page) !== false) throw new Error('BackButton остался после закрытия карточки');
+    });
+
+    test('модалка поверх экрана: BackButton виден, нажатие закрывает модалку, стек не тронут', async ({ page }) => {
+        await openAppModern(page);
+        /* шит фильтров Техники — модалка, не зависящая от данных сервера (могут быть
+            чужие активные тренировки: FAB тогда открывает пикер поверх карточки) */
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('[data-act="techFiltersMuscle"]').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        if (await bbVis(page) !== true) throw new Error('BackButton скрыт при открытой модалке');
+        await pressBack(page);
+        await expect(page.locator('.modal.open')).toHaveCount(0, { timeout: 5000 });
+        /* шит фильтров открывался из каталога на корневой вкладке: модалка не навигация —
+            BackButton снова скрыт (карточка упражнения не открывалась) */
+        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
+        if (await bbVis(page) !== false) throw new Error('BackButton не скрыт после закрытия модалки на корне');
+    });
+});
+
+/* свайпы — только touch-проекты (android360/iphone13/pixel7): синтетический TouchEvent */
+test.describe('UX-T42: свайп-жесты назад/вперёд', function () {
+
+    test.skip(function () { return !test.info().project.use.hasTouch; }, 'нужен hasTouch-проект');
+
+    /* фабрика тач-событий, портируемая Chromium/WebKit: у WebKit нет конструктора
+        Touch и TouchEvent требует настоящие TouchList (document.createTouch(List)) */
+    const SWIPE_HELPERS = function () {
+        function mkTouch(target, x, y) {
+            if (typeof document.createTouch === 'function') {
+                return document.createTouch(window, target, 1, x, y, 0, 0);
+            }
+            return new Touch({ identifier: 1, target: target, clientX: x, clientY: y });
+        }
+        function mkList(arr) {
+            if (typeof document.createTouchList === 'function') return document.createTouchList.apply(document, arr);
+            return arr;
+        }
+        window.__gymSwipe = function (type, target, x, y) {
+            const t = mkTouch(target, x, y);
+            const changed = mkList([t]);
+            const touches = type === 'touchend' ? mkList([]) : changed;
+            document.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: touches, changedTouches: changed }));
+        };
+    };
+
+    /* свайп от края: side 'l' — от левого края вправо (назад), 'r' — от правого влево (вперёд) */
+    async function edgeSwipe(page, side) {
+        await page.evaluate(SWIPE_HELPERS);
+        await page.evaluate(function (arg) {
+            const vw = document.documentElement.clientWidth;
+            const y = 300;
+            const x0 = arg.side === 'l' ? 6 : vw - 6;
+            const dir = arg.side === 'l' ? 1 : -1;
+            window.__gymSwipe('touchstart', document.documentElement, x0, y);
+            window.__gymSwipe('touchmove', document.documentElement, x0 + dir * 30, y);
+            window.__gymSwipe('touchmove', document.documentElement, x0 + dir * 90, y);
+            window.__gymSwipe('touchend', document.documentElement, x0 + dir * 90, y);
+        }, { side: side });
+    }
+
+    test('свайп от левого края вправо закрывает Настройки; свайп от правого возвращает вперёд', async ({ page }) => {
         await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+        await edgeSwipe(page, 'l'); /* назад */
+        await expect(page.locator('.tb-title')).toContainText('GymHelper ·', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).not.toContainText('Настройки');
+        await edgeSwipe(page, 'r'); /* вперёд — Настройки возвращаются */
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+        await edgeSwipe(page, 'l'); /* снова назад — чистим за собой */
+        await expect(page.locator('.tb-title')).not.toContainText('Настройки', { timeout: 5000 });
+    });
+
+    test('вертикальный жест не переключает экраны (скролл списков не перехватывается)', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+        await page.evaluate(SWIPE_HELPERS);
         await page.evaluate(function () {
-            window.TelegramGameProxy_receiveEvent('safe_area_changed', { top: 44, bottom: 24, left: 0, right: 0 });
-            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: true });
+            const y0 = 200;
+            window.__gymSwipe('touchstart', document.documentElement, 6, y0);
+            window.__gymSwipe('touchmove', document.documentElement, 8, y0 + 40);
+            window.__gymSwipe('touchmove', document.documentElement, 10, y0 + 100);
+            window.__gymSwipe('touchend', document.documentElement, 10, y0 + 100);
         });
-        await expect(page.locator('body.fs .topbar')).toHaveCount(1);
-        const m = await page.evaluate(function () {
-            const tb = document.querySelector('.topbar').getBoundingClientRect();
-            const gear = document.querySelector('.topbar [aria-label="Настройки"]').getBoundingClientRect();
-            return {
-                vw: document.documentElement.clientWidth,
-                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-                pad: getComputedStyle(document.querySelector('.topbar')).paddingTop,
-                tb: { left: Math.round(tb.left), right: Math.round(tb.right) },
-                gear: { left: Math.round(gear.left), right: Math.round(gear.right) }
-            };
-        });
-        if (m.pad !== '56px') throw new Error('padding-top topbar в fs на 320px: ' + m.pad + ', ожидался 56px');
-        if (m.overflow) throw new Error('горизонтальное переполнение на 320px в fullscreen: ' + JSON.stringify(m));
-        if (m.tb.left < 0 || m.tb.right > m.vw) throw new Error('topbar шире вьюпорта 320px в fs: ' + JSON.stringify(m.tb));
-        if (m.gear.left < 0 || m.gear.right > m.vw) throw new Error('шестерёнка вылезает за 320px в fs: ' + JSON.stringify(m.gear));
-        /* тап без force: Playwright проверяет hit — в fs шестерёнка реально кликабельна */
-        await page.locator('.topbar [aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
-        await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
-        /* выход из fs тем же событием: класс снят, геометрия обычного режима (регресс 10px на 320px) */
+        /* |dx|=4 < |dy|=100 — вертикаль доминирует: Настройки остались открыты */
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+    });
+
+    test('жест, стартовавший на кнопке, навигацию не запускает (пульт/backbar/табы) ', async ({ page }) => {
+        await openApp(page);
+        /* свайп от края экрана, но тач начался на кнопке нижней навигации */
+        await page.evaluate(SWIPE_HELPERS);
         await page.evaluate(function () {
-            window.TelegramGameProxy_receiveEvent('fullscreen_changed', { is_fullscreen: false });
+            const btn = document.querySelector('.nav .nfab');
+            const r = btn.getBoundingClientRect();
+            const y = Math.round(r.top + r.height / 2);
+            window.__gymSwipe('touchstart', btn, 4, y);
+            window.__gymSwipe('touchmove', btn, 80, y);
+            window.__gymSwipe('touchend', btn, 80, y);
         });
-        await expect(page.locator('body.fs')).toHaveCount(0);
-        const padOut = await page.evaluate(function () {
-            return getComputedStyle(document.querySelector('.topbar')).paddingTop;
-        });
-        if (padOut !== '10px') throw new Error('padding-top .topbar после выхода из fs на 320px: ' + padOut + ', ожидался 10px');
+        /* никаких экранов не открылось и не закрылось: календарь не открыт, тостов нет */
+        await expect(page.locator('.tb-title')).not.toContainText('Календарь', { timeout: 5000 });
+        await expect(page.locator('.toast.show')).toHaveCount(0);
     });
 });
 
@@ -5812,3 +5762,4 @@ test.describe('[UX-I14] шейринг картинкой', function () {
         expect(sc.texts.some(function (t) { return String(t).indexOf('Эпли') >= 0; })).toBeFalsy(); /* 1ПМ у калистеники нет */
     });
 });
+
