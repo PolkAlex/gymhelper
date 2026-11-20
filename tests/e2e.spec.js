@@ -5889,3 +5889,143 @@ test.describe('UX-T40: разминка по дефолту', function () {
         }
     });
 });
+/* ============ [UX-T42/T43] навигация: BackButton Telegram, свайпы от краёв; fullscreen выпилен ============ */
+test.describe('[UX-T42/T43] навигация: стек, BackButton, свайпы; fullscreen удалён', function () {
+    /* открытие приложения с поддержкой BackButton в vendor-заглушке (версия >= 6.1) */
+    async function openAppTg(page) {
+        await page.goto('/#tgWebAppVersion=7.10');
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+    }
+    /* состояние вендорного BackButton (то, чем управляет приложение) */
+    async function bbVisible(page) {
+        return page.evaluate(function () {
+            return !!(window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.BackButton
+                && window.Telegram.WebApp.BackButton.isVisible);
+        });
+    }
+    async function bbPress(page) {
+        await page.evaluate(function () { window.Telegram.WebView.receiveEvent('back_button_pressed'); });
+    }
+    test('[UX-T42] BackButton Telegram: корень=hidden, подэкраны/модалка=visible, back_button_pressed = «Назад»', async ({ page }) => {
+        await openAppTg(page);
+        if (await bbVisible(page)) throw new Error('BackButton виден на корневой вкладке, должен быть скрыт');
+        /* Настройки: подэкран -> кнопка Telegram видна; нажатие = тот же экранный «Назад» */
+        await page.locator('.topbar [data-act="openSettings"]').click();
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toBeVisible({ timeout: 5000 });
+        if (!(await bbVisible(page))) throw new Error('BackButton скрыт на подэкране «Настройки»');
+        await bbPress(page);
+        await expect(page.locator('.topbar [data-act="openSettings"]')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toHaveCount(0);
+        if (await bbVisible(page)) throw new Error('BackButton не скрылся после возврата на корень');
+        /* Календарь: то же на втором подэкране */
+        await page.evaluate(function () { localStorage.setItem('gymCalView', 'month'); });
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.cal-grid')).toBeVisible({ timeout: 5000 });
+        if (!(await bbVisible(page))) throw new Error('BackButton скрыт на календаре');
+        await bbPress(page);
+        await expect(page.locator('.cal-grid')).toHaveCount(0);
+        if (await bbVisible(page)) throw new Error('BackButton не скрылся после закрытия календаря');
+        /* Модалка поверх корня (пикер): BackButton закрывает модалку, не экран */
+        await page.locator('.nav .nfab').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        if (!(await bbVisible(page))) throw new Error('BackButton скрыт при открытой модалке');
+        await bbPress(page);
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        /* nfab сразу создаёт тренировку: после закрытия пикера мы на карточке, BackButton снова виден */
+        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
+        if (!(await bbVisible(page))) throw new Error('BackButton не показался на карточке после закрытия модалки');
+    });
+    test('[UX-T42] BackButton на карточке тренировки: виден, нажатие закрывает карточку', async ({ page }) => {
+        await openAppTg(page);
+        await page.locator('.nav .nfab').click();
+        const modal = page.locator('.modal.open');
+        await modal.waitFor({ state: 'visible', timeout: 5000 });
+        await modal.locator('.secrow .chip', { hasText: 'Все' }).first().click();
+        await modal.locator('.excard', { hasText: EX }).first().click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await page.locator('#mWeight').fill('60');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.backbar [data-act="closeHistory"]')).toBeVisible({ timeout: 5000 });
+        if (!(await bbVisible(page))) throw new Error('BackButton скрыт на карточке тренировки');
+        await bbPress(page);
+        await expect(page.locator('.backbar')).toHaveCount(0);
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        if (await bbVisible(page)) throw new Error('BackButton не скрылся после закрытия карточки');
+    });
+    /* синтетический свайп: старт в точке (x0,y0) со смещением (dx,dy); target = элемент начала жеста */
+    async function swipe(page, x0, y0, dx, dy, targetSel) {
+        await page.evaluate(function (o) {
+            let el = document.getElementById('app');
+            if (o.sel) { el = document.querySelector(o.sel); }
+            const mkT = function (x, y) { return { identifier: 1, target: el, clientX: x, clientY: y }; };
+            /* WebKit не даёт new Touch: собираем событие с own-полями, хендлер читает те же touches/changedTouches/target */
+            const mkEv = function (type, touches, changed) {
+                const ev = new Event(type, { bubbles: true, cancelable: true });
+                Object.defineProperty(ev, 'touches', { value: touches });
+                Object.defineProperty(ev, 'targetTouches', { value: touches });
+                Object.defineProperty(ev, 'changedTouches', { value: changed });
+                Object.defineProperty(ev, 'target', { value: el });
+                return ev;
+            };
+            const mx = o.x0 + o.dx * 0.5, my = o.y0 + o.dy * 0.5;
+            el.dispatchEvent(mkEv('touchstart', [mkT(o.x0, o.y0)], [mkT(o.x0, o.y0)]));
+            el.dispatchEvent(mkEv('touchmove', [mkT(mx, my)], [mkT(mx, my)]));
+            el.dispatchEvent(mkEv('touchend', [], [mkT(o.x0 + o.dx, o.y0 + o.dy)]));
+        }, { x0: x0, y0: y0, dx: dx, dy: dy, sel: targetSel || null });
+    }
+    test('[UX-T42] свайпы от краёв: назад/вперёд, вертикаль и старт на кнопке не навигируют, вперёд гасится новым действием', async ({ page }) => {
+        test.skip(!test.info().project.use.hasTouch, 'свайпы: только touch-проекты (android360, iphone13, pixel7)');
+        await openApp(page);
+        const vw = await page.evaluate(function () { return document.documentElement.clientWidth; });
+        /* корень: свайп от левого края, назад некуда, экран не меняется */
+        await swipe(page, 10, 300, 120, 0);
+        await expect(page.locator('.topbar [data-act="openSettings"]')).toBeVisible({ timeout: 5000 });
+        /* Настройки: свайп от левого края вправо = «Назад» */
+        await page.locator('.topbar [data-act="openSettings"]').click();
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toBeVisible({ timeout: 5000 });
+        await swipe(page, 10, 300, 120, 0);
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toHaveCount(0);
+        /* свайп от правого края влево = «Вперёд», настройки открываются снова */
+        await swipe(page, vw - 10, 300, -120, 0);
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toBeVisible({ timeout: 5000 });
+        /* вертикальный жест от края: не навигация (скролл списка), экран не трогаем */
+        await swipe(page, 10, 300, 0, 220);
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toBeVisible();
+        /* жест, начатый на кнопке (стрелка в шапке настроек у левого края): тап, не свайп-навигация */
+        await swipe(page, 10, 24, 120, 0, '.topbar [data-act="closeSettings"]');
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toBeVisible();
+        /* назад, затем новое навигационное действие (календарь): «вперёд» больше некуда */
+        await swipe(page, 10, 300, 120, 0);
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toHaveCount(0);
+        await page.evaluate(function () { localStorage.setItem('gymCalView', 'month'); });
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.cal-grid')).toBeVisible({ timeout: 5000 });
+        await swipe(page, vw - 10, 300, -120, 0);
+        await expect(page.locator('.cal-grid')).toBeVisible(); /* вперёд погашен: календарь остался */
+        /* назад с календаря свайпом работает */
+        await swipe(page, 10, 300, 120, 0);
+        await expect(page.locator('.cal-grid')).toHaveCount(0);
+    });
+
+    test('[UX-T43] fullscreen выпилен: gymFullscreen=1 мёртв, тогла нет, шапка обычной геометрии', async ({ page }) => {
+        await page.addInitScript(function () {
+            try { localStorage.setItem('gymFullscreen', '1'); } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        const cls = await page.evaluate(function () { return document.body.className; });
+        if ((' ' + cls + ' ').indexOf(' fs ') !== -1) throw new Error('класс body.fs на месте: ' + cls);
+        const pad = await page.evaluate(function () {
+            const cs = getComputedStyle(document.querySelector('.topbar'));
+            return { pt: cs.paddingTop, pl: cs.paddingLeft };
+        });
+        if (pad.pt !== '10px' || pad.pl !== '12px') {
+            throw new Error('шапка не в обычной геометрии 10px 12px (gymFullscreen=1 должен быть мёртв): ' + JSON.stringify(pad));
+        }
+        /* тогл «Полноэкранный режим» больше не существует нигде в UI (в т.ч. в Настройках) */
+        await page.locator('.topbar [data-act="openSettings"]').click();
+        await expect(page.locator('.topbar [data-act="closeSettings"]')).toBeVisible({ timeout: 5000 });
+        const text = await page.evaluate(function () { return document.body.innerText; });
+        if (text.indexOf('Полноэкран') !== -1) throw new Error('текст «Полноэкранный...» найден в UI Настроек');
+    });
+});
