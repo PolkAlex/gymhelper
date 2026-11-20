@@ -977,47 +977,179 @@ function loadTheme() {
     }
 }
 
-/* [UX-T25] полноэкранный режим Mini App: состояние в localStorage gymFullscreen ('1'/'0'),
-   по умолчанию выключен; нужен Telegram 8.0+ — на старом клиенте requestFullscreen
-   бросает исключение: показываем только тост и флаг не ставим.
-   isFullscreen НЕ проверяем синхронно: клиент подтверждает вход асинхронно
-   (событие fullscreenChanged) — синхронная проверка ложно ругалась бы на 8.0+ */
-function fullscreenOn() {
-    let v = '0';
-    try { v = localStorage.getItem('gymFullscreen') || '0'; } catch (e) { /* noop */ }
-    return v === '1';
-}
-function fullscreenToggle() {
-    if (!tg || !tg.requestFullscreen) { toast('Не поддерживается этим Telegram'); return; }
-    if (!fullscreenOn()) {
-        try { tg.requestFullscreen(); } catch (e1) { toast('Не поддерживается этим Telegram'); return; }
-        /* вызов принят: вход подтвердится событием fullscreenChanged; при неудаче
-           флаг просто повторно применится при следующем старте (см. init) */
-        try { localStorage.setItem('gymFullscreen', '1'); } catch (e2) { /* noop */ }
-        toast('Полноэкранный режим включён');
-    } else {
-        try { tg.exitFullscreen(); } catch (e3) { /* noop */ }
-        try { localStorage.setItem('gymFullscreen', '0'); } catch (e4) { /* noop */ }
-        toast('Обычный режим');
-    }
+/* ============ [UX-T42] стек навигации, BackButton Telegram, свайпы ============ */
+/* Явная модель навигации (UX-I19): навигационные действия пушат/попают записи
+   {screen, data} — screen-код экрана и восстановительные данные (снимок состояния
+   на момент ухода). Корневые вкладки — база стека и в записи не входят: switchTab
+   закрывает все подэкраны и очищает оба стека. NAV_BACK — куда вернуться («← Назад»,
+   BackButton Telegram, свайп от левого края вправо), NAV_FWD — куда вернуться вперёд
+   (свайп от правого края влево), браузерная семантика: любое новое навигационное
+   действие очищает NAV_FWD, «назад» кладёт текущий экран в NAV_FWD.
+   Экраны (совпадают с приоритетом рендера render()/topbarHtml()): help, settings,
+   gw (мастер целей), goals, cal (календарь), workout (карточка тренировки), techCard
+   (карточка упражнения). Подлинное состояние живёт в прежних флагах (settingsOpen,
+   calOpen и т.д.) — «назад» выполняет тот же ACTION, что видимая кнопка «← Назад»,
+   поэтому стек никогда не расходится с тем, что видит пользователь. */
+let NAV_BACK = [];
+let NAV_FWD = [];
+
+/* текущий видимый экран — тот же приоритет, что в render()/topbarHtml() */
+function navScreen() {
+    if (helpOpen) return 'help';
+    if (settingsOpen) return 'settings';
+    if (gwOpen) return 'gw';
+    if (goalsOpen) return 'goals';
+    if (calVisible()) return 'cal';
+    if (tab === 'history' && viewWid) return 'workout';
+    if (tab === 'tech' && TECH.open) return 'techCard';
+    return 'tab';
 }
 
-/* [UX-B10] fullscreen safe-area: класс fs на body + переменная --fs-inset-top на :root.
-   Вход/выход fullscreen и изменение safe-area приходят событиями (fullscreenChanged,
-   safeAreaChanged); на старте isFullscreen вендор восстанавливает из sessionStorage
-   синхронно. safeAreaInset.top — число px (вендор дублирует в --tg-safe-area-inset-*,
-   свойство держим своё — не зависим от наличия API). Переменная ставится ВСЕГДА, поэтому
-   CSS-фолбэк не срабатывает: нет корректного числа от API — пишем JS-дефолт top=28,
-   но правило [UX-B11] берёт max(56px, var(--fs-inset-top, 56px)) — фактический
-   минимум остаётся 56px; есть число от API — фактический inset */
-function applyFsChrome() {
-    let on = false, top = 28;
-    try { on = !!(tg && tg.isFullscreen); } catch (e1) { /* noop */ }
+/* снимок восстановительных данных экрана на момент ухода с него */
+function navSnapshot(screen) {
+    if (screen === 'cal') return { fromTab: calFromTab, view: CAL.view, date: CAL.date, panel: CAL.panel };
+    if (screen === 'gw') return { step: gwStep, gw: GW ? JSON.parse(JSON.stringify(GW)) : null };
+    if (screen === 'goals') return { fromTab: goalsFromTab };
+    if (screen === 'help') return { faq: helpFaq, settings: settingsOpen };
+    if (screen === 'workout') return { id: viewWid };
+    if (screen === 'techCard') return { id: TECH.open };
+    return {};
+}
+
+/* открыть подэкран: запись в стек назад, вперёд идти больше некуда (браузерная семантика) */
+function navPush(screen) {
+    NAV_BACK.push({ screen: screen, data: navSnapshot(screen) });
+    NAV_FWD = [];
+}
+
+/* закрыть подэкран: снимаем вершину, пока код экрана совпадает (молчаливо, без ошибок) */
+function navPop(expected) {
+    const top = NAV_BACK[NAV_BACK.length - 1];
+    if (top && (!expected || top.screen === expected)) NAV_BACK.pop();
+}
+
+/* полный сброс стека: смена корневой вкладки, туториал и прочие глубокие сбросы */
+function navResetAll() { NAV_BACK = []; NAV_FWD = []; }
+
+function navFwdPush(cur, data) {
+    /* дедуп: повторный «назад» с несохранившейся карточкой не плодит одинаковые записи */
+    const top = NAV_FWD[NAV_FWD.length - 1];
+    if (top && top.screen === cur && JSON.stringify(top.data) === JSON.stringify(data)) return;
+    NAV_FWD.push({ screen: cur, data: data });
+}
+
+/* «Назад»: то же действие, что верхняя видимая кнопка «← Назад» (backbar/шапка).
+   Вызывается из Telegram BackButton (Android-жест/кнопка системы) и свайпа от левого края.
+   Модалка поверх экрана закрывается первой — это не навигация между экранами. */
+function navBack() {
+    if (navModalOpen()) { closeModal(); render(); return true; }
+    const cur = navScreen();
+    if (cur === 'tab') return false; /* корневая вкладка — назад некуда */
+    /* мастер целей: «←» сначала шагает по шагам (это не переход между экранами) */
+    if (cur === 'gw' && gwStep > 0) { ACTIONS.gwBack(); return true; }
+    navFwdPush(cur, navSnapshot(cur));
+    if (cur === 'help') ACTIONS.closeHelp();
+    else if (cur === 'settings') ACTIONS.closeSettings();
+    else if (cur === 'goals') ACTIONS.closeGoals();
+    else if (cur === 'cal') ACTIONS.closeCal();
+    else if (cur === 'workout') ACTIONS.closeHistory();
+    else if (cur === 'techCard') ACTIONS.techBack();
+    else if (cur === 'gw') ACTIONS.gwCancel(); /* шаг 1 — выход из мастера */
+    return true;
+}
+
+/* «Вперёд»: вернуть экран из NAV_FWD (свайп от правого края влево). Текущий экран
+   кладётся в NAV_BACK — браузерная семантика «вперёд» после «назад». */
+function navForward() {
+    const entry = NAV_FWD.pop();
+    if (!entry) return false;
+    const cur = navScreen();
+    if (cur !== 'tab') NAV_BACK.push({ screen: cur, data: navSnapshot(cur) });
+    const d = entry.data || {};
+    if (entry.screen === 'settings') { settingsOpen = true; }
+    else if (entry.screen === 'help') { helpOpen = true; helpFaq = d.faq || 0; settingsOpen = !!d.settings; }
+    else if (entry.screen === 'gw') { gwOpen = true; gwStep = d.step || 0; GW = d.gw ? JSON.parse(JSON.stringify(d.gw)) : null; }
+    else if (entry.screen === 'goals') { goalsOpen = true; goalsFromTab = d.fromTab || tab; }
+    else if (entry.screen === 'cal') {
+        calOpen = true; calFromTab = d.fromTab || tab;
+        if (d.view) CAL.view = d.view;
+        if (d.date) CAL.date = d.date;
+        CAL.panel = !!d.panel;
+    }
+    else if (entry.screen === 'workout') { editSnap = JSON.stringify(G); viewWid = d.id || 0; tab = 'history'; }
+    else if (entry.screen === 'techCard') { tab = 'tech'; TECH.open = d.id || null; }
+    window.scrollTo(0, 0);
+    render();
+    return true;
+}
+
+/* модалка поверх экрана (#modal: confirm'ы, шиты, пикеры) */
+function navModalOpen() {
+    const m = document.getElementById('modal');
+    return !!(m && m.classList.contains('open'));
+}
+
+/* Telegram BackButton (вендор tg.BackButton): показываем на любом не-корневом экране
+   и поверх модалки; нажатие (Android-жест/кнопка системы) = navBack — тот же «← Назад».
+   Обновление — из render() (универсальная перерисовка) и open/closeModal. */
+function navUpdateBackButton() {
+    if (!tg || !tg.BackButton) return;
     try {
-        if (tg && tg.safeAreaInset && typeof tg.safeAreaInset.top === 'number') top = tg.safeAreaInset.top;
-    } catch (e2) { /* noop */ }
-    document.body.classList.toggle('fs', on);
-    try { document.documentElement.style.setProperty('--fs-inset-top', top + 'px'); } catch (e3) { /* noop */ }
+        const show = navModalOpen() || navScreen() !== 'tab';
+        if (show) { if (!tg.BackButton.isVisible) tg.BackButton.show(); }
+        else if (tg.BackButton.isVisible) tg.BackButton.hide();
+    } catch (e) { /* noop */ }
+}
+
+/* [UX-T42] свайпы: от левого края (≤48px) вправо — «Назад», от правого края влево —
+   «Вперёд». Пороги: |dx| ≥ 60px и |dx| > |dy| (не перехватываем вертикальный скролл
+   списков и сетки календаря), жест короче 700 мс (не мешаем drag'у упражнений
+   длинным нажатием), старт не на интерактивном элементе (кнопки/поля/переключатели —
+   обычные тапы: пульт таймера, backbar, нижняя навигация). Feedback — тонкий
+   индикатор у края (#navSwipeHint), без тяжёлых анимаций. */
+let NAV_SWIPE = null; /* {x0, y0, side, t0} — активный жест */
+
+function navSwipeHintShow(side, prog) {
+    const hint = document.getElementById('navSwipeHint');
+    if (!hint) return;
+    hint.className = side + (prog > 0.2 ? ' show' : '');
+    hint.style.height = Math.min(96, 40 + prog * 60) + 'px';
+}
+function navSwipeHintHide() {
+    const hint = document.getElementById('navSwipeHint');
+    if (hint) { hint.className = ''; hint.style.height = ''; }
+}
+
+function navInitGestures() {
+    document.addEventListener('touchstart', function (ev) {
+        if (ev.touches.length !== 1) { NAV_SWIPE = null; return; }
+        const t = ev.touches[0];
+        const vw = document.documentElement.clientWidth;
+        const side = t.clientX <= 48 ? 'l' : (t.clientX >= vw - 48 ? 'r' : '');
+        const el = ev.target && ev.target.closest ? ev.target.closest('button, a, input, textarea, select, [role="switch"]') : null;
+        if (!side || el) { NAV_SWIPE = null; return; }
+        NAV_SWIPE = { x0: t.clientX, y0: t.clientY, side: side, t0: Date.now() };
+    }, { passive: true });
+    document.addEventListener('touchmove', function (ev) {
+        if (!NAV_SWIPE || ev.touches.length !== 1) return;
+        const t = ev.touches[0];
+        const dx = t.clientX - NAV_SWIPE.x0;
+        const prog = Math.max(0, (NAV_SWIPE.side === 'l' ? dx : -dx)) / 60;
+        navSwipeHintShow(NAV_SWIPE.side, prog);
+    }, { passive: true });
+    document.addEventListener('touchend', function (ev) {
+        const sw = NAV_SWIPE;
+        NAV_SWIPE = null;
+        navSwipeHintHide();
+        if (!sw || ev.changedTouches.length !== 1) return;
+        const t = ev.changedTouches[0];
+        const dx = t.clientX - sw.x0, dy = t.clientY - sw.y0;
+        const horiz = Math.abs(dx) > Math.abs(dy);
+        const quick = (Date.now() - sw.t0) < 700; /* долгий жест = drag/скролл, не наш */
+        if (!horiz || !quick) return;
+        if (sw.side === 'l' && dx >= 60) navBack();
+        else if (sw.side === 'r' && -dx >= 60) navForward();
+    }, { passive: true });
 }
 
 /* ============ ACTIONS ============ */
@@ -1039,16 +1171,20 @@ const ACTIONS = {
         GW = null;
         /* [UX-S6] тап по любому табу закрывает и календарь [§3.4] */
         calOpen = false;
+        /* [UX-T42] смена корневой вкладки — новая база стека: история навигации сброшена */
+        navResetAll();
         tab = a; viewWid = 0; render();
     },
     /* [UX-T27] шестерёнка в topbar: экран «Настройки» поверх текущей вкладки [UX-S4 §3] */
     openSettings: function () {
         settingsOpen = true;
+        navPush('settings'); /* [UX-T42] */
         window.scrollTo(0, 0);
         render();
     },
     closeSettings: function () {
         settingsOpen = false;
+        navPop('settings'); /* [UX-T42] */
         window.scrollTo(0, 0);
         render();
     },
@@ -1057,6 +1193,7 @@ const ACTIONS = {
     openCal: function () {
         calOpen = true;
         calFromTab = tab; /* ред. 5: кнопка на всех вкладках — «Назад» вернёт на источник [§3.4] */
+        navPush('cal'); /* [UX-T42] */
         calInitState();
         window.scrollTo(0, 0);
         render();
@@ -1064,6 +1201,7 @@ const ACTIONS = {
     closeCal: function () {
         calOpen = false;
         tab = calFromTab; /* возврат на вкладку, с которой открыли календарь [§3.4] */
+        navPop('cal'); /* [UX-T42] */
         window.scrollTo(0, 0);
         render();
     },
@@ -1144,6 +1282,7 @@ const ACTIONS = {
         editSnap = JSON.stringify(G);
         viewWid = +a;
         tab = 'history';
+        navPush('workout'); /* [UX-T42] */
         render();
     },
     openEntryModal: function (a, b, c) { openEntryModal(+a, +b, +c); },
@@ -1154,6 +1293,7 @@ const ACTIONS = {
         if (isDirty()) { const r = await save(); if (r !== 'ok') return; } /* тост уже показан doSave'ом */
         editSnap = null;
         viewWid = 0;
+        navPop('workout'); /* [UX-T42] */
         render();
     },
     /* [UX-T23] ACTION saveWorkout удалён вместе с иконкой 💾 из шапки завершённой:
@@ -1177,8 +1317,8 @@ const ACTIONS = {
     pickCatEx: function (a) { pickCatEx(a); },
     customExerciseModal: function () { customExerciseModal(); },
     createCustom: function () { createCustom(); },
-    openTech: function (a) { TECH.open = a; render(); },
-    techBack: function () { TECH.open = null; render(); },
+    openTech: function (a) { TECH.open = a; navPush('techCard'); render(); }, /* [UX-T42] */
+    techBack: function () { TECH.open = null; navPop('techCard'); render(); }, /* [UX-T42] */
     /* [EXR-T4] режимы Техники: «Все» = без фильтров (мультивыбор сбрасывается),
        ★ Любимые/Своё/Коллекции — режимы поверх фильтров (выбор сохраняется) */
     techSection: function (a) {
@@ -1203,7 +1343,7 @@ const ACTIONS = {
     techResetFilters: function () { techResetState(); render(); },
     /* [UX-T17] «⭐ Любимые упражнения» из Профиля: вкладка «Техника» + фильтр «★ Любимые».
        [UX-T23] lastTab-механика «Назад» убрана вместе с кнопкой tb-back */
-    openFavs: function () { techResetState(); TECH.section = 'fav'; tab = 'tech'; viewWid = 0; render(); },
+    openFavs: function () { techResetState(); TECH.section = 'fav'; tab = 'tech'; viewWid = 0; navResetAll(); render(); }, /* [UX-T42] вход с другой вкладки — база стека новая */
     wAdd: function (a) { wAdd(+a); },
     wSet: function (a) { wSet(a); },
     wClr: function () { wClr(); },
@@ -1290,12 +1430,14 @@ const ACTIONS = {
         helpFaq = 0;
         srvState = '';
         lsSet('gymHelpSeen', '1'); /* пилюля «новое» видна до первого открытия (решение 13) */
+        navPush('help'); /* [UX-T42] */
         window.scrollTo(0, 0);
         render();
     },
     closeHelp: function () {
         helpOpen = false;
         settingsOpen = true; /* «← Назад» — на Настройки (точка входа) */
+        navPop('help'); /* [UX-T42] */
         window.scrollTo(0, 0);
         render();
     },
@@ -1303,6 +1445,7 @@ const ACTIONS = {
     openGoals: function () {
         goalsOpen = true;
         goalsFromTab = tab;
+        navPush('goals'); /* [UX-T42] */
         window.scrollTo(0, 0);
         render();
         goalArchNudge();
@@ -1310,6 +1453,7 @@ const ACTIONS = {
     closeGoals: function () {
         goalsOpen = false;
         tab = goalsFromTab; /* «← Назад» — на вкладку, с которой открыли (§8.1) */
+        navPop('goals'); /* [UX-T42] */
         window.scrollTo(0, 0);
         render();
     },
@@ -1363,10 +1507,8 @@ const ACTIONS = {
         try { localStorage.removeItem('gymBg'); } catch (e) { /* noop */ }
         document.documentElement.classList.remove('has-bg');
         toast('Фон убран');
-    },
-    /* [UX-T25] тогл полноэкранного режима в Настройках; render — тогл показывает
-       актуальное состояние (подтверждение клиента приходит асинхронно) [UX-T27/UX-S4 §8.2] */
-    fullscreenToggle: function () { fullscreenToggle(); render(); }
+    }
+    /* [UX-T43] тогл полноэкранного режима удалён вместе с самим режимом (решение владельца 20.11) */
 };
 
 /* ============ каркас ============ */
@@ -1424,6 +1566,9 @@ function render() {
     /* [UX-T36] снимок скролла недели — ДО перестройки DOM, restore вернёт свежую позицию */
     calGridScrollPre();
     app.innerHTML = h;
+    /* [UX-T42] самолечение стека: оказались на корневой вкладке — история навигации пуста */
+    if (navScreen() === 'tab') NAV_BACK = [];
+    navUpdateBackButton(); /* [UX-T42] BackButton по фактическому экрану */
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
         /* [EXR-T4] refreshTechList: живой список + пустое состояние (раньше techListHtml была не определена) */
@@ -3304,6 +3449,7 @@ function goalHintTake() {
     GW = { type: 1, ex: hint.name, target: hint.target, period: null, q: '', warn: false };
     gwOpen = true;
     gwStep = 3; /* шаги «упражнение» и «значение» предзаполнены (§5) — остаётся срок */
+    navPush('gw'); /* [UX-T42] */
     window.scrollTo(0, 0);
     render();
 }
@@ -3555,6 +3701,7 @@ function gwCreate() {
     if (G.nextId < 1) G.nextId = 1;
     gwOpen = false;
     GW = null;
+    navPop('gw'); /* [UX-T42] */
     goalsOpen = true; /* возврат на экран «Цели» и из мастера, и из подсказки (§9) */
     save().then(function (r) {
         if (r === 'ok') toast('🎯 Цель поставлена');
@@ -3569,6 +3716,7 @@ function gwBack() {
 function gwCancel() {
     gwOpen = false;
     GW = null;
+    navPop('gw'); /* [UX-T42] */
     render();
 }
 
@@ -3604,6 +3752,7 @@ function goalRepeat(id) {
     GW = { type: g.type, ex: g.exercise || null, target: g.target, period: g.end ? goalDefaultPeriod(g.end) : 'none', q: '', warn: false };
     gwOpen = true;
     gwStep = g.type === 1 ? 3 : 2; /* осталось подтвердить срок */
+    navPush('gw'); /* [UX-T42] */
     window.scrollTo(0, 0);
     render();
 }
@@ -3622,13 +3771,14 @@ function goalNew() {
     GW = { type: 0, ex: null, target: null, period: null, q: '', warn: false };
     gwOpen = true;
     gwStep = 0;
+    navPush('gw'); /* [UX-T42] */
     window.scrollTo(0, 0);
     render();
 }
 
 /* ---------- [UX-T27] экран «Настройки» (Story [UX-S4], спека §6) ---------- */
 /* тогл-компонент .switch [UX-S4 §4]: role=switch/aria-checked; у темы ручка несёт иконку
-   активной темы, на свободном конце — «призрак» пассивной; fullscreen и звук — без иконок */
+   активной темы, на свободном конце — «призрак» пассивной; звук — без иконки */
 function swToggleHtml(on, act, arg, label, knobIco, ghostIco, ghostSide) {
     let inner = '<span class="sw-track">';
     if (ghostIco) inner += '<span class="sw-ico ' + ghostSide + '">' + ghostIco + '</span>';
@@ -3637,24 +3787,15 @@ function swToggleHtml(on, act, arg, label, knobIco, ghostIco, ghostSide) {
         '" aria-label="' + escAttr(label) + '" data-act="' + act + '"' + (arg != null ? ' data-a="' + escAttr(arg) + '"' : '') + '>' + inner + '</button>';
 }
 function renderSettings() {
-    /* 🎨 Оформление: тогл темы (ON = тёмная) + тогл fullscreen + фон [UX-S4 §6] */
+    /* 🎨 Оформление: тогл темы + фон [UX-S4 §6]; [UX-T43] тогл полноэкранного режима
+       удалён (решение владельца 20.11 — режим «кривой», выпилен целиком) */
     const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
-    /* [UX-S4 §8.2] клиент без requestFullscreen (Telegram < 8.0): locked-тогл,
-       наличие API считается при каждом рендере (клиент мог обновиться) */
-    const fsAvail = !!(tg && tg.requestFullscreen);
     let h = '<div class="card"><p class="t1">🎨 Оформление</p>';
     /* тогл темы показывает фактическую тему; тап фиксирует выбор в gymTheme [UX-S4 §8.1] */
     h += '<div class="setrow"><span class="lbl">Тёмная тема</span>' +
         swToggleHtml(dark, 'setTheme', dark ? 'light' : 'dark', 'Тёмная тема',
             dark ? ICONS.moon : ICONS.sun, dark ? ICONS.sun : ICONS.moon, dark ? 'l' : 'r') + '</div>' +
         '<p class="meta">Без выбора — тема как в клиенте Telegram</p>';
-    h += '<div class="setrow"><span class="lbl">Полноэкранный режим <span class="wip">(в разработке)</span></span>' +
-        (fsAvail
-            ? swToggleHtml(fullscreenOn(), 'fullscreenToggle', null, 'Полноэкранный режим')
-            : '<button class="switch locked" role="switch" aria-checked="' + (fullscreenOn() ? 'true' : 'false') +
-              '" aria-disabled="true" aria-label="Полноэкранный режим"><span class="sw-track"><span class="sw-knob"></span></span></button>') +
-        '</div>' +
-        '<p class="meta">' + (fsAvail ? 'Автоматически разворачивает приложение на весь экран' : 'Недоступно: обнови Telegram до 8.0+') + '</p>';
     /* фон приложения — перенос из Профиля как есть (pickBg/clearBg не тронуты) [UX-S4 §2] */
     h += '<div class="hr"></div>' +
         '<div class="flabel">Фон приложения</div>' +
@@ -3791,7 +3932,8 @@ function renderProfileTab() {
     h += '<div class="card"><p class="t1">⭐ Любимые упражнения</p>' +
         '<p class="meta">Упражнения, отмеченные ★ в каталоге и пикере</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="openFavs">Открыть в технике</button></div></div>';
-    /* [UX-T27] настройки (тема/fullscreen/фон/таймер/тренер) переехали в экран «Настройки» [UX-S4 §7] */
+    /* [UX-T27] настройки (тема/фон/таймер/тренер) переехали в экран «Настройки» [UX-S4 §7];
+       [UX-T43] полноэкранный режим удалён (решение владельца 20.11) */
     /* [UX-T18] обёртка .prof: компактные карточки/поля (стиль токенов не менялся) */
     return '<div class="prof">' + h + '</div>';
 }
@@ -4153,6 +4295,7 @@ function finishWorkout(id) {
     save().then(function (r) {
         if (r === 'ok') toast(goalHit ? '🏆 Цель достигнута! ' + goalNameFull(goalHit) : '✅ Тренировка завершена');
         viewWid = 0;
+        navPop('workout'); /* [UX-T42] */
         render();
     });
 }
@@ -4160,7 +4303,7 @@ function deleteWorkout(id) {
     if (!G.del) G.del = [];
     G.del.push(id);
     G.workouts = G.workouts.filter(w => w.id !== id);
-    if (viewWid === id) viewWid = 0;
+    if (viewWid === id) { viewWid = 0; navPop('workout'); } /* [UX-T42] */
     save().then(render);
 }
 
@@ -4844,12 +4987,14 @@ function openModal(html) {
     m.classList.remove('hidden');
     m.classList.add('open');
     mb.scrollTop = 0;
+    navUpdateBackButton(); /* [UX-T42] модалка поверх экрана — BackButton виден */
 }
 function closeModal() {
     const m = document.getElementById('modal');
     m.classList.remove('open');
     m.classList.add('hidden');
     modalCtx = null;
+    navUpdateBackButton(); /* [UX-T42] */
 }
 
 function applyBg(data) {
@@ -5564,6 +5709,7 @@ function tutStart() {
     settingsOpen = false;
     calOpen = false;
     helpOpen = false;
+    navResetAll(); /* [UX-T42] туториал переписывает экраны напрямую — стек синхронно */
     tutOpen = true;
     tutStep = 0; /* всегда с шага 1; шаг 2 пропускается при «Дальше», если цели нет */
     tutApplySurface();
@@ -5591,6 +5737,7 @@ function tutFinish() {
     if (tab === 'history' && viewWid && isDirty()) save();
     viewWid = 0;
     tab = 'history';
+    navResetAll(); /* [UX-T42] */
     window.scrollTo(0, 0);
     render();
 }
@@ -5722,25 +5869,18 @@ async function init() {
     restInitState(); /* таймер независим от сети: восстанавливается до /api/init */
     if (tg) {
         try { tg.ready(); tg.expand(); } catch (e) { /* noop */ }
-        /* [UX-T25] тихое восстановление полноэкранного режима, только если клиент умеет (8.0+) */
-        let fsSaved = '0';
-        try { fsSaved = localStorage.getItem('gymFullscreen') || '0'; } catch (e9) { /* noop */ }
-        if (fsSaved === '1' && tg.requestFullscreen && !tg.isFullscreen) {
-            try { tg.requestFullscreen(); } catch (e10) { /* noop */ }
-        }
-        /* [UX-B10] шапка в fullscreen: класс fs + верхний safe-area — стартовое
-           состояние сразу, далее по событиям входа/выхода и изменения safe-area.
-           [UX-T27] после подтверждения входа/выхода тогл в Настройках перерисовывается [UX-S4 §8.2] */
+        /* [UX-T42] BackButton Telegram: нажатие (Android-жест/кнопка системы) = navBack —
+           тот же экранный «← Назад»; видимость показывает navUpdateBackButton из render() */
         try {
-            tg.onEvent('fullscreenChanged', function () {
-                applyFsChrome();
-                if (settingsOpen) render();
-            });
-            tg.onEvent('safeAreaChanged', applyFsChrome);
-            applyFsChrome();
-        } catch (e11) { /* noop */ }
+            if (tg.BackButton && tg.BackButton.onClick) {
+                tg.BackButton.onClick(function () { navBack(); });
+            }
+        } catch (e9) { /* noop */ }
         INIT = tg.initData || '';
     }
+    navInitGestures(); /* [UX-T42] свайпы назад/вперёд — независимы от сети */
+    /* [UX-T43] полноэкранный режим удалён по решению владельца 20.11: восстановления
+       gymFullscreen, подписок fullscreenChanged/safeAreaChanged и applyFsChrome больше нет */
     let usedFallback = false;
     if (!INIT && location.hash) {
         const sources = [location.hash.slice(1), location.search.slice(1)];
