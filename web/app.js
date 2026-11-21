@@ -1452,12 +1452,15 @@ const ACTIONS = {
        там же перерисовка после закрытия шита фильтров Техники */
     modalBackdrop: function () { closeModal(); },
     /* ============ [UX-I16] шейринг тренировки по ссылке ============ */
-    /* шит «Телеграм» на завершённой тренировке (спека §7); «Картинка» [UX-I14]
-       вырезана 20.11 решением владельца — шеринг только ссылочный;
-       shareClick — на тап «Поделиться», точка входа воронки шеринга */
+    /* шит «Картинка / Телеграм» на завершённой тренировке (спека §7); «Картинка»
+        [UX-S16] — серверный постер ботом в чат; shareClick — на тап «Поделиться»,
+        точка входа воронки шеринга */
     shareSheet: function (a) { trackShare('shareClick'); shareSheet(+a); },
     /* поток «Телеграм» (§7.2): POST /api/share → буфер → выбор чата → тост */
     shareTg: function (a) { shareTelegramGo(+a); },
+    /* поток «Картинка» [UX-S16]: POST /api/card → сервер рендерит постер и шлёт
+        ботом в чат (sendPhoto); Mini App никуда не навигирует (урок UX-B15) */
+    shareCard: function (a) { trackShare('cardClick'); shareCardGo(+a); },
     /* opt-in имени в OG-превью ссылки (§11.1): тогл в шите, состояние в G.shareName */
     shareNameToggle: function (a) {
         G.shareName = !G.shareName;
@@ -2554,11 +2557,11 @@ function workoutCard(w) {
         h += '</div>';
     });
     /* [UX-I16] одна кнопка «Поделиться» — тело карточки завершённой тренировки
-       (спека §7.1: finished && setsTotal > 0); тап открывает шит «Телеграм»
-       («Картинка» вырезана 20.11, решение владельца — UX-I14) */
+       (спека §7.1: finished && setsTotal > 0); тап открывает шит «Картинка /
+       Телеграм»; бейдж «выбор» восстановлен с [UX-S16] */
     const setsTotalAll = exs.reduce((a, e) => a + setsCount(e), 0);
     if (w.finished && setsTotalAll > 0) {
-        h += '<div class="btnrow"><button class="btn wide share-new" id="shareBtn' + w.id + '" data-act="shareSheet" data-a="' + w.id + '">📤 Поделиться</button></div>';
+        h += '<div class="btnrow"><button class="btn wide share-new" id="shareBtn' + w.id + '" data-act="shareSheet" data-a="' + w.id + '">📤 Поделиться<span class="tag">выбор</span></button></div>';
     }
     /* [UX-T22] «Добавить упражнение» — кнопка на всю ширину под упражнениями
        (➕ из шапки убрана); только у активной */
@@ -5403,19 +5406,26 @@ function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* noop *
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* noop */ } }
 
 /* ============ [UX-I16] шейринг тренировки по ссылке ============ */
-/* шит «Телеграм» (макет экран 3, ред. 2); «Картинка» [UX-I14] вырезана 20.11
-   решением владельца — шеринг только ссылочный */
+/* шит «Картинка / Телеграм» (макет экран 3); «Картинка» [UX-S16] — серверный
+   постер v2 (рендер на сервере + sendPhoto ботом в чат), поток shareCardGo ниже */
 const TG_SVG = '<svg viewBox="0 0 24 24" width="24" height="24" fill="#ffffff" aria-hidden="true"><path d="M21.7 3.3c.3-.2.7-.2 1 .1.2.3.3.6.2 1l-3.1 14.4c-.2.9-.9 1.3-1.7.9l-4.9-3.6-2.5 2.4c-.6.6-1.5.4-1.8-.4l-1.7-5.4-4.6-1.4c-.9-.3-.9-1.3.1-1.7l18.4-7.1c.2-.1.4-.2.6-.2zM8.9 13.2l.3 3.1 1.9-1.8 4.9 3.6c.3.2.6.1.7-.3l2.9-13.5-10.7 8.9z"/></svg>';
 
 function shareSheet(wid) {
     const nameOn = !!G.shareName;
     let h = '<div class="mtitle-row"><p class="mtitle">Поделиться тренировкой</p>' +
         '<button class="barebtn" data-act="closeModal" aria-label="Закрыть">✕</button></div>';
+    /* [UX-S16] «Картинка» — постер v2: рендер на сервере, бот шлёт PNG в чат —
+       пересылается друзьям в два тапа; из Mini App никуда не навигируем (UX-B15) */
+    h += '<button class="shrow" data-act="shareCard" data-a="' + wid + '">' +
+        '<span class="sic2">🖼</span>' +
+        '<span class="st"><b>Картинка</b>' +
+        '<span class="ssub">Постер придёт в чат с ботом — перешлите друзьям</span></span></button>';
     h += '<button class="shrow tg" data-act="shareTg" data-a="' + wid + '">' +
         '<span class="sic2 tg2">' + TG_SVG + '</span>' +
         '<span class="st"><b>Телеграм</b>' +
         '<span class="ssub">Отправить в любой чат — откроется выбор чата, ссылка также скопируется</span></span></button>';
-    /* opt-in имени (§11.1): по умолчанию выключено — ссылка анонимна */
+    /* opt-in имени (§11.1): по умолчанию выключено — ссылка анонимна;
+       имя на постере не показывается никогда (решение владельца 21.11) */
     h += '<div class="shname"><span class="st"><b>Показывать моё имя при шеринге</b>' +
         '<span class="ssub">' + (nameOn ? 'Имя из Telegram увидят получатели ссылки' : 'Выключено — ссылка без вашего имени') + '</span></span>' +
         swToggleHtml(nameOn, 'shareNameToggle', String(wid), 'Показывать моё имя при шеринге') + '</div>';
@@ -5432,7 +5442,7 @@ async function shareTelegramGo(wid) {
     const setBusy = function (busy) {
         if (!btn) return;
         btn.disabled = busy;
-        btn.innerHTML = busy ? '⏳ Готовим ссылку…' : '📤 Поделиться';
+        btn.innerHTML = busy ? '⏳ Готовим ссылку…' : '📤 Поделиться<span class="tag">выбор</span>';
     };
     closeModal();
     setBusy(true);
@@ -5474,6 +5484,41 @@ async function shareTelegramGo(wid) {
         try { tg.openTelegramLink(shareUrl); opened = true; } catch (e) { opened = false; }
     }
     if (!opened) window.open(shareUrl, '_blank'); /* вне Telegram / старый webview */
+    setBusy(false);
+}
+
+/* поток «Картинка» [UX-S16]: POST /api/card — сервер сам рендерит постер
+   (CardRender, 1080×1920), сохраняет по неугадываемому токену и шлёт PNG ботом
+   в чат пользователя (sendPhoto по https-URL). Mini App только ждёт ответ:
+   ok — тост «постер в чате», ошибки (лимит/сеть/нет тренировки) — тост сервера.
+   Никаких вкладок/webview — урок UX-B15. cardClick пишется на тапе пункта шита
+   (ACTION shareCard); cardOk/cardErr — по ответу сервера. */
+async function shareCardGo(wid) {
+    const btn = document.getElementById('shareBtn' + wid);
+    const setBusy = function (busy) {
+        if (!btn) return;
+        btn.disabled = busy;
+        btn.innerHTML = busy ? '⏳ Готовим постер…' : '📤 Поделиться<span class="tag">выбор</span>';
+    };
+    closeModal();
+    setBusy(true);
+    let err = null;
+    try {
+        const r = await fetch('/api/card', {
+            method: 'POST',
+            body: JSON.stringify({ initData: INIT, wid: wid })
+        });
+        const j = await r.json();
+        if (r.ok && j.ok) {
+            trackShare('cardOk');
+            toast('🖼 Постер отправлен в чат с ботом — перешлите друзьям 💪');
+            setBusy(false);
+            return;
+        }
+        err = j && j.error ? j.error : null;
+    } catch (e) { /* сеть/сервер — тост ниже */ }
+    trackShare('cardErr');
+    toast(err || 'Нет связи: не удалось приготовить постер', true);
     setBusy(false);
 }
 

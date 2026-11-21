@@ -5651,11 +5651,12 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         await shareBtn.click();
         const modal = page.locator('.modal.open');
         await expect(modal).toBeVisible({ timeout: 5000 });
-        /* после выреза «Картинки» (решение владельца 20.11) в шите один пункт
-           «Телеграм» — строка «Картинка» отсутствует, тогл имени и футер на месте */
-        await expect(modal.locator('.shrow')).toHaveCount(1);
+        /* [UX-S16] «Картинка» вернулась: в шите два пункта, бейдж «выбор» на кнопке,
+           тогл имени и футер на месте */
+        await expect(modal.locator('.shrow')).toHaveCount(2);
         await expect(modal.locator('.shrow.tg')).toBeEnabled();
-        await expect(modal.locator('.shrow', { hasText: 'Картинка' })).toHaveCount(0);
+        await expect(modal.locator('.shrow', { hasText: 'Картинка' })).toHaveCount(1);
+        await expect(shareBtn.locator('.tag')).toHaveText('выбор');
         /* тап «Телеграм»: шит закрывается → prepare ссылки → буфер → выбор чата
            (на localhost prepare мгновенный, busy-состояние кнопки не ловим ассертом) */
         await modal.locator('.shrow.tg').click();
@@ -5678,6 +5679,57 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         await expect(page.locator('.toast.show')).toContainText('Ссылка скопирована', { timeout: 5000 });
         const url2 = await page.evaluate(function () { return navigator.clipboard.readText(); });
         expect(url2).toBe(url);
+    });
+
+    test('[UX-S16] «Картинка»: POST /api/card → тост «постер в чате с ботом», воронка cardClick/cardOk', async ({ page, request }) => {
+        test.setTimeout(60000);
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        const shareBtn = page.locator('[data-act="shareSheet"]');
+        await expect(shareBtn).toBeVisible({ timeout: 5000 });
+        await shareBtn.click();
+        const modal = page.locator('.modal.open');
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        /* тап «Картинка»: шит закрывается → сервер готовит постер и шлёт ботом → тост;
+           Mini App никуда не навигирует (урок UX-B15) */
+        await modal.locator('.shrow', { hasText: 'Картинка' }).click();
+        await expect(modal).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.toast.show')).toContainText('Постер отправлен в чат с ботом', { timeout: 5000 });
+        /* кнопка разблокирована, бейдж «выбор» на месте */
+        await expect(shareBtn).toBeEnabled();
+        await expect(shareBtn.locator('.tag')).toHaveText('выбор');
+        /* клиентская воронка: cardClick на тап пункта, cardOk по ответу; ошибки нет */
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('cardClick');
+        expect(ev).toContain('cardOk');
+        expect(ev).not.toContain('cardErr');
+    });
+
+    test('[UX-S16] «Картинка»: сервер вернул ошибку (лимит) — тост с текстом сервера, cardErr в воронке', async ({ page, request }) => {
+        test.setTimeout(60000);
+        /* cardfail-режим мока: /api/card отвечает 429 с человекочитаемой ошибкой */
+        await request.post('/api/reset?cardfail=1');
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        await expect(page.locator('.toast.show')).toContainText('Слишком часто', { timeout: 5000 });
+        /* кнопка разблокирована — ретрай легален */
+        await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('cardClick');
+        expect(ev).toContain('cardErr');
+        expect(ev).not.toContain('cardOk');
     });
 
     test('страница /w/<id> рендерится, мусорный id — 404 «Тренировка недоступна»', async ({ request }) => {
