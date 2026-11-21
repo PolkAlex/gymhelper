@@ -324,6 +324,16 @@ public final class BotLogic {
             if (webAppUrl != null) {
                 api.sendMessageWithKeyboard(chatId, "Приложение открывается кнопкой ☰ «🏋️ Дневник» у поля ввода", TelegramApi.keyboardRemove());
             }
+            /* [ANA-T10] deep-link источника привлечения (?start=<src> из кампаний/пабликов):
+               Telegram присылает payload текстом «/start <payload>». Строго с пробелом
+               (команда «/startvcru» — не deep-link), НЕ feedback (обработан выше).
+               Payload санитизируется (trim/lowercase/[a-z0-9_]/≤32) и считается в
+               stats bucket startSrc; невалидный/пустой — молча игнорируется.
+               Пользователю — обычное меню, ровно как без payload. */
+            if (stats != null && low.startsWith("/start ")) {
+                String src = Stats.sanitizeSrc(low.substring(7));
+                if (src != null) stats.incStartSrc(src);
+            }
             showMenu(chatId, null, data, st);
             return;
         }
