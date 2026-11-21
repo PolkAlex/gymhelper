@@ -796,6 +796,16 @@ public class GymContractTest {
                     && Json.lng(act.get("usersWorkoutYesterday")) == 2 && Json.lng(act.get("workoutsCompletedYesterday")) == 1,
                 "stats: activation из summary-state доезжает в /stats");
             check("2026-11-20".equals(snapAct.get("activationDay")), "stats: activationDay в /stats");
+
+            /* [ANA-T11 ревью] унаследованный summary-state от ANA-T6 (day+totals, activation
+               ещё нет — до первой 09:00-сводки): осиротевшего activationDay в /stats быть
+               не должно — оба ключа ставятся только вместе */
+            java.nio.file.Files.writeString(tmpS.resolve("summary-state.json"),
+                "{\"day\":\"2026-11-19\",\"totals\":{\"maInit\":9}}", java.nio.charset.StandardCharsets.UTF_8);
+            Map<String, Object> snapLegacy = Json.map(Json.parse(get(portS, "/stats?token=contract-test-token").body()));
+            check(snapLegacy.get("activation") == null && snapLegacy.get("activationDay") == null,
+                "stats: summary-state без activation — в /stats нет ни activation, ни activationDay");
+
             java.nio.file.Files.deleteIfExists(tmpS.resolve("summary-state.json"));
             Map<String, Object> snapNoAct = Json.map(Json.parse(get(portS, "/stats?token=contract-test-token").body()));
             check(snapNoAct.get("activation") == null, "stats: без summary-state блока activation нет (JSON прежний)");

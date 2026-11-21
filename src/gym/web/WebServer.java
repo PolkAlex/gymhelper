@@ -225,14 +225,18 @@ public final class WebServer {
         /* [ANA-T11] активационные метрики «за вчера» доезжают в /stats из
            data/summary-state.json (пишутся ботом при последней успешной утренней сводке,
            семантика «на момент сводки»); activationDay — день сводки для контекста.
-           Файла/ключа нет (бот ещё не слал сводку) — блок просто отсутствует в JSON */
+           Оба ключа ставятся только вместе: в унаследованном summary-state от ANA-T6
+           (day+totals без activation, до первой 09:00-сводки) осиротевшего
+           activationDay в /stats быть не должно. */
         Map<String, Object> snap = stats.snapshot();
         Map<String, Object> st = storage.summaryState();
         if (st != null) {
             Map<String, Object> act = Json.map(st.get("activation"));
-            if (act != null) snap.put("activation", act);
-            String day = Json.str(st, "day");
-            if (day != null) snap.put("activationDay", day);
+            if (act != null) {
+                snap.put("activation", act);
+                String day = Json.str(st, "day");
+                if (day != null) snap.put("activationDay", day);
+            }
         }
         sendJson(ex, 200, snap);
     }
