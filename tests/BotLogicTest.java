@@ -391,6 +391,9 @@ public class BotLogicTest {
         /* === 17. Источники привлечения [ANA-T10]: /start <payload> → bucket startSrc === */
         runStartSrcScenario();
 
+        /* === 18. Активационные метрики «за вчера» [ANA-T11]: скан chat-файлов + summaryText === */
+        runActivationScenario();
+
         /* === 16. Снятие reply-клавиатуры [UX-T33]: /start webapp → remove_keyboard + меню,
             /menu и /start feedback без снятия, webAppUrl == null — регрессия === */
         runKeyboardRemoveScenario();
@@ -1072,6 +1075,73 @@ public class BotLogicTest {
             check(Json.lng(srcCap.get("src5")) == 2, "startSrc: существующий источник после капа инкрементируется (1+1)");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: startSrc-сценарий " + e);
+        }
+    }
+
+    /* [ANA-T11] активационные метрики «за вчера»: Storage.activationStats сканирует
+       chat_*.json (толерантно: битый JSON — пользователь без тренировок, не падение);
+       границы: «сегодня» не «вчера», finished=false не завершённая, date отсутствует;
+       summaryText (HTML) содержит термины и числа N/M/K/L в ожидаемом формате. */
+    static void runActivationScenario() {
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymactiv");
+            Storage storage = new Storage(tmp);
+            java.time.LocalDate today = java.time.LocalDate.now();
+            java.time.LocalDate yest = today.minusDays(1);
+            final String Y = yest.toString(), T = today.toString();
+
+            /* chat 1: вчера — завершённая (finished) + «сегодня» (не входит в «вчера») */
+            GymData d1 = new GymData();
+            Workout w1 = new Workout(); w1.date = Y; w1.finished = true; w1.startedAt = Y + "T09:00:00"; d1.workouts.add(w1);
+            Workout w2 = new Workout(); w2.date = T; w2.finished = true; w2.startedAt = T + "T09:00:00"; d1.workouts.add(w2);
+            storage.save(1, d1);
+            /* chat 2: вчера — незавершённая (создал вчера, но не finished → completed не растёт) */
+            GymData d2 = new GymData();
+            Workout w3 = new Workout(); w3.date = Y; w3.finished = false; d2.workouts.add(w3);
+            Workout w4 = new Workout(); w4.date = "2026-01-01"; w4.finished = true; d2.workouts.add(w4);
+            storage.save(2, d2);
+            /* chat 3: пустой workouts (создан файл, тренировок нет) */
+            GymData d3 = new GymData();
+            storage.save(3, d3);
+            /* chat 4: workout без date (legacy/мусор в поле) — ever да, вчера нет */
+            GymData d4 = new GymData();
+            Workout w5 = new Workout(); w5.finished = true; d4.workouts.add(w5);
+            storage.save(4, d4);
+            /* chat 5: битый JSON — считается пользователем без тренировок */
+            java.nio.file.Files.writeString(tmp.resolve("chat_5.json"), "{broken json");
+
+            Storage.ActivationStats a = storage.activationStats(yest);
+            check(a.usersTotal == 5, "activ: пользователей 5 (битый JSON считается, не-чат файл — нет)");
+            check(a.usersEverWorkout == 3, "activ: с тренировками 3 (chats 1/2/4; пустой и битый — нет)");
+            check(a.usersWorkoutYesterday == 2, "activ: создали вчера 2 (chats 1/2; «сегодня» и без date — нет)");
+            check(a.workoutsCompletedYesterday == 1, "activ: завершено вчера 1 (chat 1 finished; chat 2 false; «сегодня» — нет)");
+
+            /* пустой каталог data — нули */
+            java.nio.file.Path empty = java.nio.file.Files.createTempDirectory("gymactiv-empty");
+            Storage emptyStorage = new Storage(empty);
+            Storage.ActivationStats a0 = emptyStorage.activationStats(yest);
+            check(a0.usersTotal == 0 && a0.usersEverWorkout == 0 && a0.usersWorkoutYesterday == 0
+                    && a0.workoutsCompletedYesterday == 0,
+                "activ: пустой каталог — нули без падения");
+
+            /* summaryText (HTML): активационный блок с числами и терминами */
+            Map<String, Object> snap = new java.util.LinkedHashMap<>();
+            snap.put("maInit", 10L);
+            snap.put("maSave", 5L);
+            snap.put("workoutsCreated", 2L);
+            snap.put("workoutsCompleted", 1L);
+            snap.put("templatesCreated", 0L);
+            snap.put("templatesUsed", 0L);
+            snap.put("feedbackSent", 0L);
+            snap.put("landingViews", 0L);
+            String txt = BotLogic.summaryText(snap, null, 4, 5, a);
+            check(txt.contains("👥 Пользователи: <b>5</b> всего · <b>3</b> с тренировками · <b>2</b> создали вчера"),
+                "activ: summaryText — пользователи N всего / M с тренировками / K создали вчера");
+            check(txt.contains("✅ Завершено вчера: <b>1</b>"), "activ: summaryText — завершено вчера L");
+            check(txt.contains("📊 <b>Ежедневная сводка</b>"), "activ: summaryText — шапка на месте");
+            check(!txt.contains("null"), "activ: summaryText — без null-хвостов");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: activation-сценарий " + e);
         }
     }
 
