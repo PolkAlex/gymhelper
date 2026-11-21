@@ -3,6 +3,7 @@ package gym;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -184,5 +185,58 @@ public final class Storage {
         } catch (Exception e) {
             System.out.println("[warn] saveSummaryState: " + e.getMessage());
         }
+    }
+
+    /* [ANA-T11] иммутабельный срез активационных метрик «за вчера» (для ежедневной сводки
+       владельца; наружу идут только агрегаты-числа, без ПДн) */
+    public static final class ActivationStats {
+        public final int usersTotal;
+        public final int usersEverWorkout;
+        public final int usersWorkoutYesterday;
+        public final int workoutsCompletedYesterday;
+
+        public ActivationStats(int usersTotal, int usersEverWorkout, int usersWorkoutYesterday, int workoutsCompletedYesterday) {
+            this.usersTotal = usersTotal;
+            this.usersEverWorkout = usersEverWorkout;
+            this.usersWorkoutYesterday = usersWorkoutYesterday;
+            this.workoutsCompletedYesterday = workoutsCompletedYesterday;
+        }
+    }
+
+    /* [ANA-T11] активационные метрики «за вчера»: скан chat_*.json в data/ — тот же каталог
+       и та же толерантность, что activeChats/chatIds. usersTotal — все файлы пользователей
+       (битый/пустой JSON считается пользователем без тренировок, не валит скан);
+       usersEverWorkout — workouts непуст (создавал ≥1 тренировку когда-либо);
+       usersWorkoutYesterday — есть workout с date == вчера (finished не важен);
+       workoutsCompletedYesterday — число workout'ов finished==true && date == вчера
+       (тренировка «сегодня» в «вчера» не входит; workout без date — не считается).
+       Наружу — только агрегаты-числа, id/содержимое не логируются. */
+    public synchronized ActivationStats activationStats(LocalDate yesterday) {
+        int total = 0, ever = 0, usersYesterday = 0, completed = 0;
+        String y = yesterday == null ? "" : yesterday.toString();
+        try {
+            if (Files.exists(dir)) {
+                for (Path p : Files.newDirectoryStream(dir, "chat_*.json")) {
+                    total++;
+                    try {
+                        GymData d = GymData.fromJson(Json.map(Json.parse(Files.readString(p, StandardCharsets.UTF_8))));
+                        if (!d.workouts.isEmpty()) ever++;
+                        boolean hadYesterday = false;
+                        for (Workout w : d.workouts) {
+                            if (y.equals(w.date)) {
+                                hadYesterday = true;
+                                if (w.finished) completed++;
+                            }
+                        }
+                        if (hadYesterday) usersYesterday++;
+                    } catch (Exception e) {
+                        System.out.println("[warn] activationStats: skip " + p.getFileName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[warn] activationStats: " + e.getMessage());
+        }
+        return new ActivationStats(total, ever, usersYesterday, completed);
     }
 }

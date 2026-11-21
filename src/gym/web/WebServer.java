@@ -222,7 +222,19 @@ public final class WebServer {
             send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
             return;
         }
-        sendJson(ex, 200, stats.snapshot());
+        /* [ANA-T11] активационные метрики «за вчера» доезжают в /stats из
+           data/summary-state.json (пишутся ботом при последней успешной утренней сводке,
+           семантика «на момент сводки»); activationDay — день сводки для контекста.
+           Файла/ключа нет (бот ещё не слал сводку) — блок просто отсутствует в JSON */
+        Map<String, Object> snap = stats.snapshot();
+        Map<String, Object> st = storage.summaryState();
+        if (st != null) {
+            Map<String, Object> act = Json.map(st.get("activation"));
+            if (act != null) snap.put("activation", act);
+            String day = Json.str(st, "day");
+            if (day != null) snap.put("activationDay", day);
+        }
+        sendJson(ex, 200, snap);
     }
 
     /* первый параметр name из rawQuery (уже декодированный), null — нет параметра */

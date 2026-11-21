@@ -782,6 +782,23 @@ public class GymContractTest {
                 dOld.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear()));
             check(!rotWeeks.containsKey(oldKey), "stats: старейшая неделя вытеснена при ротации");
             check(Json.lng(rot.get("maInit")) == 30, "stats: totals при ротации недель не трогаются");
+
+            /* [ANA-T11] активационные метрики из summary-state.json доезжают в /stats:
+               файл есть (бот отправил утреннюю сводку) — activation + activationDay в ответе;
+               файла нет — блок отсутствует (JSON прежний). Реальный WebServer. */
+            java.nio.file.Files.writeString(tmpS.resolve("summary-state.json"),
+                "{\"day\":\"2026-11-20\",\"totals\":{\"maInit\":9},\"activation\":{"
+                    + "\"usersTotal\":12,\"usersEverWorkout\":5,\"usersWorkoutYesterday\":2,"
+                    + "\"workoutsCompletedYesterday\":1}}", java.nio.charset.StandardCharsets.UTF_8);
+            Map<String, Object> snapAct = Json.map(Json.parse(get(portS, "/stats?token=contract-test-token").body()));
+            Map<String, Object> act = Json.map(snapAct.get("activation"));
+            check(act != null && Json.lng(act.get("usersTotal")) == 12 && Json.lng(act.get("usersEverWorkout")) == 5
+                    && Json.lng(act.get("usersWorkoutYesterday")) == 2 && Json.lng(act.get("workoutsCompletedYesterday")) == 1,
+                "stats: activation из summary-state доезжает в /stats");
+            check("2026-11-20".equals(snapAct.get("activationDay")), "stats: activationDay в /stats");
+            java.nio.file.Files.deleteIfExists(tmpS.resolve("summary-state.json"));
+            Map<String, Object> snapNoAct = Json.map(Json.parse(get(portS, "/stats?token=contract-test-token").body()));
+            check(snapNoAct.get("activation") == null, "stats: без summary-state блока activation нет (JSON прежний)");
         } catch (Exception statsErr) {
             throw new AssertionError("CONTRACT FAIL: stats " + statsErr);
         }

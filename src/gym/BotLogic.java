@@ -2146,8 +2146,10 @@ public final class BotLogic {
                 }
             }
         }
+        /* [ANA-T11] активационные метрики «за вчера» (календарные сутки) — скан chat-файлов */
+        Storage.ActivationStats act = storage.activationStats(LocalDate.now().minusDays(1));
         String err = api.sendMessageResult(chatId, summaryText(snap, prev,
-            storage.activeChats(7), storage.activeChats(30)));
+            storage.activeChats(7), storage.activeChats(30), act));
         if (err != null) {
             System.out.println("[warn] summary: " + err);
             return;
@@ -2156,9 +2158,17 @@ public final class BotLogic {
         if (persist) {
             Map<String, Object> totals = new LinkedHashMap<>();
             for (String k : Stats.KEYS) totals.put(k, Json.lng(snap.get(k)));
+            /* [ANA-T11] activation доезжает в summary-state.json (и далее в /stats из
+               WebServer.handleStats) — семантика «на момент последней утренней сводки» */
+            Map<String, Object> actMap = new LinkedHashMap<>();
+            actMap.put("usersTotal", act.usersTotal);
+            actMap.put("usersEverWorkout", act.usersEverWorkout);
+            actMap.put("usersWorkoutYesterday", act.usersWorkoutYesterday);
+            actMap.put("workoutsCompletedYesterday", act.workoutsCompletedYesterday);
             Map<String, Object> st = new LinkedHashMap<>();
             st.put("day", LocalDate.now().toString());
             st.put("totals", totals);
+            st.put("activation", actMap);
             storage.saveSummaryState(st);
         }
     }
@@ -2174,8 +2184,11 @@ public final class BotLogic {
     /* текст сводки (HTML-режим, только числа — без ПДн): продуктовые счётчики stats
        с дельтой за сутки (prev — снимок прошлой отправки, null — без дельты),
        активные чаты — по активности файлов (mtime chat_*.json, решение владельца
-       16.11 в #253). static — для юнит-теста. */
-    static String summaryText(Map<String, Object> snap, Map<String, Long> prev, int active7, int active30) {
+       16.11 в #253), [ANA-T11] активационные метрики «за вчера» (usersEverWorkout/
+       usersWorkoutYesterday/workoutsCompletedYesterday — скан Storage.activationStats).
+       static — для юнит-теста. */
+    static String summaryText(Map<String, Object> snap, Map<String, Long> prev, int active7, int active30,
+                              Storage.ActivationStats act) {
         LocalDate d = LocalDate.now();
         StringBuilder b = new StringBuilder("📊 <b>Ежедневная сводка</b> · ")
             .append(d.getDayOfMonth()).append('.')
@@ -2183,6 +2196,10 @@ public final class BotLogic {
             .append("👥 Активные за 7 дней: <b>").append(active7)
             .append("</b> · за 30: <b>").append(active30)
             .append("</b> <i>(по активности файлов)</i>\n")
+            .append("👥 Пользователи: <b>").append(act.usersTotal).append("</b> всего · <b>")
+            .append(act.usersEverWorkout).append("</b> с тренировками · <b>")
+            .append(act.usersWorkoutYesterday).append("</b> создали вчера\n")
+            .append("✅ Завершено вчера: <b>").append(act.workoutsCompletedYesterday).append("</b>\n")
             .append("📱 Открытия Mini App: <b>").append(Json.lng(snap.get("maInit"))).append("</b>")
             .append(delta("maInit", snap, prev)).append('\n')
             .append("💾 Сохранения из приложения: <b>").append(Json.lng(snap.get("maSave"))).append("</b>")
