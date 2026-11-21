@@ -10,6 +10,9 @@ import java.util.Map;
 
 public final class Main {
     public static void main(String[] args) throws Exception {
+        /* [UX-S16] рендер постера (Java 2D) без дисплея: сервер — headless всегда;
+            страховка к -Djava.awt.headless=true из Dockerfile для локальных запусков */
+        System.setProperty("java.awt.headless", "true");
         String token = System.getenv("GYM_BOT_TOKEN");
         if (token == null || token.isBlank()) token = readTextFile(Path.of("token.txt"));
         if (token == null || token.isBlank()) {

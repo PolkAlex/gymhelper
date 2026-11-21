@@ -119,6 +119,17 @@ public class TelegramApi {
         buf.write("\r\n".getBytes(StandardCharsets.UTF_8));
     }
 
+    /* [UX-S16] отправка фото по публичному https-URL (Telegram скачивает картинку сам,
+       multipart не нужен): caption — подпись фото в чате; true при ok от Telegram,
+       ошибки — в лог, решение о ретрае/сообщении пользователю — у вызывающего */
+    public boolean sendPhotoByUrl(long chatId, String photoUrl, String caption) {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("chat_id", chatId);
+        req.put("photo", photoUrl);
+        if (caption != null && !caption.isBlank()) req.put("caption", caption);
+        return postSilent("sendPhoto", req);
+    }
+
     /* [UX-T33] снятие persistent reply-клавиатуры (reply_keyboard_remove) —
        клавиатура «Открыть приложение» убрана, старую снимаем на /start */
     public static Map<String, Object> keyboardRemove() {

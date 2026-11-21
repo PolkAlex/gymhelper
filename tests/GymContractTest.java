@@ -8,9 +8,11 @@ import gym.Records;
 import gym.SetEntry;
 import gym.Stats;
 import gym.Storage;
+import gym.TelegramApi;
 import gym.Template;
 import gym.TemplateExercise;
 import gym.Workout;
+import gym.web.CardRender;
 import gym.web.WebServer;
 
 import java.util.Map;
@@ -1330,6 +1332,230 @@ public class GymContractTest {
                 "share: shareClick/shareOk/shareDownload через /api/track=1 ([UX-I14] §5)");
         } catch (Exception shareErr) {
             throw new AssertionError("CONTRACT FAIL: share " + shareErr);
+        }
+
+        /* [UX-S16] постер тренировки v2: POST /api/card (initData в теле; 401 без/мусор;
+            404 нет тренировки; 400 незавершённая/0 упражнений; 429 антиспам 3/час;
+            502 отказ sendPhoto) → PNG в data/cards (магия, IHDR 1080×1920, токен
+            22 base62), GET /card/<token>.png — публичная раздача (200 image/png,
+            тело байт-в-байт, HEAD; мусорный/короткий токен и traversal — 404),
+            TTL 1 ч (ленивая чистка при записи), кап каталога 503. Рендер CardRender —
+            в контракте (headless Java 2D + bundled шрифты), caption из дня тренировки
+            (§7.3), воронка cardClick/cardOk/cardErr в /api/track. sendPhoto —
+            заглушка (реальной сети в тесте нет). */
+        try {
+            java.nio.file.Path rootCa = java.nio.file.Files.createTempDirectory("gymposter");
+            java.nio.file.Path webDirCa = rootCa.resolve("web");
+            java.nio.file.Files.createDirectories(webDirCa);
+            Storage stCa = new Storage(rootCa.resolve("data"));
+            Stats counterCa = new Stats(rootCa.resolve("stats.json"));
+            final java.util.concurrent.atomic.AtomicBoolean sendOk = new java.util.concurrent.atomic.AtomicBoolean(true);
+            final java.util.List<String> sentCa = new java.util.ArrayList<>();
+            TelegramApi stubCa = new TelegramApi("contract-stub") {
+                @Override
+                public boolean sendPhotoByUrl(long chatId, String photoUrl, String caption) {
+                    sentCa.add(chatId + "|" + photoUrl + "|" + caption);
+                    return sendOk.get();
+                }
+            };
+            WebServer wsCa = new WebServer("contract-test-token", stCa, webDirCa, counterCa, null, stubCa);
+            java.net.ServerSocket probeCa = new java.net.ServerSocket(0);
+            int portCa = probeCa.getLocalPort();
+            probeCa.close();
+            wsCa.start(portCa);
+
+            /* seed: прошлые тренировки (база рекорда: приседания 110, жим 90) и
+               рекордная 18.11 (приседания 120 — рекорд, жим 100, тяга, планка) */
+            GymData seedCa = new GymData();
+            seedCa.nextId = 5;
+            seedCa.rev = 1;
+            Workout wBaseCa = new Workout();
+            wBaseCa.id = 1;
+            wBaseCa.date = "2026-11-10";
+            wBaseCa.finished = true;
+            ExerciseEntry beCa = new ExerciseEntry("Жим лёжа");
+            beCa.sets.add(new SetEntry("90", 3, "5"));
+            wBaseCa.exercises.add(beCa);
+            ExerciseEntry beCa2 = new ExerciseEntry("Приседания");
+            beCa2.sets.add(new SetEntry("110", 3, "8"));
+            wBaseCa.exercises.add(beCa2);
+            Workout wRecCa = new Workout();
+            wRecCa.id = 2;
+            wRecCa.date = "2026-11-18";
+            wRecCa.startedAt = "2026-11-18T09:00:00";
+            wRecCa.endedAt = "2026-11-18T10:10:00";
+            wRecCa.finished = true;
+            ExerciseEntry reCa = new ExerciseEntry("Приседания");
+            reCa.sets.add(new SetEntry("120", 3, "8"));
+            wRecCa.exercises.add(reCa);
+            ExerciseEntry reCa2 = new ExerciseEntry("Жим лёжа");
+            reCa2.sets.add(new SetEntry("100", 5, "5"));
+            wRecCa.exercises.add(reCa2);
+            ExerciseEntry reCa3 = new ExerciseEntry("Тяга штанги");
+            reCa3.sets.add(new SetEntry("80", 3, "10"));
+            wRecCa.exercises.add(reCa3);
+            ExerciseEntry reCa4 = new ExerciseEntry("Планка");
+            reCa4.sets.add(new SetEntry("", 3, "60 сек"));
+            wRecCa.exercises.add(reCa4);
+            Workout wActiveCa = new Workout();
+            wActiveCa.id = 3;
+            wActiveCa.date = "2026-11-19";
+            wActiveCa.finished = false;
+            ExerciseEntry aeCa = new ExerciseEntry("Жим лёжа");
+            aeCa.sets.add(new SetEntry("60", 1, "10"));
+            wActiveCa.exercises.add(aeCa);
+            Workout wEmptyCa = new Workout();
+            wEmptyCa.id = 4;
+            wEmptyCa.date = "2026-11-19";
+            wEmptyCa.finished = true;
+            wEmptyCa.exercises.add(new ExerciseEntry("Брусья"));
+            seedCa.workouts.add(wBaseCa);
+            seedCa.workouts.add(wRecCa);
+            seedCa.workouts.add(wActiveCa);
+            seedCa.workouts.add(wEmptyCa);
+            stCa.save(424259, seedCa);
+            String idCa = tgInitData("contract-test-token", 424259);
+            java.nio.file.Path cardsDirCa = rootCa.resolve("data").resolve("cards");
+
+            /* авторизация */
+            check(postJson(portCa, "/api/card", "{\"wid\":2}").statusCode() == 401,
+                "poster: /api/card без initData — 401");
+            check(postJson(portCa, "/api/card", "{\"initData\":\"garbage\",\"wid\":2}").statusCode() == 401,
+                "poster: /api/card с мусорным initData — 401");
+            /* защита §7.4 */
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCa + "\",\"wid\":99}").statusCode() == 404,
+                "poster: нет тренировки — 404");
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCa + "\",\"wid\":3}").statusCode() == 400,
+                "poster: незавершённая — 400");
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCa + "\",\"wid\":4}").statusCode() == 400,
+                "poster: 0 упражнений (пустые подходы) — 400");
+            check(sentCa.isEmpty(), "poster: отказы до отправки в Telegram не доезжают");
+
+            /* позитив: 200 + файл с магией PNG и IHDR 1080×1920 + sendPhoto заглушке */
+            java.net.http.HttpResponse<String> rPost1 = postJson(portCa, "/api/card",
+                "{\"initData\":\"" + idCa + "\",\"wid\":2}");
+            check(rPost1.statusCode() == 200, "poster: POST /api/card — 200, а не " + rPost1.statusCode());
+            check(sentCa.size() == 1, "poster: sendPhoto вызван 1 раз, а не " + sentCa.size());
+            String sentLine = sentCa.get(0);
+            check(sentLine.startsWith("424259|https://"), "poster: photo уходит в чат владельца по https: " + sentLine);
+            check(sentLine.endsWith("|Постер тренировки за 18.11 — перешли друзьям 💪"),
+                "poster: caption из дня тренировки (§7.3): " + sentLine);
+            String cardToken = sentLine.split("\\|")[1];
+            cardToken = cardToken.substring(cardToken.lastIndexOf('/') + 1, cardToken.lastIndexOf('.'));
+            check(cardToken.matches("[0-9a-zA-Z]{22}"), "poster: токен 22 base62: " + cardToken);
+            java.nio.file.Path cardFile = cardsDirCa.resolve(cardToken + ".png");
+            check(java.nio.file.Files.isRegularFile(cardFile), "poster: файл data/cards/<token>.png записан");
+            byte[] stored = java.nio.file.Files.readAllBytes(cardFile);
+            check(stored.length > 8 && stored[0] == (byte) 0x89 && stored[1] == 0x50 && stored[2] == 0x4E && stored[3] == 0x47,
+                "poster: файл — PNG (магия)");
+            check(stored.length > 30_000, "poster: постер 1080×1920 ожидаемо десятки КБ, а не " + stored.length);
+            check((stored[16] & 0xff) == 0 && (stored[17] & 0xff) == 0 && (stored[18] & 0xff) == 4 && (stored[19] & 0xff) == 0x38
+                    && (stored[20] & 0xff) == 0 && (stored[21] & 0xff) == 0 && (stored[22] & 0xff) == 7 && (stored[23] & 0xff) == 0x80,
+                "poster: IHDR 1080×1920 (§3)");
+
+            /* публичная раздача: 200 image/png, тело байт-в-байт; мусор — 404 */
+            java.net.http.HttpResponse<byte[]> rCard = getRaw(portCa, "/card/" + cardToken + ".png");
+            check(rCard.statusCode() == 200, "poster: GET /card/<token>.png — 200, а не " + rCard.statusCode());
+            check("image/png".equals(rCard.headers().firstValue("Content-Type").orElse(null)),
+                "poster: Content-Type image/png, а не " + rCard.headers().firstValue("Content-Type").orElse("—"));
+            check(java.util.Arrays.equals(rCard.body(), stored), "poster: тело GET = файлу байт-в-байт");
+            check("noindex, nofollow".equals(rCard.headers().firstValue("X-Robots-Tag").orElse(null)),
+                "poster: X-Robots-Tag noindex, nofollow");
+            check(headStatus(portCa, "/card/" + cardToken + ".png") == 200, "poster: HEAD — 200");
+            check(get(portCa, "/card/garbage0123456789abcdefgh.png").statusCode() == 404,
+                "poster: несуществующий токен — 404");
+            check(get(portCa, "/card/short.png").statusCode() == 404, "poster: короткий токен — 404");
+            check(get(portCa, "/card/@bad").statusCode() == 404, "poster: не-токен — 404");
+            check(rawStatus(portCa, "/card/%2e%2e%2fsecret.png") == 404, "poster: traversal — 404");
+
+            /* TTL: файл со старым mtime (2 ч) удаляется ленивой чисткой при следующем
+               POST; свежие карточки живут */
+            java.nio.file.Path oldCard = cardsDirCa.resolve("oldcardXXXXXXXXXXXXXXX.png");
+            java.nio.file.Files.write(oldCard, stored);
+            java.nio.file.Files.setLastModifiedTime(oldCard,
+                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 2 * 60 * 60 * 1000));
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCa + "\",\"wid\":2}").statusCode() == 200,
+                "poster: повторный POST — 200");
+            check(!java.nio.file.Files.exists(oldCard), "poster: TTL — файл старше 1 ч удалён при записи");
+
+            /* антиспам: 3-й POST за час ещё ок, 4-й — 429 (лимит на чат) */
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCa + "\",\"wid\":2}").statusCode() == 200,
+                "poster: 3-й POST в окно — 200");
+            java.net.http.HttpResponse<String> rSpam = postJson(portCa, "/api/card",
+                "{\"initData\":\"" + idCa + "\",\"wid\":2}");
+            check(rSpam.statusCode() == 429, "poster: 4-й POST — 429, а не " + rSpam.statusCode());
+            check(Json.map(Json.parse(rSpam.body())).get("error") != null,
+                "poster: 429 с человекочитаемой ошибкой");
+
+            /* 502: Telegram (заглушка) отказал — ошибка человекочитаемая, cardSendErr */
+            sendOk.set(false);
+            stCa.save(424260, seedCa); /* свой файл данных: лимит 429 — на чат, B отдельный */
+            String idCaB = tgInitData("contract-test-token", 424260);
+            java.net.http.HttpResponse<String> rFail = postJson(portCa, "/api/card",
+                "{\"initData\":\"" + idCaB + "\",\"wid\":2}");
+            check(rFail.statusCode() == 502, "poster: отказ sendPhoto — 502, а не " + rFail.statusCode());
+            check(Json.map(Json.parse(rFail.body())).get("error") != null, "poster: 502 с человекочитаемой ошибкой");
+            sendOk.set(true);
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCaB + "\",\"wid\":2}").statusCode() == 200,
+                "poster: ретрай после 502 — 200");
+
+            /* кап каталога (по образцу [UX-T41]): > CARD_DIR_MAX_FILES файлов — 503 */
+            for (int i = 0; i < 1001; i++) {
+                java.nio.file.Files.write(cardsDirCa.resolve("cap" + i + ".png"), stored);
+            }
+            java.net.http.HttpResponse<String> rCap = postJson(portCa, "/api/card",
+                "{\"initData\":\"" + idCaB + "\",\"wid\":2}");
+            check(rCap.statusCode() == 503, "poster: кап каталога >1000 файлов — 503, а не " + rCap.statusCode());
+
+            /* рендер: формулы/склонения/дата/caption + падение на пустых (§5–7) */
+            byte[] pngR = CardRender.render(seedCa, wRecCa);
+            check(pngR[0] == (byte) 0x89 && pngR[1] == 0x50 && pngR.length > 30_000, "poster: CardRender.render — PNG");
+            check(CardRender.russianDate("2026-11-21").equals("21 ноября 2026, суббота"), "poster: russianDate POC-формат");
+            check(CardRender.russianDate("мусор").equals("мусор"), "poster: russianDate фолбэк — строка как есть (§5.1)");
+            check(CardRender.russianDate(null).isEmpty(), "poster: russianDate(null) — пусто");
+            check(CardRender.durationCompact(null).equals("—") && CardRender.durationCompact(0L).equals("—"),
+                "poster: длительность null/0 — «—» (§6.7)");
+            check(CardRender.durationCompact(48L).equals("48 мин") && CardRender.durationCompact(60L).equals("1 ч")
+                    && CardRender.durationCompact(70L).equals("1 ч 10 мин"),
+                "poster: компактная длительность (§10.1)");
+            check(CardRender.exWord(1).equals("упражнение") && CardRender.exWord(2).equals("упражнения")
+                    && CardRender.exWord(5).equals("упражнений") && CardRender.exWord(21).equals("упражнение"),
+                "poster: склонение упражнений (§10.2)");
+            check(CardRender.repeatWord(1).equals("повторение") && CardRender.repeatWord(2).equals("повторения")
+                    && CardRender.repeatWord(38).equals("повторений"),
+                "poster: склонение повторений (§5.3)");
+            check(CardRender.weightAvgText(125.0).equals("125") && CardRender.weightAvgText(82.5).equals("82,5")
+                    && CardRender.weightAvgText(82.25).equals("82,25"),
+                "poster: среднее веса — запятая, без хвостовых нулей (§6.8)");
+            Workout oldCa = new Workout();
+            oldCa.date = "2025-03-14";
+            check(WebServer.cardCaption(oldCa).equals("Постер тренировки за 14.03.2025 — перешли друзьям 💪"),
+                "poster: caption не текущего года — dd.MM.yyyy (§7.3)");
+            Workout emptyCa = new Workout();
+            emptyCa.exercises.add(new ExerciseEntry("X"));
+            try {
+                CardRender.render(seedCa, emptyCa);
+                throw new AssertionError("CONTRACT FAIL: poster — рендер не упал на 0 упражнений");
+            } catch (IllegalArgumentException expected) {
+                /* ожидаемо: делиться нечем */
+            }
+
+            /* счётчики: cardSend = принятые (6), cardSendOk = успешные sendPhoto (4),
+               cardSendErr = отказ Telegram (1); воронка cardClick/cardOk/cardErr
+               через /api/track, bogus — мимо белого списка */
+            postTrack(portCa, idCa, "[\"cardClick\",\"cardOk\",\"cardErr\",\"bogusEvent\"]").statusCode();
+            Map<String, Object> snapCa = Json.map(Json.parse(get(portCa, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapCa.get("cardSend")) == 6,
+                "poster: cardSend=6 (принятые POST), а не " + Json.lng(snapCa.get("cardSend")));
+            check(Json.lng(snapCa.get("cardSendOk")) == 4,
+                "poster: cardSendOk=4 (успешные sendPhoto), а не " + Json.lng(snapCa.get("cardSendOk")));
+            check(Json.lng(snapCa.get("cardSendErr")) == 1,
+                "poster: cardSendErr=1 (отказ Telegram), а не " + Json.lng(snapCa.get("cardSendErr")));
+            check(Json.lng(snapCa.get("cardClick")) == 1 && Json.lng(snapCa.get("cardOk")) == 1
+                    && Json.lng(snapCa.get("cardErr")) == 1 && Json.lng(snapCa.get("bogusEvent")) == 0,
+                "poster: cardClick/cardOk/cardErr через /api/track=1, bogus — мимо белого списка");
+        } catch (Exception posterErr) {
+            throw new AssertionError("CONTRACT FAIL: poster " + posterErr);
         }
 
         System.out.println("CONTRACT OK");
