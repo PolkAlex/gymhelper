@@ -73,8 +73,9 @@ public final class WebServer {
        PNG рендерится на лету и живёт в data/cards/<token>.png (не data/*.json —
        формат GymData не меняется), токен = 22 символа base62 (как shareId,
        не угадывается), TTL жёсткий 1 час — чистка при старте сервера и лениво при
-       каждой записи; кап каталога от злоупотребления; антиспам — 3 POST /api/card
-       в час на чат (окно скользящее, отказы лимит не продлевают) */
+       каждой записи + гвард при выдаче; кап каталога от злоупотребления; антиспам —
+       3 успешных POST /api/card в час на чат (окно скользящее; 500/502/503 слот
+       откатывают — ревью [UX-S16]) */
     private static final long CARD_TTL_MS = 60L * 60 * 1000;
     private static final int CARD_TOKEN_LEN = 22;
     private static final int CARD_DIR_MAX_FILES = 1000;
@@ -677,8 +678,11 @@ public final class WebServer {
             sendJson(ex, 400, Map.of("ok", false, "error", "У этой тренировки нет записанных упражнений"));
             return;
         }
-        /* антиспам: окно скользящее, отказ лимит не продлевает */
-        if (!cardRateAllow(userId)) {
+        /* антиспам: окно скользящее; слот тратит ТОЛЬКО успешная отправка —
+           рендер-ошибка (500), переполнение каталога (503) и отказ Telegram (502)
+           слот откатывают (ревью [UX-S16]: 502 не должен съедать лимит) */
+        long slot = cardRateTakeSlot(userId);
+        if (slot < 0) {
             sendJson(ex, 429, Map.of("ok", false, "error",
                 "Слишком часто: постер можно собирать не чаще " + CARD_RATE_LIMIT + " раз в час"));
             return;
@@ -688,17 +692,20 @@ public final class WebServer {
         try {
             png = CardRender.render(data, w);
         } catch (Exception e) {
+            cardRateReleaseSlot(userId, slot);
             System.out.println("[warn] card render user " + userId + " wid " + wid + ": " + e.getMessage());
             sendJson(ex, 500, Map.of("ok", false, "error", "Не получилось собрать постер 😔 Попробуйте ещё раз"));
             return;
         }
         if (png.length < PNG_MAGIC.length || !isPng(png)) {
+            cardRateReleaseSlot(userId, slot);
             sendJson(ex, 500, Map.of("ok", false, "error", "Не получилось собрать постер 😔 Попробуйте ещё раз"));
             return;
         }
         cleanupCards();
         /* кап каталога: переполнение data/cards (злоупотреб/сбой) — 503 */
         if (countCards() > CARD_DIR_MAX_FILES) {
+            cardRateReleaseSlot(userId, slot);
             sendJson(ex, 503, Map.of("ok", false, "error", "Слишком много картинок, попробуйте позже"));
             return;
         }
@@ -706,6 +713,7 @@ public final class WebServer {
         String url = cardUrlBase + "/card/" + file.getFileName();
         boolean sent = api.sendPhotoByUrl(userId, url, cardCaption(w));
         if (!sent) {
+            cardRateReleaseSlot(userId, slot);
             stats.inc("cardSendErr");
             System.out.println("[warn] card sendPhoto failed user " + userId + " " + file.getFileName());
             sendJson(ex, 502, Map.of("ok", false, "error", "Telegram не принял картинку. Попробуйте ещё раз"));
@@ -716,15 +724,29 @@ public final class WebServer {
         sendJson(ex, 200, Map.of("ok", true));
     }
 
-    /* антиспам /api/card: не более CARD_RATE_LIMIT запросов за окно на чат */
-    private boolean cardRateAllow(long chatId) {
+    /* антиспам /api/card: не более CARD_RATE_LIMIT запросов за окно на чат.
+        Резервирует слот (метка времени), handleCard откатывает его cardRateReleaseSlot,
+        если отправка не состоялась по серверной/Telegram-причине (ревью [UX-S16]);
+        гонки потоков пула — computeIfAbsent + synchronized, как было. -1 — лимит */
+    private long cardRateTakeSlot(long chatId) {
         long now = System.currentTimeMillis();
         List<Long> hits = cardHits.computeIfAbsent(chatId, k -> new ArrayList<>());
         synchronized (hits) {
             hits.removeIf(t -> now - t > CARD_RATE_WINDOW_MS);
-            if (hits.size() >= CARD_RATE_LIMIT) return false;
+            if (hits.size() >= CARD_RATE_LIMIT) return -1;
             hits.add(now);
-            return true;
+            return now;
+        }
+    }
+
+    /* откат зарезервированного слота (неудачная отправка); дубли метки времени
+        безвредны — удалится одна, вторая остаётся честным слотом */
+    private void cardRateReleaseSlot(long chatId, long slot) {
+        if (slot < 0) return;
+        List<Long> hits = cardHits.get(chatId);
+        if (hits == null) return;
+        synchronized (hits) {
+            hits.remove(Long.valueOf(slot));
         }
     }
 
@@ -825,6 +847,17 @@ public final class WebServer {
             return;
         }
         Path file = cardsDir().resolve(name);
+        /* TTL-гвард при выдаче (ревью [UX-S16]): истёкший, но ещё не вычищенный
+            файл не отдаётся — тот же CARD_TTL_MS, что у ленивой чистки */
+        try {
+            if (System.currentTimeMillis() - Files.getLastModifiedTime(file).toMillis() > CARD_TTL_MS) {
+                send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+                return;
+            }
+        } catch (IOException e) {
+            send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+            return;
+        }
         byte[] body = Files.readAllBytes(file);
         ex.getResponseHeaders().set("Content-Type", "image/png");
         ex.getResponseHeaders().set("Cache-Control", "public, max-age=3600");

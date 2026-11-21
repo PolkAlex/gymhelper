@@ -1335,11 +1335,12 @@ public class GymContractTest {
         }
 
         /* [UX-S16] постер тренировки v2: POST /api/card (initData в теле; 401 без/мусор;
-            404 нет тренировки; 400 незавершённая/0 упражнений; 429 антиспам 3/час;
-            502 отказ sendPhoto) → PNG в data/cards (магия, IHDR 1080×1920, токен
-            22 base62), GET /card/<token>.png — публичная раздача (200 image/png,
-            тело байт-в-байт, HEAD; мусорный/короткий токен и traversal — 404),
-            TTL 1 ч (ленивая чистка при записи), кап каталога 503. Рендер CardRender —
+            404 нет тренировки; 400 незавершённая/0 упражнений; 429 антиспам 3/час —
+            слот тратит только успех, 502/503 откатывают) → PNG в data/cards (магия,
+            IHDR 1080×1920, токен 22 base62), GET /card/<token>.png — публичная раздача
+            (200 image/png, тело байт-в-байт, HEAD; мусорный/короткий токен, traversal
+            и истёкший mtime — 404), TTL 1 ч (ленивая чистка при записи + гвард выдачи),
+            кап каталога 503. Рендер CardRender —
             в контракте (headless Java 2D + bundled шрифты), caption из дня тренировки
             (§7.3), воронка cardClick/cardOk/cardErr в /api/track. sendPhoto —
             заглушка (реальной сети в тесте нет). */
@@ -1468,6 +1469,17 @@ public class GymContractTest {
             check(get(portCa, "/card/@bad").statusCode() == 404, "poster: не-токен — 404");
             check(rawStatus(portCa, "/card/%2e%2e%2fsecret.png") == 404, "poster: traversal — 404");
 
+            /* TTL-гвард при выдаче (ревью [UX-S16]): истёкший (mtime 2 ч), но ещё не
+               вычищенный файл отдаёт 404; свежая карточка живёт */
+            java.nio.file.Path expCard = cardsDirCa.resolve("expiresXXXXXXXXXXXXXXX.png");
+            java.nio.file.Files.write(expCard, stored);
+            java.nio.file.Files.setLastModifiedTime(expCard,
+                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() - 2 * 60 * 60 * 1000));
+            check(get(portCa, "/card/expiresXXXXXXXXXXXXXXX.png").statusCode() == 404,
+                "poster: TTL-гвард выдачи — истёкший файл 404, а не 200");
+            check(get(portCa, "/card/" + cardToken + ".png").statusCode() == 200,
+                "poster: свежая карточка живёт после TTL-гварды");
+
             /* TTL: файл со старым mtime (2 ч) удаляется ленивой чисткой при следующем
                POST; свежие карточки живут */
             java.nio.file.Path oldCard = cardsDirCa.resolve("oldcardXXXXXXXXXXXXXXX.png");
@@ -1487,25 +1499,43 @@ public class GymContractTest {
             check(Json.map(Json.parse(rSpam.body())).get("error") != null,
                 "poster: 429 с человекочитаемой ошибкой");
 
-            /* 502: Telegram (заглушка) отказал — ошибка человекочитаемая, cardSendErr */
+            /* 502 не съедает слот антиспама (ревью [UX-S16]): 3 отказа Telegram подряд →
+               502 ×3, затем успешный вызов проходит БЕЗ 429 */
             sendOk.set(false);
             stCa.save(424260, seedCa); /* свой файл данных: лимит 429 — на чат, B отдельный */
             String idCaB = tgInitData("contract-test-token", 424260);
-            java.net.http.HttpResponse<String> rFail = postJson(portCa, "/api/card",
-                "{\"initData\":\"" + idCaB + "\",\"wid\":2}");
-            check(rFail.statusCode() == 502, "poster: отказ sendPhoto — 502, а не " + rFail.statusCode());
-            check(Json.map(Json.parse(rFail.body())).get("error") != null, "poster: 502 с человекочитаемой ошибкой");
+            for (int i = 0; i < 3; i++) {
+                java.net.http.HttpResponse<String> rFail = postJson(portCa, "/api/card",
+                    "{\"initData\":\"" + idCaB + "\",\"wid\":2}");
+                check(rFail.statusCode() == 502, "poster: отказ sendPhoto — 502, а не " + rFail.statusCode());
+                check(Json.map(Json.parse(rFail.body())).get("error") != null, "poster: 502 с человекочитаемой ошибкой");
+            }
             sendOk.set(true);
             check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCaB + "\",\"wid\":2}").statusCode() == 200,
-                "poster: ретрай после 502 — 200");
+                "poster: 3 неудачных sendPhoto не съели слот — успешный вызов без 429");
+            /* успешные вызовы лимитируются по-прежнему: 4-й успех за окно — 429 */
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCaB + "\",\"wid\":2}").statusCode() == 200,
+                "poster: 2-й успешный POST B — 200");
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCaB + "\",\"wid\":2}").statusCode() == 200,
+                "poster: 3-й успешный POST B — 200");
+            java.net.http.HttpResponse<String> rSpamB = postJson(portCa, "/api/card",
+                "{\"initData\":\"" + idCaB + "\",\"wid\":2}");
+            check(rSpamB.statusCode() == 429, "poster: 4-й успешный POST B — 429, а не " + rSpamB.statusCode());
+            check(Json.map(Json.parse(rSpamB.body())).get("error") != null,
+                "poster: 429 с человекочитаемой ошибкой");
 
-            /* кап каталога (по образцу [UX-T41]): > CARD_DIR_MAX_FILES файлов — 503 */
+            /* кап каталога (по образцу [UX-T41]): > CARD_DIR_MAX_FILES файлов — 503;
+               503 тоже не съедает слот (ревью): у C второй вызов — снова 503, не 429 */
+            stCa.save(424261, seedCa);
+            String idCaC = tgInitData("contract-test-token", 424261);
             for (int i = 0; i < 1001; i++) {
                 java.nio.file.Files.write(cardsDirCa.resolve("cap" + i + ".png"), stored);
             }
             java.net.http.HttpResponse<String> rCap = postJson(portCa, "/api/card",
-                "{\"initData\":\"" + idCaB + "\",\"wid\":2}");
+                "{\"initData\":\"" + idCaC + "\",\"wid\":2}");
             check(rCap.statusCode() == 503, "poster: кап каталога >1000 файлов — 503, а не " + rCap.statusCode());
+            check(postJson(portCa, "/api/card", "{\"initData\":\"" + idCaC + "\",\"wid\":2}").statusCode() == 503,
+                "poster: 503 не съедает слот — повтор снова 503, а не 429");
 
             /* рендер: формулы/склонения/дата/caption + падение на пустых (§5–7) */
             byte[] pngR = CardRender.render(seedCa, wRecCa);
@@ -1540,17 +1570,18 @@ public class GymContractTest {
                 /* ожидаемо: делиться нечем */
             }
 
-            /* счётчики: cardSend = принятые (6), cardSendOk = успешные sendPhoto (4),
-               cardSendErr = отказ Telegram (1); воронка cardClick/cardOk/cardErr
-               через /api/track, bogus — мимо белого списка */
+            /* счётчики: cardSend = принятые (A:3 + B:3×502+3×200 + C:2×503 = 11),
+               cardSendOk = успешные sendPhoto (A:3 + B:3 = 6), cardSendErr = отказы
+               Telegram (B:3); воронка cardClick/cardOk/cardErr через /api/track,
+               bogus — мимо белого списка */
             postTrack(portCa, idCa, "[\"cardClick\",\"cardOk\",\"cardErr\",\"bogusEvent\"]").statusCode();
             Map<String, Object> snapCa = Json.map(Json.parse(get(portCa, "/stats?token=contract-test-token").body()));
-            check(Json.lng(snapCa.get("cardSend")) == 6,
-                "poster: cardSend=6 (принятые POST), а не " + Json.lng(snapCa.get("cardSend")));
-            check(Json.lng(snapCa.get("cardSendOk")) == 4,
-                "poster: cardSendOk=4 (успешные sendPhoto), а не " + Json.lng(snapCa.get("cardSendOk")));
-            check(Json.lng(snapCa.get("cardSendErr")) == 1,
-                "poster: cardSendErr=1 (отказ Telegram), а не " + Json.lng(snapCa.get("cardSendErr")));
+            check(Json.lng(snapCa.get("cardSend")) == 11,
+                "poster: cardSend=11 (принятые POST), а не " + Json.lng(snapCa.get("cardSend")));
+            check(Json.lng(snapCa.get("cardSendOk")) == 6,
+                "poster: cardSendOk=6 (успешные sendPhoto), а не " + Json.lng(snapCa.get("cardSendOk")));
+            check(Json.lng(snapCa.get("cardSendErr")) == 3,
+                "poster: cardSendErr=3 (отказы Telegram), а не " + Json.lng(snapCa.get("cardSendErr")));
             check(Json.lng(snapCa.get("cardClick")) == 1 && Json.lng(snapCa.get("cardOk")) == 1
                     && Json.lng(snapCa.get("cardErr")) == 1 && Json.lng(snapCa.get("bogusEvent")) == 0,
                 "poster: cardClick/cardOk/cardErr через /api/track=1, bogus — мимо белого списка");
