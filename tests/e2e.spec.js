@@ -5732,6 +5732,63 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         expect(ev).not.toContain('cardOk');
     });
 
+
+    test('[UX-S16] «Картинка»: busy ⏳ → cardOk', async ({ page, request }) => {
+        test.setTimeout(60000);
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        /* zaderzhka otveta /api/card 2s: mgnovenny otvet localhost busy-ne poymat */
+        await page.route('**/api/card', async function (route) {
+            await new Promise(function (done) { setTimeout(done, 2000); });
+            await route.continue();
+        });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        const shareBtn = page.locator('[data-act="shareSheet"]');
+        await expect(shareBtn).toBeVisible({ timeout: 5000 });
+        await shareBtn.click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        /* busy: knopka disabled, tekst ? Gotovim poster; potom tost uspeha */
+        await expect(shareBtn).toBeDisabled();
+        await expect(shareBtn).toContainText('⏳ Готовим постер…');
+        await expect(page.locator('.toast.show')).toContainText('Постер', { timeout: 10000 });
+        await expect(page.locator('.toast.show')).toContainText('чат');
+        await expect(shareBtn).toBeEnabled();
+        await expect(shareBtn).toContainText('Поделить');
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('cardOk');
+        expect(ev).not.toContain('cardErr');
+    });
+
+    test('[UX-S16] «Картинка»: offline → cardErr bez cardOk', async ({ page, request }) => {
+        test.setTimeout(60000);
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], workouts: [doneWorkout(1, today, EX, '120', 3)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.context().setOffline(true);
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        /* set padenie: tost kartochnogo potoka (poster), ne ssylochnogo (ssylkoj) */
+        await expect(page.locator('.toast.show')).toContainText('Нет связи', { timeout: 5000 });
+        await expect(page.locator('.toast.show')).toContainText('постер');
+        await expect(page.locator('.toast.show')).not.toContainText('ссылку');
+        await page.context().setOffline(false);
+        /* knopka razblokirovana: retaj legalen, povtorniy tap pri seti - uspeh */
+        await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
+        await expect(page.locator('.toast.show')).toContainText('Постер', { timeout: 5000 });
+        /* offline-tosty /api/track ne doezhayut; povtornyy uspeshnyy potok - doezhaet */
+        const ev = await (await request.get('/api/track-events')).json();
+        expect(ev).toContain('cardOk');
+        expect(ev).not.toContain('cardErr');
+    });
+
     test('страница /w/<id> рендерится, мусорный id — 404 «Тренировка недоступна»', async ({ request }) => {
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
