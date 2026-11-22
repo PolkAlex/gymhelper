@@ -2627,9 +2627,17 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
     background: rgba(255, 194, 32, .06);
     position: relative;
 }
+/* бейдж «выбор» — восстановлен с [UX-S16] (шит «Картинка / Телеграм») */
+.btn.share-new .tag {
+    position: absolute; right: 10px; top: -9px;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 999px;
+    font-size: 9.5px; font-weight: 800; letter-spacing: .5px;
+    padding: 2px 8px; text-transform: uppercase;
+}
 .btn.share-new:disabled { opacity: .6; }
 
-/* шит «Телеграм» (модалка-шит продукта); «Картинка» вырезана 20.11 (UX-I14) */
+/* шит «Картинка / Телеграм»: [UX-S16] постер v2 вернулся (вырез 20.11 отменён) */
 .shrow {
     display: flex; align-items: center; gap: 12px; width: 100%;
     background: var(--nested); border: 1px solid var(--nested-brd);

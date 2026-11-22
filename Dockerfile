@@ -23,4 +23,5 @@ COPY --from=build /build/build/libs/gymhelper-1.0.0.jar app.jar
 COPY web ./web
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# [UX-S16] Java 2D рендер постера без дисплея (headless; страховка к setProperty в Main)
+ENTRYPOINT ["java", "-Djava.awt.headless=true", "-jar", "app.jar"]

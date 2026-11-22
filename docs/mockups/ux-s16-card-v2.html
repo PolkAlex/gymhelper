@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-S16/T45] Постер тренировки v2 — 1080×1920, Amber Glass (POC [UX-T44])</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: 'DejaVu Sans', -apple-system, 'Segoe UI', Roboto, system-ui, sans-serif;
+    color: #c9ccd2;
+    padding: 32px 12px 90px;
+}
+.stage { max-width: 620px; margin: 0 auto; }
+.caption { margin: 44px 2px 10px; font-size: 16px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #f5b942; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: 0 2px 16px; font-size: 13px; color: #7d838e; line-height: 1.55; }
+
+/* ============ постер 1080×1920, показан в масштабе 0.5 (540×960) ============ */
+.frame {
+    width: 540px; max-width: 100%; height: 960px;
+    margin: 0 auto; border-radius: 18px; overflow: hidden;
+    border: 1px solid #2a2118;
+    box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.c {
+    position: relative;
+    width: 1080px; height: 1920px;
+    transform: scale(.5); transform-origin: 0 0;
+    background: linear-gradient(180deg, #14100c 0%, #241a10 100%);
+    font-family: 'DejaVu Sans', 'Segoe UI', Roboto, system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+}
+/* мягкое янтарное свечение у верхнего правого края (POC: 5 овалов alpha .02) */
+.c::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background:
+        radial-gradient(560px 420px at 96% -8%, rgba(245,185,66,.10), transparent 72%),
+        radial-gradient(300px 260px at 88% 4%, rgba(245,185,66,.05), transparent 70%);
+}
+.card {
+    position: absolute;
+    background: rgba(255,246,229,.07);
+    border-radius: 14px;
+}
+.card.hi {
+    background: rgba(245,185,66,.11);
+    border: 2px solid #f5b942;
+}
+.t { position: absolute; margin: 0; white-space: nowrap; }
+.t.main { color: #f2eadd; }
+.t.muted { color: #b8a88f; }
+.t.accent { color: #f5b942; }
+.b { font-weight: 700; }
+.date { left: 72px; top: 140px; font-size: 48px; }
+.aline { position: absolute; left: 72px; top: 230px; width: 168px; height: 4px; border-radius: 2px; background: #f5b942; }
+.stat-v { left: 104px; font-size: 56px; }
+.stat-l { left: 104px; font-size: 30px; }
+.rec-k  { left: 108px; top: 799px; font-size: 36px; letter-spacing: 1px; }
+.rec-v  { left: 108px; top: 865px; font-size: 48px; }
+.rec-s  { left: 108px; top: 930px; font-size: 30px; }
+.sec-h  { left: 72px; font-size: 30px; letter-spacing: 2px; text-transform: uppercase; }
+.ex-n   { left: 108px; font-size: 42px; }
+.ex-v   { font-size: 38px; right: 108px; left: auto; }
+.more   { left: 72px; font-size: 30px; }
+.footer { left: 0; right: 0; text-align: center; font-size: 30px; }
+
+/* координаты карточек и baseline-привязки текстов (POC, 1080-база) */
+/* ряды статистики: y=310 и y=508; значение baseline y+74 → top y+22; подпись baseline y+128 → top y+100 */
+/* рекорд: y=770 (см. .rec-*) */
+/* строки: y=1150+i*154 (с рекордом) / y=830+i*154 (без); имя baseline y+80 → top y+41 */
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <p class="caption">[UX-S16] Постер тренировки v2 <span>1080×1920 · Amber Glass · масштаб 0.5</span></p>
+    <p class="note">Визуал = одобренный POC [UX-T44] (poster-local.png), адаптированный под реальные данные
+       GymData. Имя пользователя на постере не показывается (решение владельца 21.11).
+       Спека: docs/spec-ux-s16-card-v2.md. Два состояния — типовые профили edge-кейсов.</p>
+
+    <p class="caption">Постер (а) — силовая тренировка, есть рекорд <span>данные POC · 4 строки · лимит 4</span></p>
+    <p class="note">Профиль: объём кг, рекорд реальным весом («который жал», не 1ПМ), длительность компактно,
+       склонения подписей. Единственное отклонение от POC-статиков — формат «1 ч 10 мин» (§10.1 спеки).</p>
+
+    <div class="frame"><div class="c">
+        <p class="t main b date">21 ноября 2026, суббота</p>
+        <div class="aline"></div>
+
+        <div class="card" style="left:72px; top:310px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="top:332px;">5 340 кг</p>
+        <p class="t muted stat-l" style="top:410px;">объём тренировки</p>
+
+        <div class="card" style="left:554px; top:310px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="left:586px; top:332px;">12</p>
+        <p class="t muted stat-l" style="left:586px; top:410px;">упражнений</p>
+
+        <div class="card" style="left:72px; top:508px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="top:530px;">36</p>
+        <p class="t muted stat-l" style="top:608px;">подходов</p>
+
+        <div class="card" style="left:554px; top:508px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="left:586px; top:530px;">1 ч 10 мин</p>
+        <p class="t muted stat-l" style="left:586px; top:608px;">длительность</p>
+
+        <div class="card hi" style="left:72px; top:770px; width:936px; height:230px;"></div>
+        <p class="t accent b rec-k">РЕКОРД!</p>
+        <p class="t main b rec-v">Жим лёжа — 100 кг × 5</p>
+        <p class="t muted rec-s">личный результат по этому упражнению</p>
+
+        <p class="t muted b sec-h" style="top:1092px;">Упражнения</p>
+
+        <div class="card" style="left:72px; top:1150px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1191px;">Приседания</p>
+        <p class="t muted ex-v" style="top:1191px;">120 кг × 3×8</p>
+
+        <div class="card" style="left:72px; top:1304px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1345px;">Жим лёжа</p>
+        <p class="t muted ex-v" style="top:1345px;">100 кг × 5×5</p>
+
+        <div class="card" style="left:72px; top:1458px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1499px;">Тяга штанги</p>
+        <p class="t muted ex-v" style="top:1499px;">80 кг × 3×10</p>
+
+        <div class="card" style="left:72px; top:1612px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1653px;">Планка</p>
+        <p class="t muted ex-v" style="top:1653px;">3×60 сек</p>
+
+        <p class="t muted footer" style="top:1790px;">GymHelper — дневник тренировок</p>
+    </div></div>
+
+    <p class="caption">Постер (б) — калистеника, без рекорда <span>7 упражнений · «+ 1 ещё» · лимит 6</span></p>
+    <p class="note">Профиль edge-кейсов §6 спеки: объём 0 → карточка показывает сумму повторений
+       (Σ подходы × повторения, подпись «повторений»); строки без «кг»; карточка «РЕКОРД!» отсутствует —
+       список сдвинут вверх (строки с y=830, лимит 6); седьмое упражнение скрыто за «+ 1 ещё»;
+       длительность без часов («55 мин»). Дата — день тренировки из w.date, не «сегодня» (урок UX-B14).</p>
+
+    <div class="frame"><div class="c">
+        <p class="t main b date">19 ноября 2026, четверг</p>
+        <div class="aline"></div>
+
+        <div class="card" style="left:72px; top:310px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="top:332px;">387</p>
+        <p class="t muted stat-l" style="top:410px;">повторений</p>
+
+        <div class="card" style="left:554px; top:310px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="left:586px; top:332px;">7</p>
+        <p class="t muted stat-l" style="left:586px; top:410px;">упражнений</p>
+
+        <div class="card" style="left:72px; top:508px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="top:530px;">23</p>
+        <p class="t muted stat-l" style="top:608px;">подхода</p>
+
+        <div class="card" style="left:554px; top:508px; width:454px; height:170px;"></div>
+        <p class="t accent b stat-v" style="left:586px; top:530px;">55 мин</p>
+        <p class="t muted stat-l" style="left:586px; top:608px;">длительность</p>
+
+        <p class="t muted b sec-h" style="top:772px;">Упражнения</p>
+
+        <div class="card" style="left:72px; top:830px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:871px;">Подтягивания</p>
+        <p class="t muted ex-v" style="top:871px;">4×8</p>
+
+        <div class="card" style="left:72px; top:984px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1025px;">Отжимания на брусьях</p>
+        <p class="t muted ex-v" style="top:1025px;">4×10</p>
+
+        <div class="card" style="left:72px; top:1138px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1179px;">Подъём ног в висе</p>
+        <p class="t muted ex-v" style="top:1179px;">3×12</p>
+
+        <div class="card" style="left:72px; top:1292px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1333px;">Планка</p>
+        <p class="t muted ex-v" style="top:1333px;">3×60 сек</p>
+
+        <div class="card" style="left:72px; top:1446px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1487px;">Берпи</p>
+        <p class="t muted ex-v" style="top:1487px;">3×15</p>
+
+        <div class="card" style="left:72px; top:1600px; width:936px; height:130px;"></div>
+        <p class="t main ex-n" style="top:1641px;">Выходы силой</p>
+        <p class="t muted ex-v" style="top:1641px;">3×3</p>
+
+        <p class="t muted more" style="top:1746px;">+ 1 ещё</p>
+
+        <p class="t muted footer" style="top:1790px;">GymHelper — дневник тренировок</p>
+    </div></div>
+
+    <p class="caption">Данные состояний <span>формулы = SharePage/Records</span></p>
+    <p class="note">
+        (а): объём 5 340 кг = Σ вес×подходы×повторения; подходы 36 = Σ подходы; длительность 70 мин
+        = endedAt − startedAt (округление до минут); рекорд: жим лёжа 100 кг × 5 — лучший подход
+        (макс вес, при равенстве макс повторения), строго побил базу прошлых тренировок.<br>
+        (б): повторения 387 = 4×8 + 4×10 + 3×12 + 3×60 + 3×15 + 3×3 + 3×15; тайм-упражнение («60 сек»)
+        входит в сумму как 60 — формула та же, что в приложении и на /w/&lt;id&gt;; 7 упражнений → 6 строк
+        + «+ 1 ещё»; рекорда нет — объёмы повторений не побили прошлые тренировки.
+    </p>
+
+</div>
+</body>
+</html>

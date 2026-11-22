@@ -6,6 +6,7 @@ import gym.GymData;
 import gym.Json;
 import gym.Stats;
 import gym.Storage;
+import gym.TelegramApi;
 import gym.Workout;
 
 import javax.crypto.Mac;
@@ -19,9 +20,12 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -65,15 +69,41 @@ public final class WebServer {
     private static final int SHARE_ID_LEN = 22; /* ~131 бит энтропии (§4.1 спеки) */
     private static final String SHARE_URL_BASE = "https://app.gym-helper.com/w/";
     private final SecureRandom shareRandom = new SecureRandom();
+    /* [UX-S16] постер тренировки (серверный рендер CardRender + sendPhoto ботом):
+       PNG рендерится на лету и живёт в data/cards/<token>.png (не data/*.json —
+       формат GymData не меняется), токен = 22 символа base62 (как shareId,
+       не угадывается), TTL жёсткий 1 час — чистка при старте сервера и лениво при
+       каждой записи + гвард при выдаче; кап каталога от злоупотребления; антиспам —
+       3 успешных POST /api/card в час на чат (окно скользящее; 500/502/503 слот
+       откатывают — ревью [UX-S16]) */
+    private static final long CARD_TTL_MS = 60L * 60 * 1000;
+    private static final int CARD_TOKEN_LEN = 22;
+    private static final int CARD_DIR_MAX_FILES = 1000;
+    private static final int CARD_RATE_LIMIT = 3;
+    private static final long CARD_RATE_WINDOW_MS = 60L * 60 * 1000;
+    private static final byte[] PNG_MAGIC = {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+    private final Map<Long, List<Long>> cardHits = new ConcurrentHashMap<>();
+    /* [UX-S16] https-база карточек (downloadFile Telegram и Bot API принимают только
+       https; sendPhoto по URL): env GYM_WEBAPP_URL, не задан/не https — домен Mini App */
+    private final String cardUrlBase;
+    /* [UX-S16] TelegramApi для sendPhoto; инжект в пакетном конструкторе —
+       контракт-тест подменяет заглушкой (реальной сети в тестах быть не должно) */
+    private final TelegramApi api;
     private HttpServer server;
 
     public WebServer(String token, Storage storage, Path webDir, Stats stats) {
-        this(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"));
+        this(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"), new TelegramApi(token));
     }
 
     /* [UX-B14] инжект username для контракт-теста (env JVM-процесса поменять нельзя);
-       прод использует конструктор выше с env GYM_BOT_USERNAME */
+        прод использует конструктор выше с env GYM_BOT_USERNAME */
     public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername) {
+        this(token, storage, webDir, stats, botUsername, new TelegramApi(token));
+    }
+
+    /* [UX-S16] полный конструктор: username + TelegramApi (заглушка в контракт-тесте —
+        sendPhoto не должен ходить в реальную сеть); прод использует конструкторы выше */
+    public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername, TelegramApi api) {
         this.token = token;
         this.storage = storage;
         this.stats = stats;
@@ -81,6 +111,12 @@ public final class WebServer {
         String at = System.getenv("GYM_ADMIN_TOKEN");
         this.adminToken = (at == null || at.isBlank()) ? token : at.trim();
         this.botUsername = (botUsername == null || botUsername.isBlank()) ? "MyHelperGymBot" : botUsername.trim();
+        String wu = System.getenv("GYM_WEBAPP_URL");
+        if (wu == null || !wu.trim().startsWith("https://")) wu = "https://app.gym-helper.com";
+        wu = wu.trim();
+        while (wu.endsWith("/")) wu = wu.substring(0, wu.length() - 1);
+        this.cardUrlBase = wu;
+        this.api = api;
     }
 
     public void start(int port) throws IOException {
@@ -92,6 +128,8 @@ public final class WebServer {
             return t;
         }));
         server.start();
+        /* [UX-S16] карточки прошлой сессии (до рестарта) — по TTL */
+        cleanupCards();
     }
 
     /* адрес HTTP-сервера из env GYM_BIND_ADDR, по умолчанию 127.0.0.1 (как раньше).
@@ -146,10 +184,26 @@ public final class WebServer {
                 handleShare(ex);
                 return;
             }
+            /* [UX-S16] постер тренировки: initData-авторизация → рендер PNG → сохранение
+                в data/cards → sendPhoto ботом в чат пользователя */
+            if ("/api/card".equals(path)) {
+                if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+                    sendJson(ex, 405, Map.of("ok", false));
+                    return;
+                }
+                handleCard(ex);
+                return;
+            }
             /* [UX-I16] публичная страница тренировки — БЕЗ initData (до авторизационного
                слоя /api/*, §8.1); robots.txt — статический файл web/robots.txt */
             if (path.startsWith("/w/")) {
                 handleSharePage(ex, path.substring(3));
+                return;
+            }
+            /* [UX-S16] публичная раздача постера по токену — БЕЗ initData (Telegram
+               скачивает https-URL сам при sendPhoto); Content-Type image/png */
+            if (path.startsWith("/card/")) {
+                handleCardGet(ex, path.substring(6));
                 return;
             }
             serveStatic(ex, path);
@@ -433,7 +487,9 @@ public final class WebServer {
         "linkCopy", "linkSend",
         /* [UX-I14] события картинки (§5): фича вырезана 20.11 (решение владельца),
            ключи оставлены для старых клиентов в кэше и истории stats.json */
-        "shareClick", "shareOk", "shareDownload");
+        "shareClick", "shareOk", "shareDownload",
+        /* [UX-S16] воронка «Картинка» (постер v2): тап пункта шита / успех / ошибка */
+        "cardClick", "cardOk", "cardErr");
 
     /* [ANA-T5] POST /api/track {initData, events:[имя,...]} — события онбординга в Stats.
        Онбординг завершается без изменений данных, /api/save при нём не вызывается, а
@@ -585,6 +641,236 @@ public final class WebServer {
             }
         } while (taken.contains(b.toString()));
         return b.toString();
+    }
+
+    /* ============ [UX-S16] постер тренировки: рендер → cards → sendPhoto ============ */
+
+    /* POST /api/card {initData, wid} — собрать постер завершённой тренировки и отправить
+       его ботом в чат пользователя (sendPhoto по URL, §7.3): рендер CardRender на лету
+       (кэша нет — каждый тап рендерит заново), файл в data/cards/<token>.png (TTL 1 ч,
+       кап, магия PNG), ответ {ok:true}. Ошибки — человекочитаемые на русском. Счётчики:
+       cardSend (принятый запрос), cardSendOk/cardSendErr (исход sendPhoto). */
+    private void handleCard(HttpExchange ex) throws IOException {
+        Map<String, Object> body = readJsonBody(ex);
+        if (body == null) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        String initData = (String) body.get("initData");
+        long userId = validateInitData(initData == null ? "" : initData, token);
+        if (userId <= 0) {
+            System.out.println("[warn] card rejected: initDataLen=" + (initData == null ? -1 : initData.length()));
+            sendJson(ex, 401, Map.of("ok", false));
+            return;
+        }
+        long wid = Json.lng(body.get("wid"));
+        GymData data = storage.load(userId);
+        Workout w = data.findById(wid);
+        if (w == null) {
+            sendJson(ex, 404, Map.of("ok", false, "error", "Тренировка не найдена"));
+            return;
+        }
+        if (!w.finished) {
+            sendJson(ex, 400, Map.of("ok", false, "error", "Постер можно сделать для завершённой тренировки"));
+            return;
+        }
+        if (w.exercises.stream().noneMatch(e -> !e.sets.isEmpty())) {
+            sendJson(ex, 400, Map.of("ok", false, "error", "У этой тренировки нет записанных упражнений"));
+            return;
+        }
+        /* антиспам: окно скользящее; слот тратит ТОЛЬКО успешная отправка —
+           рендер-ошибка (500), переполнение каталога (503) и отказ Telegram (502)
+           слот откатывают (ревью [UX-S16]: 502 не должен съедать лимит) */
+        long slot = cardRateTakeSlot(userId);
+        if (slot < 0) {
+            sendJson(ex, 429, Map.of("ok", false, "error",
+                "Слишком часто: постер можно собирать не чаще " + CARD_RATE_LIMIT + " раз в час"));
+            return;
+        }
+        stats.inc("cardSend");
+        byte[] png;
+        try {
+            png = CardRender.render(data, w);
+        } catch (Exception e) {
+            cardRateReleaseSlot(userId, slot);
+            System.out.println("[warn] card render user " + userId + " wid " + wid + ": " + e.getMessage());
+            sendJson(ex, 500, Map.of("ok", false, "error", "Не получилось собрать постер 😔 Попробуйте ещё раз"));
+            return;
+        }
+        if (png.length < PNG_MAGIC.length || !isPng(png)) {
+            cardRateReleaseSlot(userId, slot);
+            sendJson(ex, 500, Map.of("ok", false, "error", "Не получилось собрать постер 😔 Попробуйте ещё раз"));
+            return;
+        }
+        cleanupCards();
+        /* кап каталога: переполнение data/cards (злоупотреб/сбой) — 503 */
+        if (countCards() > CARD_DIR_MAX_FILES) {
+            cardRateReleaseSlot(userId, slot);
+            sendJson(ex, 503, Map.of("ok", false, "error", "Слишком много картинок, попробуйте позже"));
+            return;
+        }
+        Path file = newCardFile(png);
+        String url = cardUrlBase + "/card/" + file.getFileName();
+        boolean sent = api.sendPhotoByUrl(userId, url, cardCaption(w));
+        if (!sent) {
+            cardRateReleaseSlot(userId, slot);
+            stats.inc("cardSendErr");
+            System.out.println("[warn] card sendPhoto failed user " + userId + " " + file.getFileName());
+            sendJson(ex, 502, Map.of("ok", false, "error", "Telegram не принял картинку. Попробуйте ещё раз"));
+            return;
+        }
+        stats.inc("cardSendOk");
+        System.out.println("[card] user " + userId + " wid " + wid + " " + file.getFileName() + " " + png.length + "B");
+        sendJson(ex, 200, Map.of("ok", true));
+    }
+
+    /* антиспам /api/card: не более CARD_RATE_LIMIT запросов за окно на чат.
+        Резервирует слот (метка времени), handleCard откатывает его cardRateReleaseSlot,
+        если отправка не состоялась по серверной/Telegram-причине (ревью [UX-S16]);
+        гонки потоков пула — computeIfAbsent + synchronized, как было. -1 — лимит */
+    private long cardRateTakeSlot(long chatId) {
+        long now = System.currentTimeMillis();
+        List<Long> hits = cardHits.computeIfAbsent(chatId, k -> new ArrayList<>());
+        synchronized (hits) {
+            hits.removeIf(t -> now - t > CARD_RATE_WINDOW_MS);
+            if (hits.size() >= CARD_RATE_LIMIT) return -1;
+            hits.add(now);
+            return now;
+        }
+    }
+
+    /* откат зарезервированного слота (неудачная отправка); дубли метки времени
+        безвредны — удалится одна, вторая остаётся честным слотом */
+    private void cardRateReleaseSlot(long chatId, long slot) {
+        if (slot < 0) return;
+        List<Long> hits = cardHits.get(chatId);
+        if (hits == null) return;
+        synchronized (hits) {
+            hits.remove(Long.valueOf(slot));
+        }
+    }
+
+    /* caption §7.3: день тренировки из w.date (не «сегодня», урок UX-B14),
+       dd.MM — или dd.MM.yyyy, если год не текущий; нераспарсимая — строка как есть.
+       public с [UX-S16] — контракт-тест проверяет формат (прецедент validateInitData) */
+    public static String cardCaption(Workout w) {
+        String day;
+        try {
+            LocalDate d = LocalDate.parse(w.date.trim());
+            day = String.format("%02d.%02d", d.getDayOfMonth(), d.getMonthValue());
+            if (d.getYear() != LocalDate.now().getYear()) day += "." + d.getYear();
+        } catch (Exception e) {
+            day = w.date == null ? "" : w.date.trim();
+        }
+        return "Постер тренировки за " + day + " — перешли друзьям 💪";
+    }
+
+    /* data/cards рядом с data/*.json (прод-раскладка root/web + root/data — как
+       countChats/scanShareIndex); каталог не коммитится (data/ в .gitignore) */
+    private Path cardsDir() {
+        Path parent = webDir.getParent();
+        return (parent == null ? webDir : parent).resolve("data").resolve("cards");
+    }
+
+    /* случайный токен = имя файла; запись через CREATE_NEW — атомарна: гонка коллизии
+       токена не перезапишет чужой файл, занятый токен — молчаливая перегенерация */
+    private Path newCardFile(byte[] body) throws IOException {
+        Path dir = cardsDir();
+        Files.createDirectories(dir);
+        StringBuilder b = new StringBuilder(CARD_TOKEN_LEN);
+        while (true) {
+            b.setLength(0);
+            for (int i = 0; i < CARD_TOKEN_LEN; i++) {
+                b.append(SHARE_ALPHABET.charAt(shareRandom.nextInt(SHARE_ALPHABET.length())));
+            }
+            Path file = dir.resolve(b + ".png");
+            try {
+                Files.write(file, body, StandardOpenOption.CREATE_NEW);
+                return file;
+            } catch (FileAlreadyExistsException e) {
+                /* токен занят — следующая итерация */
+            }
+        }
+    }
+
+    /* число файлов в data/cards (кап каталога); недоступен каталог — 0 */
+    private long countCards() {
+        try (java.util.stream.Stream<Path> s = Files.list(cardsDir())) {
+            return s.count();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static boolean isPng(byte[] b) {
+        for (int i = 0; i < PNG_MAGIC.length; i++) {
+            if (b[i] != PNG_MAGIC[i]) return false;
+        }
+        return true;
+    }
+
+    /* TTL-чистка карточек старше CARD_TTL_MS; ошибка на одном файле/каталоге — не помеха */
+    private void cleanupCards() {
+        try {
+            Path dir = cardsDir();
+            if (!Files.isDirectory(dir)) return;
+            long now = System.currentTimeMillis();
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.png")) {
+                for (Path p : stream) {
+                    try {
+                        if (now - Files.getLastModifiedTime(p).toMillis() > CARD_TTL_MS) {
+                            Files.deleteIfExists(p);
+                        }
+                    } catch (Exception e) {
+                        System.out.println("[warn] cards cleanup skip " + p.getFileName() + ": " + e.getMessage());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.out.println("[warn] cards cleanup: " + e.getMessage());
+        }
+    }
+
+    /* GET /card/<token>.png — публичная раздача постера: Telegram скачивает https-URL
+       сам при sendPhoto. Токен строго 22 base62 + «.png» — иначе 404 (заодно
+       traversal-гвард: «..» паттерн не проходит). Картинка по токену неизменна до
+       истечения TTL — короткий public-кэш вместо no-store (токен не угадывается). */
+    private void handleCardGet(HttpExchange ex, String name) throws IOException {
+        boolean head = "HEAD".equalsIgnoreCase(ex.getRequestMethod());
+        if (!head && !"GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, Map.of("ok", false));
+            return;
+        }
+        if (name == null || !name.matches("[0-9a-zA-Z]{22}\\.png")
+            || !Files.isRegularFile(cardsDir().resolve(name))) {
+            send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+            return;
+        }
+        Path file = cardsDir().resolve(name);
+        /* TTL-гвард при выдаче (ревью [UX-S16]): истёкший, но ещё не вычищенный
+            файл не отдаётся — тот же CARD_TTL_MS, что у ленивой чистки */
+        try {
+            if (System.currentTimeMillis() - Files.getLastModifiedTime(file).toMillis() > CARD_TTL_MS) {
+                send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+                return;
+            }
+        } catch (IOException e) {
+            send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
+            return;
+        }
+        byte[] body = Files.readAllBytes(file);
+        ex.getResponseHeaders().set("Content-Type", "image/png");
+        ex.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
+        ex.getResponseHeaders().set("X-Robots-Tag", "noindex, nofollow");
+        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+        if (head) {
+            ex.sendResponseHeaders(200, -1);
+            return;
+        }
+        ex.sendResponseHeaders(200, body.length);
+        try (OutputStream os = ex.getResponseBody()) {
+            os.write(body);
+        }
     }
 
     /* GET /w/<shareId> — публичная страница (§8.1): noindex-заголовки, живой рендер,
