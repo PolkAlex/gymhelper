@@ -1921,7 +1921,7 @@ public class GymContractTest {
             String idS = tgInitData("contract-test-token", 502);
             String idX = tgInitData("contract-test-token", 503);
 
-            /* [TRN-T2] 18+ гейт карточек: тренеру 501 нужен взрослый профиль (birth-данные) */
+            /* [TRN-T2] 18+ гейт соцслоя: участникам нужны взрослые профили (birth-данные) */
             GymData prof501 = new GymData();
             prof501.nextId = 1;
             prof501.profile = new ProfileData();
@@ -1932,6 +1932,26 @@ public class GymContractTest {
             prof501.profile.birthYear = 1990;
             prof501.profile.birthMonth = 11;
             stApi.save(501, prof501);
+            GymData prof502 = new GymData();
+            prof502.nextId = 1;
+            prof502.profile = new ProfileData();
+            prof502.profile.sex = "ж";
+            prof502.profile.age = 28;
+            prof502.profile.height = 165;
+            prof502.profile.weight = 58;
+            prof502.profile.birthYear = 1998;
+            prof502.profile.birthMonth = 3;
+            stApi.save(502, prof502);
+            GymData prof503 = new GymData();
+            prof503.nextId = 1;
+            prof503.profile = new ProfileData();
+            prof503.profile.sex = "м";
+            prof503.profile.age = 30;
+            prof503.profile.height = 182;
+            prof503.profile.weight = 84;
+            prof503.profile.birthYear = 1996;
+            prof503.profile.birthMonth = 7;
+            stApi.save(503, prof503);
 
             /* гейт: мусорная подпись — 401; GET — 405; отложенный health — 404 */
             check(postJson(portSo, "/api/social/me", "{\"initData\":\"garbage\"}").statusCode() == 401,
@@ -2232,6 +2252,171 @@ public class GymContractTest {
                 "t2: submit на сервере с ownerChatId — 200");
             check(spy.sent.size() == 1 && spy.sent.get(0).startsWith("9999:") && spy.sent.get(0).contains("на проверку"),
                 "t2: владельцу 9999 ушла карточка на проверку (§5.2 → §14.5)");
+
+            /* ===== фиксы ревью батча T1–T3 ===== */
+
+            /* замечание 4: повторный submit при уже-pending — тихий успех без второго пуша */
+            check(postJson(portN, "/api/social/card", "{\"initData\":\"" + idA + "\",\"submit\":true}").statusCode() == 200,
+                "fix4: повторный submit при pending — 200 (успех)");
+            check(spy.sent.size() == 1, "fix4: владелец уведомлён один раз, а не " + spy.sent.size());
+            Map<String, Object> snapN = Json.map(Json.parse(get(portN, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapN.get("socialCardPending")) == 1,
+                "fix4: socialCardPending не задвоился, а не " + Json.lng(snapN.get("socialCardPending")));
+
+            /* фикс блокера 1: enabled=false → true не теряют контент карточки и photoUrl */
+            stT2.save(710, adultProfile(27));
+            String id10 = tgInitData("contract-test-token", 710, "Мария", "https://t.me/i/maria.jpg");
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + id10 + "\",\"card\":{\"displayName\":\"Мария\",\"bio\":\"Нутрициолог\","
+                    + "\"specs\":[\"loss\"],\"city\":\"Брест\",\"years\":4}}").statusCode() == 200,
+                "fix1: полная карточка — 200");
+            check(postJson(portT2, "/api/social/card", "{\"initData\":\"" + id10 + "\",\"enabled\":false}").statusCode() == 200,
+                "fix1: enabled=false — 200");
+            TrainerCard mHidden = stT2.social().get().trainers.get(710L);
+            check(TrainerCard.STATUS_HIDDEN.equals(mHidden.status) && "Мария".equals(mHidden.displayName)
+                    && "Нутрициолог".equals(mHidden.bio) && mHidden.specs.contains("loss")
+                    && "Брест".equals(mHidden.city) && "https://t.me/i/maria.jpg".equals(mHidden.photoUrl),
+                "fix1: выключение режима не трогает displayName/bio/specs/city/photoUrl");
+            check(postJson(portT2, "/api/social/card", "{\"initData\":\"" + id10 + "\",\"enabled\":true}").statusCode() == 200,
+                "fix1: enabled=true — 200");
+            TrainerCard mOn = stT2.social().get().trainers.get(710L);
+            check(TrainerCard.STATUS_DRAFT.equals(mOn.status) && "Мария".equals(mOn.displayName)
+                    && mOn.specs.contains("loss") && "https://t.me/i/maria.jpg".equals(mOn.photoUrl),
+                "fix1: включение режима тоже сохраняет контент");
+
+            /* фикс блокера 2a: у студента со связкой accept/invite-use вторым тренером — 409 */
+            stT2.save(711, adultProfile(30));
+            stT2.save(712, adultProfile(25));
+            stT2.save(713, adultProfile(33));
+            String id11 = tgInitData("contract-test-token", 711);
+            String id12 = tgInitData("contract-test-token", 712);
+            String id13 = tgInitData("contract-test-token", 713);
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + id11 + "\",\"card\":{\"displayName\":\"Тренер Один\",\"city\":\"Минск\","
+                    + "\"specs\":[\"power\"],\"years\":5}}").statusCode() == 200, "fix2a: карточка тренера 711 — 200");
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + id13 + "\",\"card\":{\"displayName\":\"Тренер Два\",\"city\":\"Гродно\","
+                    + "\"specs\":[\"mass\"],\"years\":8}}").statusCode() == 200, "fix2a: карточка тренера 713 — 200");
+            stT2.social().get().trainers.get(711L).status = TrainerCard.STATUS_VERIFIED;
+            stT2.social().get().trainers.get(713L).status = TrainerCard.STATUS_VERIFIED;
+            check(postJson(portT2, "/api/social/apply", "{\"initData\":\"" + id12 + "\",\"trainerId\":711}").statusCode() == 200,
+                "fix2a: заявка к первому тренеру — 200");
+            check(postJson(portT2, "/api/social/link",
+                "{\"initData\":\"" + id11 + "\",\"action\":\"accept\",\"userId\":712}").statusCode() == 200,
+                "fix2a: первый accept — 200");
+            check(postJson(portT2, "/api/social/apply", "{\"initData\":\"" + id12 + "\",\"trainerId\":713}").statusCode() == 200,
+                "fix2a: заявка ко второму тренеру проходит (гейт — на accept)");
+            check(postJson(portT2, "/api/social/link",
+                "{\"initData\":\"" + id13 + "\",\"action\":\"accept\",\"userId\":712}").statusCode() == 409,
+                "fix2a: accept вторым тренером при действующей связке — 409 (§7.4)");
+            java.net.http.HttpResponse<String> rinv13 = postJson(portT2, "/api/social/invite",
+                "{\"initData\":\"" + id13 + "\",\"action\":\"create\"}");
+            check(rinv13.statusCode() == 200, "fix2a: код второго тренера — 200");
+            String code13 = Json.str(Json.map(Json.parse(rinv13.body())), "code");
+            check(postJson(portT2, "/api/social/invite",
+                "{\"initData\":\"" + id12 + "\",\"action\":\"use\",\"code\":\"" + code13 + "\"}").statusCode() == 409,
+                "fix2a: use кода вторым тренером при действующей связке — 409 (§7.4)");
+
+            /* фикс блокера 2b: hidden-тренер — accept/invite create/use отказ */
+            stT2.save(714, adultProfile(35));
+            stT2.save(715, adultProfile(22));
+            String id14 = tgInitData("contract-test-token", 714);
+            String id15 = tgInitData("contract-test-token", 715);
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + id14 + "\",\"card\":{\"displayName\":\"Тайный\"}}").statusCode() == 200,
+                "fix2b: карточка 714 — 200");
+            stT2.social().get().trainers.get(714L).status = TrainerCard.STATUS_VERIFIED;
+            check(postJson(portT2, "/api/social/apply", "{\"initData\":\"" + id15 + "\",\"trainerId\":714}").statusCode() == 200,
+                "fix2b: заявка активному тренеру — 200");
+            java.net.http.HttpResponse<String> rinv14 = postJson(portT2, "/api/social/invite",
+                "{\"initData\":\"" + id14 + "\",\"action\":\"create\"}");
+            check(rinv14.statusCode() == 200, "fix2b: код активного тренера — 200");
+            String code14 = Json.str(Json.map(Json.parse(rinv14.body())), "code");
+            check(postJson(portT2, "/api/social/card", "{\"initData\":\"" + id14 + "\",\"enabled\":false}").statusCode() == 200,
+                "fix2b: тренер 714 выключился (hidden)");
+            check(postJson(portT2, "/api/social/link",
+                "{\"initData\":\"" + id14 + "\",\"action\":\"accept\",\"userId\":715}").statusCode() == 409,
+                "fix2b: accept скрытым тренером — 409 (§5.4)");
+            check(postJson(portT2, "/api/social/invite",
+                "{\"initData\":\"" + id15 + "\",\"action\":\"use\",\"code\":\"" + code14 + "\"}").statusCode() == 409,
+                "fix2b: use кода скрытого тренера — 409 (§5.4)");
+            check(postJson(portT2, "/api/social/invite",
+                "{\"initData\":\"" + id14 + "\",\"action\":\"create\"}").statusCode() == 403,
+                "fix2b: раздача кода скрытым тренером — 403 (§5.4)");
+
+            /* замечание 1: 18+ гейтист ВЕСЬ соцслой — search/me для несовершеннолетнего 403 */
+            java.net.http.HttpResponse<String> rsearchM = postJson(portT2, "/api/social/search",
+                "{\"initData\":\"" + idM + "\"}");
+            check(rsearchM.statusCode() == 403 && "age".equals(Json.str(Json.map(Json.parse(rsearchM.body())), "reason")),
+                "fix: search для 15-летнего — 403 reason age (решение 12.11 №12)");
+            check(postJson(portT2, "/api/social/me", "{\"initData\":\"" + idM + "\"}").statusCode() == 403,
+                "fix: me для несовершеннолетнего — 403");
+
+            /* замечание 3: возраст self-declared — поле age работает без birth-данных */
+            GymData a706 = new GymData();
+            a706.nextId = 1;
+            a706.profile = new ProfileData();
+            a706.profile.sex = "м";
+            a706.profile.age = 30;
+            a706.profile.height = 180;
+            a706.profile.weight = 82;
+            stT2.save(706, a706);
+            String id706 = tgInitData("contract-test-token", 706);
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + id706 + "\",\"card\":{\"displayName\":\"Статический Возраст\"}}").statusCode() == 200,
+                "fix: 18+ гейт пропускает self-declared age=30 без birth-данных");
+            GymData a707 = new GymData();
+            a707.nextId = 1;
+            a707.profile = new ProfileData();
+            a707.profile.sex = "ж";
+            a707.profile.age = 17;
+            a707.profile.height = 165;
+            a707.profile.weight = 52;
+            stT2.save(707, a707);
+            String id707 = tgInitData("contract-test-token", 707);
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + id707 + "\",\"card\":{\"displayName\":\"Семнадцать\"}}").statusCode() == 403,
+                "fix: self-declared age=17 — 403 (оба пути ageOf зафиксированы)");
+
+            /* замечание 5a: TTL заявки — границы 13.9 / 14 / 14.1 дня (§7.1) */
+            long nowFix = System.currentTimeMillis();
+            java.time.LocalDateTime baseFix = java.time.LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(nowFix), java.time.ZoneId.systemDefault());
+            SocialRequest tr13 = new SocialRequest();
+            tr13.createdAt = baseFix.minusSeconds((long) (13.9 * 86400)).toString();
+            SocialRequest tr14 = new SocialRequest();
+            tr14.createdAt = baseFix.minusDays(14).toString(); /* until == nowFix: граница включительно */
+            SocialRequest tr141 = new SocialRequest();
+            tr141.createdAt = baseFix.minusSeconds((long) (14.1 * 86400)).toString();
+            check(!tr13.expired(nowFix), "fix: заявка 13.9 дня — жива (TTL 14 дней, §7.1)");
+            check(!tr14.expired(nowFix), "fix: заявка ровно 14 дней — ещё жива (исчезает после)");
+            check(tr141.expired(nowFix), "fix: заявка 14.1 дня — истекла");
+
+            /* замечание 5b: кулдаун повторной отправки — граница ровно 30 дней */
+            java.time.LocalDateTime rbase = java.time.LocalDateTime.now().withNano(0);
+            TrainerCard cd701 = stT2.social().get().trainers.get(701L);
+            cd701.status = TrainerCard.STATUS_REJECTED;
+            cd701.statusNote = "граница";
+            cd701.rejectedAt = rbase.minusDays(30).plusMinutes(5).toString();
+            java.net.http.HttpResponse<String> rb1 = postJson(portN, "/api/social/card",
+                "{\"initData\":\"" + idA + "\",\"submit\":true}");
+            check(rb1.statusCode() == 403 && Json.lng(Json.map(Json.parse(rb1.body())).get("retryInDays")) == 1,
+                "fix: кулдаун 30 дней − 5 минут → 403, retryInDays=1");
+            cd701.rejectedAt = rbase.minusDays(30).minusMinutes(5).toString();
+            check(postJson(portN, "/api/social/card", "{\"initData\":\"" + idA + "\",\"submit\":true}").statusCode() == 200,
+                "fix: кулдаун 30 дней + 5 минут → submit проходит (граница включительно)");
+
+            /* замечание 2: HTML в displayName экранируется в уведомлении владельцу */
+            stT2.save(720, adultProfile(29));
+            String idXss = tgInitData("contract-test-token", 720, "<b>XSS</b>");
+            check(postJson(portN, "/api/social/card",
+                "{\"initData\":\"" + idXss + "\",\"card\":{\"displayName\":\"<b>XSS</b>\"}}").statusCode() == 200,
+                "fix: карточка с HTML в имени — 200");
+            check(postJson(portN, "/api/social/card", "{\"initData\":\"" + idXss + "\",\"submit\":true}").statusCode() == 200,
+                "fix: submit XSS-карточки — 200");
+            check(spy.sent.size() == 3 && spy.sent.get(2).startsWith("9999:")
+                    && spy.sent.get(2).contains("#720 · &lt;b&gt;XSS&lt;/b&gt;") && !spy.sent.get(2).contains("<b>XSS"),
+                "fix: уведомление владельцу с экранированным именем (esc)");
         } catch (Exception t2Err) {
             throw new AssertionError("CONTRACT FAIL: t2 " + t2Err);
         }
@@ -2278,6 +2463,22 @@ public class GymContractTest {
         for (byte b : h) hex.append(String.format("%02x", b));
         return "auth_date=1700000000&hash=" + hex + "&user="
             + java.net.URLEncoder.encode(userJson, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /* [TRN-T2] взрослый профиль: birth-пара «сегодня минус age лет», месяц = текущий —
+       ageOf() даёт ровно age (18+ гейт). Возраст self-declared: работает и через поле
+       age без birth — оба пути покрыты в фикс-тестах ревью */
+    static GymData adultProfile(int age) {
+        GymData d = new GymData();
+        d.nextId = 1;
+        d.profile = new ProfileData();
+        d.profile.sex = "м";
+        d.profile.height = 180;
+        d.profile.weight = 80;
+        java.time.LocalDate b = java.time.LocalDate.now().minusYears(age);
+        d.profile.birthYear = b.getYear();
+        d.profile.birthMonth = java.time.LocalDate.now().getMonthValue();
+        return d;
     }
 
     /* заглушка TelegramApi для проверки уведомлений WebServer ([TRN-T2]): «chatId:text» — в sent */

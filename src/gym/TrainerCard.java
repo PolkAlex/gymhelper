@@ -101,6 +101,31 @@ public final class TrainerCard {
         return m;
     }
 
+    /* [TRN-T2 фикс ревью] полная копия карточки: путь «только статус» (submit/enabled
+       без card) обязан сохранять контент — иначе enabled=false затирал бы содержимое */
+    public static TrainerCard copyOf(TrainerCard p) {
+        TrainerCard c = new TrainerCard();
+        if (p == null) return c;
+        c.displayName = p.displayName;
+        c.bio = p.bio;
+        c.specs.addAll(p.specs);
+        c.city = p.city;
+        c.gyms = p.gyms;
+        c.years = p.years;
+        c.achievements.addAll(p.achievements);
+        c.education.addAll(p.education);
+        c.schedule.addAll(p.schedule);
+        c.cap = p.cap;
+        c.useTgAvatar = p.useTgAvatar;
+        c.status = p.status;
+        c.statusNote = p.statusNote;
+        c.updatedAt = p.updatedAt;
+        c.verifiedAt = p.verifiedAt;
+        c.rejectedAt = p.rejectedAt;
+        c.photoUrl = p.photoUrl;
+        return c;
+    }
+
     public static TrainerCard fromJson(java.util.Map<String, Object> m) {
         TrainerCard c = new TrainerCard();
         c.displayName = orEmpty(Json.str(m, "displayName"));

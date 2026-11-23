@@ -3930,13 +3930,16 @@ function trYearsWord(n) {
     if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'года';
     return 'лет';
 }
-/* аватар: фото Telegram (тогл включён и ссылка есть) либо инициалы (§5.2) */
+/* аватар: фото Telegram (тогл включён и ссылка есть) либо инициалы (§5.2);
+   фото может протухнуть на CDN Telegram — onerror разворачивает инициалы (ревью) */
 function trAvaHtml(c, size) {
+    const ini = String(c.displayName || '?').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase();
     if (c.useTgAvatar && c.photoUrl) {
-        return '<img class="tr-ava" src="' + escAttr(c.photoUrl) + '" width="' + size + '" height="' + size +
+        const fb = '<span class="tr-ava" style="width:' + size + 'px;height:' + size + 'px;">' + esc(ini || '?') + '</span>';
+        return '<img class="tr-ava" src="' + escAttr(c.photoUrl) + '" data-fb="' + escAttr(fb) + '"' +
+            ' onerror="this.outerHTML=this.dataset.fb" width="' + size + '" height="' + size +
             '" alt="" loading="lazy" referrerpolicy="no-referrer">';
     }
-    const ini = String(c.displayName || '?').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase();
     return '<span class="tr-ava" style="width:' + size + 'px;height:' + size + 'px;">' + esc(ini || '?') + '</span>';
 }
 let __trSearchTimer = null;

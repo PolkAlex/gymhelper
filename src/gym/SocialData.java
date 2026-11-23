@@ -74,6 +74,14 @@ public final class SocialData {
         return m;
     }
 
+    /* есть ли у пользователя связка в роли подопечного (§7.4 MVP: один активный тренер) */
+    public boolean hasTrainer(long userId) {
+        for (SocialLink l : links) {
+            if (l.student == userId) return true;
+        }
+        return false;
+    }
+
     /* активная (не истёкшая) заявка пары тренер→подопечный; null — нет */
     public SocialRequest activeRequest(long trainer, long student, long nowMs) {
         for (SocialRequest r : requests) {

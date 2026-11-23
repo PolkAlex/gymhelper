@@ -3065,7 +3065,9 @@ public final class BotLogic {
         return max;
     }
 
-    static String esc(String s) {
+    /* HTML-экранирование <>& (Telegram parse_mode HTML); public — используется и
+       в WebServer (уведомления владельцу [TRN-T2]), не только внутри бота */
+    public static String esc(String s) {
         if (s == null) return "";
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }

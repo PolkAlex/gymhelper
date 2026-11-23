@@ -1032,6 +1032,16 @@ public final class WebServer {
             sendJson(ex, 401, Map.of("ok", false));
             return;
         }
+        /* [TRN-T2] 18+ для ВСЕГО соцслоя (решение владельца 12.11 №12 — «18+ для
+           соцфункций», не только режим тренера): возраст self-declared — birth-данные
+           или поле age (ProfileData.ageOf()); неизвестный возраст или < 18 — 403 на
+           любой эндпоинт (и чтение, и запись) */
+        ProfileData prof = storage.load(userId).profile;
+        if (prof == null || prof.ageOf() < 18) {
+            System.out.println("[warn] social age-gate: user " + userId + " " + path);
+            sendJson(ex, 403, Map.of("ok", false, "reason", "age"));
+            return;
+        }
         SocialStore social = storage.social();
         switch (path) {
             case "/api/social/me" -> sendJson(ex, 200, socialMe(social, userId));
@@ -1100,16 +1110,9 @@ public final class WebServer {
         boolean disable = body.containsKey("enabled") && !Boolean.TRUE.equals(body.get("enabled"));
         boolean enable = Boolean.TRUE.equals(body.get("enabled"));
         /* submit/enabled без card разрешены: у клиента уже есть карточка — меняется только
-           статус; но хотя бы что-то одно прийти обязано */
+           статус; но хотя бы что-то одно прийти обязано. 18+ гейт — общий в handleSocial */
         if (in == null && !submit && !disable && !enable) {
             sendJson(ex, 400, Map.of("ok", false));
-            return;
-        }
-        /* [TRN-T2] 18+ для соцфункций (решение владельца 12.11 №12): возраст — из
-           birth-данных GymData; неизвестный возраст или < 18 — блок до изменения данных */
-        ProfileData prof = storage.load(userId).profile;
-        if (prof == null || prof.ageOf() < 18) {
-            sendJson(ex, 403, Map.of("ok", false, "reason", "age"));
             return;
         }
         SocialData d = social.get();
@@ -1118,15 +1121,10 @@ public final class WebServer {
             sendJson(ex, 400, Map.of("ok", false));
             return;
         }
-        TrainerCard card = new TrainerCard();
-        if (prev != null) { /* server-owned поля не меняются клиентом */
-            card.status = prev.status;
-            card.statusNote = prev.statusNote;
-            card.verifiedAt = prev.verifiedAt;
-            card.rejectedAt = prev.rejectedAt;
-            card.useTgAvatar = prev.useTgAvatar;
-            card.updatedAt = prev.updatedAt;
-        }
+        /* [TRN-T2 фикс ревью] стартуем с ПОЛНОЙ копии prev: путь «только статус»
+           (submit/enabled без card) не теряет контент карточки; client-поля ниже
+           замещаются поверх копии, server-owned остаются как были */
+        TrainerCard card = TrainerCard.copyOf(prev);
         if (in != null) {
             String name = clamp(in, "displayName", TrainerCard.MAX_NAME);
             if (name.isEmpty()) { /* имя — единственное обязательное поле формы (§5.2: 2–40) */
@@ -1137,19 +1135,25 @@ public final class WebServer {
             card.bio = clamp(in, "bio", TrainerCard.MAX_BIO);
             card.city = clamp(in, "city", TrainerCard.MAX_CITY);
             card.gyms = clamp(in, "gyms", TrainerCard.MAX_GYMS);
+            /* [TRN-T2 фикс ревью] card — копия prev: клиентские списки ЗАМЕЩАЮТ содержимое */
+            card.specs.clear();
             card.specs.addAll(clampList(in, "specs", TrainerCard.MAX_SPECS, 16));
             card.specs.removeIf(s -> !TrainerCard.SPEC_IDS.contains(s)); /* только набор §5.2 */
             int y = (int) Json.lng(in.get("years"));
             card.years = Math.max(0, Math.min(y, TrainerCard.MAX_YEARS));
+            card.achievements.clear();
             card.achievements.addAll(clampList(in, "achievements", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
+            card.education.clear();
             card.education.addAll(clampList(in, "education", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
+            card.schedule.clear();
             card.schedule.addAll(clampList(in, "schedule", TrainerCard.MAX_SCHEDULE_ITEMS, TrainerCard.MAX_SCHEDULE_LEN));
             int c = (int) Json.lng(in.get("cap"));
             card.cap = TrainerCard.CAPS.contains(c) ? c : TrainerCard.DEFAULT_CAP;
             Object av = in.get("useTgAvatar");
             if (av instanceof Boolean b) card.useTgAvatar = b;
             /* [TRN-T3] аватар Telegram — ТОЛЬКО из подписанного initData (user.photo_url);
-               клиентский payload не доверенный (по образцу initUserName, ревью №3) */
+               клиентский payload не доверенный (по образцу initUserName, ревью №3);
+               пустой photo_url (Telegram не дал ссылку) прежний аватар не затирает */
             String photo = initUserPhoto((String) body.get("initData"));
             if (!photo.isEmpty()) card.photoUrl = photo;
             card.updatedAt = nowIso();
@@ -1157,7 +1161,8 @@ public final class WebServer {
             if (TrainerCard.STATUS_VERIFIED.equals(card.status)) card.status = TrainerCard.STATUS_PENDING;
             if (prev == null) stats.inc("socialTrainerOn"); /* включение режима (§17) */
         }
-        if (submit) { /* «Отправить на проверку» (§5.2 → §14.5) */
+        boolean alreadyPending = TrainerCard.STATUS_PENDING.equals(card.status);
+        if (submit && !alreadyPending) { /* «Отправить на проверку» (§5.2 → §14.5) */
             if (TrainerCard.STATUS_REJECTED.equals(card.status)) {
                 long left = resubmitLeftDays(card.rejectedAt);
                 if (left > 0) { /* после отказа — через 30 дней (решение владельца 23.11) */
@@ -1170,6 +1175,8 @@ public final class WebServer {
             stats.inc("socialCardPending");
             notifyOwnerPending(userId, card);
         }
+        /* повторный submit при уже-pending — тихий успех: статус не меняется, владелец
+           повторно не уведомляется, счётчик не растёт (замечание ревью батча T1–T3) */
         String warning = null;
         if (disable) { /* выключение режима (§5.4): вне поиска, связи сохраняются */
             card.status = TrainerCard.STATUS_HIDDEN;
@@ -1213,12 +1220,13 @@ public final class WebServer {
     }
 
     /* [TRN-T2] уведомление владельцу о карточке «на проверке» (§5.2 → §14.5);
-       ownerChatId не задан (контракт-тесты, env пуст) — тихо */
+       ownerChatId не задан (контракт-тесты, env пуст) — тихо. sendMessage шлёт в
+       HTML-режиме — имя/город экранируются (замечание ревью) */
     private void notifyOwnerPending(long userId, TrainerCard card) {
         if (ownerChatId <= 0) return;
         api.sendMessage(ownerChatId, "🧑‍🏫 Карточка отправлена на проверку\n\n#"
-            + userId + " · " + card.displayName
-            + (card.city.isEmpty() ? "" : " · " + card.city)
+            + userId + " · " + BotLogic.esc(card.displayName)
+            + (card.city.isEmpty() ? "" : " · " + BotLogic.esc(card.city))
             + "\n\nРазбор очереди: /trainer_pending", null);
     }
 
@@ -1360,6 +1368,17 @@ public final class WebServer {
                 sendJson(ex, 409, Map.of("ok", false));
                 return;
             }
+            /* [TRN-T2 фикс ревью] выключенный (hidden) тренер не принимает заявок (§5.4) */
+            if (!trainerActive(d, userId)) {
+                sendJson(ex, 409, Map.of("ok", false));
+                return;
+            }
+            /* [TRN-T2 фикс ревью] у подопечного один активный тренер (§7.4 MVP):
+               не только дубль этой пары, но и любая другая действующая связка */
+            if (d.hasTrainer(peer)) {
+                sendJson(ex, 409, Map.of("ok", false));
+                return;
+            }
             TrainerCard card = d.trainers.get(userId);
             int cap = card == null ? TrainerCard.DEFAULT_CAP : card.cap;
             if (d.studentCount(userId) >= cap) {
@@ -1385,6 +1404,14 @@ public final class WebServer {
         sendJson(ex, 400, Map.of("ok", false));
     }
 
+    /* [TRN-T2 фикс ревью] карточка тренера существует и режим не выключен: новые заявки
+       и раздача кодов невозможны при hidden (§5.4) — иначе выключенный режим обходится
+       напрямую через API в обход поиска */
+    private static boolean trainerActive(SocialData d, long trainerId) {
+        TrainerCard c = d.trainers.get(trainerId);
+        return c != null && !TrainerCard.STATUS_HIDDEN.equals(c.status);
+    }
+
     /* POST /api/social/invite {initData, action, code?} — код приглашения (§7.2):
        create — новый одноразовый код (прежний гасится), revoke — отозвать,
        use — подопечный применяет код: связка сразу, без стадии заявки. */
@@ -1392,6 +1419,11 @@ public final class WebServer {
         String action = Json.str(body, "action");
         SocialData d = social.get();
         if ("create".equals(action)) {
+            /* [TRN-T2 фикс ревью] код раздаёт только активный (не hidden) тренер (§5.4) */
+            if (!trainerActive(d, userId)) {
+                sendJson(ex, 403, Map.of("ok", false));
+                return;
+            }
             d.invites.removeIf(i -> i.trainer == userId);
             SocialInvite inv = new SocialInvite();
             inv.trainer = userId;
@@ -1413,6 +1445,16 @@ public final class WebServer {
             SocialInvite inv = code == null ? null : d.inviteByCode(code.strip());
             if (inv == null || inv.trainer == userId) {
                 sendJson(ex, 404, Map.of("ok", false));
+                return;
+            }
+            /* [TRN-T2 фикс ревью] код выключенного (hidden) тренера не работает (§5.4) */
+            if (!trainerActive(d, inv.trainer)) {
+                sendJson(ex, 409, Map.of("ok", false));
+                return;
+            }
+            /* [TRN-T2 фикс ревью] у подопечного один активный тренер (§7.4 MVP) */
+            if (d.hasTrainer(userId)) {
+                sendJson(ex, 409, Map.of("ok", false));
                 return;
             }
             if (d.linkBetween(inv.trainer, userId) != null) {
