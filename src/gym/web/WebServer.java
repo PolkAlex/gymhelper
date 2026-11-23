@@ -4,9 +4,16 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import gym.GymData;
 import gym.Json;
+import gym.SocialData;
+import gym.SocialInvite;
+import gym.SocialLink;
+import gym.SocialReport;
+import gym.SocialRequest;
+import gym.SocialStore;
 import gym.Stats;
 import gym.Storage;
 import gym.TelegramApi;
+import gym.TrainerCard;
 import gym.Workout;
 
 import javax.crypto.Mac;
@@ -26,6 +33,7 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -192,6 +200,11 @@ public final class WebServer {
                     return;
                 }
                 handleCard(ex);
+                return;
+            }
+            /* [TRN-T1] соцслой «Тренер»: каркас API (спека [TRN-S1] §4.2) */
+            if (path.startsWith("/api/social/")) {
+                handleSocial(ex, path);
                 return;
             }
             /* [UX-I16] публичная страница тренировки — БЕЗ initData (до авторизационного
@@ -979,6 +992,423 @@ public final class WebServer {
         } catch (Exception e) {
             System.out.println("[warn] share index scan: " + e.getMessage());
         }
+    }
+
+    /* ============ [TRN-T1] соцслой «Тренер»: каркас API (спека [TRN-S1] §4.2) ============
+       Все эндпоинты POST с initData в теле — как /api/init|save|share (initData длинный,
+       в URL не передаём). Здесь только чтение/запись SocialStore: карточки, поиск,
+       заявки, связки, гранты, коды приглашений, жалобы. Верификация/админ-команды и
+       уведомления бота — [TRN-T2/T4], экраны Mini App — [TRN-T3/T5]. /api/social/health
+       не реализован: поле «Здоровье» отложено (решение владельца 23.11). */
+
+    private void handleSocial(HttpExchange ex, String path) throws IOException {
+        if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendJson(ex, 405, Map.of("ok", false));
+            return;
+        }
+        Map<String, Object> body = readJsonBody(ex);
+        if (body == null) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        String initData = (String) body.get("initData");
+        long userId = validateInitData(initData == null ? "" : initData, token);
+        if (userId <= 0) {
+            System.out.println("[warn] social rejected: " + path
+                + " initDataLen=" + (initData == null ? -1 : initData.length()));
+            sendJson(ex, 401, Map.of("ok", false));
+            return;
+        }
+        SocialStore social = storage.social();
+        switch (path) {
+            case "/api/social/me" -> sendJson(ex, 200, socialMe(social, userId));
+            case "/api/social/card" -> socialCard(social, userId, body, ex);
+            case "/api/social/search" -> sendJson(ex, 200, socialSearch(social, userId, body));
+            case "/api/social/apply" -> socialApply(social, userId, body, ex);
+            case "/api/social/link" -> socialLinkAction(social, userId, body, ex);
+            case "/api/social/invite" -> socialInvite(social, userId, body, ex);
+            case "/api/social/grants" -> socialGrants(social, userId, body, ex);
+            case "/api/social/report" -> socialReport(social, userId, body, ex);
+            default -> sendJson(ex, 404, Map.of("ok", false));
+        }
+    }
+
+    /* «моя соцпанель» (§4.2 /api/social/me): своя карточка, связки в обе стороны
+       (с именем контрагента), входящие заявки (тренер), моя исходящая заявка, мой код.
+       Истёкшие заявки не показываются и гасятся при следующей записи (§7.1). */
+    private Map<String, Object> socialMe(SocialStore social, long userId) {
+        SocialData d = social.get();
+        long now = System.currentTimeMillis();
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        TrainerCard card = d.trainers.get(userId);
+        resp.put("card", card == null ? null : card.toMap());
+        List<Object> asTrainer = new ArrayList<>();
+        List<Object> asStudent = new ArrayList<>();
+        for (SocialLink l : d.links) {
+            if (l.trainer == userId) asTrainer.add(linkView(l, d.trainers.get(l.student)));
+            if (l.student == userId) asStudent.add(linkView(l, d.trainers.get(l.trainer)));
+        }
+        resp.put("linksAsTrainer", asTrainer);
+        resp.put("linksAsStudent", asStudent);
+        List<Object> incoming = new ArrayList<>();
+        Map<String, Object> outgoing = null;
+        for (SocialRequest r : d.requests) {
+            if (r.expired(now)) continue;
+            if (r.trainer == userId) incoming.add(r.toJson());
+            if (r.student == userId && outgoing == null) outgoing = r.toJson();
+        }
+        resp.put("requests", incoming);
+        resp.put("myRequest", outgoing);
+        SocialInvite invite = d.inviteOf(userId);
+        resp.put("inviteCode", invite == null ? null : invite.code);
+        return resp;
+    }
+
+    /* связка для /api/social/me: данные как в файле + имя контрагента (после связки
+       контакт раскрыт — §13.1); карточки у контрагента нет — null */
+    private Map<String, Object> linkView(SocialLink l, TrainerCard peer) {
+        Map<String, Object> m = l.toJson();
+        m.put("peerName", peer == null ? null : peer.displayName);
+        return m;
+    }
+
+    /* POST /api/social/card {initData, card:{…}} — сохранить карточку (§5.2). Клиентские
+       поля обрезаются по лимитам формы; статус верификации клиент не выставляет: новая
+       карточка — draft, правки содержимого статус не меняют (возврат в pending при
+       правке подтверждённой карточки — [TRN-T2]). */
+    private void socialCard(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
+        Map<String, Object> in = Json.map(body.get("card"));
+        if (in == null) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        String name = clamp(in, "displayName", TrainerCard.MAX_NAME);
+        if (name.isEmpty()) { /* имя — единственное обязательное поле формы (§5.2: 2–40) */
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        SocialData d = social.get();
+        TrainerCard prev = d.trainers.get(userId);
+        TrainerCard card = new TrainerCard();
+        if (prev != null) {
+            card.status = prev.status;
+            card.statusNote = prev.statusNote;
+            card.verifiedAt = prev.verifiedAt;
+            card.useTgAvatar = prev.useTgAvatar;
+        }
+        card.displayName = name;
+        card.bio = clamp(in, "bio", TrainerCard.MAX_BIO);
+        card.city = clamp(in, "city", TrainerCard.MAX_CITY);
+        card.gyms = clamp(in, "gyms", TrainerCard.MAX_GYMS);
+        card.specs.addAll(clampList(in, "specs", TrainerCard.MAX_SPECS, 16));
+        card.specs.removeIf(s -> !TrainerCard.SPEC_IDS.contains(s)); /* только набор §5.2 */
+        int y = (int) Json.lng(in.get("years"));
+        card.years = Math.max(0, Math.min(y, TrainerCard.MAX_YEARS));
+        card.achievements.addAll(clampList(in, "achievements", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
+        card.education.addAll(clampList(in, "education", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
+        card.schedule.addAll(clampList(in, "schedule", TrainerCard.MAX_SCHEDULE_ITEMS, TrainerCard.MAX_SCHEDULE_LEN));
+        int c = (int) Json.lng(in.get("cap"));
+        card.cap = TrainerCard.CAPS.contains(c) ? c : TrainerCard.DEFAULT_CAP;
+        Object av = in.get("useTgAvatar");
+        if (av instanceof Boolean b) card.useTgAvatar = b;
+        card.updatedAt = nowIso();
+        d.trainers.put(userId, card);
+        social.save();
+        System.out.println("[social] card user " + userId + " status " + card.status
+            + " specs " + card.specs.size() + " years " + card.years);
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("card", card.toMap());
+        sendJson(ex, 200, resp);
+    }
+
+    /* POST /api/social/search {initData, city?, specs?:[id]} — публичный каталог:
+       только verified-карточки (§6.2); анонимного каталога нет (initData обязателен).
+       city — вхождение без регистра в city и gyms; specs — совпадение по любой (OR).
+       Сортировка: свежие подтверждения сверху (§6.2); пока verifiedAt не проставляется
+       ([TRN-T2]) — по updatedAt; строки ISO сравниваются лексикографически. */
+    private Map<String, Object> socialSearch(SocialStore social, long userId, Map<String, Object> body) {
+        String city = clamp(body, "city", 80).toLowerCase();
+        List<String> specs = clampList(body, "specs", TrainerCard.MAX_SPECS, 16);
+        SocialData d = social.get();
+        List<Map.Entry<Long, TrainerCard>> hits = new ArrayList<>();
+        for (Map.Entry<Long, TrainerCard> e : d.trainers.entrySet()) {
+            TrainerCard card = e.getValue();
+            if (!TrainerCard.STATUS_VERIFIED.equals(card.status)) continue;
+            if (!city.isEmpty() && !card.city.toLowerCase().contains(city)
+                && !card.gyms.toLowerCase().contains(city)) continue;
+            if (!specs.isEmpty() && card.specs.stream().noneMatch(specs::contains)) continue;
+            hits.add(e);
+        }
+        hits.sort((a, b) -> {
+            String ka = a.getValue().verifiedAt.isEmpty() ? a.getValue().updatedAt : a.getValue().verifiedAt;
+            String kb = b.getValue().verifiedAt.isEmpty() ? b.getValue().updatedAt : b.getValue().verifiedAt;
+            return kb.compareTo(ka);
+        });
+        List<Object> cards = new ArrayList<>();
+        for (Map.Entry<Long, TrainerCard> e : hits) {
+            Map<String, Object> cm = e.getValue().publicMap();
+            cm.put("userId", e.getKey());
+            cards.add(cm);
+        }
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("cards", cards);
+        return resp;
+    }
+
+    /* POST /api/social/apply {initData, trainerId, comment?} — заявка в подопечные (§7.1):
+       только на verified-карточку, не к себе, без существующей связки и дубля активной
+       заявки; лимит подопечных тренера («Набор закрыт», §6.4). Истёкшие заявки гаснут. */
+    private void socialApply(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
+        long trainerId = Json.lng(body.get("trainerId"));
+        String comment = clamp(body, "comment", SocialRequest.MAX_COMMENT);
+        if (trainerId <= 0 || trainerId == userId) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        SocialData d = social.get();
+        long now = System.currentTimeMillis();
+        TrainerCard card = d.trainers.get(trainerId);
+        if (card == null || !TrainerCard.STATUS_VERIFIED.equals(card.status)) {
+            sendJson(ex, 404, Map.of("ok", false));
+            return;
+        }
+        d.purgeExpiredRequests(now);
+        if (d.linkBetween(trainerId, userId) != null || d.activeRequest(trainerId, userId, now) != null) {
+            sendJson(ex, 409, Map.of("ok", false));
+            return;
+        }
+        if (d.studentCount(trainerId) >= card.cap) {
+            sendJson(ex, 409, Map.of("ok", false));
+            return;
+        }
+        SocialRequest r = new SocialRequest();
+        r.trainer = trainerId;
+        r.student = userId;
+        r.comment = comment;
+        r.createdAt = nowIso();
+        d.requests.add(r);
+        social.save();
+        System.out.println("[social] apply user " + userId + " -> trainer " + trainerId);
+        sendJson(ex, 200, Map.of("ok", true));
+    }
+
+    /* POST /api/social/link {initData, action, userId} — механика связки (§7):
+       accept — тренер принимает заявку (связка создаётся, гранты дефолтные:
+       «Прогресс» ВКЛ — финал владельца 23.11), reject — отклоняет, break — любая
+       из сторон разрывает связь (гранты умирают вместе со связкой, §7.5/§8.2).
+       Уведомления бота — [TRN-T4]. */
+    private void socialLinkAction(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
+        String action = Json.str(body, "action");
+        long peer = Json.lng(body.get("userId"));
+        SocialData d = social.get();
+        long now = System.currentTimeMillis();
+        if ("break".equals(action)) {
+            SocialLink link = peer > 0 ? d.linkBetween(userId, peer) : null;
+            if (link == null) {
+                sendJson(ex, 404, Map.of("ok", false));
+                return;
+            }
+            d.links.remove(link);
+            social.save();
+            System.out.println("[social] break user " + userId + " peer " + peer);
+            sendJson(ex, 200, Map.of("ok", true));
+            return;
+        }
+        if ("reject".equals(action) || "accept".equals(action)) {
+            /* заявки разбирает только тренер (я — адресат заявки) */
+            SocialRequest r = peer > 0 ? d.activeRequest(userId, peer, now) : null;
+            if (r == null) {
+                sendJson(ex, 404, Map.of("ok", false));
+                return;
+            }
+            if ("reject".equals(action)) {
+                d.requests.remove(r);
+                social.save();
+                System.out.println("[social] reject user " + userId + " student " + peer);
+                sendJson(ex, 200, Map.of("ok", true));
+                return;
+            }
+            if (d.linkBetween(userId, peer) != null) {
+                sendJson(ex, 409, Map.of("ok", false));
+                return;
+            }
+            TrainerCard card = d.trainers.get(userId);
+            int cap = card == null ? TrainerCard.DEFAULT_CAP : card.cap;
+            if (d.studentCount(userId) >= cap) {
+                sendJson(ex, 409, Map.of("ok", false));
+                return;
+            }
+            SocialLink link = new SocialLink();
+            link.trainer = userId;
+            link.student = peer;
+            link.since = LocalDate.now().toString();
+            link.grants.putAll(SocialLink.defaultGrants());
+            link.source = SocialLink.SOURCE_APPLY;
+            d.requests.remove(r);
+            d.links.add(link);
+            social.save();
+            System.out.println("[social] accept user " + userId + " student " + peer);
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("ok", true);
+            resp.put("link", link.toJson());
+            sendJson(ex, 200, resp);
+            return;
+        }
+        sendJson(ex, 400, Map.of("ok", false));
+    }
+
+    /* POST /api/social/invite {initData, action, code?} — код приглашения (§7.2):
+       create — новый одноразовый код (прежний гасится), revoke — отозвать,
+       use — подопечный применяет код: связка сразу, без стадии заявки. */
+    private void socialInvite(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
+        String action = Json.str(body, "action");
+        SocialData d = social.get();
+        if ("create".equals(action)) {
+            d.invites.removeIf(i -> i.trainer == userId);
+            SocialInvite inv = new SocialInvite();
+            inv.trainer = userId;
+            inv.code = newInviteCode(d);
+            d.invites.add(inv);
+            social.save();
+            System.out.println("[social] invite create user " + userId);
+            sendJson(ex, 200, Map.of("ok", true, "code", inv.code));
+            return;
+        }
+        if ("revoke".equals(action)) {
+            d.invites.removeIf(i -> i.trainer == userId);
+            social.save();
+            sendJson(ex, 200, Map.of("ok", true));
+            return;
+        }
+        if ("use".equals(action)) {
+            String code = Json.str(body, "code");
+            SocialInvite inv = code == null ? null : d.inviteByCode(code.strip());
+            if (inv == null || inv.trainer == userId) {
+                sendJson(ex, 404, Map.of("ok", false));
+                return;
+            }
+            if (d.linkBetween(inv.trainer, userId) != null) {
+                sendJson(ex, 409, Map.of("ok", false));
+                return;
+            }
+            TrainerCard card = d.trainers.get(inv.trainer);
+            int cap = card == null ? TrainerCard.DEFAULT_CAP : card.cap;
+            if (d.studentCount(inv.trainer) >= cap) {
+                sendJson(ex, 409, Map.of("ok", false));
+                return;
+            }
+            SocialLink link = new SocialLink();
+            link.trainer = inv.trainer;
+            link.student = userId;
+            link.since = LocalDate.now().toString();
+            link.grants.putAll(SocialLink.defaultGrants());
+            link.source = SocialLink.SOURCE_INVITE;
+            d.invites.remove(inv); /* код одноразовый — гасится применением (§7.2) */
+            d.links.add(link);
+            social.save();
+            System.out.println("[social] invite use user " + userId + " trainer " + inv.trainer);
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("ok", true);
+            resp.put("link", link.toJson());
+            sendJson(ex, 200, resp);
+            return;
+        }
+        sendJson(ex, 400, Map.of("ok", false));
+    }
+
+    /* 6 символов, алфавит без похожих (§7.2); коллизия в пределах активных кодов
+       исключена перегенерацией (как newShareId) */
+    private static final String INVITE_ALPHABET = "ABCDEFGHJKLMNPRTUVWXY23456789";
+
+    private String newInviteCode(SocialData d) {
+        Set<String> active = new HashSet<>();
+        for (SocialInvite i : d.invites) active.add(i.code);
+        StringBuilder b = new StringBuilder(SocialInvite.CODE_LEN);
+        do {
+            b.setLength(0);
+            for (int i = 0; i < SocialInvite.CODE_LEN; i++) {
+                b.append(INVITE_ALPHABET.charAt(shareRandom.nextInt(INVITE_ALPHABET.length())));
+            }
+        } while (active.contains(b.toString()));
+        return b.toString();
+    }
+
+    /* POST /api/social/grants {initData, trainerId, grants:{key:bool}} — согласие
+       подопечного (§8): меняет только его связку, применяется немедленно; уведомлений
+       тренеру нет (спам-риск, §8.2). Незнакомые ключи клиента игнорируются, ранее
+       сохранённые (будущие гранты) не теряются. */
+    private void socialGrants(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
+        long trainerId = Json.lng(body.get("trainerId"));
+        Map<String, Object> in = Json.map(body.get("grants"));
+        SocialLink link = trainerId > 0 ? social.get().linkBetween(trainerId, userId) : null;
+        if (link == null || link.student != userId || in == null) {
+            sendJson(ex, 404, Map.of("ok", false));
+            return;
+        }
+        for (String k : SocialStore.GRANT_KEYS) {
+            Object v = in.get(k);
+            if (v instanceof Boolean b) link.grants.put(k, b);
+        }
+        social.save();
+        System.out.println("[social] grants user " + userId + " trainer " + trainerId);
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("grants", link.toJson().get("grants"));
+        sendJson(ex, 200, resp);
+    }
+
+    /* POST /api/social/report {initData, about, text} — жалоба (§13.4): владелец получает
+       текст через существующий feedback-канал (deep-link — клиентская часть), здесь —
+       запись в social.json; разбор — админ-команды [TRN-T2]. */
+    private void socialReport(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
+        long about = Json.lng(body.get("about"));
+        String text = clamp(body, "text", SocialReport.MAX_TEXT);
+        if (about <= 0 || about == userId || text.isEmpty()) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
+        SocialData d = social.get();
+        SocialReport r = new SocialReport();
+        r.by = userId;
+        r.about = about;
+        r.at = nowIso();
+        r.text = text;
+        d.reports.add(r);
+        social.save();
+        System.out.println("[social] report user " + userId + " about " + about);
+        sendJson(ex, 200, Map.of("ok", true));
+    }
+
+    /* [TRN-T1] серверная обрезка строк по лимитам формы (§5.2) — как initUserName
+       (ревью №2): null/пусто → "", длиннее лимита — хвост отрезан */
+    private static String clamp(Map<String, Object> m, String key, int max) {
+        String v = Json.str(m, key);
+        if (v == null) return "";
+        String t = v.strip();
+        return t.length() <= max ? t : t.substring(0, max);
+    }
+
+    /* список строк формы: не-строки пропускаются, лимит количества и длины элемента */
+    private static List<String> clampList(Map<String, Object> m, String key, int maxItems, int maxLen) {
+        List<String> out = new ArrayList<>();
+        List<Object> in = Json.list(m.get(key));
+        if (in == null) return out;
+        for (Object o : in) {
+            if (out.size() >= maxItems) break;
+            if (!(o instanceof String s)) continue;
+            String t = s.strip();
+            if (t.isEmpty()) continue;
+            out.add(t.length() <= maxLen ? t : t.substring(0, maxLen));
+        }
+        return out;
+    }
+
+    /* ISO-дата-время без наносекунд (формат createdAt/updatedAt в social.json) */
+    private static String nowIso() {
+        return LocalDateTime.now().withNano(0).toString();
     }
 
     private void serveStatic(HttpExchange ex, String path) throws IOException {

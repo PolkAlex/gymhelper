@@ -6,11 +6,18 @@ import gym.Json;
 import gym.ProfileData;
 import gym.Records;
 import gym.SetEntry;
+import gym.SocialData;
+import gym.SocialInvite;
+import gym.SocialLink;
+import gym.SocialReport;
+import gym.SocialRequest;
+import gym.SocialStore;
 import gym.Stats;
 import gym.Storage;
 import gym.TelegramApi;
 import gym.Template;
 import gym.TemplateExercise;
+import gym.TrainerCard;
 import gym.Workout;
 import gym.web.CardRender;
 import gym.web.WebServer;
@@ -1682,6 +1689,377 @@ public class GymContractTest {
                 "poster: cardClick/cardOk/cardErr через /api/track=1, bogus — мимо белого списка");
         } catch (Exception posterErr) {
             throw new AssertionError("CONTRACT FAIL: poster " + posterErr);
+        }
+
+        /* [TRN-T1] social.json (соцслой «Тренер», спека [TRN-S1] §4): отсутствующий/старый/
+           битый файл читается; гранты — 4 фиксированных ключа (финал владельца 23.11,
+           «Здоровье» отложено, формат расширяем); round-trip; бэкапы с ротацией как у чатов;
+           чистка при /delete_my_data (право на забвение §4.1); API-каркас §4.2. */
+        try {
+            java.nio.file.Path tmpSo = java.nio.file.Files.createTempDirectory("gymsocial");
+            Storage stSo = new Storage(tmpSo);
+            /* отсутствующий файл → пустое состояние без падения */
+            check(stSo.social().get().trainers.isEmpty() && stSo.social().get().links.isEmpty(),
+                "social: отсутствующий файл читается (пустое состояние)");
+
+            /* seed: полный набор сущностей → round-trip через новый экземпляр Storage */
+            SocialData sd1 = stSo.social().get();
+            TrainerCard tc = new TrainerCard();
+            tc.displayName = "Игорь Соколов";
+            tc.bio = "Реабилитация и осанка";
+            tc.specs.add("rehab");
+            tc.specs.add("mobility");
+            tc.city = "Минск";
+            tc.gyms = "«Атлет»";
+            tc.years = 6;
+            tc.achievements.add("КМС по пауэрлифтингу, 2019");
+            tc.education.add("РГУФК, 2015");
+            tc.schedule.add("Пн–Пт 07:00–21:00");
+            tc.cap = 10;
+            tc.status = TrainerCard.STATUS_VERIFIED;
+            tc.verifiedAt = "2026-11-23T10:00:00";
+            tc.updatedAt = "2026-11-23T10:00:00";
+            sd1.trainers.put(101L, tc);
+            SocialLink sl = new SocialLink();
+            sl.trainer = 101;
+            sl.student = 202;
+            sl.since = "2026-11-23";
+            sl.grants.putAll(SocialLink.defaultGrants());
+            sl.grants.put(SocialStore.GRANT_KCAL, true);
+            sd1.links.add(sl);
+            SocialRequest sr = new SocialRequest();
+            sr.trainer = 101;
+            sr.student = 303;
+            sr.comment = "Хочу похудеть к лету";
+            sr.createdAt = "2026-11-23T09:00:00";
+            sd1.requests.add(sr);
+            SocialInvite si = new SocialInvite();
+            si.trainer = 101;
+            si.code = "K7RM2X";
+            sd1.invites.add(si);
+            SocialReport srep = new SocialReport();
+            srep.by = 303;
+            srep.about = 101;
+            srep.at = "2026-11-23T09:30:00";
+            srep.text = "спам в описании";
+            sd1.reports.add(srep);
+            stSo.social().save();
+            check(java.nio.file.Files.exists(tmpSo.resolve("social.json")), "social: файл создан");
+
+            SocialData sd2 = new Storage(tmpSo).social().get();
+            TrainerCard tc2 = sd2.trainers.get(101L);
+            check(tc2 != null && "Игорь Соколов".equals(tc2.displayName) && tc2.years == 6
+                    && tc2.specs.contains("rehab") && tc2.cap == 10 && tc2.useTgAvatar
+                    && TrainerCard.STATUS_VERIFIED.equals(tc2.status)
+                    && "2026-11-23T10:00:00".equals(tc2.verifiedAt),
+                "social: карточка переживает round-trip без потерь");
+            check(sd2.links.size() == 1 && sd2.links.get(0).trainer == 101 && sd2.links.get(0).student == 202
+                    && "apply".equals(sd2.links.get(0).source) && "2026-11-23".equals(sd2.links.get(0).since),
+                "social: связка переживает round-trip");
+            /* гранты: ровно 4 фиксированных ключа (финал 23.11), значения на месте */
+            Map<String, Boolean> g = sd2.links.get(0).grants;
+            check(g.size() == 4 && Boolean.TRUE.equals(g.get(SocialStore.GRANT_PROGRESS))
+                    && Boolean.FALSE.equals(g.get(SocialStore.GRANT_GOALS))
+                    && Boolean.FALSE.equals(g.get(SocialStore.GRANT_BODY))
+                    && Boolean.TRUE.equals(g.get(SocialStore.GRANT_KCAL)),
+                "social: гранты — 4 фиксированных ключа, значения переживают round-trip");
+            check(sd2.requests.size() == 1 && "Хочу похудеть к лету".equals(sd2.requests.get(0).comment),
+                "social: заявка переживает round-trip");
+            check(sd2.invites.size() == 1 && "K7RM2X".equals(sd2.invites.get(0).code),
+                "social: код приглашения переживает round-trip");
+            check(sd2.reports.size() == 1 && sd2.reports.get(0).by == 303 && sd2.reports.get(0).about == 101,
+                "social: жалоба переживает round-trip");
+
+            /* старый/минимальный файл: связка без grants-ключа → дефолт связки (progress ВКЛ) */
+            java.nio.file.Files.writeString(tmpSo.resolve("social.json"),
+                "{\"ver\":1,\"links\":[{\"trainer\":5,\"student\":6}]}",
+                java.nio.charset.StandardCharsets.UTF_8);
+            Map<String, Boolean> gOld = new Storage(tmpSo).social().get().links.get(0).grants;
+            check(gOld.size() == 4 && Boolean.TRUE.equals(gOld.get(SocialStore.GRANT_PROGRESS))
+                    && Boolean.FALSE.equals(gOld.get(SocialStore.GRANT_GOALS)),
+                "social: старый файл без grants → 4 ключа, «Прогресс» ВКЛ (дефолт связки)");
+
+            /* мусорный ключ карты trainers пропускается, валидный читается */
+            java.nio.file.Files.writeString(tmpSo.resolve("social.json"),
+                "{\"ver\":1,\"trainers\":{\"абс\":{\"displayName\":\"X\"},\"7\":{\"displayName\":\"Y\"}}}",
+                java.nio.charset.StandardCharsets.UTF_8);
+            SocialData sdK = new Storage(tmpSo).social().get();
+            check(sdK.trainers.size() == 1 && "Y".equals(sdK.trainers.get(7L).displayName),
+                "social: мусорный ключ карты trainers пропускается без падения");
+
+            /* будущий грант (health) в файле: чтение толерантно, ключ переживает перезапись —
+               «Здоровье» добавится позже без ломки формата (решение владельца 23.11) */
+            java.nio.file.Files.writeString(tmpSo.resolve("social.json"),
+                "{\"ver\":1,\"links\":[{\"trainer\":5,\"student\":6,\"grants\":{\"progress\":true,\"goals\":true,\"health\":true}}]}",
+                java.nio.charset.StandardCharsets.UTF_8);
+            SocialData sdF = new Storage(tmpSo).social().get();
+            check(Boolean.TRUE.equals(sdF.links.get(0).grants.get("health")),
+                "social: незнакомый грант health читается без падения");
+            check(Boolean.FALSE.equals(sdF.links.get(0).grants.get(SocialStore.GRANT_KCAL)),
+                "social: отсутствующий kcal в файле → OFF (дефолт)");
+            new Storage(tmpSo).social().save();
+            String socialOut = java.nio.file.Files.readString(tmpSo.resolve("social.json"),
+                java.nio.charset.StandardCharsets.UTF_8);
+            check(socialOut.contains("\"health\":true"),
+                "social: незнакомый грант переживает перезапись (формат расширяем)");
+            check(socialOut.contains("\"ver\":1"), "social: файл с версионированием формата (ver)");
+
+            /* битый файл → пустое состояние без падения; уходит в бэкап при перезаписи */
+            java.nio.file.Path tmpBad = java.nio.file.Files.createTempDirectory("gymsocialbad");
+            java.nio.file.Files.writeString(tmpBad.resolve("social.json"), "{битый",
+                java.nio.charset.StandardCharsets.UTF_8);
+            Storage stBad = new Storage(tmpBad);
+            check(stBad.social().get().links.isEmpty(), "social: битый файл → пустое состояние без падения");
+            stBad.social().save();
+            int badBackups = 0;
+            try (java.nio.file.DirectoryStream<java.nio.file.Path> dsBadSo =
+                     java.nio.file.Files.newDirectoryStream(tmpBad.resolve("backups"), "social.*.json")) {
+                for (java.nio.file.Path p : dsBadSo) badBackups++;
+            }
+            check(badBackups == 1, "social: битый прежний файл уехал в бэкап при первой перезаписи");
+
+            /* бэкап ПЕРЕД перезаписью + ротация BACKUPS_TO_KEEP — как у чат-файлов */
+            Storage stBk = new Storage(tmpSo);
+            stBk.social().get().trainers.put(999L, new TrainerCard());
+            for (int i = 0; i < Storage.BACKUPS_TO_KEEP + 3; i++) {
+                Thread.sleep(3);
+                stBk.social().save();
+            }
+            int socBackups = 0;
+            try (java.nio.file.DirectoryStream<java.nio.file.Path> dsBk =
+                     java.nio.file.Files.newDirectoryStream(tmpSo.resolve("backups"), "social.*.json")) {
+                for (java.nio.file.Path p : dsBk) socBackups++;
+            }
+            check(socBackups == Storage.BACKUPS_TO_KEEP,
+                "social: ротация держит " + Storage.BACKUPS_TO_KEEP + " бэкапов, а не " + socBackups);
+            check(new Storage(tmpSo).social().get().trainers.containsKey(999L),
+                "social: основной файл читается после ротации");
+
+            /* право на забвение (§4.1): /delete_my_data вычищает все соцданные пользователя */
+            java.nio.file.Path tmpFor = java.nio.file.Files.createTempDirectory("gymsocialdel");
+            Storage stFor = new Storage(tmpFor);
+            SocialData fd = stFor.social().get();
+            TrainerCard fc = new TrainerCard();
+            fc.displayName = "Удаляемый";
+            fd.trainers.put(404L, fc);
+            TrainerCard fc2 = new TrainerCard();
+            fc2.displayName = "Остаётся";
+            fd.trainers.put(405L, fc2);
+            SocialLink fl1 = new SocialLink();
+            fl1.trainer = 404;
+            fl1.student = 505;
+            fl1.grants.putAll(SocialLink.defaultGrants());
+            SocialLink fl2 = new SocialLink();
+            fl2.trainer = 606;
+            fl2.student = 404;
+            fl2.grants.putAll(SocialLink.defaultGrants());
+            SocialLink fl3 = new SocialLink();
+            fl3.trainer = 405;
+            fl3.student = 505;
+            fl3.grants.putAll(SocialLink.defaultGrants());
+            fd.links.add(fl1);
+            fd.links.add(fl2);
+            fd.links.add(fl3);
+            SocialRequest fr1 = new SocialRequest();
+            fr1.trainer = 405;
+            fr1.student = 404;
+            SocialRequest fr2 = new SocialRequest();
+            fr2.trainer = 404;
+            fr2.student = 505;
+            fd.requests.add(fr1);
+            fd.requests.add(fr2);
+            SocialInvite fi = new SocialInvite();
+            fi.trainer = 404;
+            fi.code = "AAAABB";
+            SocialInvite fi2 = new SocialInvite();
+            fi2.trainer = 405;
+            fi2.code = "CCCCDD";
+            fd.invites.add(fi);
+            fd.invites.add(fi2);
+            SocialReport fp1 = new SocialReport();
+            fp1.by = 404;
+            fp1.about = 405;
+            SocialReport fp2 = new SocialReport();
+            fp2.by = 405;
+            fp2.about = 404;
+            SocialReport fp3 = new SocialReport();
+            fp3.by = 405;
+            fp3.about = 505;
+            fd.reports.add(fp1);
+            fd.reports.add(fp2);
+            fd.reports.add(fp3);
+            stFor.social().deleteUser(404);
+            SocialData fd2 = new Storage(tmpFor).social().get();
+            check(!fd2.trainers.containsKey(404L) && fd2.trainers.containsKey(405L),
+                "social del: карточка удалена, чужая осталась");
+            check(fd2.links.size() == 1 && fd2.links.get(0).trainer == 405,
+                "social del: обе связки с участием пользователя удалены (гранты умерли с ними)");
+            check(fd2.requests.isEmpty(), "social del: заявки с его участием удалены");
+            check(fd2.invites.size() == 1 && fd2.invites.get(0).trainer == 405,
+                "social del: его код приглашения удалён, чужой остался");
+            check(fd2.reports.size() == 1 && fd2.reports.get(0).about == 505,
+                "social del: жалобы с его участием удалены, чужая осталась");
+            check(fd2.links.get(0).grants.size() == 4,
+                "social del: гранты оставшейся (чужой) связки не тронуты");
+        } catch (Exception soErr) {
+            throw new AssertionError("CONTRACT FAIL: social " + soErr);
+        }
+
+        /* [TRN-T1] API-каркас §4.2 (реальный WebServer на эфемерном порту): initData-гейт,
+           карточка (лимиты/фильтр specs/server-owned статус), search только verified,
+           заявка/приём (дефолт грантов), grants, invite, break, report; /api/social/health
+           не реализован («Здоровье» отложено). */
+        try {
+            java.nio.file.Path tmpApi = java.nio.file.Files.createTempDirectory("gymsocapi");
+            Storage stApi = new Storage(tmpApi);
+            WebServer wsSo = new WebServer("contract-test-token", stApi, tmpApi, new Stats(tmpApi.resolve("stats.json")));
+            java.net.ServerSocket probeSo = new java.net.ServerSocket(0);
+            int portSo = probeSo.getLocalPort();
+            probeSo.close();
+            wsSo.start(portSo);
+            String idT = tgInitData("contract-test-token", 501);
+            String idS = tgInitData("contract-test-token", 502);
+            String idX = tgInitData("contract-test-token", 503);
+
+            /* гейт: мусорная подпись — 401; GET — 405; отложенный health — 404 */
+            check(postJson(portSo, "/api/social/me", "{\"initData\":\"garbage\"}").statusCode() == 401,
+                "social api: неверная подпись — 401");
+            check(get(portSo, "/api/social/me").statusCode() == 405,
+                "social api: GET вместо POST — 405");
+            check(postJson(portSo, "/api/social/health", "{\"initData\":\"" + idT + "\"}").statusCode() == 404,
+                "social api: /api/social/health не реализован («Здоровье» отложено, 23.11)");
+
+            /* карточка: лимиты обрезаются, specs фильтруются, cap вне набора → дефолт */
+            java.net.http.HttpResponse<String> rc1 = postJson(portSo, "/api/social/card",
+                "{\"initData\":\"" + idT + "\",\"card\":{\"displayName\":\"" + "И".repeat(60)
+                    + "\",\"bio\":\"Реабилитация\",\"specs\":[\"rehab\",\"мусор\"],\"city\":\"Минск\","
+                    + "\"gyms\":\"«Атлет»\",\"years\":120,\"cap\":7,\"achievements\":[\"КМС\"],"
+                    + "\"schedule\":[\"Пн–Пт 07:00\"],\"useTgAvatar\":false}}");
+            check(rc1.statusCode() == 200, "social api: card save — 200, а не " + rc1.statusCode());
+            TrainerCard savedT = stApi.social().get().trainers.get(501L);
+            check(savedT != null && savedT.displayName.length() == TrainerCard.MAX_NAME
+                    && savedT.specs.size() == 1 && "rehab".equals(savedT.specs.get(0))
+                    && savedT.years == TrainerCard.MAX_YEARS && savedT.cap == TrainerCard.DEFAULT_CAP
+                    && !savedT.useTgAvatar && TrainerCard.STATUS_DRAFT.equals(savedT.status),
+                "social api: карточка обрезана по лимитам, specs фильтрованы, статус draft (server-owned)");
+
+            /* клиент не выставляет статус; неприсланные клиентские поля замещаются */
+            check(postJson(portSo, "/api/social/card",
+                "{\"initData\":\"" + idT + "\",\"card\":{\"displayName\":\"Игорь\",\"status\":\"verified\",\"statusNote\":\"сам\"}}").statusCode() == 200,
+                "social api: повторный card save — 200");
+            TrainerCard updT = stApi.social().get().trainers.get(501L);
+            check(TrainerCard.STATUS_DRAFT.equals(updT.status) && updT.statusNote.isEmpty(),
+                "social api: статус/статусNote клиент не выставляет (server-owned)");
+            check(updT.bio.isEmpty() && updT.specs.isEmpty(),
+                "social api: карточка замещается присланными полями (bio/specs сброшены)");
+
+            /* поиск: draft не виден; заявка на draft — 404 */
+            java.net.http.HttpResponse<String> rsearch = postJson(portSo, "/api/social/search",
+                "{\"initData\":\"" + idS + "\"}");
+            check(rsearch.statusCode() == 200 && !rsearch.body().contains("Игорь"),
+                "social api: не-verified карточка в поиске не видна");
+            check(postJson(portSo, "/api/social/apply",
+                "{\"initData\":\"" + idS + "\",\"trainerId\":501,\"comment\":\"пустите\"}").statusCode() == 404,
+                "social api: заявка на draft-карточку — 404");
+
+            /* «верификация» — эмуляция будущей /trainer_ok [TRN-T2]: правка статуса в хранилище */
+            stApi.social().get().trainers.get(501L).status = TrainerCard.STATUS_VERIFIED;
+            stApi.social().get().trainers.get(501L).verifiedAt = "2026-11-23T11:00:00";
+            java.net.http.HttpResponse<String> rsearch2 = postJson(portSo, "/api/social/search",
+                "{\"initData\":\"" + idS + "\"}");
+            check(rsearch2.statusCode() == 200 && rsearch2.body().contains("Игорь")
+                    && !rsearch2.body().contains("statusNote") && !rsearch2.body().contains("\"cap\""),
+                "social api: verified найден; публичная проекция без statusNote/cap");
+
+            /* заявка: к себе — 400; дубль — 409; accept не-тренером — 404 */
+            check(postJson(portSo, "/api/social/apply",
+                "{\"initData\":\"" + idS + "\",\"trainerId\":501,\"comment\":\"Хочу похудеть к лету. Грыжа\"}").statusCode() == 200,
+                "social api: заявка — 200");
+            check(postJson(portSo, "/api/social/apply",
+                "{\"initData\":\"" + idS + "\",\"trainerId\":501}").statusCode() == 409,
+                "social api: дубль активной заявки — 409 (§7.1)");
+            check(postJson(portSo, "/api/social/apply",
+                "{\"initData\":\"" + idS + "\",\"trainerId\":502}").statusCode() == 400,
+                "social api: заявка к себе — 400");
+            check(postJson(portSo, "/api/social/link",
+                "{\"initData\":\"" + idS + "\",\"action\":\"accept\",\"userId\":503}").statusCode() == 404,
+                "social api: accept не-тренером (заявки нет) — 404");
+
+            /* входящая видна тренеру; accept создаёт связку с грантами «Прогресс» ВКЛ */
+            java.net.http.HttpResponse<String> rmeT = postJson(portSo, "/api/social/me",
+                "{\"initData\":\"" + idT + "\"}");
+            check(rmeT.statusCode() == 200 && rmeT.body().contains("Хочу похудеть к лету. Грыжа"),
+                "social api: входящая заявка видна тренеру в /api/social/me");
+            java.net.http.HttpResponse<String> rlink = postJson(portSo, "/api/social/link",
+                "{\"initData\":\"" + idT + "\",\"action\":\"accept\",\"userId\":502}");
+            check(rlink.statusCode() == 200 && rlink.body().contains("\"progress\":true")
+                    && rlink.body().contains("\"goals\":false") && rlink.body().contains("\"bodyMetrics\":false")
+                    && rlink.body().contains("\"kcal\":false"),
+                "social api: accept — связка, гранты по дефолту «Прогресс» ВКЛ (финал 23.11)");
+            check(postJson(portSo, "/api/social/link",
+                "{\"initData\":\"" + idT + "\",\"action\":\"accept\",\"userId\":502}").statusCode() == 404,
+                "social api: заявка после accept исчезла — 404");
+            java.net.http.HttpResponse<String> rmeS = postJson(portSo, "/api/social/me",
+                "{\"initData\":\"" + idS + "\"}");
+            check(rmeS.body().contains("\"peerName\":\"Игорь\""),
+                "social api: подопечный видит связку с именем контрагента");
+
+            /* grants: меняет только подопечный своей связки; мусорные ключи игнорируются */
+            check(postJson(portSo, "/api/social/grants",
+                "{\"initData\":\"" + idS + "\",\"trainerId\":501,\"grants\":{\"goals\":true,\"мусор\":true}}").statusCode() == 200,
+                "social api: grants update — 200");
+            SocialLink gl = stApi.social().get().linkBetween(501, 502);
+            check(Boolean.TRUE.equals(gl.grants.get(SocialStore.GRANT_GOALS))
+                    && Boolean.TRUE.equals(gl.grants.get(SocialStore.GRANT_PROGRESS))
+                    && gl.grants.size() == 4,
+                "social api: goals ВКЛ, progress сохранён, незнакомые ключи клиента отброшены");
+            check(postJson(portSo, "/api/social/grants",
+                "{\"initData\":\"" + idT + "\",\"trainerId\":501,\"grants\":{\"goals\":true}}").statusCode() == 404,
+                "social api: тренер не может менять гранты (решает подопечный, §8)");
+
+            /* invite: create → 6 символов алфавита без похожих; use связанным — 409;
+               use третьим — связка сразу, код гаснет (§7.2) */
+            java.net.http.HttpResponse<String> rinv = postJson(portSo, "/api/social/invite",
+                "{\"initData\":\"" + idT + "\",\"action\":\"create\"}");
+            check(rinv.statusCode() == 200, "social api: invite create — 200");
+            String invCode = Json.str(Json.map(Json.parse(rinv.body())), "code");
+            check(invCode != null && invCode.length() == SocialInvite.CODE_LEN
+                    && invCode.matches("[ABCDEFGHJKLMNPRTUVWXY23456789]+"),
+                "social api: код 6 символов из алфавита без похожих, а не «" + invCode + "»");
+            check(postJson(portSo, "/api/social/invite",
+                "{\"initData\":\"" + idS + "\",\"action\":\"use\",\"code\":\"" + invCode + "\"}").statusCode() == 409,
+                "social api: use кода при существующей связке — 409");
+            check(postJson(portSo, "/api/social/invite",
+                "{\"initData\":\"" + idX + "\",\"action\":\"use\",\"code\":\"" + invCode + "\"}").statusCode() == 200,
+                "social api: use кода третьим — связка сразу без заявки (§7.2)");
+            check(stApi.social().get().linkBetween(501, 503) != null
+                    && stApi.social().get().linkBetween(501, 503).source.equals(SocialLink.SOURCE_INVITE)
+                    && Boolean.TRUE.equals(stApi.social().get().linkBetween(501, 503).grants.get(SocialStore.GRANT_PROGRESS)),
+                "social api: связка по коду с дефолтными грантами (Прогресс ВКЛ)");
+            check(postJson(portSo, "/api/social/invite",
+                "{\"initData\":\"" + idX + "\",\"action\":\"use\",\"code\":\"" + invCode + "\"}").statusCode() == 404,
+                "social api: код одноразовый — гаснет применением");
+
+            /* break: подопечный разрывает связь; гранты умирают со связкой */
+            check(postJson(portSo, "/api/social/link",
+                "{\"initData\":\"" + idX + "\",\"action\":\"break\",\"userId\":501}").statusCode() == 200,
+                "social api: break подопечным — 200 (§7.5)");
+            check(stApi.social().get().linkBetween(501, 503) == null,
+                "social api: связка после break удалена");
+
+            /* report: жалоба пишется; на себя — 400 */
+            check(postJson(portSo, "/api/social/report",
+                "{\"initData\":\"" + idS + "\",\"about\":501,\"text\":\"спам в карточке\"}").statusCode() == 200,
+                "social api: жалоба — 200");
+            check(stApi.social().get().reports.size() == 1
+                    && stApi.social().get().reports.get(0).by == 502
+                    && stApi.social().get().reports.get(0).about == 501,
+                "social api: жалоба записана в social.json");
+            check(postJson(portSo, "/api/social/report",
+                "{\"initData\":\"" + idS + "\",\"about\":502,\"text\":\"на себя\"}").statusCode() == 400,
+                "social api: жалоба на себя — 400");
+        } catch (Exception soErr) {
+            throw new AssertionError("CONTRACT FAIL: social api " + soErr);
         }
 
         System.out.println("CONTRACT OK");

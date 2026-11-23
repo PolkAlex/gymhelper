@@ -2303,7 +2303,8 @@ public final class BotLogic {
             /* протухшие записи (окно подтверждения вышло) подчищаем, чтобы карта не росла */
             pendingDeletes.entrySet().removeIf(e -> now - e.getValue() > DELETE_CONFIRM_MS);
             pendingDeletes.put(chatId, now);
-            api.sendMessage(chatId, "⚠️ Будут безвозвратно удалены все твои тренировки и профиль."
+            api.sendMessage(chatId, "⚠️ Будут безвозвратно удалены все твои тренировки, профиль"
+                + " и данные раздела «Тренер» (карточка, связи)."
                 + "\nДля подтверждения в течение 5 минут отправь /delete_my_data_confirm", null);
             return;
         }
@@ -2318,6 +2319,11 @@ public final class BotLogic {
             return;
         }
         storage.deleteChat(chatId);
+        /* [TRN-T1] право на забвение (152-ФЗ, §4.1 спеки [TRN-S1]): вместе с дневником
+           стирается соцслой — карточка тренера, заявки, связки/гранты, коды приглашений,
+           жалобы; у контрагентов связка исчезает без следов. chatId личного чата — это
+           и есть Telegram user id (ключ соцслоя); tombstone не нужен — файл глобальный */
+        storage.social().deleteUser(chatId);
         api.sendMessage(chatId, "🗑 Все твои данные удалены."
             + "\nВернуться — просто напиши боту или открой Mini App", null);
     }
