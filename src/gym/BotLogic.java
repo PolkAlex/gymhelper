@@ -393,6 +393,18 @@ public final class BotLogic {
             handleDeleteData(chatId, "confirm".equals(delCmd));
             return;
         }
+        /* [TRN-T2] верификация карточек — только владелец: строго, /trainer_okx и
+           /trainer_pendingx не матчатся (§2.7); проверка доступа — в обработчике */
+        String[] trAdmin = parseTrainerAdmin(text);
+        if (trAdmin != null) {
+            handleTrainerAdmin(chatId, trAdmin);
+            return;
+        }
+        /* [TRN-T2] личный статус «Тренер» (§14.4): строго, /trainerx не матчится (§2.7) */
+        if (low.equals("/trainer")) {
+            handleTrainerStatus(chatId);
+            return;
+        }
         /* [ANA-T6] сводка владельцу по требованию: строго, /summaryx не матчится (§2.7) */
         if (low.equals("/summary")) {
             handleSummaryCommand(chatId);
@@ -2326,6 +2338,231 @@ public final class BotLogic {
         storage.social().deleteUser(chatId);
         api.sendMessage(chatId, "🗑 Все твои данные удалены."
             + "\nВернуться — просто напиши боту или открой Mini App", null);
+    }
+
+    /* ===== [TRN-T2] раздел «Тренер»: личный статус + верификация карточек ===== */
+
+    /* разбор админ-команд верификации (§14.5): {"pending"} — /trainer_pending;
+       {"ok", id} — /trainer_ok <id>; {"no", id, причина} — /trainer_no <id> <причина>.
+       Причина сохраняет регистр (берётся из исходного текста, как в /announce).
+       Строго: /trainer_okx, /trainer_pendingx, /trainer_nox не матчатся (§2.7).
+       static — для юнит-теста без конструктора. */
+    public static String[] parseTrainerAdmin(String text) {
+        if (text == null) return null;
+        String low = text.toLowerCase();
+        if (low.equals("/trainer_pending")) return new String[]{"pending"};
+        if (low.equals("/trainer_ok") || low.startsWith("/trainer_ok ")) {
+            return new String[]{"ok", text.substring("/trainer_ok".length()).trim()};
+        }
+        if (low.equals("/trainer_no") || low.startsWith("/trainer_no ")) {
+            String rest = text.substring("/trainer_no".length()).trim();
+            int sp = rest.indexOf(' ');
+            if (sp < 0) return new String[]{"no", rest, ""};
+            return new String[]{"no", rest.substring(0, sp), rest.substring(sp + 1).trim()};
+        }
+        return null;
+    }
+
+    /* админ-команды верификации: только chat id владельца из env GYM_ADMIN_CHAT_ID
+       (как /announce — 0/чужой id тихо игнорируется, команду нельзя прощупать) */
+    private void handleTrainerAdmin(long chatId, String[] cmd) {
+        if (adminChatId <= 0 || chatId != adminChatId) return;
+        switch (cmd[0]) {
+            case "pending" -> trainerQueue(chatId);
+            case "ok" -> trainerVerify(chatId, cmd[1]);
+            case "no" -> trainerReject(chatId, cmd[1], cmd.length > 2 ? cmd[2] : "");
+        }
+    }
+
+    /* /trainer_pending — очередь карточек «на проверке» с чек-листом. ФИНАЛЬНЫЙ чек
+       верификации (решение владельца 23.11): обязательные — ① город/зал ② ≥1 специализация
+       ③ стаж ≥1 или образование-подтверждение; мягкие (владелец смотрит глазами) — аватар
+       Telegram и отсутствие жалоб; автомата-браковки нет (§5.3) */
+    private void trainerQueue(long chatId) {
+        SocialData d = storage.social().get();
+        StringBuilder b = new StringBuilder("🧑‍🏫 Очередь проверки карточек\n\n");
+        int n = 0;
+        for (Map.Entry<Long, TrainerCard> e : d.trainers.entrySet()) {
+            TrainerCard c = e.getValue();
+            if (!TrainerCard.STATUS_PENDING.equals(c.status)) continue;
+            n++;
+            b.append("#").append(e.getKey()).append(" · ").append(esc(c.displayName));
+            if (!c.city.isEmpty()) b.append(" · ").append(esc(c.city));
+            b.append(" · обновлено ").append(shortDate(c.updatedAt)).append('\n');
+            b.append(checkLine("город/зал", !c.city.isEmpty() || !c.gyms.isEmpty()))
+                .append(checkLine("специализация", !c.specs.isEmpty()))
+                .append(checkLine("стаж/образование", c.years >= 1 || !c.education.isEmpty()))
+                .append(' ').append(c.useTgAvatar ? "👤 аватар вкл" : "👤 аватар выкл")
+                .append(" · жалоб: ").append(reportsAbout(d, e.getKey())).append("\n\n");
+        }
+        if (n == 0) b.append("Очередь пуста — новых заявок нет.\n\n");
+        b.append("Подтвердить: /trainer_ok <id>\n")
+            .append("Отклонить: /trainer_no <id> причина");
+        api.sendMessage(chatId, b.toString(), null);
+    }
+
+    private static String checkLine(String label, boolean ok) {
+        return (ok ? "✅ " : "❌ ") + label + "\n";
+    }
+
+    private static int reportsAbout(SocialData d, long userId) {
+        int n = 0;
+        for (SocialReport r : d.reports) {
+            if (r.about == userId) n++;
+        }
+        return n;
+    }
+
+    /* «23-11» из ISO-даты-времени; неразборчиво — «—» */
+    private static String shortDate(String iso) {
+        try {
+            return LocalDate.parse(iso.substring(0, 10)).format(DDM);
+        } catch (Exception e) {
+            return "—";
+        }
+    }
+
+    /* id из админ-команды: положительное число; пусто/мусор — подсказка формата, -1 */
+    private long parseUserId(long chatId, String s) {
+        String t = s == null ? "" : s.trim();
+        try {
+            long id = Long.parseLong(t);
+            if (id > 0) return id;
+        } catch (NumberFormatException ignored) {
+        }
+        api.sendMessage(chatId, "Нужен id пользователя (число) из списка /trainer_pending", null);
+        return -1;
+    }
+
+    /* карточка для верификации существует и режим не выключен (hidden нельзя
+       «публиковать» — иначе выключенный режим внезапно включится) */
+    private boolean trainerCardEditable(long chatId, long userId, String action) {
+        TrainerCard card = storage.social().get().trainers.get(userId);
+        if (card == null) {
+            api.sendMessage(chatId, "Карточка #" + userId + " не найдена — тренер должен отправить её из приложения.", null);
+            return false;
+        }
+        if (TrainerCard.STATUS_HIDDEN.equals(card.status)) {
+            api.sendMessage(chatId, "Карточка #" + userId + " скрыта (режим тренера выключен) — " + action + " недоступно.", null);
+            return false;
+        }
+        return true;
+    }
+
+    /* /trainer_ok <id>: публикация (§5.3) + уведомление тренеру (§14.5) */
+    private void trainerVerify(long chatId, String idStr) {
+        long userId = parseUserId(chatId, idStr);
+        if (userId <= 0) return;
+        if (!trainerCardEditable(chatId, userId, "подтверждение")) return;
+        TrainerCard card = storage.social().get().trainers.get(userId);
+        card.status = TrainerCard.STATUS_VERIFIED;
+        card.verifiedAt = nowIsoSocial();
+        card.statusNote = "";
+        card.rejectedAt = "";
+        storage.social().save();
+        if (stats != null) stats.inc("socialCardVerified");
+        api.sendMessage(chatId, "✅ Карточка #" + userId + " (" + esc(card.displayName) + ") подтверждена и опубликована. Тренеру отправлено уведомление.", null);
+        api.sendMessage(userId, "🎉 Карточка тренера подтверждена\n\n"
+            + "Ваша карточка опубликована в поиске. Изменение содержимого карточки вернёт её на проверку.\n\n"
+            + "📱 Открыть раздел «Тренер» — кнопкой ниже.", trainerOpenKb());
+    }
+
+    /* /trainer_no <id> <причина>: rejected + причина тренеру (§14.5);
+       повторная отправка блокируется на 30 дней (rejectedAt, финал владельца 23.11) */
+    private void trainerReject(long chatId, String idStr, String reason) {
+        long userId = parseUserId(chatId, idStr);
+        if (userId <= 0) return;
+        if (reason.isEmpty()) {
+            api.sendMessage(chatId, "Формат: /trainer_no <id> причина\nПричина (до 200 символов) уходит тренеру.", null);
+            return;
+        }
+        if (!trainerCardEditable(chatId, userId, "отклонение")) return;
+        String note = reason.length() > TrainerCard.MAX_NOTE ? reason.substring(0, TrainerCard.MAX_NOTE) : reason;
+        TrainerCard card = storage.social().get().trainers.get(userId);
+        card.status = TrainerCard.STATUS_REJECTED;
+        card.statusNote = note;
+        card.rejectedAt = nowIsoSocial();
+        storage.social().save();
+        api.sendMessage(chatId, "✖️ Карточка #" + userId + " (" + esc(card.displayName) + ") отклонена. Тренеру отправлена причина.", null);
+        api.sendMessage(userId, "✖️ Карточка отклонена\n\nПричина: " + esc(note)
+            + "\nИсправьте и отправьте снова — повторная заявка через 30 дней.", null);
+    }
+
+    /* кнопки раздела «Тренер»: deep-link приложения (если задан) + меню */
+    private List<List<Map<String, Object>>> trainerOpenKb() {
+        List<List<Map<String, Object>>> kb = new ArrayList<>();
+        if (appLink != null) kb.add(List.of(TelegramApi.urlButton("📱 Открыть раздел «Тренер»", appLink)));
+        kb.add(List.of(TelegramApi.button("🏠 Меню", "home")));
+        return kb;
+    }
+
+    /* /trainer — личный статус (§14.4): 18+ гейт (решение 12.11 №12), статус карточки,
+       подопечные/заявки, связь как подопечного с грантами */
+    private void handleTrainerStatus(long chatId) {
+        /* 18+ для соцфункций (решение владельца 12.11 №12): возраст из birth-данных GymData;
+           дата рождения нигде не публикуется — только для этой проверки */
+        ProfileData p = storage.load(chatId).profile;
+        if (p == null || p.ageOf() < 18) {
+            api.sendMessage(chatId, "🧑‍🏫 Раздел «Тренер» доступен с 18 лет.\n\n"
+                + "Укажите дату рождения в профиле приложения — она не публикуется и нужна только для этой проверки.",
+                List.of(List.of(TelegramApi.button("🏠 Меню", "home"))));
+            return;
+        }
+        SocialData d = storage.social().get();
+        TrainerCard card = d.trainers.get(chatId);
+        StringBuilder b = new StringBuilder("🧑‍🏫 Тренер\n\n");
+        if (card == null || TrainerCard.STATUS_HIDDEN.equals(card.status)) {
+            /* выключенный режим (§5.4): связи сохраняются, новые заявки невозможны */
+            b.append("Режим тренера выключен.\n");
+            int linked = d.studentCount(chatId);
+            if (linked > 0) {
+                b.append("Связи сохранены: ").append(linked).append(" ")
+                    .append(plural(linked, "подопечный", "подопечных", "подопечных"))
+                    .append(" — разорвать можно в приложении.\n");
+            }
+            b.append("Включить режим или найти тренера — в приложении: Профиль → «Тренер».\n");
+        } else {
+            switch (card.status) {
+                case TrainerCard.STATUS_PENDING -> b.append("Карточка: ⏳ На проверке\n");
+                case TrainerCard.STATUS_VERIFIED -> b.append("Карточка: ✔ Подтверждена\n");
+                case TrainerCard.STATUS_REJECTED -> {
+                    b.append("Карточка: ✖ Отклонена\n");
+                    if (!card.statusNote.isEmpty()) b.append("Причина: ").append(esc(card.statusNote)).append('\n');
+                }
+                default -> b.append("Карточка: черновик\n");
+            }
+            b.append("Подопечных: ").append(d.studentCount(chatId)).append(" из ").append(card.cap).append('\n');
+            int req = 0;
+            for (SocialRequest r : d.requests) {
+                if (r.trainer == chatId) req++;
+            }
+            if (req > 0) b.append("Заявок: ").append(req).append(" новых\n");
+        }
+        /* связь как подопечного (один активный тренер, §7.4) */
+        for (SocialLink l : d.links) {
+            if (l.student != chatId) continue;
+            TrainerCard peer = d.trainers.get(l.trainer);
+            b.append("\nВы подопечный: ").append(peer == null ? "—" : esc(peer.displayName))
+                .append(" (с ").append(l.since.isEmpty() ? "—" : l.since).append(")\n");
+            b.append("Тренер видит: ").append(grantsRu(l)).append('\n');
+        }
+        b.append("\n📱 Открыть раздел «Тренер» — кнопкой ниже.");
+        api.sendMessage(chatId, b.toString(), trainerOpenKb());
+    }
+
+    /* «прогресс · цели · вес и рост · ккал» — только включённые гранты связки (§8) */
+    private static String grantsRu(SocialLink l) {
+        List<String> on = new ArrayList<>();
+        if (Boolean.TRUE.equals(l.grants.get(SocialStore.GRANT_PROGRESS))) on.add("прогресс");
+        if (Boolean.TRUE.equals(l.grants.get(SocialStore.GRANT_GOALS))) on.add("цели");
+        if (Boolean.TRUE.equals(l.grants.get(SocialStore.GRANT_BODY))) on.add("вес и рост");
+        if (Boolean.TRUE.equals(l.grants.get(SocialStore.GRANT_KCAL))) on.add("ккал");
+        return on.isEmpty() ? "данные закрыты" : String.join(" · ", on);
+    }
+
+    /* ISO-дата-время для server-side статусов social.json (verifiedAt/rejectedAt) */
+    private static String nowIsoSocial() {
+        return LocalDateTime.now().withNano(0).toString();
     }
 
     private void showKcal(long chatId, Long mid, GymData data, long id) {

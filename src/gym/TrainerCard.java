@@ -6,11 +6,19 @@ package gym;
    статус верификации и заметка модератора — server-owned: клиент их не выставляет
    (ручная проверка владельцем — [TRN-T2]). Публикация в поиске — только verified (§6.2). */
 public final class TrainerCard {
-    /* статусы карточки (§5.3) */
+    /* статусы карточки (§5.3); hidden — режим «Я тренер» выключен (§5.4): из поиска
+       исчезает (search берёт только verified), связи сохраняются, заявки невозможны */
     public static final String STATUS_DRAFT = "draft";
     public static final String STATUS_PENDING = "pending";
     public static final String STATUS_VERIFIED = "verified";
     public static final String STATUS_REJECTED = "rejected";
+    public static final String STATUS_HIDDEN = "hidden";
+
+    /* [TRN-T2] повторная отправка карточки после отказа — через 30 дней
+       (решение владельца 23.11; момент отказа — rejectedAt) */
+    public static final int RESUBMIT_COOLDOWN_DAYS = 30;
+    /* заметка модератора (причина отказа §14.5) — до 200 символов */
+    public static final int MAX_NOTE = 200;
 
     /* лимиты формы §5.2 — серверная сторона валидации (обрезка хвоста, как initUserName) */
     public static final int MAX_NAME = 40;
@@ -46,7 +54,9 @@ public final class TrainerCard {
     public String status = STATUS_DRAFT;
     public String statusNote = "";
     public String updatedAt = "";      /* ISO-дата-время последней правки содержимого */
-    public String verifiedAt = "";     /* момент подтверждения (/trainer_ok [TRN-T2]); пусто — не подтверждена */
+    public String verifiedAt = "";     /* момент подтверждения (/trainer_ok); пусто — не подтверждена */
+    public String rejectedAt = "";     /* [TRN-T2] момент отказа (/trainer_no) — старт 30-дневного кулдауна */
+    public String photoUrl = "";       /* [TRN-T3] аватар Telegram: photo_url из подписанного initData (server-owned) */
 
     /* полная проекция — для /api/social/me (свою карточку владелец видит целиком) */
     public java.util.Map<String, Object> toMap() {
@@ -65,6 +75,8 @@ public final class TrainerCard {
         m.put("status", status);
         m.put("statusNote", statusNote);
         if (!verifiedAt.isEmpty()) m.put("verifiedAt", verifiedAt);
+        if (!rejectedAt.isEmpty()) m.put("rejectedAt", rejectedAt);
+        if (!photoUrl.isEmpty()) m.put("photoUrl", photoUrl);
         m.put("updatedAt", updatedAt);
         return m;
     }
@@ -82,6 +94,9 @@ public final class TrainerCard {
         m.put("achievements", new java.util.ArrayList<>(achievements));
         m.put("education", new java.util.ArrayList<>(education));
         m.put("schedule", new java.util.ArrayList<>(schedule));
+        /* [TRN-T3] аватар Telegram: ссылка отдаётся только при включённом тогле —
+           иначе в карточке инициалы, ссылка не раскрывается (§5.2) */
+        if (useTgAvatar && !photoUrl.isEmpty()) m.put("photoUrl", photoUrl);
         m.put("useTgAvatar", useTgAvatar);
         return m;
     }
@@ -106,6 +121,8 @@ public final class TrainerCard {
         c.statusNote = orEmpty(Json.str(m, "statusNote"));
         c.updatedAt = orEmpty(Json.str(m, "updatedAt"));
         c.verifiedAt = orEmpty(Json.str(m, "verifiedAt"));
+        c.rejectedAt = orEmpty(Json.str(m, "rejectedAt"));
+        c.photoUrl = orEmpty(Json.str(m, "photoUrl"));
         return c;
     }
 

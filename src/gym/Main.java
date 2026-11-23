@@ -54,7 +54,8 @@ public final class Main {
         int port = readInt(System.getenv("GYM_PORT"), 8080);
         Path webDir = Path.of("web");
         if (Files.isDirectory(webDir)) {
-            new WebServer(token, storage, webDir, stats).start(port);
+            /* [TRN-T2] ownerChatId — уведомления о карточках «на проверке» (env GYM_OWNER_CHAT_ID) */
+            new WebServer(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"), api, ownerChatId).start(port);
             System.out.println("Web app server: http://" + WebServer.bindAddress() + ":" + port);
         } else {
             System.out.println("[warn] web/ folder not found - Mini App disabled");

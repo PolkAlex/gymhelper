@@ -1921,6 +1921,18 @@ public class GymContractTest {
             String idS = tgInitData("contract-test-token", 502);
             String idX = tgInitData("contract-test-token", 503);
 
+            /* [TRN-T2] 18+ гейт карточек: тренеру 501 нужен взрослый профиль (birth-данные) */
+            GymData prof501 = new GymData();
+            prof501.nextId = 1;
+            prof501.profile = new ProfileData();
+            prof501.profile.sex = "м";
+            prof501.profile.age = 36;
+            prof501.profile.height = 178;
+            prof501.profile.weight = 78;
+            prof501.profile.birthYear = 1990;
+            prof501.profile.birthMonth = 11;
+            stApi.save(501, prof501);
+
             /* гейт: мусорная подпись — 401; GET — 405; отложенный health — 404 */
             check(postJson(portSo, "/api/social/me", "{\"initData\":\"garbage\"}").statusCode() == 401,
                 "social api: неверная подпись — 401");
@@ -2062,6 +2074,168 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: social api " + soErr);
         }
 
+        /* [TRN-T2] режим «Я тренер»: переходы статусов (draft → pending → verified →
+           pending при правке; rejected + 30-дневный кулдаун), 18+ гейт по birth-данным,
+           выключение режима (hidden, warning при связках), аватар из initData,
+           уведомление владельцу о новой заявке, счётчики /stats (§17). */
+        try {
+            java.nio.file.Path tmpT2 = java.nio.file.Files.createTempDirectory("gymsocialt2");
+            Storage stT2 = new Storage(tmpT2);
+            WebServer wsT2 = new WebServer("contract-test-token", stT2, tmpT2, new Stats(tmpT2.resolve("stats.json")));
+            java.net.ServerSocket probeT2 = new java.net.ServerSocket(0);
+            int portT2 = probeT2.getLocalPort();
+            probeT2.close();
+            wsT2.start(portT2);
+            /* 701 — взрослый (birth 1990-11), 702 — 15 лет, 703 — взрослый без карточки */
+            GymData adultT2 = new GymData();
+            adultT2.nextId = 1;
+            adultT2.profile = new ProfileData();
+            adultT2.profile.sex = "м";
+            adultT2.profile.age = 36;
+            adultT2.profile.height = 178;
+            adultT2.profile.weight = 78;
+            adultT2.profile.birthYear = 1990;
+            adultT2.profile.birthMonth = 11;
+            stT2.save(701, adultT2);
+            GymData minorT2 = new GymData();
+            minorT2.nextId = 1;
+            minorT2.profile = new ProfileData();
+            minorT2.profile.sex = "ж";
+            minorT2.profile.age = 15;
+            minorT2.profile.height = 160;
+            minorT2.profile.weight = 50;
+            minorT2.profile.birthYear = java.time.LocalDate.now().getYear() - 15;
+            minorT2.profile.birthMonth = 1;
+            stT2.save(702, minorT2);
+            GymData adult3T2 = new GymData();
+            adult3T2.nextId = 1;
+            adult3T2.profile = new ProfileData();
+            adult3T2.profile.sex = "м";
+            adult3T2.profile.age = 30;
+            adult3T2.profile.height = 180;
+            adult3T2.profile.weight = 80;
+            stT2.save(703, adult3T2);
+            String idA = tgInitData("contract-test-token", 701);
+            String idM = tgInitData("contract-test-token", 702);
+            String idC = tgInitData("contract-test-token", 703);
+
+            /* 18+ гейт: 15 лет → 403 reason age; возраст неизвестен → тоже 403 */
+            java.net.http.HttpResponse<String> rminor = postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + idM + "\",\"card\":{\"displayName\":\"Мала\"}}");
+            check(rminor.statusCode() == 403 && "age".equals(Json.str(Json.map(Json.parse(rminor.body())), "reason")),
+                "t2: карточка 15-летнего — 403 reason age, а не " + rminor.statusCode());
+            String idNo = tgInitData("contract-test-token", 704);
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + idNo + "\",\"card\":{\"displayName\":\"БезВозраста\"}}").statusCode() == 403,
+                "t2: без birth-данных — 403 (18+ гейт, решение 12.11 №12)");
+
+            /* draft: черновик сохраняется, socialTrainerOn=1 (§17) */
+            java.net.http.HttpResponse<String> rc2 = postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + idA + "\",\"card\":{\"displayName\":\"Игорь Соколов\",\"city\":\"Минск\","
+                    + "\"specs\":[\"rehab\"],\"years\":6,\"education\":[\"РГУФК, 2015\"]}}");
+            check(rc2.statusCode() == 200 && TrainerCard.STATUS_DRAFT.equals(stT2.social().get().trainers.get(701L).status),
+                "t2: новая карточка — draft");
+            Map<String, Object> snapT2 = Json.map(Json.parse(get(portT2, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapT2.get("socialTrainerOn")) == 1, "t2: socialTrainerOn=1 (включение режима)");
+
+            /* submit-only → pending (черновик уже у сервера, поля не повторяются) */
+            check(postJson(portT2, "/api/social/card", "{\"initData\":\"" + idA + "\",\"submit\":true}").statusCode() == 200,
+                "t2: submit-only — 200");
+            check(TrainerCard.STATUS_PENDING.equals(stT2.social().get().trainers.get(701L).status),
+                "t2: submit → pending (§5.2)");
+            snapT2 = Json.map(Json.parse(get(portT2, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapT2.get("socialCardPending")) == 1, "t2: socialCardPending=1");
+
+            /* «верификация» (эмуляция /trainer_ok [TRN-T2]): verified; правка → снова pending */
+            TrainerCard v701 = stT2.social().get().trainers.get(701L);
+            v701.status = TrainerCard.STATUS_VERIFIED;
+            v701.verifiedAt = "2026-11-23T11:00:00";
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + idA + "\",\"card\":{\"displayName\":\"Игорь С.\"}}").statusCode() == 200,
+                "t2: правка verified-карточки — 200");
+            check(TrainerCard.STATUS_PENDING.equals(stT2.social().get().trainers.get(701L).status),
+                "t2: правка содержимого вернула verified в pending (§5.3)");
+
+            /* отказ (эмуляция /trainer_no) → 30-дневный кулдаун повторной отправки */
+            TrainerCard r701 = stT2.social().get().trainers.get(701L);
+            r701.status = TrainerCard.STATUS_REJECTED;
+            r701.statusNote = "нет подтверждения стажа";
+            r701.rejectedAt = java.time.LocalDateTime.now().withNano(0).toString();
+            java.net.http.HttpResponse<String> rcool = postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + idA + "\",\"submit\":true}");
+            check(rcool.statusCode() == 403 && "cooldown".equals(Json.str(Json.map(Json.parse(rcool.body())), "reason")),
+                "t2: submit сразу после отказа — 403 cooldown");
+            long retry = Json.lng(Json.map(Json.parse(rcool.body())).get("retryInDays"));
+            check(retry >= 29 && retry <= 30, "t2: retryInDays ≈ 30, а не " + retry);
+            r701.rejectedAt = java.time.LocalDateTime.now().minusDays(31).withNano(0).toString();
+            check(postJson(portT2, "/api/social/card", "{\"initData\":\"" + idA + "\",\"submit\":true}").statusCode() == 200,
+                "t2: submit после истечения 30 дней — 200");
+
+            /* выключение режима: verified → hidden; вне поиска; заявки невозможны;
+               при связке — warning (связи сохраняются, §5.4) */
+            stT2.social().get().trainers.get(701L).status = TrainerCard.STATUS_VERIFIED;
+            SocialLink lkT2 = new SocialLink();
+            lkT2.trainer = 701;
+            lkT2.student = 703;
+            lkT2.grants.putAll(SocialLink.defaultGrants());
+            stT2.social().get().links.add(lkT2);
+            java.net.http.HttpResponse<String> roff = postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + idA + "\",\"enabled\":false}");
+            check(roff.statusCode() == 200 && TrainerCard.STATUS_HIDDEN.equals(stT2.social().get().trainers.get(701L).status),
+                "t2: enabled=false → hidden (§5.4)");
+            Map<String, Object> mOff = Json.map(Json.parse(roff.body()));
+            check(mOff.get("warning") != null && String.valueOf(mOff.get("warning")).contains("Связи сохранены"),
+                "t2: выключение при связке вернуло warning");
+            check(!postJson(portT2, "/api/social/search", "{\"initData\":\"" + idC + "\"}").body().contains("Игорь"),
+                "t2: hidden карточка не видна в поиске");
+            check(postJson(portT2, "/api/social/apply", "{\"initData\":\"" + idC + "\",\"trainerId\":701}").statusCode() == 404,
+                "t2: заявка на hidden — 404 (только verified, §6.4)");
+            check(postJson(portT2, "/api/social/card", "{\"initData\":\"" + idA + "\",\"enabled\":true}").statusCode() == 200
+                    && TrainerCard.STATUS_DRAFT.equals(stT2.social().get().trainers.get(701L).status),
+                "t2: enabled=true → draft (повторная отправка через submit)");
+
+            /* аватар: photo_url из подписанного initData попадает в карточку и в publicMap;
+               клиентский payload «photo» не доверенный */
+            GymData adult5 = new GymData();
+            adult5.nextId = 1;
+            adult5.profile = new ProfileData();
+            adult5.profile.sex = "м";
+            adult5.profile.age = 30;
+            adult5.profile.height = 180;
+            adult5.profile.weight = 82;
+            adult5.profile.birthYear = 1996;
+            adult5.profile.birthMonth = 5;
+            stT2.save(705, adult5);
+            String idPh = tgInitData("contract-test-token", 705, "Павел", "https://t.me/i/userphoto.jpg");
+            check(postJson(portT2, "/api/social/card",
+                "{\"initData\":\"" + idPh + "\",\"card\":{\"displayName\":\"Павел\",\"city\":\"Гродно\","
+                    + "\"specs\":[\"mass\"],\"years\":9,\"photo\":\"ПОДМЕНА\"}}").statusCode() == 200,
+                "t2: карточка с аватаром в initData — 200");
+            TrainerCard phCard = stT2.social().get().trainers.get(705L);
+            check("https://t.me/i/userphoto.jpg".equals(phCard.photoUrl),
+                "t2: photoUrl из подписанного initData");
+            phCard.status = TrainerCard.STATUS_VERIFIED;
+            java.net.http.HttpResponse<String> rsh2 = postJson(portT2, "/api/social/search", "{\"initData\":\"" + idC + "\"}");
+            check(rsh2.body().contains("\"photoUrl\":\"https://t.me/i/userphoto.jpg\""),
+                "t2: search отдаёт photoUrl verified-карточки");
+            snapT2 = Json.map(Json.parse(get(portT2, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapT2.get("socialSearch")) == 2, "t2: socialSearch=2 (§17)");
+
+            /* уведомление владельцу о «на проверке»: 7-параметровый конструктор + заглушка TelegramApi */
+            SpyApi spy = new SpyApi();
+            WebServer wsN = new WebServer("contract-test-token", stT2, tmpT2, new Stats(tmpT2.resolve("stats-n.json")), null, spy, 9999);
+            java.net.ServerSocket probeN = new java.net.ServerSocket(0);
+            int portN = probeN.getLocalPort();
+            probeN.close();
+            wsN.start(portN);
+            check(postJson(portN, "/api/social/card", "{\"initData\":\"" + idA + "\",\"submit\":true}").statusCode() == 200,
+                "t2: submit на сервере с ownerChatId — 200");
+            check(spy.sent.size() == 1 && spy.sent.get(0).startsWith("9999:") && spy.sent.get(0).contains("на проверку"),
+                "t2: владельцу 9999 ушла карточка на проверку (§5.2 → §14.5)");
+        } catch (Exception t2Err) {
+            throw new AssertionError("CONTRACT FAIL: t2 " + t2Err);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }
@@ -2075,10 +2249,21 @@ public class GymContractTest {
 
     /* вариант с кастомным first_name ([UX-I16] ревью №3: имя сервер берёт из initData) */
     static String tgInitData(String token, long userId, String firstName) throws Exception {
+        return tgInitDataUser(token, userId,
+            "{\"id\":" + userId + ",\"first_name\":\"" + firstName + "\"}");
+    }
+
+    /* [TRN-T3] вариант с photo_url: аватар карточки сервер берёт ТОЛЬКО из подписанного initData */
+    static String tgInitData(String token, long userId, String firstName, String photoUrl) throws Exception {
+        return tgInitDataUser(token, userId,
+            "{\"id\":" + userId + ",\"first_name\":\"" + firstName + "\",\"photo_url\":\"" + photoUrl + "\"}");
+    }
+
+    /* подпись initData по правилам Telegram по готовому user-json (см. WebServer.validateInitData) */
+    private static String tgInitDataUser(String token, long userId, String userJson) throws Exception {
         javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
         mac.init(new javax.crypto.spec.SecretKeySpec("WebAppData".getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
         byte[] secret = mac.doFinal(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-        String userJson = "{\"id\":" + userId + ",\"first_name\":\"" + firstName + "\"}";
         java.util.TreeMap<String, String> p = new java.util.TreeMap<>();
         p.put("auth_date", "1700000000");
         p.put("user", userJson);
@@ -2093,6 +2278,18 @@ public class GymContractTest {
         for (byte b : h) hex.append(String.format("%02x", b));
         return "auth_date=1700000000&hash=" + hex + "&user="
             + java.net.URLEncoder.encode(userJson, java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    /* заглушка TelegramApi для проверки уведомлений WebServer ([TRN-T2]): «chatId:text» — в sent */
+    static final class SpyApi extends TelegramApi {
+        final java.util.List<String> sent = new java.util.ArrayList<>();
+        SpyApi() {
+            super("contract-test-token");
+        }
+        @Override
+        public void sendMessage(long chatId, String text, java.util.List<java.util.List<Map<String, Object>>> keyboard) {
+            sent.add(chatId + ":" + text);
+        }
     }
 
     /* POST /api/save в тестовый WebServer: rev — верхнеуровневый rev клиента (как у doSave) */

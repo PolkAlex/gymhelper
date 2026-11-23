@@ -2,7 +2,6 @@ package gym;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -19,11 +18,12 @@ public final class SocialRequest {
     public String comment = "";
     public String createdAt = ""; /* ISO-дата-время */
 
-    /* истекла ли заявка на момент nowMs (epoch); неразборчивая дата считается истекшей */
+    /* истекла ли заявка на момент nowMs (epoch); неразборчивая дата считается истекшей.
+       createdAt — локальное серверное время (как LocalDateTime.now()) → зона системная */
     public boolean expired(long nowMs) {
         try {
             long until = LocalDateTime.parse(createdAt).plus(Duration.ofMillis(TTL_MS))
-                .toEpochSecond(ZoneOffset.UTC) * 1000;
+                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli();
             return until < nowMs;
         } catch (DateTimeParseException e) {
             return true;

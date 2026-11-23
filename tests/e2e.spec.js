@@ -3419,10 +3419,11 @@ test.describe('UX-T27: экран «Настройки»', function () {
             const cnt = await app.getByText(dead).count();
             if (cnt > 0) throw new Error('в Профиле остался блок «' + dead + '» (экземпляров: ' + cnt + ')');
         }
-        /* 4 карточки данных на месте [UX-S4 §7: состав — ровно 4 карточки; дата рождения
-            и рост/вес — одна карточка с разделителем, как в макете ux-i8 ред.2] */
-        await expect(page.locator('.prof .card')).toHaveCount(4);
+        /* 5 карточек данных на месте [UX-S4 §7: дата рождения и рост/вес — одна карточка
+            с разделителем, как в макете ux-i8 ред.2; [TRN-T2] добавила карточку «Тренер» §5.1] */
+        await expect(page.locator('.prof .card')).toHaveCount(5);
         await expect(page.locator('.card', { hasText: '⭐ Любимые упражнения' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.card', { hasText: '🧑‍🏫 Тренер' })).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.sexrow')).toBeVisible();
         await expect(page.locator('#pfBirthYear')).toBeVisible();
         await expect(page.locator('#pfBirthMonth')).toBeVisible();

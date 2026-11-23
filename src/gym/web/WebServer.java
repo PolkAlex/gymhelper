@@ -2,8 +2,10 @@ package gym.web;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import gym.BotLogic;
 import gym.GymData;
 import gym.Json;
+import gym.ProfileData;
 import gym.SocialData;
 import gym.SocialInvite;
 import gym.SocialLink;
@@ -97,34 +99,45 @@ public final class WebServer {
     /* [UX-S16] TelegramApi для sendPhoto; инжект в пакетном конструкторе —
        контракт-тест подменяет заглушкой (реальной сети в тестах быть не должно) */
     private final TelegramApi api;
+    /* [TRN-T2] chat id владельца для уведомления о карточке «на проверке»
+       (env GYM_OWNER_CHAT_ID — так же, как у BotLogic); 0 — уведомления off */
+    private final long ownerChatId;
     private HttpServer server;
 
     public WebServer(String token, Storage storage, Path webDir, Stats stats) {
-        this(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"), new TelegramApi(token));
+        this(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"), new TelegramApi(token), 0);
     }
 
     /* [UX-B14] инжект username для контракт-теста (env JVM-процесса поменять нельзя);
         прод использует конструктор выше с env GYM_BOT_USERNAME */
     public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername) {
-        this(token, storage, webDir, stats, botUsername, new TelegramApi(token));
+        this(token, storage, webDir, stats, botUsername, new TelegramApi(token), 0);
     }
 
     /* [UX-S16] полный конструктор: username + TelegramApi (заглушка в контракт-тесте —
         sendPhoto не должен ходить в реальную сеть); прод использует конструкторы выше */
     public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername, TelegramApi api) {
+        this(token, storage, webDir, stats, botUsername, api, 0);
+    }
+
+    /* [TRN-T2] +ownerChatId: уведомление владельцу о карточке, отправленной на проверку;
+        botUsername null/пустой — env GYM_BOT_USERNAME (Main), дальше фолбэк как раньше */
+    public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername, TelegramApi api, long ownerChatId) {
         this.token = token;
         this.storage = storage;
         this.stats = stats;
         this.webDir = webDir.toAbsolutePath().normalize();
         String at = System.getenv("GYM_ADMIN_TOKEN");
         this.adminToken = (at == null || at.isBlank()) ? token : at.trim();
-        this.botUsername = (botUsername == null || botUsername.isBlank()) ? "MyHelperGymBot" : botUsername.trim();
+        String bu = (botUsername == null || botUsername.isBlank()) ? System.getenv("GYM_BOT_USERNAME") : botUsername;
+        this.botUsername = (bu == null || bu.isBlank()) ? "MyHelperGymBot" : bu.trim();
         String wu = System.getenv("GYM_WEBAPP_URL");
         if (wu == null || !wu.trim().startsWith("https://")) wu = "https://app.gym-helper.com";
         wu = wu.trim();
         while (wu.endsWith("/")) wu = wu.substring(0, wu.length() - 1);
         this.cardUrlBase = wu;
         this.api = api;
+        this.ownerChatId = ownerChatId;
     }
 
     public void start(int port) throws IOException {
@@ -1073,46 +1086,105 @@ public final class WebServer {
         return m;
     }
 
-    /* POST /api/social/card {initData, card:{…}} — сохранить карточку (§5.2). Клиентские
-       поля обрезаются по лимитам формы; статус верификации клиент не выставляет: новая
-       карточка — draft, правки содержимого статус не меняют (возврат в pending при
-       правке подтверждённой карточки — [TRN-T2]). */
+    /* POST /api/social/card {initData, card:{…}, submit?, enabled?} — карточка режима
+       «Я тренер» (§5.2). Переходы статусов [TRN-T2]: новая — draft; submit → pending
+       (после отказа — не раньше чем через 30 дней, rejectedAt — финал владельца 23.11);
+       правка содержимого подтверждённой возвращает в pending (§5.3); enabled=false —
+       выключение режима (§5.4: скрытие из поиска, связи сохраняются — при них вернётся
+       warning; полный разрыв связей — [TRN-T4]). 18+ гейт (решение 12.11 №12): возраст
+       из birth-данных GymData. Клиентские поля замещаются целиком с лимитами формы;
+       status/statusNote/verifiedAt/rejectedAt/updatedAt/photoUrl — server-owned. */
     private void socialCard(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
         Map<String, Object> in = Json.map(body.get("card"));
-        if (in == null) {
+        boolean submit = Boolean.TRUE.equals(body.get("submit"));
+        boolean disable = body.containsKey("enabled") && !Boolean.TRUE.equals(body.get("enabled"));
+        boolean enable = Boolean.TRUE.equals(body.get("enabled"));
+        /* submit/enabled без card разрешены: у клиента уже есть карточка — меняется только
+           статус; но хотя бы что-то одно прийти обязано */
+        if (in == null && !submit && !disable && !enable) {
             sendJson(ex, 400, Map.of("ok", false));
             return;
         }
-        String name = clamp(in, "displayName", TrainerCard.MAX_NAME);
-        if (name.isEmpty()) { /* имя — единственное обязательное поле формы (§5.2: 2–40) */
-            sendJson(ex, 400, Map.of("ok", false));
+        /* [TRN-T2] 18+ для соцфункций (решение владельца 12.11 №12): возраст — из
+           birth-данных GymData; неизвестный возраст или < 18 — блок до изменения данных */
+        ProfileData prof = storage.load(userId).profile;
+        if (prof == null || prof.ageOf() < 18) {
+            sendJson(ex, 403, Map.of("ok", false, "reason", "age"));
             return;
         }
         SocialData d = social.get();
         TrainerCard prev = d.trainers.get(userId);
+        if (prev == null && in == null) {
+            sendJson(ex, 400, Map.of("ok", false));
+            return;
+        }
         TrainerCard card = new TrainerCard();
-        if (prev != null) {
+        if (prev != null) { /* server-owned поля не меняются клиентом */
             card.status = prev.status;
             card.statusNote = prev.statusNote;
             card.verifiedAt = prev.verifiedAt;
+            card.rejectedAt = prev.rejectedAt;
             card.useTgAvatar = prev.useTgAvatar;
+            card.updatedAt = prev.updatedAt;
         }
-        card.displayName = name;
-        card.bio = clamp(in, "bio", TrainerCard.MAX_BIO);
-        card.city = clamp(in, "city", TrainerCard.MAX_CITY);
-        card.gyms = clamp(in, "gyms", TrainerCard.MAX_GYMS);
-        card.specs.addAll(clampList(in, "specs", TrainerCard.MAX_SPECS, 16));
-        card.specs.removeIf(s -> !TrainerCard.SPEC_IDS.contains(s)); /* только набор §5.2 */
-        int y = (int) Json.lng(in.get("years"));
-        card.years = Math.max(0, Math.min(y, TrainerCard.MAX_YEARS));
-        card.achievements.addAll(clampList(in, "achievements", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
-        card.education.addAll(clampList(in, "education", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
-        card.schedule.addAll(clampList(in, "schedule", TrainerCard.MAX_SCHEDULE_ITEMS, TrainerCard.MAX_SCHEDULE_LEN));
-        int c = (int) Json.lng(in.get("cap"));
-        card.cap = TrainerCard.CAPS.contains(c) ? c : TrainerCard.DEFAULT_CAP;
-        Object av = in.get("useTgAvatar");
-        if (av instanceof Boolean b) card.useTgAvatar = b;
-        card.updatedAt = nowIso();
+        if (in != null) {
+            String name = clamp(in, "displayName", TrainerCard.MAX_NAME);
+            if (name.isEmpty()) { /* имя — единственное обязательное поле формы (§5.2: 2–40) */
+                sendJson(ex, 400, Map.of("ok", false));
+                return;
+            }
+            card.displayName = name;
+            card.bio = clamp(in, "bio", TrainerCard.MAX_BIO);
+            card.city = clamp(in, "city", TrainerCard.MAX_CITY);
+            card.gyms = clamp(in, "gyms", TrainerCard.MAX_GYMS);
+            card.specs.addAll(clampList(in, "specs", TrainerCard.MAX_SPECS, 16));
+            card.specs.removeIf(s -> !TrainerCard.SPEC_IDS.contains(s)); /* только набор §5.2 */
+            int y = (int) Json.lng(in.get("years"));
+            card.years = Math.max(0, Math.min(y, TrainerCard.MAX_YEARS));
+            card.achievements.addAll(clampList(in, "achievements", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
+            card.education.addAll(clampList(in, "education", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
+            card.schedule.addAll(clampList(in, "schedule", TrainerCard.MAX_SCHEDULE_ITEMS, TrainerCard.MAX_SCHEDULE_LEN));
+            int c = (int) Json.lng(in.get("cap"));
+            card.cap = TrainerCard.CAPS.contains(c) ? c : TrainerCard.DEFAULT_CAP;
+            Object av = in.get("useTgAvatar");
+            if (av instanceof Boolean b) card.useTgAvatar = b;
+            /* [TRN-T3] аватар Telegram — ТОЛЬКО из подписанного initData (user.photo_url);
+               клиентский payload не доверенный (по образцу initUserName, ревью №3) */
+            String photo = initUserPhoto((String) body.get("initData"));
+            if (!photo.isEmpty()) card.photoUrl = photo;
+            card.updatedAt = nowIso();
+            /* [TRN-T2] правка содержимого возвращает подтверждённую карточку на проверку (§5.3) */
+            if (TrainerCard.STATUS_VERIFIED.equals(card.status)) card.status = TrainerCard.STATUS_PENDING;
+            if (prev == null) stats.inc("socialTrainerOn"); /* включение режима (§17) */
+        }
+        if (submit) { /* «Отправить на проверку» (§5.2 → §14.5) */
+            if (TrainerCard.STATUS_REJECTED.equals(card.status)) {
+                long left = resubmitLeftDays(card.rejectedAt);
+                if (left > 0) { /* после отказа — через 30 дней (решение владельца 23.11) */
+                    sendJson(ex, 403, Map.of("ok", false, "reason", "cooldown", "retryInDays", left));
+                    return;
+                }
+            }
+            card.status = TrainerCard.STATUS_PENDING;
+            card.updatedAt = nowIso();
+            stats.inc("socialCardPending");
+            notifyOwnerPending(userId, card);
+        }
+        String warning = null;
+        if (disable) { /* выключение режима (§5.4): вне поиска, связи сохраняются */
+            card.status = TrainerCard.STATUS_HIDDEN;
+            card.updatedAt = nowIso();
+            int linked = d.studentCount(userId);
+            if (linked > 0) {
+                warning = "Режим выключен, карточка скрыта из поиска. Связи сохранены: "
+                    + linked + " " + BotLogic.plural(linked, "подопечный", "подопечных", "подопечных")
+                    + " — разорвать их можно в разделе «Мои подопечные»";
+            }
+        } else if (enable && TrainerCard.STATUS_HIDDEN.equals(card.status)) {
+            /* повторное включение — черновик; submit снова отправит на проверку */
+            card.status = TrainerCard.STATUS_DRAFT;
+            card.updatedAt = nowIso();
+        }
         d.trainers.put(userId, card);
         social.save();
         System.out.println("[social] card user " + userId + " status " + card.status
@@ -1120,7 +1192,59 @@ public final class WebServer {
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("card", card.toMap());
+        if (warning != null) resp.put("warning", warning);
         sendJson(ex, 200, resp);
+    }
+
+    /* [TRN-T2] сколько дней осталось до конца 30-дневного кулдауна повторной отправки
+       после отказа; 0 — кулдаун истёк, отказа не было или дата неразборчива.
+       rejectedAt — локальное серверное время (как LocalDateTime.now()) → зона системная */
+    private static long resubmitLeftDays(String rejectedAt) {
+        if (rejectedAt == null || rejectedAt.isEmpty()) return 0;
+        try {
+            long ms = LocalDateTime.parse(rejectedAt)
+                .plusDays(TrainerCard.RESUBMIT_COOLDOWN_DAYS)
+                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+                - System.currentTimeMillis();
+            return ms <= 0 ? 0 : (ms + 86_399_999) / 86_400_000; /* вверх до целого дня */
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /* [TRN-T2] уведомление владельцу о карточке «на проверке» (§5.2 → §14.5);
+       ownerChatId не задан (контракт-тесты, env пуст) — тихо */
+    private void notifyOwnerPending(long userId, TrainerCard card) {
+        if (ownerChatId <= 0) return;
+        api.sendMessage(ownerChatId, "🧑‍🏫 Карточка отправлена на проверку\n\n#"
+            + userId + " · " + card.displayName
+            + (card.city.isEmpty() ? "" : " · " + card.city)
+            + "\n\nРазбор очереди: /trainer_pending", null);
+    }
+
+    /* [TRN-T3] аватар Telegram из ПОДПИСАННОГО initData (user.photo_url) — server-owned
+       ПДн, клиентский payload «photo» не доверенный; пусто — аватара нет.
+       Только https (инъекция javascript:/data: исключена на входе в базу). */
+    static String initUserPhoto(String initData) {
+        if (initData == null || initData.isEmpty()) return "";
+        try {
+            Map<String, String> params = new HashMap<>();
+            for (String pair : initData.split("&")) {
+                int i = pair.indexOf('=');
+                if (i <= 0) continue;
+                params.put(URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8),
+                    URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8));
+            }
+            String userJson = params.get("user");
+            if (userJson == null) return "";
+            Map<String, Object> user = Json.map(Json.parse(userJson));
+            String photo = Json.str(user, "photo_url");
+            if (photo == null) return "";
+            photo = photo.strip();
+            return photo.startsWith("https://") ? photo : "";
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /* POST /api/social/search {initData, city?, specs?:[id]} — публичный каталог:
@@ -1132,6 +1256,7 @@ public final class WebServer {
         String city = clamp(body, "city", 80).toLowerCase();
         List<String> specs = clampList(body, "specs", TrainerCard.MAX_SPECS, 16);
         SocialData d = social.get();
+        stats.inc("socialSearch"); /* [TRN-T3] поиски тренера (§17) */
         List<Map.Entry<Long, TrainerCard>> hits = new ArrayList<>();
         for (Map.Entry<Long, TrainerCard> e : d.trainers.entrySet()) {
             TrainerCard card = e.getValue();
