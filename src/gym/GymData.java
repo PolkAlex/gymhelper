@@ -207,6 +207,11 @@ public final class GymData {
             workout.finished = Boolean.TRUE.equals(w.get("finished"));
             workout.title = Json.str(w, "title");
             workout.nutrition = Json.str(w, "nutrition");
+            /* [UX-S17] заметка: ключа нет → null (старые файлы читаются как раньше);
+                только String — мусорное значение (число/объект) игнорируется без падения;
+                строка читается как есть, включая переносы; пустая строка = заметки нет */
+            Object nt = w.get("note");
+            if (nt instanceof String && !((String) nt).isEmpty()) workout.note = (String) nt;
             /* [UX-I16] shareId: ключа нет → null (старые файлы и тренировки без шеринга);
                 только String — мусорное значение (число и т.п.) игнорируется без падения */
             Object sid = w.get("shareId");
@@ -323,6 +328,9 @@ public final class GymData {
             wm.put("finished", w.finished);
             if (w.title != null) wm.put("title", w.title);
             if (w.nutrition != null) wm.put("nutrition", w.nutrition);
+            /* [UX-S17] заметка пишется только когда непустая (trim) — файлы тренировок
+                без заметок остаются байт-в-байт прежними (§5 спеки UX-S17) */
+            if (w.note != null && !w.note.isBlank()) wm.put("note", w.note);
             /* [UX-I16] shareId пишется только когда задан — файлы без шеринга байт-в-байт прежние */
             if (w.shareId != null) wm.put("shareId", w.shareId);
             List<Object> es = new ArrayList<>();

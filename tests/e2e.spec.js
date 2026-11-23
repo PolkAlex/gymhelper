@@ -6615,6 +6615,225 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
     });
 });
 
+/* ============ [UX-S17] заметка тренировки (docs/spec-ux-s17-notes.md, ред. 2) ============ */
+test.describe('[UX-S17] заметка тренировки', function () {
+
+    const NOTE = 'Тяга пошла легче — попробовать 50 кг.';
+    const NOTE_MORE = 'Тяга пошла легче — попробовать 50 кг. Дописал после тренировки.';
+
+    /* чек-лист §9.1: поле с плейсхолдером в карточке активной тренировки, после
+       «➕ Добавить упражнение», до details; maxlength 1000; пустое поле — одна строка */
+    test('плейсхолдер виден на пустом поле, позиция после «Добавить упражнение»', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toBeVisible({ timeout: 5000 });
+        await expect(ta).toHaveAttribute('placeholder', 'Добавить заметку');
+        await expect(ta).toHaveAttribute('maxlength', '1000');
+        expect(await ta.inputValue()).toBe('');
+        /* порядок блоков карточки: «Добавить упражнение» < заметка < details */
+        const order = await page.evaluate(function () {
+            const ta = document.querySelector('textarea.notefield');
+            if (!ta) return 'нет поля заметки';
+            const card = document.getElementById('w' + ta.getAttribute('data-wid'));
+            if (!card || !card.contains(ta)) return 'карточка w<id> не найдена';
+            const seq = Array.prototype.map.call(card.children, function (el) {
+                if (el.tagName === 'TEXTAREA' && el.classList.contains('notefield')) return 'note';
+                if (el.tagName === 'DETAILS') return 'details';
+                if (el.classList.contains('btnrow') && el.textContent.indexOf('Добавить упражнение') >= 0) return 'add';
+                return '';
+            }).filter(Boolean);
+            return seq.join('>');
+        });
+        expect(order).toBe('add>note>details');
+    });
+
+    /* чек-лист §9.2: пусто — 1 строка; рост с вводом; максимум 4 строки — высота
+       фиксируется, дальше внутренний скролл (overflow-y: auto); очистка — снова 1 строка */
+    test('авто-высота: рост с вводом, кап на 4 строках — дальше внутренний скролл', async ({ page }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toBeVisible({ timeout: 5000 });
+        await ta.fill('Одна строка');
+        const h1 = (await ta.boundingBox()).height;
+        await ta.fill('Строка один\nСтрока два\nСтрока три\nСтрока четыре');
+        const h4 = (await ta.boundingBox()).height;
+        expect(h4).toBeGreaterThan(h1 * 2.2); /* четыре строки выше одной */
+        await ta.fill('Строка один\nСтрока два\nСтрока три\nСтрока четыре\nСтрока пять\nСтрока шесть\nСтрока семь\nСтрока восемь');
+        const h8 = (await ta.boundingBox()).height;
+        expect(Math.abs(h8 - h4)).toBeLessThanOrEqual(3); /* после 4 строк высота не растёт */
+        const m = await ta.evaluate(function (el) {
+            return { ov: el.style.overflowY, scr: el.classList.contains('scr'), sh: el.scrollHeight, ch: el.clientHeight };
+        });
+        expect(m.ov).toBe('auto'); /* внутренний скролл включён */
+        expect(m.scr).toBeTruthy();
+        expect(m.sh).toBeGreaterThan(m.ch); /* контента больше видимой высоты */
+        await ta.fill(''); /* очистка — возврат к одной строке */
+        const hClr = (await ta.boundingBox()).height;
+        expect(Math.abs(hClr - h1)).toBeLessThanOrEqual(3);
+    });
+
+    /* чек-лист §9.3: debounce-автосейв доезжает до сервера, текст живёт после
+       перезагрузки; автосейв тихий: без тоста успеха и без render() (фокус на месте) */
+    test('набранный текст живёт после перезагрузки, фокус не сбрасывается, тоста нет', async ({ page, request }) => {
+        await openApp(page);
+        await startWorkoutUi(page);
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toBeVisible({ timeout: 5000 });
+        const saveDone = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await ta.fill(NOTE);
+        const resp = await saveDone;
+        expect(resp.status()).toBe(200);
+        /* серверное состояние: note на объекте тренировки */
+        const st = await (await request.get('/api/state')).json();
+        expect(st.workouts[0].note).toBe(NOTE);
+        /* автосейв без render(): фокус остался в поле (render пересоздал бы DOM) */
+        expect(await page.evaluate(function () {
+            return !!document.activeElement && document.activeElement.classList.contains('notefield');
+        })).toBe(true);
+        /* без тоста успеха */
+        await page.waitForTimeout(250);
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+        /* persist: после перезагрузки значение берётся с сервера */
+        await page.reload();
+        await openActiveDetail(page);
+        await expect(page.locator('textarea.notefield')).toHaveValue(NOTE, { timeout: 10000 });
+    });
+
+    /* чек-лист §9.5: заметка в завершённой карточке — видна, редактируется тем же полем;
+       blur — немедленный flush без тоста; pcard-превью заметку не показывает */
+    test('заметка в завершённой карточке: правка и flush на blur; pcard без заметки', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [Object.assign(doneWorkout(1, today, EX, '120', 3), { note: NOTE })]
+        } } });
+        await openApp(page);
+        /* pcard — плотное превью: заметка там не нужна (§7 спеки) */
+        await expect(page.locator('.pcard').first()).not.toContainText(NOTE);
+        await page.locator('.pcard').first().click();
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toHaveValue(NOTE, { timeout: 5000 });
+        /* правка у завершённой разрешена; blur — немедленный flush */
+        const saveDone = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await ta.fill(NOTE_MORE);
+        await ta.blur();
+        const resp = await saveDone;
+        expect(resp.status()).toBe(200);
+        const st = await (await request.get('/api/state')).json();
+        expect(st.workouts[0].note).toBe(NOTE_MORE);
+        await page.waitForTimeout(250);
+        await expect(page.locator('.toast.show')).toHaveCount(0);
+    });
+
+    /* чек-лист §9.5: заметка не попадает в share — ни в пейлоад /api/share, ни на страницу /w/ */
+    test('заметка не попадает в share-пейлоад и на страницу /w/<id>', async ({ page, context, request }) => {
+        /* моки Telegram/clipboard — тот же паттерн, что у [UX-I16] (выше): без них
+           openTelegramLink уходит в window.open и страница навигируется на t.me */
+        await context.addInitScript(function () {
+            let tries = 0;
+            const t = setInterval(function () {
+                tries++;
+                const w = window.Telegram || (window.Telegram = {});
+                const app = w.WebApp;
+                if (app && !app.__mocked) {
+                    app.__mocked = true;
+                    app.__opened = [];
+                    app.openTelegramLink = function (url) { app.__opened.push(url); };
+                }
+                if ((app && app.__mocked) || tries > 400) clearInterval(t);
+            }, 25);
+        });
+        await context.addInitScript(function () {
+            const mem = [];
+            try {
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    value: {
+                        writeText: function (t) { mem.push(String(t)); return Promise.resolve(); },
+                        readText: function () { return Promise.resolve(mem.length ? mem[mem.length - 1] : ''); }
+                    }
+                });
+            } catch (e) { /* движок не дал переопределить — тост ловит ветку ниже */ }
+        });
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [Object.assign(doneWorkout(1, today, EX, '120', 3), { note: NOTE })]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        let sharePayload = null;
+        await page.route('**/api/share', async function (route) {
+            sharePayload = route.request().postData();
+            await route.continue();
+        });
+        await page.locator('[data-act="shareSheet"]').click();
+        await page.locator('.modal.open .shrow.tg').click();
+        await expect(page.locator('.toast.show')).toContainText('Ссылка скопирована', { timeout: 5000 });
+        /* пейлоад — только initData/wid/shareName, заметки там нет */
+        expect(sharePayload).toBeTruthy();
+        expect(sharePayload).not.toContain(NOTE);
+        expect(sharePayload).not.toContain('"note"');
+        /* публичная страница без текста заметки */
+        const st = await (await request.get('/api/state')).json();
+        const sid = st.workouts[0].shareId;
+        expect(sid).toBeTruthy();
+        const html = await (await request.get('/w/' + sid)).text();
+        expect(html).toContain(EX);
+        expect(html).not.toContain(NOTE);
+        /* открытие выбора чата — через мок Telegram, без навигации страницы */
+        const opened = await page.evaluate(function () { return window.Telegram.WebApp.__opened; });
+        expect(opened.length).toBe(1);
+        expect(decodeURIComponent(opened[0])).toContain('/w/' + sid);
+    });
+
+    /* чек-лист §9.5: заметка переживает завершение тренировки — на месте в завершённой карточке,
+       редактируется тем же полем; правка доезжает до сервера */
+    test('заметка переживает завершение тренировки', async ({ page, request }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('50');
+        await page.locator('#mSets').fill('1');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toBeVisible({ timeout: 5000 });
+        /* ждём сейв с заметкой в пейлоаде (не фоновый сейв записи) */
+        const noteSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST'
+                && (r.request().postData() || '').indexOf('note') >= 0;
+        });
+        await ta.fill(NOTE);
+        expect((await noteSaved).status()).toBe(200);
+        /* завершение — список истории ([UX-T13]); открываем завершённую карточку */
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await page.locator('.pcard').first().click();
+        const fin = page.locator('textarea.notefield');
+        await expect(fin).toHaveValue(NOTE, { timeout: 5000 });
+        /* редактируется тем же полем: правка + blur — flush до сервера */
+        const editSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST'
+                && (r.request().postData() || '').indexOf('note') >= 0;
+        });
+        await fin.fill(NOTE_MORE);
+        await fin.blur();
+        expect((await editSaved).status()).toBe(200);
+        const st = await (await request.get('/api/state')).json();
+        const finW = (st.workouts || []).filter(function (x) { return x.finished; })[0];
+        if (!finW) throw new Error('завершённой тренировки нет на сервере');
+        if (finW.note !== NOTE_MORE) throw new Error('правка не сохранилась: ' + JSON.stringify(finW.note));
+    });
+});
+
 /* ============ [UX-T49] scroll restoration (docs/spec-ux-i22-scroll.md §10) ============
    Хелпер scrollKeeper: снимок позиции ДО перестройки DOM, восстановление ПОСЛЕ по ключу
    вида (как wkScroll у календаря). Клик по элементу ниже фолда — через evaluate(el.click()):

@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-S17] #353 · Заметка во время тренировки — поле в карточке · Amber Glass · ред. 2</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+.note .live { color: #ffc220; font-weight: 600; }
+
+/* ============ телефон 390px ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --nested: rgba(0,0,0,.18); --nestedbrd: rgba(255,255,255,.05);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    --field: rgba(0,0,0,.22); --fieldbrd: rgba(255,255,255,.12);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.45; color: var(--text);
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+.glass {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-top: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: rgba(255,255,255,.07); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.content { padding: 4px 12px 130px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -12px; padding: 8px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { font-size: 19px; line-height: 1; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+
+/* кнопки */
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn {
+    border: 1px solid var(--btnbrd); border-radius: 14px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+    background: var(--btn); color: var(--text); text-align: center;
+}
+.btn.sec { background: var(--btn); }
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent); font-weight: 700;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.btn.wide { flex: 1 1 100%; }
+.btn .tag { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; color: var(--accent); border: 1px solid var(--glowbrd); background: rgba(255,194,32,.1); border-radius: 999px; padding: 1px 7px; vertical-align: 1px; }
+.split3 { display: flex; gap: 6px; }
+.split3 .btn { flex: 1 1 0; min-width: 0; padding: 11px 6px; font-size: 13px; }
+.bb-del { color: var(--danger); }
+
+/* карточка тренировки: шапка, пилюли [как web/app.js workoutCard] */
+.wchead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wchead .t1 { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.barebtn {
+    width: 32px; height: 32px; border-radius: 9px; border: none; flex: none; cursor: pointer;
+    background: none; color: var(--muted); font-size: 15px;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.wcpill {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; width: 100%;
+    background: var(--nested); border: 1px solid var(--nestedbrd);
+    border-radius: 12px; padding: 7px 12px; margin: 8px 0 2px;
+}
+.wpill { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11.5px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wpill.wp-k { color: var(--accent); }
+.metaline { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+
+/* плитка упражнения */
+.expill {
+    background: var(--nested); border: 1px solid var(--nestedbrd);
+    border-radius: 14px; padding: 10px; margin-top: 10px;
+}
+.exhead { display: flex; align-items: center; gap: 8px; }
+.exico {
+    width: 32px; height: 32px; border-radius: 10px; flex: none;
+    background: rgba(255,255,255,.07); border: 1px solid var(--glassbrd);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 15px;
+}
+.exname { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 700; line-height: 1.25; }
+.exhead .trash { color: var(--muted); opacity: .6; font-size: 13px; flex: none; }
+.entry {
+    padding: 8px 10px; border-radius: 11px; background: rgba(0,0,0,.16);
+    border: 1px solid rgba(255,255,255,.05); margin-top: 6px;
+    display: flex; justify-content: space-between; gap: 6px; align-items: center;
+    font-size: 13.5px;
+}
+.entry .prtag {
+    flex: none; margin-left: auto; background: rgba(255,194,32,.12);
+    border: 1px solid var(--glowbrd); color: var(--accent);
+    border-radius: 9px; padding: 2px 8px; font-size: 11.5px; font-weight: 700;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.ex-addset {
+    display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px;
+    margin: 8px 0 0; padding: 4px 12px; border-radius: 999px;
+    background: rgba(0,0,0,.14); border: 1px solid var(--nestedbrd);
+    color: var(--muted); font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+}
+.ex-addset svg { width: 14px; height: 14px; flex: none; }
+
+details { margin-top: 12px; }
+summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); }
+summary .wip { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+
+/* backbar */
+.backbar { position: sticky; bottom: 78px; z-index: 19; margin: 10px -2px 0; }
+.backbar .btn { background: rgba(30,32,38,.92); box-shadow: 0 8px 28px rgba(0,0,0,.28); }
+
+/* ============ [UX-S17] ред. 2: ПОЛЕ ЗАМЕТКИ в карточке ============ */
+/* стиль полей приложения (web/style.css: input/textarea): --field/--field-brd, r12 */
+.notefield {
+    width: 100%; box-sizing: border-box; display: block;
+    margin-top: 12px; resize: none;
+    border: 1px solid var(--fieldbrd); border-radius: 12px;
+    padding: 10px 12px; font-size: 15px; line-height: 1.45;
+    background: var(--field); color: var(--text);
+    outline: none; font-family: inherit; overflow-y: hidden;
+    transition: border-color .15s ease;
+}
+.notefield:focus { border-color: var(--accent); }
+.notefield::placeholder { color: rgba(154,160,170,.55); }
+.notefield.scr { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent; }
+.notefield.scr::-webkit-scrollbar { width: 4px; }
+.notefield.scr::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 999px; }
+/* подпись-подсказка автосейва в макете (в продукте НЕ рисуется — тишина) */
+.autosavehint { margin: 4px 2px 0; font-size: 11px; color: #6d737d; }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">Заметка во время тренировки — поле в карточке <span>[UX-S17] #353 · Amber Glass · ред. 2 · 23.11.2026</span></div>
+    <div class="note"><b>Ред. 2 по фидбеку владельца:</b> пилюля, шит, кнопки «Сохранить/Очистить»
+    и подсказка «В прошлый раз» — отменены. «Просто поле для ввода текста»: обычная
+    <code>textarea</code> в карточке тренировки с плейсхолдером <code>Добавить заметку</code>,
+    авто-высота до <b>4 строк</b>, дальше внутренний скролл. Автосохранение — debounce ~800 мс +
+    blur, в существующую очередь <code>save()</code> (drag-паттерн: успех молчит, ошибки — тосты
+    <code>doSave</code>). Хранение — ключ <code>note</code> рядом с <code>nutrition</code>.
+    Спека: <code>docs/spec-ux-s17-notes.md</code> (ред. 2).<br>
+    <span class="live">Макет живой:</span> можно печатать в полях на экранах 1–3 — высота
+    растёт до 4 строк и фиксируется, дальше поле скроллится изнутри.</div>
+
+    <!-- ================= ЭКРАН 1: ПУСТОЕ ПОЛЕ ================= -->
+    <div class="caption">Экран 1 · Активная тренировка — поле пустое <span>плейсхолдер «Добавить заметку»</span></div>
+    <div class="note">Поле одной строки на месте точки входа: после «➕ Добавить упражнение»,
+    до details. Стиль полей приложения (<code>--field</code>/<code>--field-brd</code>, радиус 12).
+    Плейсхолдер — <code>Добавить заметку</code>. Никаких кнопок и бейджей: поле либо есть в
+    карточке, либо заметки нет. Тап → клавиатура, печать → поле растёт (экран 2).</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:41</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><div class="ttl">🏋️ Дневник</div><button class="tbtn">⚙︎</button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <div class="wchead"><p class="t1">Спина + грудь</p><button class="barebtn">⏱</button></div>
+                <div class="wcpill"><span class="wpill">🕐 с 18:30</span><span class="wpill wp-k">🔥 210 ккал</span><span class="wpill">🏋 12 подх.</span></div>
+                <p class="metaline">🥤 Вода, банан после жима</p>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🏋️</span><span class="exname">Жим штанги лёжа</span><span class="trash">🗑</span></div>
+                    <div class="entry"><span>60 кг × 8</span></div>
+                    <div class="entry"><span>62.5 кг × 8</span><span class="prtag">🏆 78</span></div>
+                    <button class="ex-addset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Добавить подход</button>
+                </div>
+                <div class="btnrow"><button class="btn sec wide">➕ Добавить упражнение</button></div>
+
+                <!-- [UX-S17] ред. 2: просто поле -->
+                <textarea class="notefield" rows="1" maxlength="1000" placeholder="Добавить заметку"></textarea>
+
+                <details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary></details>
+            </div>
+            <div class="backbar split3">
+                <button class="btn sec bb-del">🗑</button>
+                <button class="btn prime">✅ Завершить</button>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn on"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= ЭКРАН 2: ПОЛЕ С ТЕКСТОМ (АВТО-ВЫСОТА) ================= -->
+    <div class="caption">Экран 2 · Поле с заметкой — авто-высота <span>растёт с вводом</span></div>
+    <div class="note">Поле растёт вместе с текстом: было 1 строка — стало 2 (переносы считаются
+    как набранные строки). Никаких «✓ Сохранено» — автосейв молчит: через ~800 мс после ввода
+    или на потере фокуса <code>save()</code> в общую очередь (ошибки — тосты <code>doSave</code>:
+    «Нет связи…», 409 и т.п.). Подпись под полем — только в макете для пояснения, <b>в продукте
+    её нет</b> (тишина, как просил владелец). Поле можно попечатать прямо здесь.</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>19:12</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><div class="ttl">🏋️ Дневник</div><button class="tbtn">⚙︎</button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <div class="wchead"><p class="t1">Спина + грудь</p><button class="barebtn">⏱</button></div>
+                <div class="wcpill"><span class="wpill">🕐 с 18:30</span><span class="wpill wp-k">🔥 210 ккал</span><span class="wpill">🏋 12 подх.</span></div>
+                <p class="metaline">🥤 Вода, банан после жима</p>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🏋️</span><span class="exname">Жим штанги лёжа</span><span class="trash">🗑</span></div>
+                    <div class="entry"><span>60 кг × 8</span></div>
+                    <div class="entry"><span>62.5 кг × 8</span><span class="prtag">🏆 78</span></div>
+                    <button class="ex-addset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Добавить подход</button>
+                </div>
+                <div class="btnrow"><button class="btn sec wide">➕ Добавить упражнение</button></div>
+
+                <textarea class="notefield" rows="1" maxlength="1000">Тяга пошла легче — попробовать 50 кг. Плечо после жима — следить.</textarea>
+                <div class="autosavehint">↑ поле выросло под текст · сохраняется автоматически · в продукте этой подписи нет</div>
+
+                <details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary></details>
+            </div>
+            <div class="backbar split3">
+                <button class="btn sec bb-del">🗑</button>
+                <button class="btn prime">✅ Завершить</button>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn on"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= ЭКРАН 3: ДЛИННЫЙ ТЕКСТ — 4 СТРОКИ, СКРОЛЛ ================= -->
+    <div class="caption">Экран 3 · Длинная заметка — максимум 4 строки, дальше скролл <span>высота зафиксирована</span></div>
+    <div class="note">Текста 6+ строк, но поле остановилось на <b>4 строках</b>:
+    <code>scrollHeight &gt; clientHeight</code> → внутренний скролл (тонкий скроллбар — только на
+    десктопе, на телефоне — жестом по полю). Курсор при наборе автоскроллится и остаётся видимым.
+    Высота не меняется после 4 строк — карточка не «прыгает», основной поток ввода подходов
+    стабилен. Лимит поля <code>maxlength=1000</code> — тихая обрезка (вопрос 1000 vs 2000 —
+    спека §8.1). Попробуйте вставить длинный текст — поле не вырастет дальше 4 строк.</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>19:20</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><div class="ttl">🏋️ Дневник</div><button class="tbtn">⚙︎</button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <div class="wchead"><p class="t1">Спина + грудь</p><button class="barebtn">⏱</button></div>
+                <div class="wcpill"><span class="wpill">🕐 с 18:30</span><span class="wpill wp-k">🔥 210 ккал</span><span class="wpill">🏋 12 подх.</span></div>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🏋️</span><span class="exname">Жим штанги лёжа</span><span class="trash">🗑</span></div>
+                    <div class="entry"><span>60 кг × 8</span></div>
+                    <div class="entry"><span>62.5 кг × 8</span><span class="prtag">🏆 78</span></div>
+                </div>
+                <div class="btnrow"><button class="btn sec wide">➕ Добавить упражнение</button></div>
+
+                <textarea class="notefield" rows="1" maxlength="1000">Тяга блока пошла легче обычного — попробовать 50 кг.
+После 4-го подхода жима лёгкое натяжение в правом плече — следить, если повторится — снизить вес.
+Разминку на плечи делать всегда, сегодня пропустил и почувствовал.
+Жим: 60 по 8 легко, 62.5 тяжеловато но чисто, в следующий раз 65×6.
+Отдых между подходами блока держал минуту — хорошо работает.</textarea>
+                <div class="autosavehint">↑ набрано 5 строк (с переносами больше) · видно 4, дальше скролл внутри поля</div>
+
+                <details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary></details>
+            </div>
+            <div class="backbar split3">
+                <button class="btn sec bb-del">🗑</button>
+                <button class="btn prime">✅ Завершить</button>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn on"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= ЭКРАН 4: ЗАВЕРШЁННАЯ ТРЕНИРОВКА ================= -->
+    <div class="caption">Экран 4 · Завершённая тренировка — та же заметка <span>openHistory() · ред.</span></div>
+    <div class="note">Поле то же самое, в той же точке карточки (после «📤 Поделиться», до details):
+    заметка с текстом видна сразу — чтение = взглянуть, правка = тапнуть и дописать
+    (редактирование завершённых разрешено, как <code>titleModal</code> сегодня; автосейв работает
+    так же). Отдельный «блок для чтения» не нужен. Отдельных кнопок по-прежнему нет; очистить —
+    стереть текст в поле. «В прошлый раз» не показывается (отменено владельцем).</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>21:03</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><div class="ttl">🏋️ Дневник</div><button class="tbtn">⚙︎</button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <div class="wchead"><p class="t1">Спина + грудь</p><button class="barebtn">⏱</button></div>
+                <div class="wcpill"><span class="wpill">🕐 18:30–19:40</span><span class="wpill wp-k">🔥 210 ккал</span><span class="wpill">🏋 12 подх.</span></div>
+                <p class="metaline">🥤 Вода, банан после жима</p>
+                <div class="expill">
+                    <div class="exhead"><span class="exico">🏋️</span><span class="exname">Жим штанги лёжа</span></div>
+                    <div class="entry"><span>60 кг × 8</span></div>
+                    <div class="entry"><span>62.5 кг × 8</span><span class="prtag">🏆 78</span></div>
+                </div>
+
+                <div class="btnrow"><button class="btn sec wide">📤 Поделиться<span class="tag">выбор</span></button></div>
+
+                <textarea class="notefield" rows="1" maxlength="1000">Тяга пошла легче — попробовать 50 кг. Плечо после жима — следить.</textarea>
+
+                <details><summary>📈 Прогресс <span class="wip">(в разработке)</span></summary></details>
+            </div>
+            <div class="backbar split3">
+                <button class="btn sec bb-del">🗑</button>
+                <button class="btn sec">🔁 Повторить</button>
+                <button class="btn sec">← Назад</button>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn on"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <div class="caption">Итог ред. 2 <span>коротко</span></div>
+    <div class="note">① Точка входа = само поле с плейсхолдером «Добавить заметку» — пилюля, шит,
+    кнопки и подсказка отменены. ② Авто-высота до 4 строк, дальше внутренний скролл.
+    ③ Автосейв: debounce ~800 мс + blur/flush в очередь <code>save()</code>, молча при успехе,
+    ошибки — тосты <code>doSave</code>. ④ Хранение: <code>note</code> рядом с <code>nutrition</code>,
+    старые файлы читаются (GymContractTest). ⑤ Редактирование у завершённых, вне share/шаблонов,
+    бот — этап 2.<br><br>
+    <b>Открытые вопросы владельцу</b> (спека §8): лимит 1000 vs 2000 (дефолт 1000); разворот
+    длинной заметки на полный текст в завершённой карточке (дефолт — не делать); заметка в боте
+    этапом 2.</div>
+
+</div>
+</body>
+<script>
+/* [UX-S17] демо авто-высоты: рост до 4 строк, дальше внутренний скролл.
+   Продуктовая логика — та же формула (см. спеку §2.4), здесь — для интерактива владельца. */
+(function () {
+    var LINES = 4;
+    function fit(ta) {
+        var cs = getComputedStyle(ta);
+        var lh = parseFloat(cs.lineHeight) || 21;
+        var pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+        var maxH = LINES * lh + pad;
+        ta.style.height = 'auto';
+        var h = Math.min(ta.scrollHeight, maxH);
+        ta.style.height = h + 'px';
+        var scrollable = ta.scrollHeight > maxH + 1;
+        ta.style.overflowY = scrollable ? 'auto' : 'hidden';
+        ta.classList.toggle('scr', scrollable);
+    }
+    function fitAll() {
+        var tas = document.querySelectorAll('.notefield');
+        for (var i = 0; i < tas.length; i++) fit(tas[i]);
+    }
+    document.addEventListener('input', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('notefield')) fit(e.target);
+    });
+    if (document.readyState === 'complete') fitAll();
+    else window.addEventListener('load', fitAll);
+})();
+</script>
+</html>
