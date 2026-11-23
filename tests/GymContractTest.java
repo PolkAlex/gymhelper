@@ -299,6 +299,23 @@ public class GymContractTest {
                 && "Фермерская прогулка".equals(dcx2.customEx.get(1).n)
                 && dcx2.favs.size() == 2,
             "customEx/favs переживают round-trip без потерь");
+        /* [FIT-T2] мусорный tags у «своего»: не массив или не-строки внутри — игнор,
+            запись читается как «своё» без групп (карта мышц не падает на старых файлах) */
+        String cexTrash = "{\"nextId\":1,\"customEx\":[" +
+            "{\"n\":\"Тяга в своей раме\",\"tags\":\"мусор\"}," +
+            "{\"n\":\"Жим в своей раме\",\"tags\":42}," +
+            "{\"n\":\"Становая своя\",\"tags\":[42,null,\"\",\"   \"," + "\"" + "x".repeat(41) + "\",\"m:back\"]}," +
+            "{\"n\":\"Гиперэкстензия своя\",\"tags\":[]}" +
+            "],\"workouts\":[]}";
+        GymData dcxt = GymData.fromJson((Map<String, Object>) Json.parse(cexTrash));
+        check(dcxt.customEx.size() == 4, "customEx: мусорный tags не роняет чтение, все записи на месте, а не " + dcxt.customEx.size());
+        check(dcxt.customEx.get(0).tags.isEmpty() && dcxt.customEx.get(1).tags.isEmpty(),
+            "customEx: tags-не-массив игнорируется (группы не указаны)");
+        check(dcxt.customEx.get(2).tags.size() == 1 && "m:back".equals(dcxt.customEx.get(2).tags.get(0)),
+            "customEx: не-строки/пустые/слишком длинные теги пропускаются, валидный остаётся");
+        GymData dcxt2 = GymData.fromJson((Map<String, Object>) Json.parse(Json.write(dcxt.toJson())));
+        check(dcxt2.customEx.get(0).tags.isEmpty() && dcxt2.customEx.get(2).tags.size() == 1,
+            "customEx: мусорный tags переживает round-trip (не-массив не пишется обратно)");
 
         /* [GOA-S1] переименование упражнения обновляет ex ТОЛЬКО активных силовых целей (§4.3) */
         GymData grn = GymData.fromJson((Map<String, Object>) Json.parse(

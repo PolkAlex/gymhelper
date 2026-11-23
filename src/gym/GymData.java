@@ -176,9 +176,11 @@ public final class GymData {
                 if (name.isEmpty() || name.length() > 60 || !seen.add(name.toLowerCase())) continue;
                 CustomExercise ce = new CustomExercise();
                 ce.n = name;
-                List<Object> tagList = Json.list(c.get("tags"));
-                if (tagList != null) {
-                    for (Object t : tagList) {
+                /* [FIT-T2] мусор в tags (не массив) игнорируется — запись «своего»
+                    без групп всё равно читается (обратная совместимость обязательна) */
+                Object rawTags = c.get("tags");
+                if (rawTags instanceof List) {
+                    for (Object t : (List<?>) rawTags) {
                         if (ce.tags.size() >= 16) break;
                         if (!(t instanceof String)) continue;
                         String tag = ((String) t).strip();
