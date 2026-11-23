@@ -5448,6 +5448,39 @@ test.describe('[ONB-T7] «Что нового»', function () {
         const off3 = await page.evaluate(function () { try { return localStorage.getItem('gymWnOff'); } catch (e) { return null; } });
         if (off3 !== '1') throw new Error('выключение тогла не установило gymWnOff');
     });
+
+    /* [РЕЛИЗ 1.43] автопоказ РЕАЛЬНОГО релиза: пользователь, видевший 1.42 (gymWnVer=1.42),
+       при открытии обновлённого приложения получает модалку «Релиз 1.43» с тремя пунктами
+       (заметки / карта мышц / импорт Strong); «Понятно» пишет gymWnVer=1.43, перезагрузка
+       автопоказ не возвращает (механизм выше гоняется на фейковом 9.99, контент текущего
+       релиза здесь; gymWnOff глобального хука снят, тест именно про автопоказ) */
+    test('реальный релиз 1.43: автопоказ пользователю 1.42 — «Релиз 1.43», 3 пункта, флаг раз-на-релиз', async ({ page }) => {
+        /* глобальный beforeEach-хук ставит gymWnOff=1 (глушит автопоказ всем тестам);
+           init-скрипт снимает его и сажает «пользователя 1.42»; self-guard: после
+           перезагрузки скрипт больше ничего не меняет (флаг установки уже стоит) */
+        await page.addInitScript(function () {
+            try {
+                if (localStorage.getItem('gymRel143Set') === '1') return;
+                localStorage.setItem('gymRel143Set', '1');
+                localStorage.removeItem('gymWnOff');
+                localStorage.setItem('gymWnVer', '1.42');
+            } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        /* первый вход после обновления: wnAuto открыл модалку 1.43 поверх приложения */
+        await expect(page.locator('.mwrap .wnm')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.relpill')).toHaveText('Релиз 1.43');
+        await expect(page.locator('.wni')).toHaveCount(3);
+        await expect(page.locator('.wni b')).toContainText(['Заметка к тренировке', 'Карта мышц', 'Импорт из Strong']);
+        /* «Понятно» пишет флаг реального релиза; перезагрузка автопоказ не возвращает */
+        await page.locator('[data-act="wnAck"]').click();
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+        const ver = await page.evaluate(function () { try { return localStorage.getItem('gymWnVer'); } catch (e) { return null; } });
+        if (ver !== '1.43') throw new Error('gymWnVer после «Понятно»: ' + ver);
+        await page.reload();
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        await expect(page.locator('.mwrap')).toHaveCount(0);
+    });
 });
 
 /* ============ [GOA-S1] цели тренировок (docs/spec-goa-s1-goals.md) ============ */
