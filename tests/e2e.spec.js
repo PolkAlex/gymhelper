@@ -7263,25 +7263,33 @@ test.describe('[FIT-S2] карта мышц', function () {
         await openApp(page);
         await page.locator('.pcard').first().click();
         await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
-        /* тап по зоне «Спина» на фигуре спереди → шит: группа, строки с подходами и тоннажем */
-        await page.locator('#bmF path.mz.lvl3[data-a="back"]').first().click();
+        /* [FIT-T1 тест-фикс iphone13] тап по трапециям «Спина» на фигуре СПЕРЕДИ (~8×7px в
+           ассете) детерминированно мимо в WebKit — locator.click и force в центр bbox оба
+           не попадают в тонкий путь; продукт исправен. Схема tester'а: тапаем по крупным
+           зонам — грудные пластины на фронте (~22×25px) и спина на виде сзади (~16×37px) */
+        /* тап по зоне «Грудь» на фигуре спереди → шит: группа, строка с подходами и тоннажем */
+        await page.locator('#bmF path.mz.lvl2[data-a="chest"]').first().click();
         const modal = page.locator('.modal.open');
         await expect(modal).toBeVisible({ timeout: 5000 });
         await expect(modal.locator('.msub')).toHaveText('Задействованная группа');
-        await expect(modal.locator('.mtitle')).toHaveText('Спина · 4 подх.');
+        await expect(modal.locator('.mtitle')).toHaveText('Грудь · 2 подх.');
         await expect(modal.locator('.grrow')).toHaveCount(1);
-        await expect(modal.locator('.grrow').first()).toContainText('Подтягивания');
-        await expect(modal.locator('.grrow').first()).toContainText('4 подхода · без веса');
-        await expect(modal.locator('.grrow', { hasText: 'Жим штанги лёжа' })).toHaveCount(0);
+        await expect(modal.locator('.grrow').first()).toContainText('Жим штанги лёжа');
+        await expect(modal.locator('.grrow').first()).toContainText('2 подхода · ≈1200 кг');
+        await expect(modal.locator('.grrow', { hasText: 'Подтягивания' })).toHaveCount(0);
         await modal.locator('[data-act="closeModal"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
-        /* повторный тап по другой фигуре — та же модалка без стеков */
+        /* повторный тап по зоне «Спина» на фигуре сзади — та же модалка без стеков */
         await page.locator('#bmB path.mz.lvl3[data-a="back"]').first().click();
         await expect(page.locator('.modal.open .mtitle')).toHaveText('Спина · 4 подх.', { timeout: 5000 });
+        await expect(page.locator('.modal.open .grrow').first()).toContainText('Подтягивания');
+        await expect(page.locator('.modal.open .grrow').first()).toContainText('4 подхода · без веса');
         await page.locator('.modal.open [data-act="closeModal"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
-        /* тап по не подсвеченной зоне (idle-рельеф без data-act) — шит не открывается (§6.5) */
-        await page.locator('#bmF path.mz:not(.lvl1):not(.lvl2):not(.lvl3)').first().click();
+        /* тап по не подсвеченной зоне — шит не открывается (§6.5). dispatchEvent вместо
+           физического клика: смысл проверки — отсутствие ДЕЙСТВИЯ на уровне диспетчера
+           (у idle-зоны data-act нет), физический hit-test тонких idle-путей не при чём */
+        await page.locator('#bmF path.mz:not(.lvl1):not(.lvl2):not(.lvl3)').first().dispatchEvent('click');
         await expect(page.locator('.modal.open')).toHaveCount(0);
     });
 
