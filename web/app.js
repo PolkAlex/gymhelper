@@ -1664,6 +1664,7 @@ function render() {
        (в месячном виде сетки нет — no-op внутри) */
     if (calVisible()) calGridScrollPost();
     renderRestbar(); /* панель/пилюля таймера переживает навигацию: класс raised и содержимое актуальны */
+    noteFitAll(); /* [UX-S17] заметка: высота поля по содержимому сразу при рендере (§2.4) */
     /* [ONB] пост-выравнивание оверлеев: карусель по ширине контейнера, тултип по месту подсветки */
     if (obOpen) obAlignTrack();
     if (tutOpen) tutPlaceTip();
@@ -2583,6 +2584,10 @@ function workoutCard(w) {
     if (!w.finished) {
         h += '<div class="btnrow"><button class="btn sec wide" data-act="openPicker" data-a="' + w.id + '">➕ Добавить упражнение</button></div>';
     }
+    /* [UX-S17] заметка тренировки: одно поле в карточке (активной и завершённой) —
+       после «➕ Добавить упражнение»/«📤 Поделиться», до details; те же точки у обеих.
+       Автосейв — тихий (note-блок ниже, §3 спеки); value через esc — textarea безопасна */
+    h += '<textarea class="notefield" rows="1" maxlength="1000" placeholder="Добавить заметку" data-wid="' + w.id + '">' + esc(w.note || '') + '</textarea>';
     if (G.profile && G.profile.weight > 0 && exs.length) {
         h += '<details><summary>🔥 Ккал по упражнениям <span class="wip">(в разработке)</span></summary>' + kcalBreakdown(w) + '</details>';
     }
@@ -2592,6 +2597,67 @@ function workoutCard(w) {
     h += '</div>';
     return h;
 }
+
+/* ---------- [UX-S17] заметка тренировки: тихий автосейв ---------- */
+/* ввод → w.note в памяти + debounce 800 мс; blur/скрытие вкладки — немедленный flush.
+   save() БЕЗ тоста успеха и БЕЗ render() (фокус/курсор не сбрасываются); ошибки —
+   штатные тосты doSave; очередь __saveChain сериализует сама (паттерн drag-сохранения).
+   Пустая строка → ключ note удаляется из w: файлы без заметок не меняются (§5). */
+const NOTE_MAX_LINES = 4;
+const NOTE_DEBOUNCE_MS = 800;
+let noteTimer = null;
+let noteDirtyWid = 0;
+
+/* авто-высота (§2.4): пусто — 1 строка; растёт с вводом; максимум 4 строки — дальше
+   внутренний скролл. Вызывается на вводе и при рендере карточки с существующей
+   заметкой (поле сразу рисуется своей высотой, без «прыжка») */
+function noteFit(ta) {
+    const cs = getComputedStyle(ta);
+    const lh = parseFloat(cs.lineHeight) || 21;
+    const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const maxH = NOTE_MAX_LINES * lh + pad;
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, maxH) + 'px';
+    const scr = ta.scrollHeight > maxH + 1;
+    ta.style.overflowY = scr ? 'auto' : 'hidden';
+    ta.classList.toggle('scr', scr);
+}
+function noteFitAll() {
+    const tas = document.querySelectorAll('textarea.notefield');
+    for (const ta of tas) noteFit(ta);
+}
+function noteSave(wid) {
+    const w = findW(wid);
+    const ta = document.querySelector('textarea.notefield[data-wid="' + wid + '"]');
+    if (!w || !ta) return;
+    const v = ta.value;
+    if (v && v.trim()) w.note = v; else delete w.note;
+    noteDirtyWid = 0;
+    save(); /* тихо при успехе; ошибки — тосты doSave; рендер не нужен */
+}
+function noteFlush() {
+    if (noteTimer) { clearTimeout(noteTimer); noteTimer = null; }
+    if (noteDirtyWid) noteSave(noteDirtyWid);
+}
+document.addEventListener('input', function (ev) {
+    const ta = ev.target && ev.target.classList && ev.target.classList.contains('notefield') ? ev.target : null;
+    if (!ta) return;
+    noteFit(ta);
+    const wid = parseInt(ta.getAttribute('data-wid'), 10) || 0;
+    if (!wid) return;
+    noteDirtyWid = wid;
+    if (noteTimer) clearTimeout(noteTimer);
+    noteTimer = setTimeout(function () { noteTimer = null; noteSave(wid); }, NOTE_DEBOUNCE_MS);
+});
+/* blur не всплывает — делегируем через focusout; скрытие вкладки/окна — финальный
+   flush, чтобы «набрал и спрятал телефон» не теряло хвост текста (§3) */
+document.addEventListener('focusout', function (ev) {
+    if (ev.target && ev.target.classList && ev.target.classList.contains('notefield')) noteFlush();
+});
+document.addEventListener('visibilitychange', function () {
+    if (document.hidden) noteFlush();
+});
+window.addEventListener('blur', noteFlush);
 
 /* ---------- [UX-T14] перетаскивание упражнений (pointer events, без библиотек) ---------- */
 /* long-press 650 мс по плитке (кроме кнопок и записей) поднимает её; остальные
