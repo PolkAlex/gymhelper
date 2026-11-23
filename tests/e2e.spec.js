@@ -7299,4 +7299,202 @@ test.describe('[ONB-T10] импорт из Strong', function () {
         await page.locator('.nav .nbtn[data-act="switchTab"][data-a="stats"]').click();
         await expect(page.locator('.topbar .tb-title')).toContainText('Статистика', { timeout: 5000 });
     });
+
+    /* ---------- досдача 564edae + дыры ревью [ONB-T10] (In Test, 23.11.2026) ---------- */
+
+    /* синтетический свайп от края (копия helper [UX-T42]): старт x0, смещение dx по горизонтали */
+    async function swipeEdge(page, x0, dx) {
+        await page.evaluate(function (o) {
+            const el = document.getElementById('app');
+            const mkT = function (x, y) { return { identifier: 1, target: el, clientX: x, clientY: y }; };
+            const mkEv = function (type, touches, changed) {
+                const ev = new Event(type, { bubbles: true, cancelable: true });
+                Object.defineProperty(ev, 'touches', { value: touches });
+                Object.defineProperty(ev, 'targetTouches', { value: touches });
+                Object.defineProperty(ev, 'changedTouches', { value: changed });
+                Object.defineProperty(ev, 'target', { value: el });
+                return ev;
+            };
+            el.dispatchEvent(mkEv('touchstart', [mkT(o.x0, 300)], [mkT(o.x0, 300)]));
+            el.dispatchEvent(mkEv('touchmove', [mkT(o.x0 + o.dx / 2, 300)], [mkT(o.x0 + o.dx / 2, 300)]));
+            el.dispatchEvent(mkEv('touchend', [], [mkT(o.x0 + o.dx, 300)]));
+        }, { x0: x0, dx: dx });
+    }
+    /* 320px: на экране нет горизонтального скролла документа */
+    async function noHScroll(page, label) {
+        const m = await page.evaluate(function () {
+            return { sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth };
+        });
+        if (m.sw > m.cw + 1) throw new Error(label + ': горизонтальный скролл на 320px — scrollWidth ' + m.sw + ' > clientWidth ' + m.cw);
+    }
+    /* выгрузка на 12 тренировок × 3 упражнения × 300 одинаковых подходов ≈ 0.6 МБ —
+       выше порога кадра «Читаем файл…» (200 КБ); повторяющиеся подходы схлопнутся */
+    function csvBig() {
+        const names = ['Жим штанги лёжа', 'Bench Press (Barbell)', 'Lat Pulldown'];
+        const rows = [HEAD];
+        for (let d = 0; d < 12; d++) {
+            const day = '2023-03-' + String(1 + d).padStart(2, '0');
+            for (const name of names) {
+                for (let k = 1; k <= 300; k++) {
+                    rows.push(day + ' 07:00,Full Gym,1h,' + name + ',' + k + ',60,8,,,kg\n');
+                }
+            }
+        }
+        return rows.join('');
+    }
+    /* предпросмотр для 320px: известное + ДЛИННОЕ чужое имя — стресс переноса строк в раскрытии */
+    function csv320() {
+        return HEAD +
+            '2024-11-18 07:00,Full Gym,1h,Жим штанги лёжа,1,60,8,,,kg\n' +
+            '2024-11-18 07:00,Full Gym,1h,Dumbbell Incline Bench Press Two Dumbbells Variation (Barbell),1,22.5,12,,,kg\n';
+    }
+
+    test('кадр Э3 «Читаем файл…» для файла >200 КБ: честный кадр без ✓, после разбора исчезает (564edae)', async ({ page }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        const csv = csvBig();
+        if (Buffer.byteLength(csv, 'utf8') <= 200 * 1024) throw new Error('фикстура меньше порога 200 КБ: ' + Buffer.byteLength(csv, 'utf8'));
+        await pickCsv(page, 'big.csv', csv);
+        /* кадр парсинга появился сразу и ЧЕСТНЫЙ: «Читаем файл…», имя/размер файла, БЕЗ преждевременных «✓» */
+        await expect(page.locator('.imp-busy')).toBeVisible({ timeout: 2000 });
+        await expect(page.locator('.imp-busy')).toContainText('Читаем файл…');
+        await expect(page.locator('.imp-busy .filetag')).toContainText('big.csv');
+        await expect(page.locator('.imp-busy .filetag')).toContainText('КБ');
+        const frameText = (await page.locator('.imp-busy').textContent()) || '';
+        if (frameText.indexOf('✓') >= 0) throw new Error('в кадре парсинга преждевременная «✓»: ' + frameText);
+        /* разбор дошёл до предпросмотра — кадр исчез (не завис) */
+        await expect(page.locator('.bignum')).toContainText('12', { timeout: 10000 });
+        await expect(page.locator('.imp-busy')).toHaveCount(0);
+    });
+
+    test('файл >15 МБ (§4.5): лимит-заглушка сразу, без кадра парсинга; другой файл проходит', async ({ page }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        /* контент неважен: проверка размера до чтения (§4.5) */
+        await pickCsv(page, 'huge.csv', Buffer.alloc(15 * 1024 * 1024 + 100, 0x61).toString('binary'));
+        await expect(page.locator('.resttl')).toHaveText('Файл слишком большой', { timeout: 5000 });
+        await expect(page.locator('.card')).toContainText('до 15 МБ');
+        await expect(page.locator('.imp-busy')).toHaveCount(0); /* кадр парсинга не показывался */
+        /* «Выбрать другой файл» — путь восстановления: валидный CSV → предпросмотр */
+        await pickCsv(page, 'strong.csv', csvTwo());
+        await expect(page.locator('.bignum')).toContainText('2', { timeout: 5000 });
+        await expect(page.locator('.resttl')).toHaveCount(0);
+    });
+
+    test('navForward-стрип: «назад» из флоу и после результата — свайп «вперёд» импорт не возвращает', async ({ page }) => {
+        test.skip(!test.info().project.use.hasTouch, 'свайпы: только touch-проекты (android360, iphone13, pixel7)');
+        await openApp(page);
+        const vw = await page.evaluate(function () { return document.documentElement.clientWidth; });
+        await page.locator('[data-act="openSettings"]').first().click();
+        await page.locator('.card.impdata .arow').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('📦 Переезд из Strong', { timeout: 5000 });
+        /* назад с шага выбора (свайп от левого края) → Настройки; «вперёд» — импорт НЕ возвращается */
+        await swipeEdge(page, 10, 120);
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await swipeEdge(page, vw - 10, -120);
+        await expect(page.locator('.topbar .tb-title')).toContainText('Настройки', { timeout: 5000 });
+        await expect(page.locator('[data-act="impPick"]')).toHaveCount(0);
+        /* повторный вход, довели до результата, назад свайпом → «вперёд» тоже не вернёт флоу
+           (риск: случайный свайп по результату с «Отменить импорт» = повторный импорт) */
+        await page.locator('.card.impdata .arow').click();
+        await expect(page.locator('[data-act="impPick"]')).toBeVisible({ timeout: 5000 });
+        await pickCsv(page, 'strong.csv', csvTwo());
+        await expect(page.locator('.bignum')).toContainText('2', { timeout: 5000 });
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово — 2 тренировки в дневнике!', { timeout: 10000 });
+        await swipeEdge(page, 10, 120);
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await swipeEdge(page, vw - 10, -120);
+        await expect(page.locator('.topbar .tb-title')).toContainText('Настройки', { timeout: 5000 });
+        await expect(page.locator('.resttl')).toHaveCount(0);
+        await expect(page.locator('[data-act="impUndo"]')).toHaveCount(0);
+    });
+
+    test('undo-цикл: после «Отменить импорт» История пуста и плашка вернулась; повторный импорт тем же файлом работает', async ({ page, request }) => {
+        await openApp(page);
+        await page.locator('[data-act="openSettings"]').first().click();
+        await page.locator('.card.impdata .arow').click();
+        await pickCsv(page, 'strong.csv', csvTwo());
+        await expect(page.locator('.bignum')).toContainText('2', { timeout: 5000 });
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово — 2 тренировки в дневнике!', { timeout: 10000 });
+        const undoSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await page.locator('[data-act="impUndo"]').click();
+        await expect(page.locator('[data-act="impPick"]')).toBeVisible({ timeout: 5000 }); /* снова шаг 1 */
+        await undoSaved;
+        const st = await (await request.get('/api/state')).json();
+        expect(st.workouts.length).toBe(0);
+        expect((st.del || []).length).toBe(2); /* томстоуны: undo не воскресит серверные копии */
+        /* назад → Настройки → закрыть: История ПУСТА (герой), плашка импорта вернулась */
+        await page.locator('.topbar [data-act="impBack"]').click();
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await page.locator('.topbar [data-act="closeSettings"]').first().click();
+        await expect(page.locator('#app .hero', { hasText: 'Пока пусто' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pcard')).toHaveCount(0);
+        await expect(page.locator('.imp-cta')).toBeVisible({ timeout: 5000 });
+        /* повторный импорт ТЕМ ЖЕ файлом — из плашки, до результата и Истории */
+        await page.locator('.imp-cta [data-act="openImport"]').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('📦 Переезд из Strong', { timeout: 5000 });
+        await pickCsv(page, 'strong.csv', csvTwo());
+        await expect(page.locator('.bignum')).toContainText('2', { timeout: 5000 });
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово — 2 тренировки в дневнике!', { timeout: 10000 });
+        await page.locator('[data-act="impOpenHistory"]').click();
+        await expect(page.locator('.pcard')).toHaveCount(2, { timeout: 5000 });
+        const st2 = await (await request.get('/api/state')).json();
+        expect(st2.workouts.length).toBe(2);
+        /* свежие id не пересекаются с отменёнными (nextId монотонен) */
+        const reused = (st2.workouts || []).some(function (w) { return (st.del || []).indexOf(w.id) >= 0; });
+        expect(reused).toBe(false);
+    });
+
+    test('320px (§4.6): карточка «Данные», все кадры флоу и плашка — без горизонтального скролла; .unitseg 170px не ломает строку единиц', async ({ page }) => {
+        await page.setViewportSize({ width: 320, height: 680 });
+        await openApp(page);
+        /* Э9: плашка в пустой Истории */
+        await expect(page.locator('.imp-cta')).toBeVisible({ timeout: 5000 });
+        await noHScroll(page, 'плашка Э9');
+        /* Э1: карточка «Данные» в Настройках */
+        await page.locator('[data-act="openSettings"]').first().click();
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await noHScroll(page, 'Э1 Настройки');
+        /* Э2: выбор файла — сегмент единиц: 170px зафиксированы, подпись не наезжает на сегмент */
+        await page.locator('.card.impdata .arow').click();
+        await expect(page.locator('[data-act="impPick"]')).toBeVisible({ timeout: 5000 });
+        await noHScroll(page, 'Э2 выбор файла');
+        const u = await page.evaluate(function () {
+            const row = document.querySelector('.unitrow');
+            const seg = row && row.querySelector('.unitseg');
+            const lbl = row && row.querySelector('.ulbl');
+            if (!row || !seg || !lbl) return { err: 'нет .unitrow/.unitseg/.ulbl' };
+            const r = seg.getBoundingClientRect(), l = lbl.getBoundingClientRect();
+            return {
+                cssW: getComputedStyle(seg).width,
+                segW: Math.round(r.width), overlap: l.right > r.left + 0.5,
+                segIn: r.right <= document.documentElement.clientWidth + 0.5
+            };
+        });
+        if (u.err) throw new Error(u.err);
+        /* width в CSS = 170px; рендер 172px = content-box + 1px бордеры с двух сторон */
+        if (u.cssW !== '170px') throw new Error('.unitseg width в CSS не 170px: ' + u.cssW);
+        if (u.segW < 168 || u.segW > 176) throw new Error('.unitseg отрендерился не своей шириной: ' + u.segW);
+        if (u.overlap) throw new Error('подпись «Веса в выгрузке Strong» наезжает на сегмент');
+        if (!u.segIn) throw new Error('.unitseg вылезает за вьюпорт');
+        /* Э4/Э5: предпросмотр с длинным «чужим» именем — раскрытие переносится, не разносит сетку */
+        await pickCsv(page, 's320.csv', csv320());
+        await expect(page.locator('.bignum')).toContainText('1', { timeout: 5000 });
+        await page.locator('details.plain summary').click();
+        await expect(page.locator('details.plain .ddlist')).toContainText('Dumbbell Incline');
+        await noHScroll(page, 'Э4/Э5 предпросмотр');
+        /* Э6: результат */
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово — 1 тренировка в дневнике!', { timeout: 10000 });
+        await noHScroll(page, 'Э6 результат');
+        /* История с импортированной карточкой тоже живёт в 320px */
+        await page.locator('[data-act="impOpenHistory"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await noHScroll(page, 'История с импортом');
+    });
 });
