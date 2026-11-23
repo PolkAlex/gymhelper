@@ -6614,3 +6614,187 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         if (problems.length) throw new Error('ошибки страницы/консоли: ' + JSON.stringify(problems.slice(0, 5)));
     });
 });
+
+/* ============ [UX-T49] scroll restoration (docs/spec-ux-i22-scroll.md §10) ============
+   Хелпер scrollKeeper: снимок позиции ДО перестройки DOM, восстановление ПОСЛЕ по ключу
+   вида (как wkScroll у календаря). Клик по элементу ниже фолда — через evaluate(el.click()):
+   автоскролл Playwright сдвинул бы страницу ДО снимка и сломал сценарий. */
+test.describe('[UX-T49] scroll restoration', function () {
+
+    /* 24 завершённые тренировки за 24 дня — список Истории гарантированно длиннее вьюпорта */
+    async function seedLongHistory(request) {
+        const now = new Date();
+        const wos = [];
+        for (let i = 1; i <= 24; i++) {
+            const day = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i));
+            wos.push(doneWorkout(i, day, EX, '100', 3));
+        }
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            rev: 1, nextId: 25, del: [], workouts: wos } } });
+    }
+    async function expectScrollNear(page, expected, tol) {
+        await expect.poll(async function () {
+            const y = await page.evaluate(function () { return window.scrollY; });
+            return Math.abs(y - expected);
+        }, { timeout: 5000 }).toBeLessThanOrEqual(tol);
+    }
+    async function pageScrollTo(page, y) {
+        await page.evaluate(function (y) { window.scrollTo(0, y); }, y);
+        await expectScrollNear(page, y, 1); /* дождались фактической позиции */
+    }
+    /* клик без scroll-into-view: позиция страницы к моменту снимка не меняется */
+    async function jsClick(loc) {
+        await loc.first().evaluate(function (el) { el.click(); });
+    }
+
+    test('история: возврат из карточки — позиция списка восстановлена', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await pageScrollTo(page, 700);
+        await jsClick(page.locator('.pcard:not(.glow)'));
+        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* вход в карточку — всегда верх */
+        await page.locator('[data-act="closeHistory"]').click();
+        await expect(page.locator('.pcard:not(.glow)').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 700, 3); /* возврат — точная позиция ухода */
+    });
+
+    test('техника: возврат из карточки упражнения — позиция восстановлена', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        await pageScrollTo(page, 600);
+        await jsClick(page.locator('#techList .excard'));
+        await expect(page.locator('[data-act="techBack"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1);
+        await page.locator('[data-act="techBack"]').click();
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        /* lazy-визуалы карточек могут догрузиться после восстановления — допускаем дрейф (спека §7) */
+        await expectScrollNear(page, 600, 40);
+    });
+
+    test('техника: смена чипа — верх; возврат к прежнему чипу — восстановление', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        await pageScrollTo(page, 600);
+        /* чипы разделов выше фолда — клик без автоскролла */
+        await jsClick(page.locator('[data-act="techSection"]', { hasText: '★ Любимые' }));
+        await expect(page.locator('[data-act="techSection"][data-a="fav"].on')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* новый набор фильтров — список сверху */
+        await jsClick(page.locator('[data-act="techSection"]', { hasText: 'Все' }));
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 600, 40); /* снапшот под старым ключом жив */
+    });
+
+    test('вкладка туда-сюда: История → Статистика → История — позиция восстановлена', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await pageScrollTo(page, 500);
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="stats"]').click();
+        await expect(page.locator('.statgrid')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* новая вкладка — с верха */
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="history"]').click();
+        await expect(page.locator('.pcard:not(.glow)').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 500, 3); /* меж-вкладочная память: снапшоты не чистятся */
+    });
+
+    test('статистика: смена периода — верх; возврат к периоду — восстановление', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="stats"]').click();
+        await expect(page.locator('.statgrid')).toBeVisible({ timeout: 5000 });
+        await pageScrollTo(page, 300);
+        await jsClick(page.locator('[data-act="statsPeriod"]', { hasText: 'Год' }));
+        await expect(page.locator('.statgrid')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* решение владельца: смена периода = верх */
+        await jsClick(page.locator('[data-act="statsPeriod"]', { hasText: 'Месяц' }));
+        await expect(page.locator('.statgrid')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 300, 5);
+    });
+
+    test('настройки туда-сюда: выход возвращает позицию вкладки-источника', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await pageScrollTo(page, 400);
+        await jsClick(page.locator('[data-act="openSettings"]'));
+        await expect(page.locator('[data-act="closeSettings"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* вход в Настройки — верх */
+        await page.locator('[data-act="closeSettings"]').first().click();
+        await expect(page.locator('.pcard:not(.glow)').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 400, 3); /* фикс §3.11: не сброс наверх, а позиция ухода */
+    });
+
+    test('мастер целей: шаги с верха; выход возвращает позицию вкладки', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="stats"]').click();
+        await expect(page.locator('.statgrid')).toBeVisible({ timeout: 5000 });
+        await pageScrollTo(page, 300);
+        await page.locator('[data-act="openGoals"]').click();
+        await expect(page.locator('[data-act="goalNew"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* подэкран «Цели» — верх, не скролл Статистики */
+        await page.locator('[data-act="goalNew"]').first().click();
+        await expect(page.locator('[data-act="gwType"][data-a="1"]')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* шаг 1 — верх (старый scrollTo сохранён) */
+        await page.locator('[data-act="gwType"][data-a="1"]').click();
+        await expect(page.locator('#gwList .frow').first()).toBeVisible({ timeout: 5000 });
+        await page.locator('#gwList .frow').first().click();
+        await expect(page.locator('#gwTarget')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* шаг «значение» — верх */
+        await page.locator('#gwTarget').fill('300'); /* > e1RM (~130) — сразу «Далее», без предупреждения */
+        await page.locator('[data-act="gwTargetNext"]').click();
+        await expect(page.locator('[data-act="gwPeriod"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* шаг «срок» — верх */
+        await page.locator('[data-act="gwBack"]').first().click();
+        await expect(page.locator('#gwTarget')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* шаг назад — тоже верх (без регрессии) */
+        /* выход из мастера: шаги до 1-го, «←» закрывает — вкладка-источник восстановлена */
+        await page.locator('[data-act="gwBack"]').first().click();
+        await expect(page.locator('#gwList .frow').first()).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="gwBack"]').first().click();
+        await expect(page.locator('[data-act="gwType"][data-a="1"]')).toBeVisible({ timeout: 5000 });
+        await page.locator('[data-act="gwBack"]').first().click(); /* шаг 1 «←» — выход из мастера */
+        await expect(page.locator('[data-act="goalNew"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1);
+        await page.locator('[data-act="closeGoals"]').first().click();
+        await expect(page.locator('.statgrid')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 300, 3); /* фикс §3.11/§3.14: Статистика на позиции ухода */
+    });
+
+    test('перезагрузка страницы: все вкладки с верха (хранилище в памяти)', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await pageScrollTo(page, 600);
+        await page.reload();
+        await openApp(page);
+        await expectScrollNear(page, 0, 1); /* честный верх: снапшоты не переживают reload */
+    });
+
+    test('завершение тренировки: список Истории с верха (инвалидация снапшотов)', async ({ page, request }) => {
+        const now = new Date();
+        const today = isoDate(now);
+        const wos = [];
+        for (let i = 1; i <= 24; i++) {
+            const day = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - i));
+            wos.push(doneWorkout(i, day, EX, '100', 3));
+        }
+        /* активная тренировка с записанным подходом — превью-карточка в Истории */
+        wos.unshift({ id: 99, date: today, started: today + 'T09:00:00', ended: '', finished: false, title: '', nutrition: '',
+            exercises: [{ name: EX, st: today + 'T09:01:00', en: '', sets: [{ w: '50', s: 5, r: '8', t: today + 'T09:02:00' }] }] });
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            rev: 1, nextId: 100, del: [], workouts: wos } } });
+        await openApp(page);
+        await expect(page.locator('.pcard.glow').first()).toBeVisible({ timeout: 5000 });
+        await pageScrollTo(page, 600);
+        await jsClick(page.locator('.pcard.glow'));
+        await expect(page.locator('[data-act="finishWorkout"]')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* карточка — верх */
+        await page.locator('[data-act="finishWorkout"]').click();
+        await expect(page.locator('.toast.show')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.backbar')).toHaveCount(0);
+        await expectScrollNear(page, 0, 1); /* завершение: список с верха, старые позиции долой */
+    });
+});

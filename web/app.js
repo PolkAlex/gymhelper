@@ -1112,8 +1112,7 @@ function navForward() {
     }
     else if (entry.screen === 'workout') { editSnap = JSON.stringify(G); viewWid = d.id || 0; tab = 'history'; }
     else if (entry.screen === 'techCard') { tab = 'tech'; TECH.open = d.id || null; }
-    window.scrollTo(0, 0);
-    render();
+    render(); /* [UX-I22] скролл (верх для карточек/подэкранов, восстановление для cal) — scrollPost */
     return true;
 }
 
@@ -1213,14 +1212,12 @@ const ACTIONS = {
     openSettings: function () {
         settingsOpen = true;
         navPush('settings'); /* [UX-T42] */
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] вход на нехранимый экран — верх делает scrollPost */
     },
     closeSettings: function () {
         settingsOpen = false;
         navPop('settings'); /* [UX-T42] */
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] возврат на вкладку — позицию восстановит scrollPost */
     },
     /* [UX-S6] календарь тренировок — подэкран как Настройки [§3.4]; [UX-I17] начальное
        состояние (вид+дата) читается из gymCalView/gymCalDate и сразу записывается [§2.1] */
@@ -1229,15 +1226,13 @@ const ACTIONS = {
         calFromTab = tab; /* ред. 5: кнопка на всех вкладках — «Назад» вернёт на источник [§3.4] */
         navPush('cal'); /* [UX-T42] */
         calInitState();
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] вход на нехранимый экран — верх делает scrollPost */
     },
     closeCal: function () {
         calOpen = false;
         tab = calFromTab; /* возврат на вкладку, с которой открыли календарь [§3.4] */
         navPop('cal'); /* [UX-T42] */
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] возврат на вкладку-источник — позицию восстановит scrollPost */
     },
     /* [UX-I17 §2.2/§2.3] стрелки по видам: Месяц — ±1 месяц, Год — ±1 год; День ±1,
        3 дня ±3, Неделя ±7 дней (шаг = ширине окна сеточного вида) */
@@ -1508,31 +1503,27 @@ const ACTIONS = {
         srvState = '';
         lsSet('gymHelpSeen', '1'); /* пилюля «новое» видна до первого открытия (решение 13) */
         navPush('help'); /* [UX-T42] */
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] вход на нехранимый экран — верх делает scrollPost */
     },
     closeHelp: function () {
         helpOpen = false;
         settingsOpen = true; /* «← Назад» — на Настройки (точка входа) */
         navPop('help'); /* [UX-T42] */
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] Настройки нехранимы — верх (как прежде) даст scrollPost */
     },
     /* ============ [GOA-S1] цели ============ */
     openGoals: function () {
         goalsOpen = true;
         goalsFromTab = tab;
         navPush('goals'); /* [UX-T42] */
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] вход на нехранимый экран — верх делает scrollPost */
         goalArchNudge();
     },
     closeGoals: function () {
         goalsOpen = false;
         tab = goalsFromTab; /* «← Назад» — на вкладку, с которой открыли (§8.1) */
         navPop('goals'); /* [UX-T42] */
-        window.scrollTo(0, 0);
-        render();
+        render(); /* [UX-I22] возврат на вкладку-источник — позицию восстановит scrollPost */
     },
     goalNew: function () { goalNew(); },
     goalCancelAsk: function (a) { goalCancel(+a); },
@@ -1642,14 +1633,16 @@ function render() {
     if (wnOpen) h += wnModalHtml();
     /* [UX-T36] снимок скролла недели — ДО перестройки DOM, restore вернёт свежую позицию */
     calGridScrollPre();
+    scrollPre(); /* [UX-I22] снимок скролла страницы под текущим видом — до app.innerHTML */
     app.innerHTML = h;
     /* [UX-T42] самолечение стека: оказались на корневой вкладке — история навигации пуста */
     if (navScreen() === 'tab') NAV_BACK = [];
     navUpdateBackButton(); /* [UX-T42] BackButton по фактическому экрану */
     if (tab === 'tech' && !TECH.open) {
         const q = document.getElementById('techQ');
-        /* [EXR-T4] refreshTechList: живой список + пустое состояние (раньше techListHtml была не определена) */
-        if (q) q.addEventListener('input', function () { TECH.q = this.value; refreshTechList(); });
+        /* [EXR-T4] refreshTechList: живой список + пустое состояние (раньше techListHtml была не определена);
+           [UX-I22] ключ вида следует за живым поиском — уход после набора снимет снапшот под новым ключом */
+        if (q) q.addEventListener('input', function () { TECH.q = this.value; refreshTechList(); if (SKEEP.cur) SKEEP.cur = scrollKey(); });
     }
     /* [GOA-S1] живой поиск упражнения в мастере целей (§9, шаг 2 силовой) */
     if (gwOpen && GW && GW.type === 1 && gwStep === 1) {
@@ -1663,6 +1656,7 @@ function render() {
     /* [UX-I17 §3.2] автоскролл/восстановление scrollTop сеточного вида календаря
        (в месячном виде сетки нет — no-op внутри) */
     if (calVisible()) calGridScrollPost();
+    scrollPost(); /* [UX-I22] восстановление/верх по ключу нового вида; тот же вид — не трогаем */
     renderRestbar(); /* панель/пилюля таймера переживает навигацию: класс raised и содержимое актуальны */
     /* [ONB] пост-выравнивание оверлеев: карусель по ширине контейнера, тултип по месту подсветки */
     if (obOpen) obAlignTrack();
@@ -2450,6 +2444,53 @@ function calGridScrollPost() {
     wkScroll.key = key;
     wkScroll.top = target;
 }
+
+/* ---------- [UX-I22] scrollKeeper — позиции скролла СТРАНИЦЫ по ключам видов ----------
+   Снимок ДО перестройки DOM (render → app.innerHTML), восстановление ПОСЛЕ — по строковому
+   ключу вида (обобщение wkScroll календаря [UX-T36] на window). Хранилище в памяти:
+   перезагрузка страницы = честный верх. O(1) на рендер: без сканов DOM и scroll-слушателей. */
+let SKEEP = { cur: '', tops: {} }; /* cur — ключ вида на экране; tops — карта «ключ → scrollY» */
+
+/* ключ текущего вида из живого состояния: хранимые — префиксы tab:/cal:,
+   подэкраны и карточки — буквальные имена navScreen() (вход на них — всегда верх).
+   Календарь проверяется ПЕРВЫМ: navScreen() вернул бы общее 'cal' без вида/даты */
+function scrollKey() {
+    if (calVisible()) return 'cal:' + CAL.view + ':' + CAL.date;
+    const s = navScreen();
+    if (s !== 'tab') return s; /* settings/help/goals/gw/workout/techCard */
+    if (tab === 'history') return 'tab:h';
+    if (tab === 'stats') return 'tab:s|' + STATS.period;
+    if (tab === 'profile') return 'tab:p';
+    /* tech: раздел|категория|поиск|фильтры — смена чипа меняет ключ (верх),
+       возврат к тому же набору в сессии восстанавливает позицию (§4.2) */
+    return 'tab:t|' + TECH.section + '|' + (TECH.cat || '') + '|q=' + TECH.q +
+        '|f=' + TECH.fMuscle.join(',') + ';' + TECH.fGear.join(',') + ';' + TECH.fCats.join(',');
+}
+/* хранимые виды — вкладки и календарь; карточки/подэкраны не храним (§4.2) */
+function scrollKeepable(k) { return k.indexOf('tab:') === 0 || k.indexOf('cal:') === 0; }
+
+/* снимок страницы под текущий ключ — в render() ДО app.innerHTML, рядом с calGridScrollPre */
+function scrollPre() {
+    if (SKEEP.cur && scrollKeepable(SKEEP.cur))
+        SKEEP.tops[SKEEP.cur] = Math.max(0, window.scrollY || 0); /* iOS rubber-band ≥ 0 */
+}
+/* восстановление по ключу НОВОГО вида — в render() после перестройки, рядом с calGridScrollPost:
+   тот же вид — не трогаем (FAQ, тоглы, ★ — same-key skip §4.3); нет снапшота/вид нехраним — верх */
+function scrollPost() {
+    const k = scrollKey();
+    if (k === SKEEP.cur) return;
+    SKEEP.cur = k;
+    const t = SKEEP.tops[k];
+    if (t !== undefined && scrollKeepable(k))
+        window.scrollTo(0, Math.max(0, Math.min(t, document.documentElement.scrollHeight - window.innerHeight)));
+    else {
+        window.scrollTo(0, 0);
+        if (scrollKeepable(k)) SKEEP.tops[k] = 0;
+    }
+}
+/* инвалидация при радикальной смене данных (§6): завершение/удаление/создание
+   тренировки, удаление «своего» упражнения — устаревшие позиции не восстанавливаем */
+function scrollDropAll() { SKEEP.tops = {}; }
 
 /* ---------- [UX-I17][UX-T38] вид «Год» — 12 мини-месяцев 3×4 [§8] ----------
    весь год в кадре без внутреннего скролла (решение владельца §12.1); день с
@@ -4336,6 +4377,7 @@ function startWorkout() {
 function startBlank() {
     /* [UX-B7] при активной тренировке вторая не создаётся — диалог как в боте */
     activeConflictAsk(function () {
+        scrollDropAll(); /* [UX-I22] в истории появилась активная карточка */
         const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '', exercises: [] };
         if (G.nextId < 1) G.nextId = 1;
         /* [UX-T40] разминка первым упражнением — РОВНО ОДИН РАЗ при создании (§4.1):
@@ -4473,6 +4515,7 @@ function tplPlan(te) {
 function createFromList(t, isRepeat) {
     /* [UX-B7] при активной тренировке вторая не создаётся — диалог как в боте */
     activeConflictAsk(function () {
+        scrollDropAll(); /* [UX-I22] в истории появилась активная карточка */
         const w = { id: G.nextId++, date: todayISO(), started: nowLocalISO(), ended: '', finished: false, title: '', nutrition: '',
             exercises: (t.exercises || []).slice(0, 20).map(e => ({ name: e.name, sets: [], st: nowLocalISO(), en: '',
                 pw: e.w || '', ps: (+e.s || 0) >= 1 ? +e.s : 0, pr: e.r || '' })) };
@@ -4607,6 +4650,7 @@ function finishWorkout(id) {
     }
     /* [UX-T13] после завершения — сразу список истории, экран карточки закрывается;
        тост цели важнее обычного «Тренировка завершена» (аналог приоритета §11) */
+    scrollDropAll(); /* [UX-I22] история/рекорды пересчитаны — старые позиции невалидны */
     save().then(function (r) {
         if (r === 'ok') toast(goalHit ? '🏆 Цель достигнута! ' + goalNameFull(goalHit) : '✅ Тренировка завершена');
         viewWid = 0;
@@ -4619,6 +4663,7 @@ function deleteWorkout(id) {
     G.del.push(id);
     G.workouts = G.workouts.filter(w => w.id !== id);
     if (viewWid === id) { viewWid = 0; navPop('workout'); } /* [UX-T42] */
+    scrollDropAll(); /* [UX-I22] список сократился — устаревшие позиции долой */
     save().then(render);
 }
 
@@ -5002,6 +5047,7 @@ function ctxRemove() {
     closeModal();
     if (!name) return;
     removeCustom(name);
+    scrollDropAll(); /* [UX-I22] список «Своё» сократился; экран не дёргаем — точечный рендер ниже */
     refreshTechList();
 }
 
@@ -5787,6 +5833,7 @@ function tutStart() {
     tutOpen = true;
     tutStep = 0; /* всегда с шага 1; шаг 2 пропускается при «Дальше», если цели нет */
     tutApplySurface();
+    scrollDropAll(); /* [UX-I22] туториал сбрасывает сессию (как navResetAll) — явные верха шагов не перебивать */
     window.scrollTo(0, 0);
     render();
     tutPlaceTip();
