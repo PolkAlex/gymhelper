@@ -6573,6 +6573,51 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         }).toBe(null);
     });
 
+    /* [EXR-T19] fail-path миграции: save падает — ключ gymCustomExHidden ЖИВЁТ
+       (миграция повторится при следующем init — идемпотентно), томстона на сервере
+       ещё нет; retry (reload без сбоя) — ключ почищен, томстон на сервере */
+    test('миграция: save-error держит ключ gymCustomExHidden; retry чистит и льёт томстон на сервер', async ({ page, request }) => {
+        const day = isoDate(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 3));
+        /* сервер: база с OWN1 + история с OWN2 — union без томстона воскресил бы карточку */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        let failSave = true;
+        await page.route('/api/save', async function (route) {
+            if (failSave) await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+            else await route.continue();
+        });
+        await page.addInitScript(function (n) {
+            try { localStorage.setItem('gymCustomExHidden', JSON.stringify([n])); } catch (e) { /* noop */ }
+        }, OWN2);
+        await openOwnTech(page); /* init → migrateCustomFavs → save (падает) */
+        /* ключ пережил сбой сохранения */
+        const k = await page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        if (k === null) throw new Error('gymCustomExHidden должен пережить save-error, а ключ пуст');
+        /* томстон не доехал до сервера */
+        const s1 = await (await request.get('/api/state')).json();
+        if ((s1.customExHidden || []).length !== 0) {
+            throw new Error('томстон утёк на сервер при save-error: ' + JSON.stringify(s1.customExHidden));
+        }
+        failSave = false;
+        await page.reload();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.secrow .chip', { hasText: 'Своё' }).first().click();
+        /* подсказки имя не показывают уже при первом рендере после retry */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0, { timeout: 5000 });
+        /* ключ почищен после подтверждённого 'ok', томстон на сервере */
+        await expect.poll(async function () {
+            return page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        }, { timeout: 8000 }).toBe(null);
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).length;
+        }, { timeout: 8000 }).toBe(1);
+    });
+
+
     /* acc §12.12: активная тренировка с удаляемым упражнением — запись продолжается,
        после завершения история на месте */
     test('удаление «своего» при активной тренировке: карточка и записи на месте, запись продолжается, история после завершения', async ({ page, request }) => {
