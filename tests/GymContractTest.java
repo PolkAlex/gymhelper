@@ -207,6 +207,30 @@ public class GymContractTest {
             "{\"nextId\":1,\"workouts\":[{\"id\":1,\"finished\":true,\"shareId\":42,\"exercises\":[]}]}"));
         check(dsBad.findById(1).shareId == null, "share: shareId не-строкой игнорируется (null, без падения)");
 
+        /* [UX-S17] заметка тренировки: legacy-файл (фикстура d2 выше без ключа) читается
+            как раньше и не получает ключа при записи; round-trip строки с переносами и
+            эмодзи без потерь; мусор/пустая строка → null, без падения чтения */
+        check(w2.note == null, "note: legacy тренировка без note читается (null)");
+        check(!Json.write(d2.toJson()).contains("\"note\""), "note: toJson без заметки не пишет ключ (legacy байт-в-байт)");
+        String noteText = "Тяга пошла легче — попробовать 50 кг.\nПлечо после жима — следить 🧘 \"само пройдёт\"";
+        GymData dnote = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":2,\"workouts\":[{\"id\":1,\"date\":\"2026-11-23\",\"started\":\"2026-11-23T18:30:00\"," +
+            "\"finished\":true,\"title\":\"\",\"nutrition\":\"вода\"," +
+            "\"note\":\"" + noteText.replace("\n", "\\n").replace("\"", "\\\"") + "\",\"exercises\":[]}]}"));
+        check(noteText.equals(dnote.findById(1).note), "note: строка с переносами, эмодзи и кавычками читается как есть");
+        String noteOut = Json.write(dnote.toJson());
+        check(noteOut.contains("\"note\":\"Тяга пошла легче"), "note: toJson пишет заметку (после nutrition)");
+        GymData dnote2 = GymData.fromJson((Map<String, Object>) Json.parse(noteOut));
+        check(noteText.equals(dnote2.findById(1).note), "note: заметка переживает round-trip без потерь");
+        GymData dnoteBad = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"workouts\":[{\"id\":1,\"finished\":true,\"note\":42,\"exercises\":[]}]}"));
+        check(dnoteBad.findById(1).note == null, "note: не-строкой игнорируется (null, без падения)");
+        check(!Json.write(dnoteBad.toJson()).contains("\"note\""), "note: toJson после мусорного значения ключ не пишет");
+        GymData dnoteEmpty = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"workouts\":[{\"id\":1,\"finished\":true,\"note\":\"\",\"exercises\":[]}]}"));
+        check(dnoteEmpty.findById(1).note == null && !Json.write(dnoteEmpty.toJson()).contains("\"note\""),
+            "note: пустая строка = заметки нет, ключ в JSON не пишется");
+
         /* [UX-I16] opt-in имени владельца ссылки: ключей нет → анонимно (ПДн-минимализм §5);
             shareName — только Boolean, shareOwner — строка; пишутся только когда заданы */
         check(d2.shareName == null && d2.shareOwner == null, "shareName: legacy без ключей → null (анонимно)");
