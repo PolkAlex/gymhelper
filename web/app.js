@@ -38,6 +38,10 @@ let calFromTab = 'history';
    goalsFromTab — вкладка-источник, «← Назад» возвращает на неё */
 let goalsOpen = false;
 let goalsFromTab = 'stats';
+/* [ONB-S6] импорт Strong: экран-флоу поверх вкладки (как Настройки, спека §4).
+   IMP null = флоу закрыт; шаги: choose → (parsing) → preview → (saving) → result | error.
+   preview — результат STRONG.parseStrongCsv; addedIds — добавленные id для undo (§4.4) */
+let IMP = null;
 /* [GOA-S1] мастер создания цели (§9): подэкран поверх экрана «Цели», шаги с
    индикатором «Шаг N из M» как в онбординге; GW — черновик {type, ex, target, period, q, warn} */
 let gwOpen = false;
@@ -1029,6 +1033,7 @@ let NAV_FWD = [];
 
 /* текущий видимый экран — тот же приоритет, что в render()/topbarHtml() */
 function navScreen() {
+    if (IMP) return 'import'; /* [ONB-S6] флоу импорта поверх всего (вход из Настроек/пустой Истории) */
     if (helpOpen) return 'help';
     if (settingsOpen) return 'settings';
     if (gwOpen) return 'gw';
@@ -1082,7 +1087,8 @@ function navBack() {
     /* мастер целей: «←» сначала шагает по шагам (это не переход между экранами) */
     if (cur === 'gw' && gwStep > 0) { ACTIONS.gwBack(); return true; }
     navFwdPush(cur, navSnapshot(cur));
-    if (cur === 'help') ACTIONS.closeHelp();
+    if (cur === 'import') ACTIONS.impBack(); /* [ONB-S6] «Назад» с любого шага — выход из флоу */
+    else if (cur === 'help') ACTIONS.closeHelp();
     else if (cur === 'settings') ACTIONS.closeSettings();
     else if (cur === 'goals') ACTIONS.closeGoals();
     else if (cur === 'cal') ACTIONS.closeCal();
@@ -1095,6 +1101,8 @@ function navBack() {
 /* «Вперёд»: вернуть экран из NAV_FWD (свайп от правого края влево). Текущий экран
    кладётся в NAV_BACK — браузерная семантика «вперёд» после «назад». */
 function navForward() {
+    /* [ONB-S6] флоу импорта «вперёд» не восстанавливается (линейные шаги с кнопками) */
+    while (NAV_FWD.length && NAV_FWD[NAV_FWD.length - 1].screen === 'import') NAV_FWD.pop();
     const entry = NAV_FWD.pop();
     if (!entry) return false;
     const cur = navScreen();
@@ -1202,6 +1210,8 @@ const ACTIONS = {
         /* [GOA-S1] тап по любому табу закрывает и мастер создания цели (черновик сбрасывается) */
         gwOpen = false;
         GW = null;
+        /* [ONB-S6] тап по любому табу закрывает и флоу импорта (повторный вход — с шага выбора) */
+        IMP = null;
         /* [UX-S6] тап по любому табу закрывает и календарь [§3.4] */
         calOpen = false;
         /* [UX-T42] смена корневой вкладки — новая база стека: история навигации сброшена */
@@ -1511,6 +1521,43 @@ const ACTIONS = {
         navPop('help'); /* [UX-T42] */
         render(); /* [UX-I22] Настройки нехранимы — верх (как прежде) даст scrollPost */
     },
+    /* ============ [ONB-S6] импорт Strong: точки входа и кнопки флоу (Э1–Э9) ============ */
+    openImport: function () {
+        /* пилюля «новое» в Настройках и раскрытый аккордеон инструкции — только первый вход
+           (паттерн gymHelpSeen); флаг ставим на входе, поэтому первый вход ловим ДО lsSet */
+        const first = lsGet('gymImportSeen') !== '1';
+        lsSet('gymImportSeen', '1');
+        IMP = { step: 'choose', unit: 'kg', first: first, file: null, preview: null, addedIds: [], err: '' };
+        navPush('import'); /* [UX-T42] */
+        render(); /* [UX-I22] нехранимый экран — верх */
+    },
+    impBack: function () {
+        IMP = null; /* асинхронные хвосты (parse/save) сверяются с IMP и молча выходят */
+        navPop('import'); /* [UX-T42] */
+        render();
+    },
+    impUnit: function (a) {
+        if (!IMP || IMP.step !== 'choose') return;
+        IMP.unit = a === 'lb' ? 'lb' : 'kg';
+        render();
+    },
+    impPick: function () { const el = document.getElementById('impFile'); if (el) el.click(); },
+    impConfirm: function () { impConfirmGo(); },
+    impUndo: function () { impUndoGo(); },
+    impDone: function () {
+        IMP = null;
+        navPop('import'); /* [UX-T42] */
+        render();
+    },
+    impOpenHistory: function () {
+        /* «Открыть историю» — корневой вид Истории: подэкраны и стек долой (семантика switchTab) */
+        IMP = null;
+        settingsOpen = false; helpOpen = false; calOpen = false;
+        scrollDropAll(); /* [UX-I22] история изменилась — устаревшие позиции не восстанавливаем */
+        navResetAll();
+        tab = 'history'; viewWid = 0;
+        render();
+    },
     /* ============ [GOA-S1] цели ============ */
     openGoals: function () {
         goalsOpen = true;
@@ -1591,7 +1638,8 @@ function render() {
     /* [ONB-T5] Помощь — подэкран в том же паттерне (вход из Настроек) */
     /* [GOA-S1] Цели/мастер — подэкраны поверх вкладки; Настройки ПОВЕРХ них (приоритет
        как у календаря: иначе шестерёнка-вход из подэкрана был бы мёртвой кнопкой) */
-    if (helpOpen) h += renderHelp();
+    if (IMP) h += renderImport(); /* [ONB-S6] флоу импорта — приоритет поверх подэкранов */
+    else if (helpOpen) h += renderHelp();
     else if (settingsOpen) h += renderSettings();
     else if (gwOpen) h += renderGoalWizard();
     else if (goalsOpen) h += renderGoals();
@@ -1695,6 +1743,11 @@ function topbarHtml() {
     /* [UX-T27] вкладка profile снова подписывается «Профиль» (артефакт «Настройки» убран);
        точка входа в настройки — шестерёнка на всех вкладках [UX-S4 §3] */
     const names = { history: 'История', coach: 'Тренер', tech: 'Техника', stats: 'Статистика', profile: 'Профиль' };
+    /* [ONB-S6] флоу импорта: «←» — выход из флоу (шаг 1 всегда заново при повторном входе) */
+    if (IMP) {
+        return '<div class="topbar"><button class="tb-user" data-act="impBack" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
+            '<span class="tb-title">📦 Переезд из Strong</span></div>';
+    }
     /* [ONB-T5] экран Помощи: «←» слева — возврат в Настройки (точка входа — только они, решение 7) */
     if (helpOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeHelp" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
@@ -1831,9 +1884,14 @@ function renderHistoryTab() {
     const fin = G.workouts.filter(w => w.finished).slice().reverse();
     const act = activeW();
     if (!fin.length && !act) {
+        /* [ONB-S6] вторичная точка входа импорта (Э9): плашка видна только пока история
+           пуста — после импорта исчезает естественно, флаг не нужен (§В.1) */
         return '<div class="card hero"><p class="t1">Пока пусто 💪</p>' +
             '<p class="muted">Начни первую тренировку — кнопка ниже или «+» в нижнем меню.</p>' +
-            '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>';
+            '<div class="btnrow"><button class="btn prime wide" data-act="startWorkout">🏋️ Начать тренировку</button></div></div>' +
+            '<div class="card imp-cta"><p class="t1">📦 Переезд из Strong?</p>' +
+            '<p class="meta">Импортируйте историю из Strong — тренировки приедут с датами и подходами.</p>' +
+            '<div class="btnrow"><button class="btn prime wide" data-act="openImport">Импортировать CSV</button></div></div>';
     }
     /* [UX-T31] карточка «Рекорд недели» перенесена во вкладку Статистика */
     let h = '';
@@ -4262,6 +4320,14 @@ function renderSettings() {
         Строки — с РАЗНЫМИ иконками набора: вопрос / искра / щит (решение 13.1) */
     const wnOn = lsGet('gymWnOff') !== '1';
     const helpNew = lsGet('gymHelpSeen') !== '1';
+    /* [ONB-S6] «📦 Данные»: точка входа импорта Strong (спека §В.1, Э1) — разовое
+       служебное действие рядом с «О приложении»; пилюля «новое» до первого входа */
+    const impNew = lsGet('gymImportSeen') !== '1';
+    h += '<div class="card impdata"><p class="t1">📦 Данные</p>' +
+        '<button class="arow" data-act="openImport"><span class="aico imp" aria-hidden="true">📦</span>' +
+        '<span class="atxt">Переезд из Strong<span class="asub">Импорт тренировок из CSV-выгрузки</span></span>' +
+        (impNew ? '<span class="newpill">новое</span>' : '') +
+        '<span class="chevr">' + ICONS.chevR + '</span></button></div>';
     h += '<div class="card"><p class="t1">ℹ️ О приложении</p>' +
         '<button class="arow" data-act="openHelp"><span class="aico">' + ICONS.question + '</span>Помощь и FAQ' +
         (helpNew ? '<span class="newpill">новое</span>' : '') +
@@ -5664,6 +5730,248 @@ function initBgPicker() {
     });
 }
 
+/* ============ [ONB-S6] импорт Strong: экраны флоу (Э2–Э9) и запись ============
+   Парсер — web/importstrong.js (STRONG.parseStrongCsv); здесь только UI и запись
+   через существующий save() (§В.2). Тексты — §8 спеки, тон на «Вы». */
+function impRuNum(n) {
+    return String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+function impDmy(iso) {
+    const p = String(iso || '').split('-');
+    return p.length === 3 ? p[2] + '.' + p[1] + '.' + p[0] : String(iso || '');
+}
+function impExWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'упражнение';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'упражнения';
+    return 'упражнений';
+}
+function impDateWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'дата';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'даты';
+    return 'дат';
+}
+function impLineWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'строка';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'строки';
+    return 'строк';
+}
+function impHumanSize(bytes) {
+    if (!(bytes > 0)) return '';
+    if (bytes >= 1024 * 1024) return impRuNum(Math.round(bytes / (1024 * 1024) * 10) / 10).replace('.', ',') + ' МБ';
+    return Math.max(1, Math.round(bytes / 1024)) + ' КБ';
+}
+function impPhaseText() {
+    if (!IMP) return '';
+    if (IMP.phase === 'read') return 'Читаем файл…';
+    if (IMP.phase === 'group') return 'Собираем тренировки — ' + impRuNum(IMP.pdone) + ' из ' + impRuNum(IMP.ptotal);
+    return 'Разбираем подходы — ' + impRuNum(IMP.pdone) + ' из ' + impRuNum(IMP.ptotal);
+}
+function renderImport() {
+    if (!IMP) return '';
+    if (IMP.step === 'choose') return impChooseHtml();
+    if (IMP.step === 'parsing') return impParsingHtml();
+    if (IMP.step === 'preview') return impPreviewHtml();
+    if (IMP.step === 'saving') return impSavingHtml();
+    if (IMP.step === 'result') return impResultHtml();
+    return impErrorHtml();
+}
+/* Шаг 1 — выбор файла (Э2): единицы, инструкция-аккордеон, приватность */
+function impChooseHtml() {
+    let h = '<div class="card"><p class="t1">Переедем за минуту</p>' +
+        '<p class="meta">Тренировки приедут в дневник — с датами, упражнениями, весами и подходами. Существующие записи не изменятся.</p>' +
+        '<div class="unitrow"><span class="ulbl">Веса в выгрузке Strong</span>' +
+        '<div class="seg unitseg" role="group" aria-label="Единицы веса">' +
+        '<button class="seg-btn' + (IMP.unit !== 'lb' ? ' on' : '') + '" data-act="impUnit" data-a="kg">кг</button>' +
+        '<button class="seg-btn' + (IMP.unit === 'lb' ? ' on' : '') + '" data-act="impUnit" data-a="lb">фунты</button>' +
+        '</div></div>' +
+        '<p class="meta">Посмотреть в Strong: Настройки → Units</p>' +
+        '<details class="acc"' + (IMP.first ? ' open' : '') + '><summary>Как выгрузить CSV из Strong<span class="chev">▸</span></summary>' +
+        '<div class="accbody">' +
+        '<div class="step"><span class="n">1</span><span>В Strong откройте <b>⚙️ Настройки</b> → <b>Export Data</b></span></div>' +
+        '<div class="step"><span class="n">2</span><span>На почту из аккаунта Strong придёт письмо с CSV-файлом</span></div>' +
+        '<div class="step"><span class="n">3</span><span>Скачайте файл на телефон («Файлы» → «Загрузки») и выберите его здесь</span></div>' +
+        '</div></details>' +
+        '<div class="btnrow"><button class="btn prime wide" data-act="impPick">📄 Выбрать файл CSV</button></div>' +
+        '<p class="meta" style="text-align:center">Файл разбирается прямо в телефоне — никуда не отправляется.<br>Поддерживается только выгрузка Strong (CSV).</p>' +
+        '</div>';
+    return h;
+}
+/* Шаг 2 — парсинг (Э3): кадр показывается только для крупных файлов (>200 КБ) */
+function impParsingHtml() {
+    const pct = IMP.ptotal ? Math.max(6, Math.min(96, Math.round((IMP.pdone || 0) / IMP.ptotal * 100))) : 8;
+    return '<div class="card"><p class="t1" id="impPhaseTxt">' + esc(impPhaseText()) + '</p>' +
+        '<div class="pbar"><div class="fill" id="impBarFill" style="width:' + pct + '%"></div></div>' +
+        '<div class="ph done"><span class="ic">✓</span><span>Заголовки распознаны</span></div>' +
+        '<div class="ph' + (IMP.phase === 'sets' ? ' act' : ' done') + '"><span class="ic">' + (IMP.phase === 'sets' ? '⏳' : '✓') + '</span><span>Разбираем подходы</span></div>' +
+        '<div class="ph' + (IMP.phase === 'group' ? ' act' : ' wait') + '"><span class="ic">' + (IMP.phase === 'group' ? '⏳' : '○') + '</span><span>Собираем тренировки</span></div>' +
+        (IMP.file ? '<span class="filetag">📄 ' + esc(IMP.file.name) + ' · ' + impHumanSize(IMP.file.size) + '</span>' : '') +
+        '<p class="meta">Даже несколько лет истории — пара секунд.</p></div>';
+}
+/* Шаг 3 — предпросмотр (Э4/Э5): сводка + раскрытия «Свои» и совпавшие даты */
+function impPreviewHtml() {
+    const pv = IMP.preview;
+    const st = pv.stats;
+    let h = '<div class="card"><p class="t1">Проверьте перед импортом</p>' +
+        '<div class="bignum">' + impRuNum(st.count) + ' <small>' + trainWord(st.count) + '</small></div>' +
+        '<div class="krow"><span class="k">🗓</span><span class="v">' + impDmy(st.minDate) + ' — ' + impDmy(st.maxDate) + '</span></div>' +
+        '<div class="krow"><span class="k">🏋</span><span class="v">' + impRuNum(st.sets) + ' ' + setsWord(st.sets) + '</span></div>' +
+        '<div class="krow"><span class="k">📚</span><span class="v">' + impRuNum(st.exCount) + ' ' + impExWord(st.exCount) + '</span></div>';
+    if (pv.unknown.length) {
+        h += '<details class="plain"><summary>' + impRuNum(pv.unknown.length) + ' ' + impExWord(pv.unknown.length) +
+            ' не из каталога — станут «Своими»<span class="chev">▸</span></summary><div class="ddlist">';
+        for (const u of pv.unknown.slice(0, 10)) {
+            h += '<div class="li"><span>' + esc(u.name) + '</span><span class="cnt">' + impRuNum(u.cnt) + ' ' + trainWord(u.cnt) + '</span></div>';
+        }
+        if (pv.unknown.length > 10) h += '<div class="li"><span class="cnt">и ещё ' + impRuNum(pv.unknown.length - 10) + '</span></div>';
+        h += '</div><p class="meta">Они приедут как «Свои»: вся статистика, рекорды и калории по ним будут работать.</p></details>';
+    }
+    if (pv.dupDates.length) {
+        h += '<details class="warn"><summary>⚠️ ' + impRuNum(pv.dupDates.length) + ' ' + impDateWord(pv.dupDates.length) +
+            ' ' + (pv.dupDates.length === 1 ? 'совпадает' : 'совпадают') + ' с дневником<span class="chev">▸</span></summary><div class="ddlist">';
+        for (const d of pv.dupDates.slice(0, 10)) {
+            h += '<div class="li"><span>' + impDmy(d) + '</span><span class="cnt">уже есть тренировка</span></div>';
+        }
+        if (pv.dupDates.length > 10) h += '<div class="li"><span class="cnt">и ещё ' + impRuNum(pv.dupDates.length - 10) + '</span></div>';
+        h += '</div><p class="meta">В эти дни останутся обе тренировки — импортированная и Ваша. Лишнюю можно удалить в Истории.</p></details>';
+    }
+    h += '<div class="btnrow">' +
+        '<button class="btn prime wide" data-act="impConfirm">Импортировать ' + impRuNum(st.count) + ' ' + trainWord(st.count) + '</button>' +
+        '<button class="btn sec wide" data-act="impPick">Выбрать другой файл</button></div>' +
+        '<p class="meta" style="text-align:center">После импорта его можно отменить одной кнопкой.</p></div>';
+    return h;
+}
+/* Шаг 4 — запись: один save() на весь импорт (§В.2); кадр виден только при медленной сети */
+function impSavingHtml() {
+    return '<div class="card imp-saving"><p class="t1">Добавляем в дневник…</p>' +
+        '<div class="pbar"><div class="fill"></div></div>' +
+        '<p class="meta">Не закрывайте приложение.</p></div>';
+}
+/* Результат (Э6): итоги + построчные пропуски + undo */
+function impResultHtml() {
+    const pv = IMP.preview;
+    const st = pv.stats;
+    let h = '<div class="card"><div class="resicon ok">✓</div>' +
+        '<p class="resttl">Готово — ' + impRuNum(st.count) + ' ' + trainWord(st.count) + ' в дневнике!</p>' +
+        '<div class="krow"><span class="k">✓</span><span class="v">' + impRuNum(st.sets) + ' ' + setsWord(st.sets) + '</span></div>' +
+        '<div class="krow"><span class="k">✓</span><span class="v">Период ' + impDmy(st.minDate) + ' — ' + impDmy(st.maxDate) + '</span></div>' +
+        '<div class="krow"><span class="k">📚</span><span class="v dim">«Своих» упражнений: ' + impRuNum(pv.unknown.length) + '</span></div>' +
+        '<div class="krow"><span class="k">🔥</span><span class="v dim">Рекорды и калории пересчитались сами</span></div>';
+    if (pv.skipped.length) {
+        h += '<details class="warn" open><summary>Не перенеслось: ' + impRuNum(pv.skipped.length) + ' ' +
+            impLineWord(pv.skipped.length) + '<span class="chev">▾</span></summary><div class="ddlist">';
+        for (const s of pv.skipped.slice(0, 10)) {
+            h += '<div class="li err"><span>строка ' + impRuNum(s.line) + ' — ' + esc(s.why) + '</span></div>';
+        }
+        if (pv.skipped.length > 10) h += '<div class="li err"><span class="cnt">и ещё ' + impRuNum(pv.skipped.length - 10) + '</span></div>';
+        h += '</div></details>';
+    }
+    h += '<div class="btnrow">' +
+        '<button class="btn prime wide" data-act="impOpenHistory">Открыть историю</button>' +
+        '<button class="btn sec wide" data-act="impUndo">Отменить импорт</button>' +
+        '<button class="btn sec wide" data-act="impDone">Готово</button></div></div>';
+    return h;
+}
+/* Ошибки формата (Э7/Э8 + большой файл) */
+const IMP_ERRORS = {
+    notstrong: { t: 'Не похоже на выгрузку Strong', m: 'В файле нет колонок Strong — Date, Exercise Name и остальные. Убедитесь, что выбрали CSV из письма Export Data, и попробуйте ещё раз.' },
+    empty: { t: 'В файле нет тренировок', m: 'В этом CSV только заголовки — тренировок не нашлось. Возможно, экспорт был пустым.' },
+    big: { t: 'Файл слишком большой', m: 'Пока поддерживаем файлы до 15 МБ — обычно это больше 10 лет тренировок.' }
+};
+function impErrorHtml() {
+    const e = IMP_ERRORS[IMP.err] || IMP_ERRORS.notstrong;
+    return '<div class="card"><div class="resicon bad">⚠️</div>' +
+        '<p class="resttl">' + e.t + '</p>' +
+        '<p class="meta" style="text-align:center">' + e.m + '</p>' +
+        '<div class="btnrow"><button class="btn prime wide" data-act="impPick">Выбрать другой файл</button>' +
+        '<button class="btn sec wide" data-act="impBack">← Назад</button></div></div>';
+}
+/* выбор файла: нативный picker через скрытый #impFile (паттерн bgFile); отмена — молча */
+function initImportFile() {
+    const el = document.getElementById('impFile');
+    if (!el || el.__gymBound) return;
+    el.__gymBound = true;
+    el.addEventListener('change', function () {
+        const f = this.files && this.files[0];
+        this.value = '';
+        if (!f || !IMP) return; /* отмена picker — норма, не ошибка (§4.5) */
+        impHandleFile(f);
+    });
+}
+async function impHandleFile(f) {
+    if (!IMP || IMP.step === 'parsing' || IMP.step === 'saving') return;
+    const my = IMP;
+    if (f.size > 15 * 1024 * 1024) { IMP.step = 'error'; IMP.err = 'big'; render(); return; }
+    IMP.file = { name: f.name, size: f.size };
+    const big = f.size > 200 * 1024; /* мелкий файл — мгновенно, без кадра парсинга (§4.2) */
+    if (big) {
+        IMP.step = 'parsing'; IMP.phase = 'read'; IMP.pdone = 0; IMP.ptotal = 0;
+        render();
+        await new Promise(function (r) { setTimeout(r, 350); }); /* кадр «Читаем файл…» успевает отрисоваться */
+        if (IMP !== my) return; /* флоу закрыли, пока ждали кадр */
+    }
+    let text = '';
+    try { text = await f.text(); } catch (e) { return; /* чтение не удалось — тихо к шагу 1 (§4.5) */ }
+    if (IMP !== my) return;
+    const existing = {};
+    for (const w of G.workouts) if (w.date) existing[w.date] = true;
+    const res = STRONG.parseStrongCsv(text, { unit: IMP.unit, existingDates: existing });
+    if (IMP !== my) return;
+    if (res.status === 'ok') {
+        IMP.step = 'preview';
+        IMP.preview = res;
+    } else {
+        IMP.step = 'error';
+        IMP.err = res.status;
+    }
+    render();
+}
+async function impConfirmGo() {
+    if (!IMP || IMP.step !== 'preview' || !IMP.preview) return;
+    const my = IMP;
+    if (!IMP.addedIds.length) {
+        for (const w of IMP.preview.workouts) {
+            w.id = G.nextId++;
+            G.workouts.push(w);
+            IMP.addedIds.push(w.id);
+        }
+    }
+    IMP.step = 'saving';
+    render();
+    const r = await save(); /* один save() на весь импорт (§В.2); ошибки — тосты doSave */
+    if (IMP !== my) return; /* флоу закрыли, пока шёл save: данные уже в G */
+    if (r === 'ok') {
+        IMP.step = 'result';
+        scrollDropAll(); /* [UX-I22] история радикально изменилась — снапшоты долой */
+        try { if (tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred) tg.HapticFeedback.notificationOccurred('success'); } catch (e) { /* noop */ }
+    } else if (r === 'conflict') {
+        /* 409: сервер заменён начисто — добавленное ушло вместе с G; повтор подтвердит заново */
+        IMP.step = 'preview';
+        IMP.addedIds = [];
+    } else {
+        /* сеть: добавленное осталось в памяти вкладки, повторное «Импортировать» повторит save() (§4.6) */
+        IMP.step = 'preview';
+    }
+    render();
+}
+async function impUndoGo() {
+    if (!IMP || IMP.step !== 'result' || !IMP.addedIds.length) return;
+    const ids = IMP.addedIds;
+    if (!G.del) G.del = [];
+    for (const id of ids) G.del.push(id); /* томстоуны: сервер не воскресит (как deleteWorkout) */
+    G.workouts = G.workouts.filter(function (w) { return ids.indexOf(w.id) < 0; });
+    scrollDropAll(); /* [UX-I22] */
+    /* возврат к шагу 1 (§4.4): свежий флоу, без файла и предпросмотра */
+    IMP = { step: 'choose', unit: 'kg', first: false, file: null, preview: null, addedIds: [], err: '' };
+    render();
+    await save();
+}
+
 /* ============ [ONB-T3..T7] онбординг: приветствие, туториал, Помощь, «Что нового» ============ */
 /* localStorage-флаги (спека §8): gymOnbDone, gymWnVer, gymWnOff, gymHelpSeen.
    localStorage недоступен (приватный режим) — онбординг молча пропускаем (fail-open, §6) */
@@ -6058,6 +6366,7 @@ async function init() {
     loadTheme();
     loadBg();
     initBgPicker();
+    initImportFile(); /* [ONB-S6] скрытый #impFile — приёмник выбора CSV */
     restInitState(); /* таймер независим от сети: восстанавливается до /api/init */
     if (tg) {
         try { tg.ready(); tg.expand(); } catch (e) { /* noop */ }
