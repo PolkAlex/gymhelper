@@ -1,5 +1,4 @@
-/* ============================================================
-   Amber Glass · дизайн-система [DSN-S2]
+/* =====================================================   Amber Glass · дизайн-система [DSN-S2]
    Ровно 2 темы: тёмная (базовая) + светлая.
    Источник: docs/mockups/concept-hybrid.html + redesign-concepts.md §10
    ============================================================ */
@@ -60,6 +59,16 @@
     --sw-knob: rgba(255,255,255,.92);
     --sw-knob-brd: rgba(255,255,255,.25);
     --sw-knob-ico: #565b64;   /* иконка на белой ручке в OFF */
+    /* карта мышц [FIT-S2]: тело/зоны (значения макета fit-s2-muscle-map v3);
+       янтарные уровни --lvl1..3 общие для обеих тем */
+    --sil: rgba(255,255,255,.11);
+    --sil-bd: rgba(255,255,255,.16);
+    --mz-idle: rgba(255,255,255,.05);
+    --mz-bd: rgba(255,255,255,.11);
+    --lvl1: rgba(255,194,32,.26);
+    --lvl2: rgba(255,194,32,.52);
+    --lvl3: rgba(255,194,32,.80);
+    --lvl3-bd: rgba(255,194,32,.65);
 }
 [data-theme="light"] {
     color-scheme: light;
@@ -104,6 +113,11 @@
     --sw-knob: #ffffff;
     --sw-knob-brd: rgba(22,24,27,.12);
     --sw-knob-ico: #8a9099;
+    /* карта мышц [FIT-S2]: светлые тело/зоны; уровни янтаря общие (§В.3) */
+    --sil: rgba(22,24,27,.13);
+    --sil-bd: rgba(22,24,27,.22);
+    --mz-idle: rgba(22,24,27,.05);
+    --mz-bd: rgba(22,24,27,.14);
 }
 
 /* ============ база ============ */
@@ -1015,6 +1029,68 @@ summary .wip, .setrow .wip { font-size: 11.5px; font-weight: 400; color: var(--m
 }
 .statgrid .sg span { font-size: 11px; color: var(--muted); font-weight: 600; }
 
+/* ============ [FIT-S2] блок карты мышц в карточке тренировки ============ */
+/* макет docs/mockups/fit-s2-muscle-map.html v3; геометрия — web/bodymap.js (MIT) */
+.mapcard {
+    background: var(--nested);
+    border: 1px solid var(--nested-brd);
+    border-radius: 14px;
+    margin-top: 12px;
+    padding: 12px 10px;
+}
+.maphead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.maphead .mt { font-size: 12px; font-weight: 600; letter-spacing: .4px; color: var(--muted); text-transform: uppercase; }
+.maphead .msum { font-size: 11.5px; color: var(--muted); font-weight: 600; white-space: nowrap; }
+/* сегмент м/ж — компактный вариант .seg (паттерн профиля [UX-T18]); выбор не сохраняется */
+.mapsexrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 2px; }
+.mapseg { margin-top: 0; }
+.mapseg .seg-btn { flex: 0 0 auto; height: 28px; padding: 0 11px; font-size: 11px; }
+.mapsexnote { font-size: 10.5px; color: var(--muted); }
+.bodies { display: flex; gap: 10px; justify-content: center; margin-top: 6px; }
+.bodywrap { flex: 1 1 0; min-width: 0; max-width: 172px; }
+/* фиксированная высота фигур: viewBox видов различаются (1448/1538) — width:auto,
+   иначе подписи съезжают (§6.6); обводки — non-scaling-stroke, экранные px */
+.bodywrap svg { display: block; height: 330px; width: auto; max-width: 100%; margin: 0 auto; }
+.bodywrap .bname { text-align: center; font-size: 11px; color: var(--muted); font-weight: 600; margin-top: 2px; }
+.msil { fill: var(--sil); stroke: var(--sil-bd); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.mz { fill: var(--mz-idle); stroke: var(--mz-bd); stroke-width: .9; vector-effect: non-scaling-stroke; }
+.mz.lvl1 { fill: var(--lvl1); stroke: rgba(255,194,32,.30); stroke-width: 1; }
+.mz.lvl2 { fill: var(--lvl2); stroke: rgba(255,194,32,.45); stroke-width: 1.1; }
+.mz.lvl3 { fill: var(--lvl3); stroke: var(--lvl3-bd); stroke-width: 1.3; }
+.mz.act { cursor: pointer; }
+.mz.act:active { opacity: .85; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; padding: 0 2px; }
+.lg { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.lg b { color: var(--text); font-weight: 700; }
+.lg .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.dot.lvl1 { background: var(--lvl1); box-shadow: inset 0 0 0 1px rgba(255,194,32,.25); }
+.dot.lvl2 { background: var(--lvl2); }
+.dot.lvl3 { background: var(--lvl3); }
+/* плитки «Продолжительность / Объём / Калории» — как .statgrid, три колонки */
+.statgrid.map3 { grid-template-columns: 1fr 1fr 1fr; margin-top: 12px; }
+.statgrid.map3 .sg b { font-size: 15.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statgrid.map3 .sg span { font-size: 10.5px; }
+/* плашка «не указаны группы» — тихая, .hint-семантика (неполнота данных, не аларм) */
+.untag {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--nested); border: 1px dashed var(--btn-brd); border-radius: 12px;
+    padding: 9px 11px; margin-top: 12px; font-size: 12.5px; color: var(--muted); line-height: 1.4;
+}
+.untag .uico { flex: none; font-size: 14px; }
+.untag button {
+    border: none; background: none; color: var(--accent); font-size: 12.5px; font-weight: 700;
+    padding: 6px 4px; cursor: pointer; flex: none; font-family: inherit;
+}
+.mapempty { text-align: center; color: var(--muted); font-size: 13px; padding: 10px 8px 2px; line-height: 1.5; }
+/* шит группы: строки упражнений (название+детали слева, подходы справа); тап по строке не ведёт никуда (MVP) */
+.grrow { display: flex; align-items: center; gap: 10px; width: 100%; padding: 11px 4px; border-bottom: 1px solid var(--nested-brd); }
+.grrow:last-of-type { border-bottom: none; }
+.grrow .gn { flex: 1 1 auto; min-width: 0; }
+.grrow .gn b { display: block; font-size: 14px; font-weight: 700; }
+.grrow .gn span { font-size: 11.5px; color: var(--muted); }
+.grrow .gv { flex: none; font-size: 14px; font-weight: 800; color: var(--accent); }
+.grrow .gv small { font-size: 11px; color: var(--muted); font-weight: 600; }
+
 /* ============ живые рекорды и оценка 1ПМ [UX-T2] ============ */
 /* чип 🏆 у подхода-рекордсмена в карточке тренировки */
 .entry .prtag {
@@ -1719,8 +1795,7 @@ html.has-bg body::after {
     white-space: nowrap;
 }
 
-/* ============ [UX-I17] мультивидовый календарь: пикер вида + сеточный движок ============
-   источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 4; T1 —
+/* ============ [UX-I17] мультивидовый календарь: пикер вида + сеточный движок =====   источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 4; T1 —
    состояние/пикер/Неделя (7 колонок), T2 — День (1 колонка) и 3 дня (3 колонки)
    на том же движке; T3 — Год (сетка мини-месяцев ниже); рев. 4 [UX-B14] —
    полоса дней = окно (1/3/7), winpill удалена, высота часа ×2 (88/112/96) */
@@ -2096,8 +2171,7 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
 .rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel, .seg .seg-btn,
 .cal-d, .drow, .cal-today { cursor: pointer; }
 
-/* ============================================================
-   [ONB-T3..T7] Онбординг: приветствие, туториал, Помощь, «Что нового»
+/* =====================================================   [ONB-T3..T7] Онбординг: приветствие, туториал, Помощь, «Что нового»
    Источник: docs/mockups/onb-onboarding.html ред. 5 (Amber Glass,
    токены те же — новых переменных не нужно)
    Слои: topbar 30 · restbar 38 · backbar 39 · nav 40 · носители
@@ -2735,3 +2809,91 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
     display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent);
     border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px; margin-top: 10px;
 }
+/* ============ [ONB-S6] импорт Strong: экраны флоу (макет docs/mockups/onb-s6-import.html) ============ */
+/* карточка «📦 Данные» в Настройках (Э1): иконка-бейдж и подпись строки */
+.arow .aico.imp {
+    width: 32px; height: 32px; border-radius: 10px; font-size: 16px; color: inherit;
+    background: rgba(255,194,32,.12); border: 1px solid var(--glow-brd);
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.arow .atxt { display: flex; flex-direction: column; text-align: left; min-width: 0; flex: 1; }
+.arow .asub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.card.impdata { border-color: var(--glow-brd); }
+/* плашка пустой Истории (Э9) */
+.card.imp-cta { border-color: var(--glow-brd); }
+/* сегмент единиц на шаге выбора (Э2) */
+.unitrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.unitrow .ulbl { font-size: 14px; font-weight: 600; min-width: 0; }
+.unitseg { width: 170px; flex: none; }
+/* аккордеон-инструкция выгрузки (Э2) */
+details.acc { margin-top: 10px; }
+details.acc summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+    background: var(--nested); border: 1px solid var(--nested-brd);
+    border-radius: 14px; padding: 11px 12px; font-size: 14px; font-weight: 600; color: var(--text);
+}
+details.acc summary::-webkit-details-marker { display: none; }
+details.acc summary .chev { margin-left: auto; color: var(--muted); transition: transform .15s; font-size: 12px; flex: none; }
+details.acc[open] summary .chev { transform: rotate(90deg); }
+details.acc .accbody { padding: 12px 4px 2px; }
+details.acc .step { display: flex; gap: 10px; padding: 7px 0; font-size: 13.5px; line-height: 1.45; }
+details.acc .step .n {
+    flex: none; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
+    background: rgba(255,194,32,.14); border: 1px solid var(--glow-brd); color: var(--accent);
+    font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+/* сводка предпросмотра (Э4) */
+.bignum { font-size: 30px; font-weight: 800; letter-spacing: -.4px; margin: 6px 0 2px; }
+.bignum small { font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+.krow { display: flex; align-items: baseline; gap: 8px; padding: 7px 0; font-size: 14px; }
+.krow .k { color: var(--muted); flex: none; }
+.krow .v { font-weight: 600; min-width: 0; }
+.krow .v.dim { font-weight: 400; color: var(--muted); }
+/* плашки-раскрытия предпросмотра и результата (Э4/Э5/Э6): plain — «Свои», warn — внимание */
+details.plain, details.warn { margin-top: 10px; }
+details.plain summary, details.warn summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+    border-radius: 12px; padding: 9px 12px; font-size: 13px; font-weight: 600;
+}
+details.plain summary::-webkit-details-marker, details.warn summary::-webkit-details-marker { display: none; }
+details.plain summary {
+    background: var(--nested); border: 1px solid var(--nested-brd); color: var(--text);
+}
+details.warn summary {
+    background: rgba(255,194,32,.08); border: 1px solid var(--glow-brd); color: var(--accent);
+}
+details.plain summary .chev, details.warn summary .chev {
+    margin-left: auto; transition: transform .15s; font-size: 11px; flex: none;
+}
+details.plain summary .chev { color: var(--muted); }
+details.plain[open] summary .chev, details.warn[open] summary .chev { transform: rotate(90deg); }
+.ddlist { padding: 10px 2px 0; }
+.ddlist .li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 5px 0; min-width: 0; }
+.ddlist .li span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.ddlist .li .cnt { color: var(--muted); flex: none; }
+.ddlist .li.err { color: var(--danger); }
+.ddlist .li.err .cnt { color: var(--danger); opacity: .8; }
+/* кадр парсинга/записи (Э3): прогресс-полоса и фазы */
+.pbar { height: 8px; border-radius: 999px; background: var(--nested); overflow: hidden; margin: 12px 0 8px; }
+.pbar .fill {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent));
+    box-shadow: 0 0 14px rgba(255,194,32,.45);
+    transition: width .25s ease;
+}
+.imp-busy .pbar .fill { animation: impslide 2.2s ease-in-out infinite alternate; }
+@keyframes impslide { from { width: 46%; } to { width: 74%; } }
+.filetag {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; max-width: 100%;
+    background: var(--nested); border: 1px solid var(--nested-brd);
+    border-radius: 10px; padding: 6px 10px; font-size: 12.5px; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* результат и ошибки (Э6/Э7/Э8) */
+.resicon {
+    width: 52px; height: 52px; border-radius: 50%; margin: 4px auto 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+}
+.resicon.ok { background: rgba(61,220,151,.12); border: 1px solid rgba(61,220,151,.35); color: #3ddc97; }
+.resicon.bad { background: rgba(255,107,94,.10); border: 1px solid rgba(255,107,94,.30); color: var(--danger); }
+.resttl { text-align: center; font-size: 17px; font-weight: 800; margin: 0 0 2px; }

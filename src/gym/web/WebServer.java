@@ -481,6 +481,12 @@ public final class WebServer {
             current.favs.clear();
             current.favs.addAll(data.favs);
         }
+        /* [EXR-T19] томстоны удалённых «своих» — замещаем только если клиент прислал ключ
+            (старый кэш JS — не трогаем, по образцу customEx/favs) */
+        if (dataJson.containsKey("customExHidden")) {
+            current.customExHidden.clear();
+            current.customExHidden.addAll(data.customExHidden);
+        }
         data = current;
         /* nextId монотонно растёт: max(серверный, клиентский, max(id)+1) — иначе коллизии id затирают данные */
         data.nextId = Math.max(current.nextId, incomingNextId);

@@ -3,6 +3,10 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'web', 'app.js'), 'utf8');
 const cat = fs.readFileSync(path.join(root, 'web', 'catalog.js'), 'utf8');
+/* [FIT-S2] bodymap.js — модуль карты мышц: свой разметочный data-act="mapZone" (bodySvg),
+   participates в проверке пары «data-act ↔ ACTIONS» наравне с app.js */
+const bodymap = fs.readFileSync(path.join(root, 'web', 'bodymap.js'), 'utf8');
+const appUi = app + bodymap;
 const fails = [];
 
 if (/\.startedAt|\.endedAt/.test(app)) {
@@ -16,8 +20,8 @@ if (!actBlock) {
     const keys = new Set();
     for (const m of actBlock[1].matchAll(/([a-zA-Z]+):\s*(?:async\s+)?function/g)) keys.add(m[1]);
     const used = new Set();
-    for (const m of app.matchAll(/data-act="([a-zA-Z]+)"/g)) used.add(m[1]);
-    for (const m of app.matchAll(/data-b="([a-zA-Z]+)"/g)) used.add(m[1]);
+    for (const m of appUi.matchAll(/data-act="([a-zA-Z]+)"/g)) used.add(m[1]);
+    for (const m of appUi.matchAll(/data-b="([a-zA-Z]+)"/g)) used.add(m[1]);
     for (const m of app.matchAll(/confirmModal\([^,]+,\s*'([a-zA-Z]+)'/g)) used.add(m[1]);
     for (const u of used) {
         if (!keys.has(u)) fails.push('data-act/data-b без обработчика в ACTIONS: ' + u);
@@ -28,7 +32,7 @@ if (!actBlock) {
            tplSaveModal [UX-T18]: иконка «💾 В шаблоны» из шапки завершённой убрана,
            ACTION и модалка сохранения остались (фича живёт в боте) */
         if (k === 'nutrModal' || k === 'autoTitle' || k === 'deleteSet' || k === 'tplSaveModal') continue;
-        if (!app.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"') && !app.includes("'" + k + "'")) {
+        if (!appUi.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"') && !app.includes("'" + k + "'")) {
             fails.push('обработчик ACTIONS никогда не используется: ' + k);
         }
     }
@@ -205,6 +209,176 @@ try {
     fails.push('юниты mgTagKey не выполняются: ' + e.message);
 }
 
+/* [ONB-T9] юниты парсера Strong CSV (web/importstrong.js): выполняется вместе с catalog.js
+   в одной области видимости — findCatalog доступен парсеру через замыкание, как в браузере */
+try {
+    const imp = fs.readFileSync(path.join(root, 'web', 'importstrong.js'), 'utf8');
+    const gymApi = new Function(cat + '\n' + imp + '\nreturn { STRONG: STRONG, findCatalog: findCatalog };')();
+    const S = gymApi.STRONG;
+    if (typeof gymApi.findCatalog('Жим штанги лёжа') !== 'object') {
+        fails.push('check: в каталоге нет «Жим штанги лёжа» — юниты ниже невалидны');
+    }
+
+    /* parseCsv: кавычки с запятыми/переводами строк, ""-экранирование, BOM, CRLF, ;-фолбэк */
+    let rows = S.parseCsv('\uFEFFa,b\r\n"1,5","x""y""z"\r\n');
+    if (rows.length !== 2 || rows[0][0] !== 'a' || rows[0][1] !== 'b' || rows[1][0] !== '1,5' || rows[1][1] !== 'x"y"z') {
+        fails.push('parseCsv: кавычки/BOM/CRLF разобраны неверно: ' + JSON.stringify(rows));
+    }
+    rows = S.parseCsv('a;b\n1;2');
+    if (rows[0][1] !== 'b' || rows[1][1] !== '2') fails.push('parseCsv: ;-разделитель не распознан');
+    /* пустые строки сохраняются (нумерация skipped.line по исходному файлу) — их
+       пропускает сам parseStrongCsv; хвостовой \n даёт пустую строку в конце */
+    rows = S.parseCsv('a,b\n1,2\n\n');
+    if (rows.length !== 3 || rows[2].length !== 1 || rows[2][0] !== '') {
+        fails.push('parseCsv: пустые строки должны сохраняться для нумерации: ' + JSON.stringify(rows));
+    }
+
+    /* пустой / whitespace-only файл → Э8 «нет тренировок», не Э7 «не Strong» (§4.5) */
+    const r0 = S.parseStrongCsv('', { unit: 'kg' });
+    if (r0.status !== 'empty') fails.push('parseStrongCsv: пустой файл — ' + r0.status + ', ожидалось empty');
+    const rWs = S.parseStrongCsv('\n  \n\n', { unit: 'kg' });
+    if (rWs.status !== 'empty') fails.push('parseStrongCsv: whitespace-only файл — ' + rWs.status + ', ожидалось empty');
+
+    /* 10 колонок Strong: Date, Workout Name, Duration, Exercise Name, Set Order, Weight, Reps, Distance, Time, Weight Unit */
+    const HEAD = 'Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Time,Weight Unit\n';
+    const RU_BENCH = 'Жим штанги лёжа'; /* имя из каталога — не должно попасть в unknown */
+
+    /* нумерация пропусков учитывает пустые строки файла (ревью [ONB-T9]): заголовок=1,
+       бланк=2, Push-up=3 (ок), Plank=4 (пропуск «пустые повторения» → строка 4) */
+    const resBlank = S.parseStrongCsv(HEAD +
+        '\n' +
+        '2024-11-18 07:00,Gym,,Push-up,1,,15,,,\n' +
+        '2024-11-18 07:00,Gym,,Plank,2,30,0,,,\n', { unit: 'kg' });
+    if (resBlank.status !== 'ok' || resBlank.skipped.length !== 1 || resBlank.skipped[0].line !== 4) {
+        fails.push('parseStrongCsv: номер строки пропуска с бланк-строкой — ' + JSON.stringify(resBlank.skipped));
+    }
+
+    /* happy path: маппинг, сортировка по SET ORDER, схлопывание 60×8×3, title/duration */
+    const csvOk = HEAD +
+        '2024-11-18 07:00,Full Gym,1h 6m 25s,' + RU_BENCH + ',2,60,8,,,kg\n' +
+        '2024-11-18 07:00,Full Gym,1h 6m 25s,' + RU_BENCH + ',1,60,8,,,kg\n' +
+        '2024-11-18 07:00,Full Gym,1h 6m 25s,' + RU_BENCH + ',3,60,8,,,kg\n' +
+        '2024-11-18 07:00,Full Gym,1h 6m 25s,Bench Press (Barbell),1,62.5,10,,,kg\n' +
+        '2024-11-19 18:30:00,Full Gym,35,Lat Pulldown,1,50,12,,,kg\n';
+    const res = S.parseStrongCsv(csvOk, { unit: 'kg' });
+    if (res.status !== 'ok') {
+        fails.push('parseStrongCsv happy path: status ' + res.status);
+    } else {
+        if (res.workouts.length !== 2) fails.push('parseStrongCsv: ожидалось 2 тренировки, пришло ' + res.workouts.length);
+        const w1 = res.workouts[0];
+        if (w1.date !== '2024-11-18' || w1.started !== '2024-11-18T07:00:00') {
+            fails.push('parseStrongCsv: дата/время — ' + w1.date + ' ' + w1.started);
+        }
+        /* 1h 6m 25s от 07:00:00 → 08:06:25 */
+        if (w1.ended !== '2024-11-18T08:06:25') fails.push('parseStrongCsv: ended из Duration — ' + w1.ended);
+        if (w1.finished !== true || w1.title !== 'Full Gym' || w1.nutrition !== '') {
+            fails.push('parseStrongCsv: finished/title/nutrition — ' + JSON.stringify([w1.finished, w1.title, w1.nutrition]));
+        }
+        const bench = w1.exercises[0];
+        if (bench.name !== RU_BENCH) fails.push('parseStrongCsv: упражнение — ' + bench.name);
+        /* SET ORDER 2,1,3 в файле → сортировка 1,2,3 → три одинаковых подряд схлопнулись */
+        if (bench.sets.length !== 1 || bench.sets[0].w !== '60' || bench.sets[0].s !== 3 || bench.sets[0].r !== '8') {
+            fails.push('parseStrongCsv: схлопывание 60×8×3 — ' + JSON.stringify(bench.sets));
+        }
+        if (w1.exercises[1].name !== 'Bench Press (Barbell)' || w1.exercises[1].sets[0].w !== '62.5') {
+            fails.push('parseStrongCsv: второе упражнение — ' + JSON.stringify(w1.exercises[1]));
+        }
+        const w2 = res.workouts[1];
+        if (w2.started !== '2024-11-19T18:30:00') fails.push('parseStrongCsv: секунды в дате — ' + w2.started);
+        if (w2.ended !== '2024-11-19T19:05:00') fails.push('parseStrongCsv: голая длительность = минуты — ' + w2.ended);
+        /* «Свои»: английские имена не из каталога с числом тренировок; известное имя не в списке */
+        const un = res.unknown.map(function (u) { return u.name; });
+        if (un.indexOf('Bench Press (Barbell)') < 0 || un.indexOf('Lat Pulldown') < 0) {
+            fails.push('parseStrongCsv: unknown без английских имён: ' + JSON.stringify(res.unknown));
+        }
+        if (un.indexOf(RU_BENCH) >= 0) fails.push('parseStrongCsv: известное имя попало в unknown');
+        const bbCnt = res.unknown.filter(function (u) { return u.name === 'Bench Press (Barbell)'; })[0];
+        if (!bbCnt || bbCnt.cnt !== 1) fails.push('parseStrongCsv: cnt по тренировкам — ' + JSON.stringify(bbCnt));
+        /* сводка: 2 тренировки, подходов 3+1+1 = 5, период по датам, 3 разных упражнения */
+        if (res.stats.count !== 2 || res.stats.sets !== 5 || res.stats.minDate !== '2024-11-18' || res.stats.maxDate !== '2024-11-19') {
+            fails.push('parseStrongCsv: stats — ' + JSON.stringify(res.stats));
+        }
+        if (res.stats.exCount !== 3) fails.push('parseStrongCsv: exCount — ' + res.stats.exCount);
+
+        /* дубликаты дат: «оба + предупреждение» (§В.5) — ничего не пропускаем */
+        const resDup = S.parseStrongCsv(csvOk, { unit: 'kg', existingDates: { '2024-11-18': true, '2020-01-01': true } });
+        if (resDup.dupDates.length !== 1 || resDup.dupDates[0] !== '2024-11-18') {
+            fails.push('parseStrongCsv: dupDates — ' + JSON.stringify(resDup.dupDates));
+        }
+        if (resDup.workouts.length !== 2) fails.push('parseStrongCsv: дубликат даты не должен пропускать тренировку');
+    }
+
+    /* единицы: фунты → кг до 0.5; Weight Unit строки сильнее сегмента; запятая-десятичная */
+    const csvLb = HEAD +
+        '2024-11-18 07:00,Gym,,Squat,1,100,5,,,lbs\n' + /* 100 lb → 45.36 → 45.5 */
+        '2024-11-18 07:00,Gym,,Squat,2,100,5,,,lbs\n' + /* и схлопывание одинаковых */
+        '2024-11-18 07:00,Gym,,Bench,1,80,5,,,kg\n' +   /* kg в строке сильнее сегмента lb */
+        '2024-11-18 07:00,Gym,,Row,1,"80,5",5,,,\n';    /* колонки Unit нет → сегмент lb */
+    const resLb = S.parseStrongCsv(csvLb, { unit: 'lb' });
+    if (resLb.status !== 'ok') {
+        fails.push('parseStrongCsv lb: status ' + resLb.status);
+    } else {
+        const sq = resLb.workouts[0].exercises.find(function (e) { return e.name === 'Squat'; });
+        if (!sq || sq.sets.length !== 1 || sq.sets[0].w !== '45.5' || sq.sets[0].s !== 2) {
+            fails.push('parseStrongCsv: фунты → кг (100 lb → 45.5) со схлопыванием — ' + JSON.stringify(sq && sq.sets));
+        }
+        const be = resLb.workouts[0].exercises.find(function (e) { return e.name === 'Bench'; });
+        if (!be || be.sets[0].w !== '80') fails.push('parseStrongCsv: Weight Unit kg сильнее сегмента lb — ' + JSON.stringify(be && be.sets));
+        const rw = resLb.workouts[0].exercises.find(function (e) { return e.name === 'Row'; });
+        /* 80,5 lb = 36.5148 кг → округление до 0.5 → 36.5 */
+        if (!rw || rw.sets[0].w !== '36.5') fails.push('parseStrongCsv: сегмент lb + запятая-десятичная — ' + JSON.stringify(rw && rw.sets));
+    }
+
+    /* пропуски с причинами и номерами строк (заголовок = строка 1); пустой вес → вес тела */
+    const csvSkip = HEAD +
+        '2024-11-18 07:00,Gym,,Push-up,1,,15,,,\n' +      /* ок: вес тела */
+        '2024-11-18 07:00,Gym,,Plank,2,30,0,,,\n' +       /* строка 3: пустые повторения */
+        '2024-11-18 07:00,Gym,,Treadmill,3,,,5.5,,\n' +   /* строка 4: кардио (дистанция) */
+        '2024-11-18 07:00,Gym,,Treadmill,4,,,,25:00,\n' + /* строка 5: кардио (время) */
+        '2024-11-18 07:00,Gym,,No Name Row,5,40,8,,,\n' + /* ок */
+        ',Gym,,Ghost Row,6,40,8,,,\n' +                   /* строка 7: не прочитать дату */
+        '2024-11-18 07:00,Gym,,,7,40,8,,,\n';             /* строка 8: нет названия упражнения */
+    const resSkip = S.parseStrongCsv(csvSkip, { unit: 'kg' });
+    if (resSkip.status !== 'ok') {
+        fails.push('parseStrongCsv skip-файл: status ' + resSkip.status);
+    } else {
+        const w = resSkip.workouts[0];
+        const pu = w.exercises.find(function (e) { return e.name === 'Push-up'; });
+        if (!pu || pu.sets[0].w !== '') fails.push('parseStrongCsv: пустой вес → вес тела — ' + JSON.stringify(pu && pu.sets));
+        const whys = resSkip.skipped.map(function (s) { return s.why; }).join(' | ');
+        if (resSkip.skipped.length !== 5) {
+            fails.push('parseStrongCsv: ожидалось 5 пропусков, есть ' + resSkip.skipped.length + ' (' + whys + ')');
+        }
+        if (whys.indexOf('кардио-подход (время/дистанция) не переносится') < 0) fails.push('parseStrongCsv: кардио-причина не найдена: ' + whys);
+        if (whys.indexOf('пустые повторения') < 0) fails.push('parseStrongCsv: причина «пустые повторения» не найдена: ' + whys);
+        if (whys.indexOf('нет названия упражнения') < 0) fails.push('parseStrongCsv: причина «нет названия» не найдена: ' + whys);
+        if (whys.indexOf('не удалось прочитать дату') < 0) fails.push('parseStrongCsv: причина «не прочитать дату» не найдена: ' + whys);
+        const ln = resSkip.skipped.map(function (s) { return s.line; }).sort(function (a, b) { return a - b; }).join(',');
+        if (ln !== '3,4,5,7,8') fails.push('parseStrongCsv: номера строк пропусков — ' + ln);
+        if (w.exercises.some(function (e) { return e.name === 'Treadmill'; })) {
+            fails.push('parseStrongCsv: кардио-строки не должны попадать в тренировку');
+        }
+    }
+
+    /* ошибки формата: чужой CSV (Э7) и файл без данных (Э8) */
+    const r1 = S.parseStrongCsv('name,amount\nМолоко,2\n', { unit: 'kg' });
+    if (r1.status !== 'notstrong') fails.push('parseStrongCsv: чужой CSV — ' + r1.status);
+    const r2 = S.parseStrongCsv(HEAD, { unit: 'kg' });
+    if (r2.status !== 'empty') fails.push('parseStrongCsv: только заголовки — ' + r2.status);
+    const r3 = S.parseStrongCsv('Date,Exercise Name,Reps\n2024-01-01,Push-up,0\n', { unit: 'kg' });
+    if (r3.status !== 'empty') fails.push('parseStrongCsv: строки без структуры → empty — ' + r3.status);
+
+    /* две тренировки в один день: разное время/название — обе переносятся (§4.6) */
+    const csvTwo = HEAD +
+        '2024-11-18 07:00,Morning,1h,' + RU_BENCH + ',1,60,8,,,kg\n' +
+        '2024-11-18 19:00,Evening,1h,' + RU_BENCH + ',1,80,8,,,kg\n';
+    const r4 = S.parseStrongCsv(csvTwo, { unit: 'kg' });
+    if (r4.status !== 'ok' || r4.workouts.length !== 2) {
+        fails.push('parseStrongCsv: две тренировки одного дня — ' + r4.status + ' ' + (r4.workouts || []).length);
+    }
+} catch (e) {
+    fails.push('юниты Strong-парсера не выполняются: ' + e.message);
+}
 if (fails.length) {
     console.error('ПРОВАЛ (' + fails.length + '):\n - ' + fails.join('\n - '));
     process.exit(1);

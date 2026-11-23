@@ -33,6 +33,9 @@ public final class GymData {
        при чтении), пишутся только когда непустые — файл без «Своих»/«Любимых» прежний */
     public final List<CustomExercise> customEx = new ArrayList<>();
     public final List<String> favs = new ArrayList<>();
+    /* [EXR-T19] томстоны удалённых «своих» (имена): ключа нет → пустой список (старые
+       файлы ок); пишется только когда непустой — файл без удалённых остаётся прежним */
+    public final List<String> customExHidden = new ArrayList<>();
 
     public Workout active() {
         for (Workout w : workouts) {
@@ -173,9 +176,11 @@ public final class GymData {
                 if (name.isEmpty() || name.length() > 60 || !seen.add(name.toLowerCase())) continue;
                 CustomExercise ce = new CustomExercise();
                 ce.n = name;
-                List<Object> tagList = Json.list(c.get("tags"));
-                if (tagList != null) {
-                    for (Object t : tagList) {
+                /* [FIT-T2] мусор в tags (не массив) игнорируется — запись «своего»
+                    без групп всё равно читается (обратная совместимость обязательна) */
+                Object rawTags = c.get("tags");
+                if (rawTags instanceof List) {
+                    for (Object t : (List<?>) rawTags) {
                         if (ce.tags.size() >= 16) break;
                         if (!(t instanceof String)) continue;
                         String tag = ((String) t).strip();
@@ -195,6 +200,19 @@ public final class GymData {
                 String name = ((String) o).strip();
                 if (name.isEmpty() || !seenFav.add(name)) continue;
                 d.favs.add(name);
+            }
+        }
+        /* [EXR-T19] томстоны удалённых «своих» — по образцу favs: только непустые строки,
+            без дублей, кап 500 (защита от раздутого payload); ключа нет → пустой список */
+        List<Object> hidList = Json.list(m.get("customExHidden"));
+        if (hidList != null) {
+            Set<String> seenHid = new HashSet<>();
+            for (Object o : hidList) {
+                if (d.customExHidden.size() >= 500) break;
+                if (!(o instanceof String)) continue;
+                String name = ((String) o).strip();
+                if (name.isEmpty() || !seenHid.add(name)) continue;
+                d.customExHidden.add(name);
             }
         }
         for (Object o : Json.list(m.get("workouts"))) {
@@ -393,6 +411,9 @@ public final class GymData {
             m.put("customEx", cs);
         }
         if (!favs.isEmpty()) m.put("favs", new ArrayList<Object>(favs));
+        /* [EXR-T19] томстоны — конец карты, пишутся только когда непустые (как favs):
+            файл пользователя без удалённых «своих» остаётся байт-в-байт прежним */
+        if (!customExHidden.isEmpty()) m.put("customExHidden", new ArrayList<Object>(customExHidden));
         return m;
     }
 }
