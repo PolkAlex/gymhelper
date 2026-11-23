@@ -6729,7 +6729,35 @@ test.describe('[UX-S17] заметка тренировки', function () {
     });
 
     /* чек-лист §9.5: заметка не попадает в share — ни в пейлоад /api/share, ни на страницу /w/ */
-    test('заметка не попадает в share-пейлоад и на страницу /w/<id>', async ({ page, request }) => {
+    test('заметка не попадает в share-пейлоад и на страницу /w/<id>', async ({ page, context, request }) => {
+        /* моки Telegram/clipboard — тот же паттерн, что у [UX-I16] (выше): без них
+           openTelegramLink уходит в window.open и страница навигируется на t.me */
+        await context.addInitScript(function () {
+            let tries = 0;
+            const t = setInterval(function () {
+                tries++;
+                const w = window.Telegram || (window.Telegram = {});
+                const app = w.WebApp;
+                if (app && !app.__mocked) {
+                    app.__mocked = true;
+                    app.__opened = [];
+                    app.openTelegramLink = function (url) { app.__opened.push(url); };
+                }
+                if ((app && app.__mocked) || tries > 400) clearInterval(t);
+            }, 25);
+        });
+        await context.addInitScript(function () {
+            const mem = [];
+            try {
+                Object.defineProperty(navigator, 'clipboard', {
+                    configurable: true,
+                    value: {
+                        writeText: function (t) { mem.push(String(t)); return Promise.resolve(); },
+                        readText: function () { return Promise.resolve(mem.length ? mem[mem.length - 1] : ''); }
+                    }
+                });
+            } catch (e) { /* движок не дал переопределить — тост ловит ветку ниже */ }
+        });
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [], profile: { sex: 'м', age: 30, height: 180, weight: 90 },
@@ -6756,5 +6784,9 @@ test.describe('[UX-S17] заметка тренировки', function () {
         const html = await (await request.get('/w/' + sid)).text();
         expect(html).toContain(EX);
         expect(html).not.toContain(NOTE);
+        /* открытие выбора чата — через мок Telegram, без навигации страницы */
+        const opened = await page.evaluate(function () { return window.Telegram.WebApp.__opened; });
+        expect(opened.length).toBe(1);
+        expect(decodeURIComponent(opened[0])).toContain('/w/' + sid);
     });
 });
