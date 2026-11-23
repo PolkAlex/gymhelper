@@ -1540,6 +1540,77 @@ public class GymContractTest {
             /* рендер: формулы/склонения/дата/caption + падение на пустых (§5–7) */
             byte[] pngR = CardRender.render(seedCa, wRecCa);
             check(pngR[0] == (byte) 0x89 && pngR[1] == 0x50 && pngR.length > 30_000, "poster: CardRender.render — PNG");
+
+            /* [UX-B19] длинное имя упражнения в рекорде: полный рендер с переносом
+               заголовка на 2 строки (карточка y=740 h=290) — PNG без исключения;
+               до фикса этот путь вообще не покрывался (recLine выше — короткий) */
+            GymData longCa = new GymData();
+            longCa.nextId = 2;
+            longCa.rev = 1;
+            Workout wLongBaseCa = new Workout();
+            wLongBaseCa.id = 1;
+            wLongBaseCa.date = "2026-11-10";
+            wLongBaseCa.finished = true;
+            ExerciseEntry lbeCa = new ExerciseEntry("Подтягивания параллельным хватом");
+            lbeCa.sets.add(new SetEntry("6", 3, "8"));
+            wLongBaseCa.exercises.add(lbeCa);
+            Workout wLongRecCa = new Workout();
+            wLongRecCa.id = 2;
+            wLongRecCa.date = "2026-11-21";
+            wLongRecCa.startedAt = "2026-11-21T09:00:00";
+            wLongRecCa.endedAt = "2026-11-21T10:00:00";
+            wLongRecCa.finished = true;
+            ExerciseEntry lreCa = new ExerciseEntry("Подтягивания параллельным хватом");
+            lreCa.sets.add(new SetEntry("8", 4, "10"));
+            wLongRecCa.exercises.add(lreCa);
+            longCa.workouts.add(wLongBaseCa);
+            longCa.workouts.add(wLongRecCa);
+            byte[] pngLongCa = CardRender.render(longCa, wLongRecCa);
+            check(pngLongCa[0] == (byte) 0x89 && pngLongCa[1] == 0x50 && pngLongCa.length > 30_000,
+                "poster: рендер с длинным именем рекорда (перенос на 2 строки) — PNG ([UX-B19])");
+
+            /* [UX-B19] wrapRecTitle (рефлексия — метод приватный): короткая строка —
+               1:1 без изменений; длинная — 2 строки, ОБЕ в пределах ширины карточки
+               (это и есть фикс «заголовок вылезает за край»: старый код рисовал
+               строку шире карточки, не падая); остаток строки 2 — с «…»; «слово»
+               без пробелов режется по символам без потери остатка (§4.1, §6.3) */
+            java.awt.Font boldCa = contractFontCa("DejaVuSans-Bold.ttf");
+            java.awt.image.BufferedImage miCa = new java.awt.image.BufferedImage(
+                1, 1, java.awt.image.BufferedImage.TYPE_INT_RGB);
+            java.awt.Graphics2D mgCa = miCa.createGraphics();
+            mgCa.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            mgCa.setRenderingHint(java.awt.RenderingHints.KEY_FRACTIONALMETRICS,
+                java.awt.RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+            java.awt.FontMetrics fmCa = mgCa.getFontMetrics(boldCa.deriveFont(48f));
+            int availCa = 936 - 36 - 36;
+            try {
+                java.lang.reflect.Method wrapCa = CardRender.class.getDeclaredMethod(
+                    "wrapRecTitle", java.awt.FontMetrics.class, String.class, int.class);
+                wrapCa.setAccessible(true);
+                String[] fitCa = (String[]) wrapCa.invoke(null, fmCa, "Приседания — 120 кг × 8", availCa);
+                check(fitCa.length == 1 && fitCa[0].equals("Приседания — 120 кг × 8"),
+                    "poster: короткий рекорд — одна строка 1:1 ([UX-B19])");
+                String[] twoCa = (String[]) wrapCa.invoke(null, fmCa,
+                    "Подтягивания параллельным хватом — 8 кг × 10", availCa);
+                check(twoCa.length == 2, "poster: длинное имя — 2 строки, а не " + twoCa.length + " ([UX-B19])");
+                check(fmCa.stringWidth(twoCa[0]) <= availCa && fmCa.stringWidth(twoCa[1]) <= availCa,
+                    "poster: обе строки рекорда в пределах карточки — не вылезают за край ([UX-B19])");
+                check("Подтягивания параллельным хватом — 8 кг × 10".startsWith(twoCa[0]),
+                    "poster: строка 1 — целые слова начала строки рекорда ([UX-B19]): " + twoCa[0]);
+                String[] dotsCa = (String[]) wrapCa.invoke(null, fmCa,
+                    "Подтягивания параллельным хватом с отягощением на поясе и лямках — 8 кг × 10", availCa);
+                check(dotsCa.length == 2 && dotsCa[1].endsWith("…"),
+                    "poster: остаток строки 2 усечён «…» ([UX-B19]): " + dotsCa[1]);
+                String[] wordCa = (String[]) wrapCa.invoke(null, fmCa,
+                    "Тяга".repeat(60) + " — 8 кг × 10", availCa);
+                check(wordCa.length == 2 && fmCa.stringWidth(wordCa[0]) <= availCa
+                        && fmCa.stringWidth(wordCa[1]) <= availCa,
+                    "poster: слово без пробелов режется по символам, обе строки в карточке ([UX-B19])");
+            } finally {
+                mgCa.dispose();
+            }
+
             check(CardRender.russianDate("2026-11-21").equals("21 ноября 2026, суббота"), "poster: russianDate POC-формат");
             check(CardRender.russianDate("мусор").equals("мусор"), "poster: russianDate фолбэк — строка как есть (§5.1)");
             check(CardRender.russianDate(null).isEmpty(), "poster: russianDate(null) — пусто");
@@ -1717,6 +1788,18 @@ public class GymContractTest {
                 new java.io.InputStreamReader(s.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
             String line = in.readLine();
             return Integer.parseInt(line.split(" ")[1]);
+        }
+    }
+
+    /* bundled-шрифт для проверки переноса заголовка рекорда ([UX-B19]): тот же TTF,
+       что грузит CardRender (classpath-ресурс; fallback файловая система для точечной
+       компиляции) — метрики совпадают с продовым рендером */
+    static java.awt.Font contractFontCa(String name) throws Exception {
+        java.io.InputStream res = CardRender.class.getResourceAsStream("/gym/web/fonts/" + name);
+        java.io.InputStream in = res != null ? res
+            : java.nio.file.Files.newInputStream(java.nio.file.Path.of("src", "gym", "web", "fonts", name));
+        try (in) {
+            return java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, in);
         }
     }
 }

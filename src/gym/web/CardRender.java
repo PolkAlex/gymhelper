@@ -34,6 +34,9 @@ import java.util.Locale;
  * компиляции), системные шрифты ОС не используются (урок POC: Docker).
  * Формулы чисел — SharePage/Records (§8 спеки: паритет с приложением и /w/<id>).
  * Имя пользователя на постере не показывается (решение владельца 21.11).
+ * Заголовок «РЕКОРД!» — перенос по словам на 1–2 строки с усечением «…»
+ * ([UX-B19]): одна строка — координаты POC 1:1, две — карточка поднята
+ * (y=740, h=290, низ 1030), список и футер без изменений (§4.1).
  */
 public final class CardRender {
     private static final int W = 1080;
@@ -47,6 +50,13 @@ public final class CardRender {
     private static final int EX_GAP = 24;
     private static final int REC_Y = 770;
     private static final int REC_H = 230;
+    /* [UX-B19] заголовок рекорда в 2 строки: карточка поднимается на 30 (y=740) и
+       растёт до 290 — низ 1030, ROWS_Y_REC/ROWS_LIMIT_* и метка «УПРАЖНЕНИЯ»
+       (rowsY−30) остаются как есть (§4.1: внизу места нет). Зазоры 62px сверху
+       (до сетки статистики, низ 678) и снизу (до глифа метки ≈1092) — фидбек
+       владельца 23.11: при y=700 зазор 22px «режет глаз» */
+    private static final int REC_Y_TWO = REC_Y - 30;
+    private static final int REC_H_TWO = 290;
     /* строки списка: с рекордом — 1150 (лимит 4), без — 830 (лимит 6) (§4.1) */
     private static final int ROWS_Y_REC = 1150;
     private static final int ROWS_Y_PLAIN = 830;
@@ -139,17 +149,27 @@ public final class CardRender {
             int rowsY;
             int rowsLimit;
             if (recLine != null) {
-                /* 4 · карточка «РЕКОРД!» */
-                roundCard(g, MARGIN, REC_Y, CARD_W, REC_H, CARD_FILL_HI, ACCENT);
+                /* 4 · карточка «РЕКОРД!» (§4): заголовок в 1 строку — геометрия POC 1:1;
+                   длинное имя — перенос на 2 строки ([UX-B19]): карточка от REC_Y_TWO
+                   высотой REC_H_TWO, строки заголовка через высоту строки bold 48 (57px),
+                   подзаголовок через 48px после последней строки — ритм одиночного вида
+                   сохранён («РЕКОРД!» +62, строка 1 +140, подзаголовок до низа ≥ 30px) */
+                g.setFont(bold.deriveFont(48f));
+                String[] rec = wrapRecTitle(g.getFontMetrics(), recLine, CARD_W - 36 - 36);
+                boolean twoLines = rec.length == 2;
+                int recY = twoLines ? REC_Y_TWO : REC_Y;
+                int recH = twoLines ? REC_H_TWO : REC_H;
+                roundCard(g, MARGIN, recY, CARD_W, recH, CARD_FILL_HI, ACCENT);
                 g.setColor(ACCENT);
                 g.setFont(bold.deriveFont(36f));
-                g.drawString("РЕКОРД!", MARGIN + 36, REC_Y + 62);
+                g.drawString("РЕКОРД!", MARGIN + 36, recY + 62);
                 g.setColor(TEXT_MAIN);
                 g.setFont(bold.deriveFont(48f));
-                g.drawString(recLine, MARGIN + 36, REC_Y + 140);
+                g.drawString(rec[0], MARGIN + 36, recY + 140);
+                if (twoLines) g.drawString(rec[1], MARGIN + 36, recY + 197);
                 g.setColor(TEXT_MUTED);
                 g.setFont(sans.deriveFont(30f));
-                g.drawString("личный результат по этому упражнению", MARGIN + 36, REC_Y + 188);
+                g.drawString("личный результат по этому упражнению", MARGIN + 36, recY + (twoLines ? 245 : 188));
                 rowsY = ROWS_Y_REC;
                 rowsLimit = ROWS_LIMIT_REC;
             } else {
@@ -378,6 +398,38 @@ public final class CardRender {
         int end = name.length();
         while (end > 1 && fm.stringWidth(name.substring(0, end)) + dotsW > avail) end--;
         return name.substring(0, end) + dots;
+    }
+
+    /* перенос заголовка «РЕКОРД!» на ≤2 строки по ширине текста карточки ([UX-B19]):
+       влезает — одна строка (геометрия карточки не меняется); иначе жадный перенос
+       по словам, остаток — строка 2 с усечением «…» (по смыслу truncateName, §6.3);
+       «слово» шире строки (имя без пробелов) предварительно режется по символам
+       на два токена, чтобы не потерять остаток строки (результат рекорда) */
+    private static String[] wrapRecTitle(FontMetrics fm, String text, int avail) {
+        if (fm.stringWidth(text) <= avail) return new String[]{text};
+        String[] ws = text.split(" ");
+        if (fm.stringWidth(ws[0]) > avail) {
+            int end = ws[0].length();
+            while (end > 1 && fm.stringWidth(ws[0].substring(0, end)) > avail) end--;
+            String[] split = new String[ws.length + 1];
+            split[0] = ws[0].substring(0, end);
+            split[1] = ws[0].substring(end);
+            System.arraycopy(ws, 1, split, 2, ws.length - 1);
+            ws = split;
+        }
+        StringBuilder l1 = new StringBuilder(ws[0]);
+        int i = 1;
+        while (i < ws.length && fm.stringWidth(l1 + " " + ws[i]) <= avail) {
+            l1.append(' ').append(ws[i]);
+            i++;
+        }
+        StringBuilder rest = new StringBuilder();
+        for (int k = i; k < ws.length; k++) {
+            if (k > i) rest.append(' ');
+            rest.append(ws[k]);
+        }
+        if (rest.length() == 0) return new String[]{l1.toString()};
+        return new String[]{l1.toString(), truncateName(fm, rest.toString(), avail)};
     }
 
     /* ---------- графические примитивы и шрифты (POC 1:1) ---------- */
