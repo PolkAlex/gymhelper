@@ -6850,6 +6850,8 @@ test.describe('[UX-T49] scroll restoration', function () {
            снапшот календаря. scrollKey теперь берёт приоритет из navScreen(): settings > cal */
         await seedLongHistory(request);
         await openApp(page);
+        /* 390x640: годовой вид выше вьюпорта на всех проектах (pixel7 не скроллится) */
+        await page.setViewportSize({ width: 390, height: 640 });
         await page.locator('.topbar [data-act="openCal"]').click();
         await expect(page.locator('.card.cal')).toBeVisible({ timeout: 5000 });
         await jsClick(page.locator('.topbar [data-act="openCalPicker"]'));
@@ -6869,6 +6871,7 @@ test.describe('[UX-T49] scroll restoration', function () {
         await jsClick(page.locator('.topbar [data-act="openSettings"]'));
         await expect(page.locator('[data-act="closeSettings"]').first()).toBeVisible({ timeout: 5000 });
         await expectScrollNear(page, 0, 1); /* верх, а не y (ранее same-key skip блокировал) */
+        await pageScrollTo(page, 150); /* скролл внутри Настроек: снапшот календаря не должен перезаписаться */
         await page.locator('[data-act="closeSettings"]').first().click();
         await expect(page.locator('.card.cal')).toBeVisible({ timeout: 5000 });
         await expectScrollNear(page, y, 3); /* снапшот календаря не перезаписан скроллом Настроек */
