@@ -5330,7 +5330,9 @@ test.describe('[ONB-T5] Помощь (FAQ)', function () {
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Помощь', { timeout: 5000 });
         await page.locator('[aria-label="Назад"]').click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
-        await expect(page.locator('#app .newpill')).toHaveCount(0);
+        /* [ONB-S6] пилюля импорта на карточке «Данные» не считается — здесь проверяем
+           только погасшую пилюлю Помощи (карточка импорта появилась позже этого теста) */
+        await expect(page.locator('.card:not(.impdata) .newpill')).toHaveCount(0);
     });
 });
 
@@ -7094,5 +7096,207 @@ test.describe('[UX-T49] scroll restoration', function () {
         await page.locator('[data-act="closeSettings"]').first().click();
         await expect(page.locator('.card.cal')).toBeVisible({ timeout: 5000 });
         await expectScrollNear(page, y, 3); /* снапшот календаря не перезаписан скроллом Настроек */
+    });
+});
+
+/* ============ [ONB-T10] импорт из Strong (docs/spec-onb-s6-import.md, Э1–Э9) ============ */
+test.describe('[ONB-T10] импорт из Strong', function () {
+
+    const HEAD = 'Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Time,Weight Unit\n';
+
+    /* выгрузка на 2 тренировки: схлопывание 60×8×3, известное + английское упражнения */
+    function csvTwo() {
+        return HEAD +
+            '2024-11-18 07:00,Full Gym,1h 6m 25s,Жим штанги лёжа,2,60,8,,,kg\n' +
+            '2024-11-18 07:00,Full Gym,1h 6m 25s,Жим штанги лёжа,1,60,8,,,kg\n' +
+            '2024-11-18 07:00,Full Gym,1h 6m 25s,Жим штанги лёжа,3,60,8,,,kg\n' +
+            '2024-11-18 07:00,Full Gym,1h 6m 25s,Bench Press (Barbell),1,62.5,10,,,kg\n' +
+            '2024-11-19 18:30,Full Gym,35,Lat Pulldown,1,50,12,,,kg\n';
+    }
+    /* вход в флоу из плашки пустой Истории (Э9) */
+    async function openImportFromPlaque(page) {
+        await expect(page.locator('.imp-cta')).toBeVisible({ timeout: 5000 });
+        await page.locator('.imp-cta [data-act="openImport"]').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('📦 Переезд из Strong', { timeout: 5000 });
+    }
+    async function pickCsv(page, name, csv) {
+        await page.locator('#impFile').setInputFiles([{ name: name, mimeType: 'text/csv', buffer: Buffer.from(csv, 'utf8') }]);
+    }
+
+    test('happy path: плашка → выбор файла → предпросмотр → импорт → результат → история', async ({ page, request }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        /* Э2: сегмент кг по умолчанию, инструкция раскрыта при первом входе, приватность */
+        await expect(page.locator('.unitseg .seg-btn', { hasText: 'кг' })).toHaveClass(/on/);
+        await expect(page.locator('details.acc')).toHaveAttribute('open');
+        await expect(page.locator('[data-act="impPick"]')).toContainText('Выбрать файл CSV');
+        await expect(page.locator('.card')).toContainText('никуда не отправляется');
+        await pickCsv(page, 'strong.csv', csvTwo());
+        /* Э4: сводка предпросмотра + раскрытие «не из каталога» */
+        await expect(page.locator('.bignum')).toContainText('2', { timeout: 5000 });
+        await expect(page.locator('details.plain summary')).toContainText('2 упражнения не из каталога');
+        await page.locator('details.plain summary').click();
+        await expect(page.locator('details.plain .ddlist')).toContainText('Bench Press (Barbell)');
+        await expect(page.locator('details.plain .ddlist')).toContainText('1 тренировка');
+        /* Э6: подтверждение и результат */
+        await expect(page.locator('[data-act="impConfirm"]')).toContainText('Импортировать 2 тренировки');
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово — 2 тренировки в дневнике!', { timeout: 10000 });
+        await expect(page.locator('.krow', { hasText: 'Период' })).toContainText('18.11.2024 — 19.11.2024');
+        await page.locator('[data-act="impDone"]').click();
+        /* история заполнена, плашка исчезла (она только для пустой) */
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.imp-cta')).toHaveCount(0);
+        /* состояние сервера: finished, схлопывание, title, nutrition пуст, id назначены */
+        const st = await (await request.get('/api/state')).json();
+        expect(st.workouts.length).toBe(2);
+        const w1 = st.workouts.find(function (w) { return w.date === '2024-11-18'; });
+        expect(w1.finished).toBe(true);
+        expect(w1.title).toBe('Full Gym');
+        expect(w1.nutrition).toBe('');
+        expect(w1.started).toBe('2024-11-18T07:00:00');
+        expect(w1.ended).toBe('2024-11-18T08:06:25');
+        const bench = w1.exercises.find(function (e) { return e.name === 'Жим штанги лёжа'; });
+        expect(bench.sets.length).toBe(1);
+        expect(bench.sets[0].w).toBe('60');
+        expect(bench.sets[0].s).toBe(3);
+        expect(bench.sets[0].r).toBe('8');
+        /* ids из G.nextId, без коллизий */
+        expect(w1.id).toBeGreaterThan(0);
+    });
+
+    test('точка входа в Настройках (Э1): карточка «Данные», пилюля «новое», повторный вход', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[data-act="openSettings"]').first().click();
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.card.impdata .newpill')).toBeVisible(); /* первый вход */
+        await page.locator('.card.impdata .arow').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('📦 Переезд из Strong');
+        /* «←» из флоу возвращает в Настройки; пилюля погасла (gymImportSeen) */
+        await page.locator('.topbar [data-act="impBack"]').click();
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.card.impdata .newpill')).toHaveCount(0);
+        /* повторный вход — с шага выбора, аккордеон инструкции закрыт */
+        await page.locator('.card.impdata .arow').click();
+        await expect(page.locator('[data-act="impPick"]')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('details.acc')).not.toHaveAttribute('open');
+    });
+
+    test('чужой CSV (Э7): «Не похоже на выгрузку Strong», повторный выбор файла спасает', async ({ page }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        await pickCsv(page, 'other.csv', 'name,amount\nМолоко,2\n');
+        await expect(page.locator('.resicon.bad')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.resttl')).toHaveText('Не похоже на выгрузку Strong');
+        await expect(page.locator('.card')).toContainText('нет колонок Strong');
+        /* «Выбрать другой файл» → валидный CSV → предпросмотр */
+        await pickCsv(page, 'strong.csv', csvTwo());
+        await expect(page.locator('.bignum')).toContainText('2', { timeout: 5000 });
+    });
+
+    test('пустой файл (Э8): только заголовки — «В файле нет тренировок»', async ({ page }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        await pickCsv(page, 'empty.csv', HEAD);
+        await expect(page.locator('.resttl')).toHaveText('В файле нет тренировок', { timeout: 5000 });
+        await expect(page.locator('.card')).toContainText('только заголовки');
+    });
+
+    test('фунты (Э2): сегмент lb — веса пересчитаны в кг в состоянии', async ({ page, request }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        await page.locator('.unitseg .seg-btn', { hasText: 'фунты' }).click();
+        await expect(page.locator('.unitseg .seg-btn', { hasText: 'фунты' })).toHaveClass(/on/);
+        const csv = HEAD +
+            '2024-11-18 07:00,Gym,,Приседания со штангой,1,100,5,,,lbs\n' +
+            '2024-11-18 07:00,Gym,,Приседания со штангой,2,100,5,,,lbs\n';
+        await pickCsv(page, 'lbs.csv', csv);
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово', { timeout: 10000 });
+        const st = await (await request.get('/api/state')).json();
+        const sets = st.workouts[0].exercises[0].sets;
+        /* 100 lb = 45.36 кг → округление до 0.5 → 45.5; два подхода схлопнулись */
+        expect(sets.length).toBe(1);
+        expect(sets[0].w).toBe('45.5');
+        expect(sets[0].s).toBe(2);
+    });
+
+    test('совпадение дат (Э5): жёлтая плашка в предпросмотре, обе тренировки остаются', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], workouts: [doneWorkout(1, today, EX, '100', 3)] } } });
+        await openApp(page);
+        /* история непуста — плашки нет, вход через Настройки */
+        await expect(page.locator('.imp-cta')).toHaveCount(0);
+        await page.locator('[data-act="openSettings"]').first().click();
+        await page.locator('.card.impdata .arow').click();
+        const csv = HEAD +
+            today + ' 07:00,Full Gym,,Жим штанги лёжа,1,90,8,,,kg\n' +
+            '2024-05-01 10:00,Full Gym,,Жим штанги лёжа,1,90,8,,,kg\n';
+        await pickCsv(page, 'dup.csv', csv);
+        await expect(page.locator('details.warn summary')).toContainText('1 дата совпадает с дневником', { timeout: 5000 });
+        await page.locator('details.warn summary').click();
+        await expect(page.locator('details.warn .ddlist')).toContainText('уже есть тренировка');
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово — 2 тренировки в дневнике!', { timeout: 10000 });
+        await page.locator('[data-act="impDone"]').click();
+        const st = await (await request.get('/api/state')).json();
+        expect(st.workouts.length).toBe(3); /* «оба»: своя за сегодня + 2 импортированные */
+        expect(st.workouts.filter(function (w) { return w.date === today; }).length).toBe(2);
+    });
+
+    test('кардио-пропуск (Э6): строка с Distance/Time без Reps — с причиной в результате', async ({ page, request }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        const csv = HEAD +
+            '2024-11-18 07:00,Gym,,Жим штанги лёжа,1,60,8,,,kg\n' +
+            '2024-11-18 07:00,Gym,,Беговая дорожка,2,,,,5.5,\n' +
+            '2024-11-18 07:00,Gym,,Скакалка,3,,,,,25:00\n';
+        await pickCsv(page, 'cardio.csv', csv);
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово — 1 тренировка в дневнике!', { timeout: 10000 });
+        await expect(page.locator('details.warn summary')).toContainText('Не перенеслось: 2 строки');
+        await expect(page.locator('details.warn .ddlist')).toContainText('кардио-подход (время/дистанция) не переносится');
+        const st = await (await request.get('/api/state')).json();
+        expect(st.workouts[0].exercises.length).toBe(1);
+        expect(st.workouts[0].exercises[0].name).toBe('Жим штанги лёжа');
+    });
+
+    test('undo (Э6): «Отменить импорт» — дневник как до импорта, снова шаг 1', async ({ page, request }) => {
+        await openApp(page);
+        await openImportFromPlaque(page);
+        await pickCsv(page, 'strong.csv', csvTwo());
+        await page.locator('[data-act="impConfirm"]').click();
+        await expect(page.locator('.resttl')).toContainText('Готово', { timeout: 10000 });
+        const saved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await page.locator('[data-act="impUndo"]').click();
+        await saved; /* undo докатывается до сервера */
+        /* возврат к шагу 1 (§4.4) */
+        await expect(page.locator('[data-act="impPick"]')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.bignum')).toHaveCount(0);
+        const st = await (await request.get('/api/state')).json();
+        expect(st.workouts.length).toBe(0);
+        /* «←» — пустая история, плашка на месте */
+        await page.locator('.topbar [data-act="impBack"]').click();
+        await expect(page.locator('.imp-cta')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('навигация (§4): «←» с шага выбора возвращает на исходный экран, свайп-стек не ломается', async ({ page }) => {
+        await openApp(page);
+        await page.locator('[data-act="openSettings"]').first().click();
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await page.locator('.card.impdata .arow').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('📦 Переезд из Strong');
+        await page.locator('.topbar [data-act="impBack"]').click();
+        /* возврат именно в Настройки (подэкран, из которого открыли) */
+        await expect(page.locator('.card.impdata')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.topbar .tb-title')).toContainText('Настройки');
+        /* тап по нижнему меню закрывает флоу и уводит на вкладку (switchTab-семантика) */
+        await page.locator('.card.impdata .arow').click();
+        await expect(page.locator('.topbar .tb-title')).toHaveText('📦 Переезд из Strong');
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="stats"]').click();
+        await expect(page.locator('.topbar .tb-title')).toContainText('Статистика', { timeout: 5000 });
     });
 });
