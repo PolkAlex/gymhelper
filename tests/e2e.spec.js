@@ -7304,6 +7304,34 @@ test.describe('[FIT-S2] карта мышц', function () {
         await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Калории' })).toContainText('ккал');
     });
 
+    test('подход с пустым s (0 подходов): группа не подсвечивается и не попадает в легенду (§6.5)', async ({ page, request }) => {
+        /* [FIT-T1 ревью] у «Жима» подход-пустышка (s не заполнено, §4.3): вклад 0 —
+           единственная его группа не создаёт ключ с нулём; контраст — «Тяга» 4 подх. */
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: day, started: day + 'T09:30:00', ended: day + 'T10:00:00', finished: true, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: day + 'T09:31:00', en: day + 'T09:40:00', sets: [{ w: '60', s: 0, r: '10', t: day + 'T09:32:00' }] },
+                    { name: 'Тяга верхнего блока', st: day + 'T09:41:00', en: day + 'T10:00:00', sets: [{ w: '55', s: 4, r: '12', t: day + 'T09:42:00' }] }
+                ] }]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* легенда — только Спина 4 подх.; строк «0 подх.» нет */
+        await expect(page.locator('.legend .lg')).toHaveCount(1);
+        await expect(page.locator('.legend .lg', { hasText: 'Спина' })).toContainText('4 подх.');
+        await expect(page.locator('.legend .lg b', { hasText: '0 подх.' })).toHaveCount(0);
+        /* зона груди (группа с единственным нулевым вкладом) — без дим-подсветки */
+        await expect(page.locator('#bmF path.mz.lvl1[data-a="chest"], #bmF path.mz.lvl2[data-a="chest"], #bmF path.mz.lvl3[data-a="chest"]')).toHaveCount(0);
+        /* подсвечена только спина (lvl3), лишних уровней нет */
+        await expect(page.locator('.legend .dot.lvl3')).toHaveCount(1);
+        await expect(page.locator('#bmF path.mz.lvl3[data-a="back"]').first()).toBeVisible();
+        await expect(page.locator('#bmF path.mz.lvl1, #bmF path.mz.lvl2')).toHaveCount(0);
+    });
+
     test('[FIT-T2] «свои»: с группами подсвечиваются; без групп — плашка и редактор «Указать»', async ({ page, request }) => {
         const OWN_G = 'Тяга в своей раме';   /* с группами (m:shoulders) */
         const OWN_E = 'Жим в своей раме';    /* без групп */

@@ -3484,6 +3484,10 @@ function workoutMuscleMap(w) {
         if (!e.sets.length) continue;
         const ms = exMuscleTags(e.name);
         const n = setsCount(e);
+        /* [FIT-T1 ревью] guard §6.5/§4.3: подходов нет (поле s пустое) — вклад в карту
+           нулевой: группа не создаёт ключ с 0 (иначе дим-подсветка и строка «0 подх.»
+           в легенде); если у ВСЕХ упражнений 0 — легенда пуста → состояние §6.4 */
+        if (n <= 0) continue;
         if (!ms.length) {
             if (!findCatalog(e.name)) untagged.push(e.name);
             continue;
