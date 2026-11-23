@@ -5949,11 +5949,19 @@ test.describe('UX-T40: разминка по дефолту', function () {
         await expect(page.locator('.expill')).toHaveCount(1, { timeout: 5000 });
         await expect(page.locator('.expill .exname')).toHaveText('Разминка');
 
-        /* пользователь удаляет разминку из активной тренировки → сейв */
+        /* пользователь удаляет разминку из активной тренировки → сейв.
+           Тоста успеха у удаления НЕТ (deleteExerciseGo — splice → await save → render,
+           app.js:5298); прежний ассерт на «✓ Сохранено» ловил живой тост тоггла настроек
+           (2.2 с) — на WebKit не успевал и падал (флейк предрелизного цикла 21.11).
+           Подтверждение сохранения — состояние сервера: разминки в активной больше нет */
         await page.locator('.expill .exhead [data-act="deleteExercise"]').click();
         await page.locator('.modal.open [data-act="confirmYes"]').click();
         await expect(page.locator('.expill')).toHaveCount(0, { timeout: 5000 });
-        await expect(page.locator('.toast.show')).toHaveText('✓ Сохранено', { timeout: 5000 });
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            const act = (s.workouts || []).filter(function (x) { return !x.finished; })[0];
+            return (act && act.exercises || []).map(function (e) { return e.name; }).join(',');
+        }, { timeout: 8000 }).not.toContain('Разминка');
 
         /* завершить пустую нельзя (гвард) — пользователь добавляет реальное упражнение и завершает */
         await page.locator('[data-act="openPicker"]').click();
@@ -6251,5 +6259,358 @@ test.describe('UX-B17: кэш и gzip статики', function () {
         if (body.length !== 0) throw new Error('HEAD вернул тело: ' + body.length + ' байт');
         if (!h.headers()['content-type']) throw new Error('HEAD без Content-Type');
         if (!h.headers()['cache-control']) throw new Error('HEAD без Cache-Control');
+    });
+});
+
+/* ===== [EXR-T18] удаление «своих»: долгий тап → меню → подтверждение (issue #335) ===== */
+test.describe('[EXR-T18] удаление «своих» упражнений', function () {
+
+    const OWN1 = 'Жим Свенда стоя';
+    const OWN2 = 'Тяга гантели в разножке';
+
+    /* подсадка «своих» на сервер (G.customEx — [EXR-T14]) */
+    async function seedOwn(request, names) {
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 1, del: [], customEx: names.map(function (n) { return { n: n, tags: [] }; }), workouts: []
+        } } });
+    }
+    /* Техника → чип «Своё»; ждём первую карточку с data-custom */
+    async function openOwnTech(page) {
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.secrow .chip', { hasText: 'Своё' }).first().click();
+        await expect(page.locator('#techList .excard[data-custom]').first()).toBeVisible({ timeout: 5000 });
+    }
+    /* долгий тап (жест 500 мс, в тесте 600 мс): удержание мыши на центре карточки */
+    async function holdOwn(page, card) {
+        const b = await card.boundingBox();
+        if (!b) throw new Error('карточка не найдена');
+        const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+        await page.mouse.move(cx, cy);
+        await page.mouse.down();
+        await page.waitForTimeout(600);
+        await page.mouse.up();
+    }
+    /* открытие меню жестом + выждать __lpGuard (450 мс) — клики по шиту легальны
+       (реальный пользователь тапает по меню позже 450 мс после отпускания) */
+    async function openOwnMenu(page, card) {
+        await holdOwn(page, card);
+        await page.waitForTimeout(500);
+    }
+
+    test('долгий тап открывает меню: имя, «🗑 Удалить упражнение» danger, «Отмена»; быстрый тап и звезда молчат', async ({ page, request }) => {
+        await seedOwn(request, [OWN1, OWN2]);
+        await openOwnTech(page);
+        /* строка-совет видна при непустом списке (§9) */
+        await expect(page.locator('#techList .lphint')).toHaveText('Совет: долгий тап на упражнении — меню');
+        const card = page.locator('#techList .excard[data-custom]', { hasText: OWN1 }).first();
+        /* быстрый тап — ничего (карточка некликабельна, как сегодня) */
+        await card.click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        /* тап по звезде — тогл ★, меню не открывается */
+        await card.locator('.star').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 }).first().locator('.star')).toHaveClass(/fav/);
+        /* долгий тап — меню: caption «Упражнение», имя-заголовок, danger-пункт, «Отмена» */
+        await openOwnMenu(page, card);
+        const modal = page.locator('.modal.open');
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        await expect(modal.locator('.msub')).toHaveText('Упражнение');
+        await expect(modal.locator('.mtitle')).toHaveText(OWN1);
+        await expect(modal.locator('[data-act="ctxDelete"]')).toHaveText('🗑 Удалить упражнение');
+        await expect(modal.locator('[data-act="ctxDelete"]')).toHaveClass(/danger/);
+        /* красный — именно цветом var(--danger): сравнение с probe-элементом (тема-независимо) */
+        const dangerOk = await modal.locator('[data-act="ctxDelete"]').evaluate(function (el) {
+            const probe = document.createElement('span');
+            probe.style.color = 'var(--danger)';
+            document.body.appendChild(probe);
+            const ok = getComputedStyle(probe).color === getComputedStyle(el).color;
+            probe.remove();
+            return ok;
+        });
+        if (!dangerOk) throw new Error('пункт удаления не в danger-цвете');
+        await expect(modal.locator('[data-act="ctxCancel"]')).toHaveText('Отмена');
+        /* тап по фону закрывает меню — список не изменился */
+        await page.locator('#modal').click({ position: { x: 10, y: 10 } });
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(2);
+    });
+
+    test('жест отменяется движением >14px — меню не открывается (скролл побеждает)', async ({ page, request }) => {
+        await seedOwn(request, [OWN1]);
+        await openOwnTech(page);
+        const card = page.locator('#techList .excard[data-custom]').first();
+        const b = await card.boundingBox();
+        const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+        await page.mouse.move(cx, cy);
+        await page.mouse.down();
+        await page.mouse.move(cx + 24, cy + 24, { steps: 4 }); /* уводим палец до срабатывания */
+        await page.waitForTimeout(600);
+        await page.mouse.up();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(1);
+    });
+
+    test('«Отмена» закрывает без изменений; правый клик открывает то же меню', async ({ page, request }) => {
+        await seedOwn(request, [OWN1, OWN2]);
+        await openOwnTech(page);
+        await openOwnMenu(page, page.locator('#techList .excard[data-custom]', { hasText: OWN2 }).first());
+        const modal = page.locator('.modal.open');
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        await modal.locator('[data-act="ctxCancel"]').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(2);
+        const st = await (await request.get('/api/state')).json();
+        if ((st.customEx || []).length !== 2) throw new Error('база изменилась: ' + JSON.stringify(st.customEx));
+        /* правый клик мыши = то же меню (решение 3) */
+        await page.locator('#techList .excard[data-custom]', { hasText: OWN2 }).first().click({ button: 'right' });
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.modal.open .mtitle')).toHaveText(OWN2);
+        await page.locator('.modal.open [data-act="ctxCancel"]').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+    });
+
+    test('«Удалить» → диалог «Удалить упражнение «X»?» + пометка про тренировки; «Оставить» ничего не меняет', async ({ page, request }) => {
+        await seedOwn(request, [OWN1, OWN2]);
+        await openOwnTech(page);
+        await openOwnMenu(page, page.locator('#techList .excard[data-custom]', { hasText: OWN1 }).first());
+        const modal = page.locator('.modal.open');
+        await modal.locator('[data-act="ctxDelete"]').click();
+        await expect(modal.locator('.mtitle')).toHaveText('Удалить упражнение «' + OWN1 + '»?', { timeout: 5000 });
+        await expect(modal.locator('.hint')).toContainText('Тренировки с этим упражнением останутся без изменений — удалим только из базы и подсказок.');
+        await expect(modal.locator('.btn.danger')).toHaveText('Удалить');
+        await modal.locator('.btn.sec', { hasText: 'Оставить' }).click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(2);
+    });
+
+    test('«Удалить»: карточка исчезла и не воскресает из истории, ★ чистится, тренировка не тронута', async ({ page, request }) => {
+        const now = new Date();
+        const day = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3));
+        /* история с «своим» + база + ★: без томстона union воскресил бы карточку после удаления */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }, { n: OWN2, tags: [] }],
+            favs: [OWN2],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        await openOwnTech(page);
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 }).first().locator('.star')).toHaveClass(/fav/);
+        await openOwnMenu(page, page.locator('#techList .excard[data-custom]', { hasText: OWN2 }).first());
+        const modal = page.locator('.modal.open');
+        await modal.locator('[data-act="ctxDelete"]').click();
+        await modal.locator('.btn.danger', { hasText: 'Удалить' }).click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        /* карточка исчезла, соседка и строка-совет на месте */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
+        await expect(page.locator('#techList .lphint')).toBeVisible();
+        /* томстон в localStorage */
+        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
+        if (hid.indexOf(OWN2) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* сервер: база и ★ почистились, тренировка нетронута (сеты, вес, имя) */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customEx || []).length + ':' + (s.favs || []).length;
+        }).toBe('1:0');
+        const st = await (await request.get('/api/state')).json();
+        if ((st.favs || []).indexOf(OWN2) !== -1) throw new Error('★ не почистился: ' + JSON.stringify(st.favs));
+        const w = (st.workouts || [])[0];
+        if (!w || !w.exercises || w.exercises[0].name !== OWN2 || !w.exercises[0].sets.length || w.exercises[0].sets[0].w !== '20') {
+            throw new Error('тренировка изменилась после удаления: ' + JSON.stringify(w));
+        }
+        /* пере-рендер (перезагрузка): удалённое не вернулось из истории */
+        await page.reload();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.secrow .chip', { hasText: 'Своё' }).first().click();
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
+    });
+
+    test('каталог не трогается: правый клик и долгий тап на карточке «Все» не открывают меню', async ({ page, request }) => {
+        await seedOwn(request, [OWN1]);
+        await openOwnTech(page);
+        await page.locator('.secrow .chip', { hasText: 'Все' }).first().click();
+        await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(0);
+        const card = page.locator('#techList .excard', { hasText: EX }).first();
+        await expect(card).toBeVisible({ timeout: 5000 });
+        /* правый клик — ни нативного контекст-меню, ни меню удаления */
+        await card.click({ button: 'right' });
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        /* долгий тап — меню «своего» не открывается; отпускание = обычный тап по каталогу
+           (открывает карточку упражнения, как сегодня — поведение каталога не менялось) */
+        await holdOwn(page, card);
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+    });
+
+    test('удаление последнего «своего» — пустое состояние, строки-совета нет', async ({ page, request }) => {
+        await seedOwn(request, [OWN1]);
+        await openOwnTech(page);
+        await openOwnMenu(page, page.locator('#techList .excard[data-custom]').first());
+        const modal = page.locator('.modal.open');
+        await modal.locator('[data-act="ctxDelete"]').click();
+        await modal.locator('.btn.danger', { hasText: 'Удалить' }).click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(0);
+        await expect(page.locator('#techList .lphint')).toHaveCount(0);
+        await expect(page.locator('#techList .empty')).toContainText('Своих упражнений пока нет');
+    });
+
+    test('пересоздание удалённого имени снимает томстон — снова в подсказках (сценарий E §4)', async ({ page, request }) => {
+        const now = new Date();
+        const day = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [], customEx: [{ n: OWN2, tags: [] }],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        await openOwnTech(page);
+        await openOwnMenu(page, page.locator('#techList .excard[data-custom]', { hasText: OWN2 }).first());
+        const modal = page.locator('.modal.open');
+        await modal.locator('[data-act="ctxDelete"]').click();
+        await modal.locator('.btn.danger', { hasText: 'Удалить' }).click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0);
+        /* пересоздание с тем же именем из тренировки */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="newBlank"]').click();
+        await page.locator('.modal.open [data-act="closeModal"]').first().click(); /* пикер после старта закрываем */
+        await openActiveDetail(page);
+        await page.locator('[data-act="openPicker"]').click();
+        await page.locator('[data-act="customExerciseModal"]').click();
+        await page.locator('#mCustomName').fill(OWN2);
+        await page.locator('[data-act="createCustom"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 }); /* создание прошло */
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        /* Техника «Своё»: имя вернулось (томстон снят) */
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.secrow .chip', { hasText: 'Своё' }).first().click();
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 }).first()).toBeVisible({ timeout: 5000 });
+    });
+
+    /* ревью (важно): union-источники оба закрыты томстоном — «своё» сеется В БАЗЕ и
+       ИСПОЛЬЗУЕТСЯ в тренировке (сеты без веса, чтобы «Из истории» мастера целей
+       не подмешивало имя по e1RM); после удаления имени нет во ВСЕХ потребителях:
+       Техника «Своё» (а), пикер «Коллекции → Свои» (б), список мастера целей (в) */
+    test('удаление действует на всех потребителей: Техника «Своё», пикер «Коллекции → Свои», мастер целей', async ({ page, request }) => {
+        const day = isoDate(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 2));
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [{ id: 1, date: day, started: day + 'T09:30:00', ended: day + 'T10:00:00', finished: true, title: '', nutrition: '',
+                exercises: [{ name: OWN1, st: day + 'T09:31:00', en: day + 'T09:50:00',
+                    sets: [{ w: '', s: 3, r: '8-10', t: day + 'T09:32:00' }] }] }]
+        } } });
+        await openOwnTech(page);
+        await openOwnMenu(page, page.locator('#techList .excard[data-custom]', { hasText: OWN1 }).first());
+        await page.locator('.modal.open [data-act="ctxDelete"]').click();
+        await page.locator('.modal.open [data-act="ctxRemove"]').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        /* (а) Техника «Своё» — карточки нет (детально — сценарий «не воскресает» выше) */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(0, { timeout: 5000 });
+        /* (б) пикер «Коллекции → Свои» — имени нет */
+        await page.locator('.nav .nfab').click();
+        await page.locator('.modal.open [data-act="newBlank"]').click();
+        await expect(page.locator('.modal.open #pickerQ')).toBeVisible({ timeout: 5000 });
+        await page.locator('.modal.open .secrow .chip', { hasText: 'Коллекции' }).click();
+        await page.locator('.modal.open #pickerCats .chip', { hasText: 'Свои' }).click();
+        await expect(page.locator('#pickerList .excard', { hasText: OWN1 })).toHaveCount(0, { timeout: 5000 });
+        await page.locator('.modal.open [data-act="closeModal"]').first().click();
+        /* (в) мастер целей, шаг выбора упражнения — имени нет в #gwList */
+        await page.locator('[data-act="switchTab"][data-a="stats"]').click();
+        await page.locator('[data-act="openGoals"]').click();
+        await page.locator('[data-act="goalNew"]').click();
+        await page.locator('[data-act="gwType"][data-a="1"]').click();
+        await expect(page.locator('#gwList')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#gwList .frow', { hasText: OWN1 })).toHaveCount(0, { timeout: 5000 });
+        /* сервер: база пуста, тренировка (потребитель №4) не тронута; томстон в localStorage */
+        const st = await (await request.get('/api/state')).json();
+        if ((st.customEx || []).length !== 0) throw new Error('база не пуста после удаления: ' + JSON.stringify(st.customEx));
+        const w = (st.workouts || []).filter(function (x) { return x.finished; })[0];
+        if (!w || !w.exercises || w.exercises[0].name !== OWN1
+            || w.exercises[0].sets.length !== 1 || w.exercises[0].sets[0].s !== 3) {
+            throw new Error('тренировка изменилась после удаления: ' + JSON.stringify(w));
+        }
+        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
+        if (hid.indexOf(OWN1) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+    });
+
+    /* acc §12.12: активная тренировка с удаляемым упражнением — запись продолжается,
+       после завершения история на месте */
+    test('удаление «своего» при активной тренировке: карточка и записи на месте, запись продолжается, история после завершения', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [{ id: 1, date: today, started: today + 'T09:30:00', ended: '', finished: false, title: '', nutrition: '',
+                exercises: [{ name: OWN1, st: today + 'T09:31:00', en: '', sets: [{ w: '60', s: 2, r: '10', t: today + 'T09:32:00' }] }] }]
+        } } });
+        await openApp(page);
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.secrow .chip', { hasText: 'Своё' }).first().click();
+        await expect(page.locator('#techList .excard[data-custom]').first()).toBeVisible({ timeout: 5000 });
+        await openOwnMenu(page, page.locator('#techList .excard[data-custom]').first());
+        await page.locator('.modal.open [data-act="ctxDelete"]').click();
+        await page.locator('.modal.open [data-act="ctxRemove"]').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        /* возврат в активную тренировку: упражнение НА МЕСТЕ, записи не тронуты */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
+        const pill = page.locator('.expill', { hasText: OWN1 });
+        await expect(pill).toHaveCount(1, { timeout: 5000 });
+        await expect(pill.locator('.entry').first()).toContainText('60 кг, 2 подхода по 10 повторений', { timeout: 5000 });
+        /* запись продолжается: ещё один подход — вес предыдущего подставлен */
+        await pill.locator('.ex-addset[data-act="openEntryModal"]').click();
+        await expect(page.locator('#mWeight')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#mWeight')).toHaveValue('60');
+        await page.locator('#mWeight').fill('65');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(pill.locator('.entry')).toHaveCount(2, { timeout: 5000 });
+        /* завершение: история на месте — превью с «своим» упражнением */
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.pc-ex', { hasText: OWN1 }).first()).toBeVisible({ timeout: 5000 });
+        const st = await (await request.get('/api/state')).json();
+        const fin = (st.workouts || []).filter(function (x) { return x.finished; })[0];
+        if (!fin || !fin.exercises || fin.exercises[0].name !== OWN1 || fin.exercises[0].sets.length !== 2
+            || fin.exercises[0].sets[1].w !== '65') {
+            throw new Error('история после завершения не та: ' + JSON.stringify(fin));
+        }
+    });
+
+    /* XSS-пин: имя-инъекция попадает в меню и диалог как ТЕКСТ (esc) — ни img-узла,
+       ни сработавшего alert, ни исключений; удаление проходит штатно */
+    test('XSS-пин: имя-инъекция рендерится текстом в меню и диалоге, без img/alert/ошибок', async ({ page, request }) => {
+        const XSS = '<img src=x onerror=alert(1)>';
+        const problems = [];
+        page.on('pageerror', function (e) { problems.push('pageerror: ' + String(e)); });
+        page.on('console', function (m) {
+            /* сетевой шум («Failed to load resource») — не про экранирование; ловим ошибки скрипта */
+            if (m.type() === 'error' && !/Failed to load resource/i.test(m.text())) problems.push('console: ' + m.text());
+        });
+        const dialogs = [];
+        page.on('dialog', function (d) { dialogs.push(d.type() + ':' + d.message()); return d.dismiss().catch(function () {}); });
+        await seedOwn(request, [XSS]);
+        await openOwnTech(page);
+        const card = page.locator('#techList .excard[data-custom]').first();
+        await openOwnMenu(page, card);
+        const modal = page.locator('.modal.open');
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        /* имя как ТЕКСТ (toHaveText сравнивает literal), img-узла нет, alert не сработал */
+        await expect(modal.locator('.mtitle')).toHaveText(XSS);
+        await expect(modal.locator('img')).toHaveCount(0);
+        /* диалог подтверждения тоже экранирован */
+        await modal.locator('[data-act="ctxDelete"]').click();
+        await expect(modal.locator('.mtitle')).toHaveText('Удалить упражнение «' + XSS + '»?', { timeout: 5000 });
+        await expect(modal.locator('img')).toHaveCount(0);
+        /* удаление без исключений: карточка исчезла */
+        await modal.locator('[data-act="ctxRemove"]').click();
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+        await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(0);
+        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
+        if (hid.indexOf(XSS) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        if (dialogs.length) throw new Error('alert сработал (XSS исполнился): ' + JSON.stringify(dialogs));
+        if (problems.length) throw new Error('ошибки страницы/консоли: ' + JSON.stringify(problems.slice(0, 5)));
     });
 });

@@ -663,6 +663,8 @@ function dispatchFromEl(el, ev) {
 window.addEventListener('click', function (ev) {
     /* [UX-T14] сразу после перетаскивания синтетический клик не должен ничего открыть */
     if (__dragClickGuard && Date.now() - __dragClickGuard < 450) return;
+    /* [EXR-T18] отпускание пальца после long-press-меню — призрачный клик гасим */
+    if (__lpGuard && Date.now() - __lpGuard < 450) return;
     const el = ev.target && ev.target.closest ? ev.target.closest('[data-fav],[data-act]') : null;
     if (el) dispatchFromEl(el, ev);
 }, true);
@@ -694,6 +696,7 @@ document.addEventListener('touchend', function (ev) {
     if (!el) return;
     if (!info || info.moved || Date.now() - info.time > 500) return; /* это был скролл, не тап */
     if (__dragClickGuard && Date.now() - __dragClickGuard < 450) return; /* [UX-T14] отпускание после drag — не тап */
+    if (__lpGuard && Date.now() - __lpGuard < 450) return; /* [EXR-T18] отпускание после long-press-меню — не тап */
     if (ev.cancelable) ev.preventDefault();
     dispatchFromEl(el, ev);
 }, false);
@@ -1359,6 +1362,11 @@ const ACTIONS = {
        а не закрывает его целиком — фикс потери контекста */
     backToPicker: function () { renderPickerModal(); },
     createCustom: function () { createCustom(); },
+    /* [EXR-T18] контекст-меню «своего»: удаление с подтверждением; ctxCancel закрывает
+       меню/диалог без изменений (в диалоге кнопка называется «Оставить» — §7) */
+    ctxDelete: function () { ctxDelete(); },
+    ctxRemove: function () { ctxRemove(); },
+    ctxCancel: function () { closeModal(); },
     openTech: function (a) { TECH.open = a; navPush('techCard'); render(); }, /* [UX-T42] */
     techBack: function () { TECH.open = null; navPop('techCard'); render(); }, /* [UX-T42] */
     /* [EXR-T4] режимы Техники: «Все» = без фильтров (мультивыбор сбрасывается),
@@ -2730,6 +2738,76 @@ function dragAutoScroll() {
     }
     DRAG.raf = requestAnimationFrame(dragAutoScroll);
 }
+
+/* ---------- [EXR-T18] долгий тап «своих» упражнений — первый кирпич паттерна [UX-I20] ---------- */
+/* Делегат на document по образцу DRAG [UX-T14]: селектор #techList .excard[data-custom]
+   (только «свои» в режиме «Своё» Техники; карточки каталога атрибут не получают — защита
+   структурная). Удержание 500 мс → меню (решение 2); отмена движением 14px (скролл
+   побеждает); хаптик selectionChanged в момент открытия меню; правый клик мыши — то же
+   меню (решение 3). После срабатывания __lpGuard гасит призрачный клик/тап 450 мс —
+   аналог __dragClickGuard (см. глобальные click/touchend в начале файла).
+   Следующие экраны [UX-I20] подключаются селектором и openCtxMenu-обработчиком. */
+let LP = null;
+let __lpGuard = 0;
+let ctxName = null; /* имя упражнения, с которым открыто контекст-меню/диалог [EXR-T18] */
+const LP_HOLD_MS = 500;
+const LP_MOVE_PX = 14;
+const LP_GUARD_MS = 450;
+function lpCancel() {
+    if (!LP) return;
+    if (LP.timer) { clearTimeout(LP.timer); LP.timer = null; }
+    if (LP.el) LP.el.classList.remove('lp-hold');
+    LP = null;
+}
+document.addEventListener('pointerdown', function (ev) {
+    if (LP) { if (ev.pointerId !== LP.id) lpCancel(); return; } /* синглтон: второй палец отменяет жест */
+    if (ev.button != null && ev.button !== 0) return; /* правый клик — своя ветка contextmenu */
+    if (__lpGuard && Date.now() - __lpGuard < LP_GUARD_MS) return;
+    const card = ev.target && ev.target.closest ? ev.target.closest('#techList .excard[data-custom]') : null;
+    if (!card) return;
+    /* звезда и прочие интерактивные элементы карточки живут своей жизнью */
+    if (ev.target.closest('[data-fav], button, input, textarea, a')) return;
+    LP = { el: card, name: card.getAttribute('data-name') || '', id: ev.pointerId,
+        x0: ev.clientX, y0: ev.clientY, fired: false, timer: null };
+    card.classList.add('lp-hold'); /* подсветка + user-select/callout off */
+    LP.timer = setTimeout(lpFire, LP_HOLD_MS);
+});
+function lpFire() {
+    if (!LP || LP.fired) return;
+    LP.fired = true;
+    LP.timer = null;
+    const name = LP.name, el = LP.el;
+    if (!document.contains(el)) { lpCancel(); return; } /* карточка пережила рендер — жест мимо */
+    el.classList.remove('lp-hold');
+    dragHaptic('selectionChanged');
+    openCtxMenu(name);
+}
+document.addEventListener('pointermove', function (ev) {
+    if (!LP || LP.fired || ev.pointerId !== LP.id) return;
+    if (Math.abs(ev.clientX - LP.x0) > LP_MOVE_PX || Math.abs(ev.clientY - LP.y0) > LP_MOVE_PX) lpCancel();
+});
+document.addEventListener('pointerup', function (ev) {
+    if (!LP || ev.pointerId !== LP.id) return;
+    if (LP.fired) __lpGuard = Date.now(); /* отпускание после меню — не «докликивать» до карточки/звезды */
+    lpCancel();
+});
+document.addEventListener('pointercancel', function (ev) {
+    if (!LP || ev.pointerId !== LP.id) return;
+    lpCancel();
+});
+window.addEventListener('blur', function () { if (LP) lpCancel(); });
+document.addEventListener('visibilitychange', function () { if (document.hidden && LP) lpCancel(); });
+document.addEventListener('contextmenu', function (ev) {
+    /* нативное меню long-press (Android/WebKit) на карточке «своего» не открываем;
+       правый клик мыши = то же меню (решение 3) */
+    const card = ev.target && ev.target.closest ? ev.target.closest('#techList .excard[data-custom]') : null;
+    if (!card) return;
+    ev.preventDefault();
+    if (LP) { const held = LP; lpCancel(); if (held.fired) return; } /* меню уже открыто жестом */
+    if (__lpGuard && Date.now() - __lpGuard < LP_GUARD_MS) return;
+    if (ev.pointerType && ev.pointerType !== 'mouse') return; /* тач-жест обрабатывает LP-хелпер */
+    openCtxMenu(card.getAttribute('data-name') || '');
+});
 function timeLine(w) {
     if (!w.started) return '⏱ время не зафиксировано';
     const start = w.started.slice(11, 16);
@@ -2989,9 +3067,10 @@ function techCatCardHtml(c) {
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(c.n) + '</div><div class="extags">' + exTagHashes(c) + '</div></span>' + starHtml(c.n) + '</div>';
 }
 /* [EXR-T15] карточка своего в Технике: некликабельна (детали техники для своих — вне
-    скоупа, решение 4), звезда кликабельна */
-function techOwnCardHtml(n) {
-    return '<div class="excard">' + ico('custom') +
+    скоупа, решение 4), звезда кликабельна. [EXR-T18] lp — data-custom/data-name для
+    long-press-меню: только режим «Своё» (скоуп, решение 3); «★ Любимые» без жеста */
+function techOwnCardHtml(n, lp) {
+    return '<div class="excard"' + (lp ? ' data-custom="1" data-name="' + escAttr(n) + '"' : '') + '>' + ico('custom') +
         '<span style="flex:1;min-width:0"><div class="exn">' + esc(n) + '</div><div class="extags">' + exCustomTagHashes(findCustom(n), 3) + '</div></span>' + starHtml(n) + '</div>';
 }
 /* избранные свои для секции «★ Любимые» Техники: фильтр по поиску + тег-фильтры тем же
@@ -3016,8 +3095,12 @@ function techResultsHtml() {
     if (techOwnMode()) {
         const q = (TECH.q || '').toLowerCase();
         const own = ownCustomNames().filter(n => !q || n.toLowerCase().includes(q));
-        let h = '<div class="exgrid">';
-        for (const n of own) h += techOwnCardHtml(n);
+        let h = '';
+        /* [EXR-T18] строка-совет об обнаруживаемости жеста — постоянная, тише контента (§9);
+           при пустом списке не показываем — там подсказка про добавление из тренировки */
+        if (own.length) h += '<p class="lphint">Совет: долгий тап на упражнении — меню</p>';
+        h += '<div class="exgrid">';
+        for (const n of own) h += techOwnCardHtml(n, true);
         h += '</div>';
         if (!own.length) h += emptyFiltersHtml('Своих упражнений пока нет — добавь их из тренировки («✍️ Своё упражнение»)');
         return h;
@@ -4579,7 +4662,10 @@ function ownCustomNames() {
             if (isCustomEx(e.name)) set.add(e.name);
         }
     }
-    return Array.from(set);
+    /* [EXR-T18] томстоны: удалённые «свои» не воскресают из истории (одно место — все
+       потребители: Техника «Своё», пикер «Коллекции → Свои», подсказки целей §8.3) */
+    const hid = customHidden();
+    return hid.length ? Array.from(set).filter(n => !hid.includes(n)) : Array.from(set);
 }
 /* [EXR-T14] «Свои» — серверные данные (G.customEx): [{ n, tags: ['m:chest', …] }] */
 function customNames() { return (G.customEx || []).map(x => x.n); }
@@ -4588,6 +4674,14 @@ function findCustom(name) {
     return (G.customEx || []).find(x => (x.n || '').toLowerCase() === q) || null;
 }
 function customBase() { return customNames(); }
+/* [EXR-T18] томстоны удалённых «своих»: localStorage string[] (gymCustomExHidden).
+   Старые пользователи без ключа — читается как []; битый JSON — тоже (§8.3) */
+function customHidden() {
+    try {
+        const a = JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]');
+        return Array.isArray(a) ? a : [];
+    } catch (e) { return []; }
+}
 /* [EXR-T14] миграция localStorage (gymCustomEx/gymFavs) → сервер (сценарий G §11):
    на сервере поля отсутствуют или пусты, а локально есть — имена, которых нет на
    сервере, добавляются; ключи localStorage очищаются. Сервер приоритетен: при
@@ -4849,11 +4943,66 @@ function createCustom() {
     }
     if (!G.customEx) G.customEx = [];
     G.customEx.push({ n: name, tags: CUSTOM_DRAFT.tags.slice() });
+    /* [EXR-T18] пересоздание удалённого имени снимает томстон — снова в подсказках (§8.3) */
+    try {
+        const hid = customHidden();
+        if (hid.includes(name)) localStorage.setItem('gymCustomExHidden', JSON.stringify(hid.filter(n => n !== name)));
+    } catch (e) { /* noop */ }
     save(); /* создание уходит на сервер (§11); ошибки показывает doSave */
     closeCurrentExercise();
     const e = startExercise(w, name);
     closeModal();
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
+}
+
+/* ---------- [EXR-T18] удаление «своих»: долгий тап → меню → подтверждение ---------- */
+/* removeCustom: из базы (G.customEx) + томстон + чистка ★ (решение 4). Тренировки не
+   трогаются (решение 1) — скрытие работает только в списках подсказок (фильтр томстонов
+   в ownCustomNames). Удалённое остаётся в идущей/прошлых тренировках как есть (§10). */
+function removeCustom(name) {
+    const cu = findCustom(name);
+    if (cu) G.customEx.splice(G.customEx.indexOf(cu), 1);
+    try {
+        const hid = customHidden();
+        if (!hid.includes(name)) hid.push(name);
+        localStorage.setItem('gymCustomExHidden', JSON.stringify(hid));
+    } catch (e) { /* noop */ }
+    /* ★ Любимые: без чистки осталась бы призрачная звезда упражнения вне базы (§10) */
+    if (G.favs && G.favs.includes(name)) G.favs.splice(G.favs.indexOf(name), 1);
+    save(); /* удаление из базы уходит на сервер (§11); ошибки показывает doSave */
+}
+/* контекстное меню «своего» (bottom sheet через openModal): caption, имя-заголовок,
+   пункт удаления с danger-семантикой (фон обычный), слот под будущие пункты, «Отмена»
+   — спека §6.2 */
+function ctxMenuHtml(name) {
+    return '<p class="msub">Упражнение</p>' +
+        '<p class="mtitle">' + esc(name) + '</p>' +
+        '<button class="frow danger" data-act="ctxDelete">🗑 Удалить упражнение</button>' +
+        '<!-- слот под будущие пункты меню (переименование, «в коллекцию») — спека §6.2 -->' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="ctxCancel">Отмена</button></div>';
+}
+function openCtxMenu(name) {
+    ctxName = name;
+    openModal(ctxMenuHtml(name));
+}
+/* подтверждение удаления: заменяет содержимое той же модалки (стеков нет — §7).
+   «Оставить» — семантическое разведение с «Отменой» меню (правило «без дублей») */
+function ctxDelete() {
+    if (!ctxName) return closeModal();
+    openModal('<p class="mtitle">Удалить упражнение «' + esc(ctxName) + '»?</p>' +
+        '<div class="hint"><span class="hico">💡</span><span>Тренировки с этим упражнением останутся без изменений — удалим только из базы и подсказок.</span></div>' +
+        '<div class="btnrow"><button class="btn danger wide" data-act="ctxRemove">Удалить</button>' +
+        '<button class="btn sec wide" data-act="ctxCancel">Оставить</button></div>');
+}
+/* «Удалить» в диалоге: закрыть, удалить, точечно перерисовать список Техники —
+   без тоста (исчезновение карточки = подтверждение, §13) */
+function ctxRemove() {
+    const name = ctxName;
+    ctxName = null;
+    closeModal();
+    if (!name) return;
+    removeCustom(name);
+    refreshTechList();
 }
 
 /* ---------- окно записи ---------- */
