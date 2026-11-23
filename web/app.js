@@ -4724,30 +4724,33 @@ function findCustom(name) {
     return (G.customEx || []).find(x => (x.n || '').toLowerCase() === q) || null;
 }
 function customBase() { return customNames(); }
-/* [EXR-T18] томстоны удалённых «своих»: localStorage string[] (gymCustomExHidden).
-   Старые пользователи без ключа — читается как []; битый JSON — тоже (§8.3) */
+/* [EXR-T19] томстоны удалённых «своих»: серверные данные (G.customExHidden: string[]).
+   Старый файл/клиент без поля — читается как [] (дефолт сервера + guard G/Array.isArray) */
 function customHidden() {
-    try {
-        const a = JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]');
-        return Array.isArray(a) ? a : [];
-    } catch (e) { return []; }
+    return (G && Array.isArray(G.customExHidden)) ? G.customExHidden : [];
 }
 /* [EXR-T14] миграция localStorage (gymCustomEx/gymFavs) → сервер (сценарий G §11):
    на сервере поля отсутствуют или пусты, а локально есть — имена, которых нет на
    сервере, добавляются; ключи localStorage очищаются. Сервер приоритетен: при
    непустых серверных полях локальное игнорируется (конфликт — побеждает серверная
-   запись с тегами). Имена, совпавшие с каталогом, не переносятся (они и так каталог). */
+   запись с тегами). Имена, совпавшие с каталогом, не переносятся (они и так каталог).
+   [EXR-T19] томстоны gymCustomExHidden → G.customExHidden: merge НЕДОСТАЮЩИХ имён
+   (серверный список — уже правда, не перезатирается: удаляли и на втором устройстве);
+   имена каталога и живых «своих» не переносятся (томстон для них бессмысленен). */
 function migrateCustomFavs() {
     if (!G) return;
-    let rawC = null, rawF = null;
+    let rawC = null, rawF = null, rawH = null;
     try { rawC = localStorage.getItem('gymCustomEx'); } catch (e) { rawC = null; }
     try { rawF = localStorage.getItem('gymFavs'); } catch (e) { rawF = null; }
-    if (rawC == null && rawF == null) return;
-    let lsC = [], lsF = [];
+    try { rawH = localStorage.getItem('gymCustomExHidden'); } catch (e) { rawH = null; }
+    if (rawC == null && rawF == null && rawH == null) return;
+    let lsC = [], lsF = [], lsH = [];
     try { lsC = JSON.parse(rawC || '[]') || []; } catch (e) { lsC = []; }
     try { lsF = JSON.parse(rawF || '[]') || []; } catch (e) { lsF = []; }
+    try { lsH = JSON.parse(rawH || '[]') || []; } catch (e) { lsH = []; }
     if (!Array.isArray(lsC)) lsC = [];
     if (!Array.isArray(lsF)) lsF = [];
+    if (!Array.isArray(lsH)) lsH = [];
     let migrated = false;
     if ((!G.customEx || !G.customEx.length) && lsC.length) {
         G.customEx = [];
@@ -4769,15 +4772,32 @@ function migrateCustomFavs() {
             migrated = true;
         }
     }
+    /* [EXR-T19] томстоны: merge без учёта регистра (имя «своего» — ключ без регистра);
+       имя без удаления не скрыть на втором устройстве — добавляем только отсутствующие */
+    if (lsH.length) {
+        if (!G.customExHidden) G.customExHidden = [];
+        for (const n of lsH) {
+            if (typeof n !== 'string') continue;
+            const name = n.trim();
+            if (!name || name.length > 60 || findCatalog(name) || findCustom(name)) continue;
+            if (G.customExHidden.some(function (h) { return String(h).toLowerCase() === name.toLowerCase(); })) continue;
+            G.customExHidden.push(name);
+            migrated = true;
+        }
+    }
     /* [EXR-T14 ревью] ключи localStorage удаляются ПОСЛЕ подтверждённого сохранения
        ('ok' от doSave); при 'err'/'conflict' ключи остаются — миграция повторится при
        следующем init (идемпотентно: если save прошёл частично, вторая волна ничего
-       не добавит — серверные поля уже непусты). Если мигрировать нечего (серверные
-       поля непусты / ls пуст / битый JSON) — stale-ключи всё равно очищаются: данные
-       из них игнорируются (сервер приоритетен), а удаление предотвращает их
-       «воскрешение» при будущей полной очистке «Своих» на сервере. */
+       не добавит — серверные поля уже непусты / томстоны уже в списке). Если
+       мигрировать нечего (серверные поля непусты / ls пуст / битый JSON) — stale-ключи
+       всё равно очищаются: данные из них игнорируются (сервер приоритетен), а удаление
+       предотвращает их «воскрешение» при будущей полной очистке «Своих» на сервере. */
     const clearKeys = function () {
-        try { localStorage.removeItem('gymCustomEx'); localStorage.removeItem('gymFavs'); } catch (e) { /* noop */ }
+        try {
+            localStorage.removeItem('gymCustomEx');
+            localStorage.removeItem('gymFavs');
+            localStorage.removeItem('gymCustomExHidden'); /* [EXR-T19] */
+        } catch (e) { /* noop */ }
     };
     if (migrated) {
         save().then(function (r) { if (r === 'ok') clearKeys(); }); /* ошибки показывает doSave */
@@ -4993,11 +5013,11 @@ function createCustom() {
     }
     if (!G.customEx) G.customEx = [];
     G.customEx.push({ n: name, tags: CUSTOM_DRAFT.tags.slice() });
-    /* [EXR-T18] пересоздание удалённого имени снимает томстон — снова в подсказках (§8.3) */
-    try {
-        const hid = customHidden();
-        if (hid.includes(name)) localStorage.setItem('gymCustomExHidden', JSON.stringify(hid.filter(n => n !== name)));
-    } catch (e) { /* noop */ }
+    /* [EXR-T18] пересоздание удалённого имени снимает томстон — снова в подсказках
+       (§8.3); [EXR-T19] томстон живёт на сервере (G.customExHidden), уедет с save() */
+    if (G.customExHidden && G.customExHidden.includes(name)) {
+        G.customExHidden.splice(G.customExHidden.indexOf(name), 1);
+    }
     save(); /* создание уходит на сервер (§11); ошибки показывает doSave */
     closeCurrentExercise();
     const e = startExercise(w, name);
@@ -5012,11 +5032,10 @@ function createCustom() {
 function removeCustom(name) {
     const cu = findCustom(name);
     if (cu) G.customEx.splice(G.customEx.indexOf(cu), 1);
-    try {
-        const hid = customHidden();
-        if (!hid.includes(name)) hid.push(name);
-        localStorage.setItem('gymCustomExHidden', JSON.stringify(hid));
-    } catch (e) { /* noop */ }
+    /* [EXR-T18] томстон: удалённое не воскресает из истории; [EXR-T19] на сервере
+       (G.customExHidden) — уезжает с save(), виден на всех устройствах */
+    if (!G.customExHidden) G.customExHidden = [];
+    if (!G.customExHidden.includes(name)) G.customExHidden.push(name);
     /* ★ Любимые: без чистки осталась бы призрачная звезда упражнения вне базы (§10) */
     if (G.favs && G.favs.includes(name)) G.favs.splice(G.favs.indexOf(name), 1);
     save(); /* удаление из базы уходит на сервер (§11); ошибки показывает doSave */

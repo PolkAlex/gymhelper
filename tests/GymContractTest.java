@@ -227,6 +227,27 @@ public class GymContractTest {
         String noCexOut = Json.write(d2.toJson());
         check(!noCexOut.contains("customEx") && !noCexOut.contains("favs"),
             "customEx/favs: toJson без своих/любимых не пишет ключи (legacy байт-в-байт)");
+        /* [EXR-T19] customExHidden (томстоны удалённых «своих»): legacy без ключа читается
+            (пустой список); toJson без удалённых ключ не пишет (legacy байт-в-байт);
+            непустой список читается и переживает round-trip; дубли/мусор/не-строки пропускаются */
+        check(d2.customExHidden.isEmpty(), "customExHidden: legacy без ключа читается (пустой список)");
+        check(!noCexOut.contains("customExHidden"), "customExHidden: toJson без удалённых не пишет ключ (legacy байт-в-байт)");
+        String hidJson = "{\"nextId\":2,\"customExHidden\":[" +
+            "\"жим лёжа 45\"," +
+            "\"жим лёжа 45\"," +
+            "\"\"," +
+            "\"   \"," +
+            "42," +
+            "\"жим лёжа 45\"" +
+            "],\"workouts\":[]}";
+        GymData dhid = GymData.fromJson((Map<String, Object>) Json.parse(hidJson));
+        check(dhid.customExHidden.size() == 1 && "жим лёжа 45".equals(dhid.customExHidden.get(0)),
+            "customExHidden: имя томстона читается, дубли/мусор/не-строки пропускаются, а не " + dhid.customExHidden.size());
+        String hidOut = Json.write(dhid.toJson());
+        check(hidOut.contains("\"customExHidden\":[\"жим лёжа 45\"]"), "customExHidden: toJson пишет список томстонов");
+        GymData dhid2 = GymData.fromJson((Map<String, Object>) Json.parse(hidOut));
+        check(dhid2.customExHidden.size() == 1 && "жим лёжа 45".equals(dhid2.customExHidden.get(0)),
+            "customExHidden переживает round-trip без потерь");
         String cexJson = "{\"nextId\":2,\"customEx\":[" +
             "{\"n\":\"Жим Свенда стоя\",\"tags\":[\"m:chest\",\"m:shoulders\"]}," +
             "{\"n\":\"Фермерская прогулка\",\"tags\":[]}," +
@@ -658,7 +679,9 @@ public class GymContractTest {
 
         /* [EXR-T13] merge-защита «Своих»/«Любимых» при /api/save: клиент с ключами customEx/favs
             замещает списки целиком (создание/удаление из Любимых доезжают); старый кэш JS без
-            ключей данные не теряет; пустые списки замещают старые. Реальный WebServer. */
+            ключей данные не теряет; пустые списки замещают старые. Реальный WebServer.
+            [EXR-T19] томстоны customExHidden — та же merge-политика: с ключом замещаются,
+            без ключа не затираются, пустой список очищает. */
         try {
             java.nio.file.Path tmpCx = java.nio.file.Files.createTempDirectory("gymcex");
             Storage stCx = new Storage(tmpCx);
@@ -671,7 +694,8 @@ public class GymContractTest {
             java.net.http.HttpResponse<String> rc1 = postSave(portCx, idCx, 0,
                 "{\"rev\":0,\"nextId\":1,\"customEx\":[" +
                     "{\"n\":\"Жим Свенда стоя\",\"tags\":[\"m:chest\",\"m:shoulders\"]}," +
-                    "{\"n\":\"жим свенда стоя\",\"tags\":[]}],\"favs\":[\"Жим Свенда стоя\"],\"workouts\":[]}");
+                    "{\"n\":\"жим свенда стоя\",\"tags\":[]}],\"favs\":[\"Жим Свенда стоя\"]," +
+                    "\"customExHidden\":[\"жим лёжа 45\"],\"workouts\":[]}");
             check(rc1.statusCode() == 200, "customEx merge: save со своими/любимыми — 200, а не " + rc1.statusCode());
             GymData savedCx = stCx.load(424248);
             check(savedCx.customEx.size() == 1 && "Жим Свенда стоя".equals(savedCx.customEx.get(0).n)
@@ -679,6 +703,8 @@ public class GymContractTest {
                 "customEx merge: сервер хранит свои без дублей имён (уникальный ключ)");
             check(savedCx.favs.size() == 1 && "Жим Свенда стоя".equals(savedCx.favs.get(0)),
                 "customEx merge: Любимые сохранены");
+            check(savedCx.customExHidden.size() == 1 && "жим лёжа 45".equals(savedCx.customExHidden.get(0)),
+                "customEx merge: томстон сохранён [EXR-T19]");
             /* старый кэш JS: save без ключей customEx/favs — данные не теряются */
             java.net.http.HttpResponse<String> rc2 = postSave(portCx, idCx, 1,
                 "{\"rev\":1,\"nextId\":1,\"workouts\":[]}");
@@ -686,13 +712,17 @@ public class GymContractTest {
             GymData mergedCx = stCx.load(424248);
             check(mergedCx.customEx.size() == 1 && mergedCx.favs.size() == 1,
                 "customEx merge: старый клиент без ключей свои/любимые не теряет");
+            check(mergedCx.customExHidden.size() == 1,
+                "customEx merge: старый клиент без ключа томстоны не затирает [EXR-T19]");
             /* пустые списки замещают старые (пользователь удалил все Любимые) */
             java.net.http.HttpResponse<String> rc3 = postSave(portCx, idCx, 2,
-                "{\"rev\":2,\"nextId\":1,\"customEx\":[],\"favs\":[],\"workouts\":[]}");
+                "{\"rev\":2,\"nextId\":1,\"customEx\":[],\"favs\":[],\"customExHidden\":[],\"workouts\":[]}");
             check(rc3.statusCode() == 200, "customEx merge: save с пустыми списками — 200, а не " + rc3.statusCode());
             GymData clearedCx = stCx.load(424248);
             check(clearedCx.customEx.isEmpty() && clearedCx.favs.isEmpty(),
                 "customEx merge: пустые списки замещают старые (удаление доезжает)");
+            check(clearedCx.customExHidden.isEmpty(),
+                "customEx merge: пустой список томстонов очищает старые [EXR-T19]");
         } catch (Exception cexErr) {
             throw new AssertionError("CONTRACT FAIL: customEx merge " + cexErr);
         }

@@ -6405,9 +6405,11 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0);
         await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
         await expect(page.locator('#techList .lphint')).toBeVisible();
-        /* томстон в localStorage */
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(OWN2) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* томстон на сервере [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN2);
+        }).toBeGreaterThanOrEqual(0);
         /* сервер: база и ★ почистились, тренировка нетронута (сеты, вес, имя) */
         await expect.poll(async function () {
             const s = await (await request.get('/api/state')).json();
@@ -6530,8 +6532,45 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
             || w.exercises[0].sets.length !== 1 || w.exercises[0].sets[0].s !== 3) {
             throw new Error('тренировка изменилась после удаления: ' + JSON.stringify(w));
         }
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(OWN1) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* сервер: томстон [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN1);
+        }).toBeGreaterThanOrEqual(0);
+    });
+
+    /* [EXR-T19] миграция: старый клиент [EXR-T18] держал томстоны в localStorage
+       (gymCustomExHidden). При загрузке имена, которых нет на сервере, переносятся в
+       G.customHidden → сервер (merge), ключ localStorage очищается, подсказки имя
+       не показывают (union-воскрешение из истории глушится уже при первом рендере). */
+    test('миграция: localStorage-томстон переезжает на сервер, ключ чистится, подсказки имя не показывают', async ({ page, request }) => {
+        const now = new Date();
+        const day = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3));
+        /* сервер: база с OWN1 + история с OWN2 (в базе T18-клиента OWN2 уже НЕТ — удалён:
+           removeCustom убирал имя из базы и клал томстон в localStorage) — union без
+           томстона воскресил бы карточку из истории */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        /* сеем legacy-ключ старого клиента до загрузки app.js */
+        await page.addInitScript(function (n) {
+            try { localStorage.setItem('gymCustomExHidden', JSON.stringify([n])); } catch (e) { /* noop */ }
+        }, OWN2);
+        await openOwnTech(page);
+        /* подсказки не показывают удалённое (фильтр работает уже при первом рендере) */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
+        /* томстон оказался на сервере */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN2);
+        }).toBeGreaterThanOrEqual(0);
+        /* localStorage-ключ почищен после подтверждённого сохранения */
+        await expect.poll(async function () {
+            return page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        }).toBe(null);
     });
 
     /* acc §12.12: активная тренировка с удаляемым упражнением — запись продолжается,
@@ -6608,8 +6647,11 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         await modal.locator('[data-act="ctxRemove"]').click();
         await expect(page.locator('.modal.open')).toHaveCount(0);
         await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(0);
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(XSS) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* томстон на сервере [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(XSS);
+        }).toBeGreaterThanOrEqual(0);
         if (dialogs.length) throw new Error('alert сработал (XSS исполнился): ' + JSON.stringify(dialogs));
         if (problems.length) throw new Error('ошибки страницы/консоли: ' + JSON.stringify(problems.slice(0, 5)));
     });
