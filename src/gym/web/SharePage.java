@@ -303,8 +303,9 @@ final class SharePage {
 
     /* рекорд реальным весом: max вес упражнения в этой тренировке строго больше всех
        прошлых (индекс < текущей — база как в prChipSetIdx/Records.congratulation);
-       первое выполнение упражнения (базы нет) рекордом не считается */
-    private static boolean isRealWeightRecord(GymData data, Workout current, String exercise, double hereMax) {
+       первое выполнение упражнения (базы нет) рекордом не считается.
+       package-private с [UX-S16] — CardRender (постер) считает рекорд по тем же правилам */
+    static boolean isRealWeightRecord(GymData data, Workout current, String exercise, double hereMax) {
         int idx = data.workouts.indexOf(current);
         if (idx < 0) return false;
         String nl = exercise.toLowerCase();
@@ -412,8 +413,8 @@ final class SharePage {
         return n < 10 ? "0" + n : String.valueOf(n);
     }
 
-    /* группировка тысяч: 5340 → «5 340» */
-    private static String fmtNum(long n) {
+    /* группировка тысяч: 5340 → «5 340»; package-private с [UX-S16] — общий код постера */
+    static String fmtNum(long n) {
         String raw = String.valueOf(n);
         StringBuilder b = new StringBuilder();
         for (int i = 0; i < raw.length(); i++) {

@@ -40,7 +40,11 @@ public final class Stats {
         /* [UX-I14] события картинки-шеринга (§5): фича вырезана 20.11 решением владельца,
            ключи оставлены в белом списке /api/track для старых клиентов в кэше
            и для чтения истории stats.json */
-        "shareClick", "shareOk", "shareDownload"
+        "shareClick", "shareOk", "shareDownload",
+        /* [UX-S16] постер v2: принятые POST /api/card и исход sendPhoto */
+        "cardSend", "cardSendOk", "cardSendErr",
+        /* [UX-S16] клиентская воронка «Картинки» через /api/track */
+        "cardClick", "cardOk", "cardErr"
     };
     /* верхняя граница числа источников в bucket startSrc (защита от раздутого файла) */
     private static final int START_SRC_MAX = 200;

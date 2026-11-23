@@ -16,6 +16,12 @@ sourceSets {
         java {
             srcDirs = ['src']
         }
+        /* [UX-S16] bundled шрифты постера (src/gym/web/fonts/*.ttf + LICENSE) едут
+            в jar как ресурсы рядом с классами (gym/web/fonts/...); *.java из
+            resources исключается Gradle автоматически */
+        resources {
+            srcDirs = ['src']
+        }
     }
     // контрактный тест формата данных (tests/GymContractTest.java, default package)
     contractTest {
@@ -23,7 +29,9 @@ sourceSets {
             srcDirs = ['tests']
         }
         compileClasspath += sourceSets.main.output
-        runtimeClasspath += sourceSets.main.output
+        /* [UX-S16] main.runtimeClasspath = классы + ресурсы (шрифты CardRender —
+            рендер PNG гоняется в контракте) + пустая runtime-конфигурация */
+        runtimeClasspath += sourceSets.main.runtimeClasspath
     }
 }
 

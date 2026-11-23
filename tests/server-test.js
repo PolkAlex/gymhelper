@@ -24,6 +24,8 @@ let store = initialStore();
 const staticGzipCache = new Map();
 /* [ANA-T5] собранные события онбординга (прод: Stats.inc; здесь список для e2e-проверок) */
 let trackedEvents = [];
+/* [UX-S16] режим отказа /api/card для негативного e2e (ставится /api/reset?cardfail=1) */
+let cardFail = false;
 
 const types = {
     '.html': 'text/html; charset=utf-8',
@@ -126,6 +128,9 @@ function handle(req, res) {
     if (req.method === 'POST' && url === '/api/reset') {
         store = initialStore();
         trackedEvents = [];
+        /* [UX-S16] /api/reset?cardfail=1 — сброс + /api/card отвечает 429
+           (негативная ветка «Картинки»); обычный /api/reset флаг снимает */
+        cardFail = (raw.split('?')[1] || '').indexOf('cardfail') >= 0;
         /* [UX-T29] /api/reset?noprofile=1 — сброс без профиля: сценарий новичка
            (в initialStore по умолчанию legacy-профиль age-only для kcal-тестов) */
         if ((raw.split('?')[1] || '').indexOf('noprofile') >= 0) delete store.profile;
@@ -185,6 +190,26 @@ function handle(req, res) {
                    в e2e initData пуст → shareOwner не заполняется (аноним) */
                 if (!w.shareId) w.shareId = newShareId();
                 sendJson(res, 200, { ok: true, shareId: w.shareId, url: 'http://' + (req.headers.host || '127.0.0.1:8099') + '/w/' + w.shareId });
+            } catch (e) {
+                sendJson(res, 400, { ok: false });
+            }
+        });
+        return;
+    }
+    /* [UX-S16] мок /api/card: сервер «рендерит» постер и шлёт ботом в чат (прод:
+       CardRender + data/cards + sendPhoto); здесь — фиксированный ok или отказ
+       429 при cardFail (негативная ветка e2e) */
+    if (req.method === 'POST' && url === '/api/card') {
+        let body = '';
+        req.on('data', function (ch) { body += ch; });
+        req.on('end', function () {
+            try {
+                const j = JSON.parse(body);
+                const w = (store.workouts || []).find(function (x) { return x.id === j.wid; });
+                if (!w) { sendJson(res, 404, { ok: false, error: 'Тренировка не найдена' }); return; }
+                if (!w.finished) { sendJson(res, 400, { ok: false, error: 'Постер можно сделать для завершённой тренировки' }); return; }
+                if (cardFail) { sendJson(res, 429, { ok: false, error: 'Слишком часто: постер можно собирать не чаще 3 раз в час' }); return; }
+                sendJson(res, 200, { ok: true });
             } catch (e) {
                 sendJson(res, 400, { ok: false });
             }

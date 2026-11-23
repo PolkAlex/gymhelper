@@ -742,19 +742,22 @@ summary .wip, .setrow .wip { font-size: 11.5px; font-weight: 400; color: var(--m
 .entry .pen { opacity: .4; }
 .restline { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
-/* [UX-T35] «Добавить подход» — тонкая пилюля на всю ширину плитки под списком подходов,
-   над «упражнение активно — время идёт»; заметно скромнее «➕ Добавить упражнение»:
-   инсет-стекло темнее карточки, тихая рамка, приглушённый текст, тонкий SVG-плюс;
-   хит-слой ::after — скрытая зона тапа ~42px при видимой высоте ~26px (соседей не
-   съедает: сверху 8px до записей, снизу 4px до restline — она некликабельна) */
-.ex-addset { display: flex; width: 100%; align-items: center; justify-content: center; gap: 6px;
-    margin: 8px 0 0; padding: 4px 12px; border-radius: 999px;
+/* [UX-T48] «Добавить подход» — пилюля на всю ширину плитки под списком подходов,
+   над «упражнение активно — время идёт»; скромнее «➕ Добавить упражнение»,
+   но с 21.11.2026 (запрос владельца) выше на 50%: было ~26px (padding 4px, шрифт 12,
+   плюс 14px) → стало ~39px (padding 10px, шрифт 14, плюс 16px); инсет-стекло,
+   тихая рамка, приглушённый текст, тонкий SVG-плюс — стиль сохранён;
+   хит-слой ::after — скрытая зона тапа ~47px при видимой высоте ~39px (соседей не
+   съедает: сверху свес 4px при 8px отступе до записей, снизу 4px ровно до restline —
+   она некликабельна) */
+.ex-addset { display: flex; width: 100%; align-items: center; justify-content: center; gap: 8px;
+    margin: 8px 0 0; padding: 10px 14px; border-radius: 999px;
     background: var(--nested); border: 1px solid var(--nested-brd);
-    color: var(--muted); font-size: 12px; font-weight: 600; font-family: inherit; cursor: pointer;
+    color: var(--muted); font-size: 14px; font-weight: 600; font-family: inherit; cursor: pointer;
     touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
-.ex-addset svg { width: 14px; height: 14px; flex: none; }
+.ex-addset svg { width: 16px; height: 16px; flex: none; }
 .ex-addset:active { background: var(--btn-pressed); color: var(--text); transform: scale(.985); }
-.ex-addset::after { content: ''; position: absolute; inset: -8px -6px; }
+.ex-addset::after { content: ''; position: absolute; inset: -4px -6px; }
 .expill.exhold { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .expill.drag-src {
     position: relative;
@@ -2638,9 +2641,17 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
     background: rgba(255, 194, 32, .06);
     position: relative;
 }
+/* бейдж «выбор» — восстановлен с [UX-S16] (шит «Картинка / Телеграм») */
+.btn.share-new .tag {
+    position: absolute; right: 10px; top: -9px;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); border-radius: 999px;
+    font-size: 9.5px; font-weight: 800; letter-spacing: .5px;
+    padding: 2px 8px; text-transform: uppercase;
+}
 .btn.share-new:disabled { opacity: .6; }
 
-/* шит «Телеграм» (модалка-шит продукта); «Картинка» вырезана 20.11 (UX-I14) */
+/* шит «Картинка / Телеграм»: [UX-S16] постер v2 вернулся (вырез 20.11 отменён) */
 .shrow {
     display: flex; align-items: center; gap: 12px; width: 100%;
     background: var(--nested); border: 1px solid var(--nested-brd);
