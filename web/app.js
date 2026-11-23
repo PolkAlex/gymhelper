@@ -1363,6 +1363,50 @@ const ACTIONS = {
         const row = document.getElementById('mCustomMuscles');
         if (row) row.innerHTML = customMuscleChips();
     },
+    /* [FIT-T2] редактор групп существующего «своего» (плашка карты «Указать»):
+       те же чипы, что при создании; тогл — точечная перерисовка ряда */
+    customEditMuscle: function (a) {
+        if (!CUSTOM_EDIT) return;
+        const k = CUSTOM_EDIT.tags.indexOf(a);
+        if (k === -1) CUSTOM_EDIT.tags.push(a); else CUSTOM_EDIT.tags.splice(k, 1);
+        const row = document.getElementById('mEditMuscles');
+        if (row) row.innerHTML = customEditChips();
+    },
+    customEditSave: function () {
+        const edit = CUSTOM_EDIT;
+        CUSTOM_EDIT = null;
+        if (!edit) return closeModal();
+        const cu = findCustom(edit.name);
+        if (!cu) return closeModal();
+        /* не-m: теги (если появятся) сохраняются как были — меняем только группы */
+        const others = (cu.tags || []).filter(function (t) { return String(t).indexOf('m:') !== 0; });
+        cu.tags = others.concat(edit.tags.slice());
+        save(); /* ошибки показывает doSave */
+        closeModal();
+        render(); /* карта пересчитывается на лету */
+    },
+    /* [FIT-T2] плашка «У N упражнений не указаны группы» → редактор групп первого
+       исправимого «своего» из тренировки (томстоны — без кнопки, чинить нечем) */
+    mapUntagFix: function (a) { customEditModal(a); },
+    /* [FIT-S2] сегмент м/ж: перерисовка обеих фигур без полного рендера карточки;
+       уровни подсветки не меняются — меняется только тело (§6.6); выбор не сохраняем */
+    mapSex: function (a) {
+        if (!MAPVIEW || (a !== 'м' && a !== 'ж')) return;
+        MAPVIEW.sex = a;
+        const f = document.getElementById('bmF'), b = document.getElementById('bmB');
+        if (f) f.innerHTML = bodySvg(true, bmSex(a), MAPVIEW.map.lvl, true);
+        if (b) b.innerHTML = bodySvg(false, bmSex(a), MAPVIEW.map.lvl, true);
+        document.querySelectorAll('.mapseg .seg-btn').forEach(function (btn) {
+            btn.classList.toggle('on', btn.getAttribute('data-a') === a);
+        });
+    },
+    /* [FIT-S2] тап по зоне тела → шит группы; не подсвеченная зона — ничего (§6.5):
+       шит только для групп из легенды */
+    mapZone: function (a) {
+        const g = String(a || '');
+        if (!MAPVIEW || MAPVIEW.wid !== viewWid || !MAPVIEW.map.lvl[g]) return;
+        openModal(mapGroupSheetHtml(g));
+    },
     /* [EXR-T14] «Отмена» в модалке своего возвращает В ПИКЕР (секция/поиск PICKER сохранены),
        а не закрывает его целиком — фикс потери контекста */
     backToPicker: function () { renderPickerModal(); },
@@ -2627,13 +2671,24 @@ function workoutCard(w) {
         const sT = String(w.started).slice(11, 16);
         const range = (w.finished && w.ended) ? sT + '–' + String(w.ended).slice(11, 16) : 'с ' + sT;
         const setsTotal = (w.exercises || []).reduce((a, e) => a + setsCount(e), 0);
-        let pill = '<span class="wpill wp-r">🕐 ' + range + '</span>';
-        if (G.profile && G.profile.weight > 0) {
-            const res = calcWorkoutKcal(G.profile, w);
-            if (res && res.total > 0) pill += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
+        /* [FIT-S2] у завершённой пилюля метрик заменена блоком карты «Задействованные
+           мышцы» — время/объём/ккал переезжают в плитки блока (§6.1, иначе дубль);
+           у активной wcpill остаётся, блока карты нет */
+        if (w.finished) {
+            h += mapBlockHtml(w);
+        } else {
+            let pill = '<span class="wpill wp-r">🕐 ' + range + '</span>';
+            if (G.profile && G.profile.weight > 0) {
+                const res = calcWorkoutKcal(G.profile, w);
+                if (res && res.total > 0) pill += '<span class="wpill wp-k">🔥 ' + res.total + ' ккал</span>';
+            }
+            if (setsTotal > 0) pill += '<span class="wpill wp-s">🏋 ' + setsTotal + ' подх.</span>';
+            h += '<div class="wcpill">' + pill + '</div>';
         }
-        if (setsTotal > 0) pill += '<span class="wpill wp-s">🏋 ' + setsTotal + ' подх.</span>';
-        h += '<div class="wcpill">' + pill + '</div>';
+    } else if (w.finished) {
+        /* [FIT-S2] завершённая без started (старые данные): карту всё равно показываем,
+           плитка времени покажет тире */
+        h += mapBlockHtml(w);
     }
     if (w.nutrition && w.nutrition.trim()) h += '<p class="meta">🥤 ' + esc(w.nutrition) + '</p>';
     const exs = w.exercises || [];
@@ -3448,6 +3503,163 @@ function muscleGroupsCardHtml(groups, title) {
             '<span class="mgn">' + esc(g.n) + '</span><b>' + g.sets + ' подх.</b></div>';
     }
     return h + '</div></div>';
+}
+
+/* ============ [FIT-S2] карта мышц тренировки (docs/spec-fit-s2-muscle-map.md) ============ */
+/* подпись группы каталога по слагу зоны bodymap ('back' → «Спина»); FILTERS.muscle —
+   единый источник имён 8 групп (те же чипы в модалке «Своего») */
+function mapGroupName(slug) {
+    const it = (FILTERS.muscle.items || []).find(function (x) { return x.id === 'm:' + slug; });
+    return it ? it.n : slug;
+}
+/* все m:-теги упражнения: запись каталога (ВСЕ теги, не первый — отличие от
+   weekMuscleGroups, §4.2) или «своё» (G.customEx[].tags). Каталог без m:
+   (кардио/разминка) — норма данных: пусто, но это не «группы не указаны» */
+function exMuscleTags(name) {
+    const c = findCatalog(name);
+    const tags = c ? exTags(c) : ((findCustom(name) || {}).tags || []);
+    const out = [];
+    for (const t of tags) {
+        const s = String(t);
+        if (s.indexOf('m:') === 0 && out.indexOf(s) === -1) out.push(s);
+    }
+    return out;
+}
+/* объём одного упражнения, кг — та же формула, что workoutVolume */
+function exVolume(e) {
+    let v = 0;
+    for (const s of e.sets) v += avgNum(s.w) * (+s.s || 0) * repsAvg(s.r);
+    return v;
+}
+/* агрегация §4.2: подходы группы (полное зачисление каждой m:-группе: становая
+   даёт и спине, и ногам, и ягодицам); untagged — имена без каталога и без m:-тегов
+   («свои» без групп, томстоны). Уровни 1..3 — доля группы от лидера, пороги 1/3
+   и 2/3 (§В.3); одна группа — lvl3. Расчёт на лету: ретроактивен для истории,
+   в data/*.json ничего не пишется */
+function workoutMuscleMap(w) {
+    const sets = {}, rows = {}, untagged = [];
+    for (const e of (w.exercises || [])) {
+        if (!e.sets.length) continue;
+        const ms = exMuscleTags(e.name);
+        const n = setsCount(e);
+        /* [FIT-T1 ревью] guard §6.5/§4.3: подходов нет (поле s пустое) — вклад в карту
+           нулевой: группа не создаёт ключ с 0 (иначе дим-подсветка и строка «0 подх.»
+           в легенде); если у ВСЕХ упражнений 0 — легенда пуста → состояние §6.4 */
+        if (n <= 0) continue;
+        if (!ms.length) {
+            if (!findCatalog(e.name)) untagged.push(e.name);
+            continue;
+        }
+        if (!rows[e.name]) rows[e.name] = { sets: 0, ton: 0, ms: ms };
+        rows[e.name].sets += n;
+        rows[e.name].ton += exVolume(e);
+        for (const g of ms) sets[g] = (sets[g] || 0) + n;
+    }
+    let max = 0;
+    for (const g in sets) if (sets[g] > max) max = sets[g];
+    const lvl = {};
+    for (const g in sets) {
+        const share = max > 0 ? sets[g] / max : 0;
+        lvl[g.slice(2)] = share >= 2 / 3 ? 3 : (share >= 1 / 3 ? 2 : 1);
+    }
+    const legend = Object.keys(sets).map(function (g) {
+        return { g: g.slice(2), n: mapGroupName(g.slice(2)), sets: sets[g] };
+    }).sort(function (a, b) { return b.sets - a.sets || (a.n < b.n ? -1 : 1); });
+    return { sets: sets, lvl: lvl, legend: legend, untagged: untagged, rows: rows };
+}
+function groupsWord(n) {
+    n = Math.abs(+n || 0);
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'группа';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'группы';
+    return 'групп';
+}
+/* «У N …» для плашки untagged: У 1 упражнения / У 3 упражнений */
+function untagExWord(n) {
+    n = Math.abs(+n || 0);
+    return (n % 10 === 1 && n % 100 !== 11) ? 'упражнения' : 'упражнений';
+}
+/* временный вид карты открытой карточки: тело м/ж — дефолт из профиля (§6.6),
+   ручной выбор НЕ сохраняется; пересоздаётся при каждом рендере карточки.
+   Пол хранится как «м»/«ж» (GymData), наборы ассета — латинские 'm'/'f' */
+let MAPVIEW = null;
+function mapSexDefault() { return (G.profile && G.profile.sex === 'ж') ? 'ж' : 'м'; }
+function bmSex(s) { return s === 'ж' ? 'f' : 'm'; }
+/* блок «💪 Задействованные мышцы» (Э1): фигуры front/back + сегмент м/ж + легенда +
+   плитки «Продолжительность / Объём / Калории» (замещают wcpill у завершённой) + плашка untagged */
+function mapBlockHtml(w) {
+    const map = workoutMuscleMap(w);
+    MAPVIEW = { wid: w.id, sex: mapSexDefault(), map: map };
+    let h = '<div class="mapcard">' +
+        '<div class="maphead"><span class="mt">💪 Задействованные мышцы</span>' +
+        (map.legend.length
+            ? '<span class="msum">' + map.legend.length + ' ' + groupsWord(map.legend.length) +
+              ' · ' + map.legend.reduce((a, g) => a + g.sets, 0) + ' подх.</span>'
+            : '') +
+        '</div>';
+    h += '<div class="mapsexrow">' +
+        '<div class="seg mapseg" role="group" aria-label="Вариант тела">' +
+        '<button class="seg-btn' + (MAPVIEW.sex === 'м' ? ' on' : '') + '" data-act="mapSex" data-a="м">Мужское</button>' +
+        '<button class="seg-btn' + (MAPVIEW.sex === 'ж' ? ' on' : '') + '" data-act="mapSex" data-a="ж">Женское</button>' +
+        '</div>' +
+        '<span class="mapsexnote">' + (G.profile && G.profile.sex
+            ? 'пол профиля: ' + esc(G.profile.sex)
+            : 'по умолчанию — пол из профиля') + '</span>' +
+        '</div>';
+    /* фигуры фиксированной высоты 330px (viewBox видов различаются, §6.6); лейблы под фигурами */
+    h += '<div class="bodies">' +
+        '<div class="bodywrap"><div id="bmF">' + bodySvg(true, bmSex(MAPVIEW.sex), map.lvl, true) + '</div><div class="bname">Спереди</div></div>' +
+        '<div class="bodywrap"><div id="bmB">' + bodySvg(false, bmSex(MAPVIEW.sex), map.lvl, true) + '</div><div class="bname">Сзади</div></div>' +
+        '</div>';
+    if (map.legend.length) {
+        h += '<div class="legend">';
+        for (const g of map.legend) {
+            h += '<span class="lg"><i class="dot lvl' + map.lvl[g.g] + '"></i>' + esc(g.n) + ' <b>' + g.sets + ' подх.</b></span>';
+        }
+        h += '</div>';
+    } else {
+        h += '<div class="mapempty">Нет силовых упражнений —<br>подсвечивать нечего 🏃</div>';
+    }
+    const mins = durationMin(w);
+    const vol = workoutVolume(w);
+    const kcal = (G.profile && G.profile.weight > 0) ? calcWorkoutKcal(G.profile, w) : null;
+    h += '<div class="statgrid map3">' +
+        '<div class="sg"><b>' + (mins != null ? durationText(mins) : '—') + '</b><span>Продолжительность</span></div>' +
+        '<div class="sg"><b>' + (vol > 0 ? '≈' + fmtW(Math.round(vol)) + ' кг' : '—') + '</b><span>Объём</span></div>' +
+        '<div class="sg"><b>' + (kcal && kcal.total > 0 ? '≈' + kcal.total + ' ккал' : '—') + '</b><span>Калории</span></div>' +
+        '</div>';
+    if (map.untagged.length) {
+        let fixName = '';
+        for (const n of map.untagged) { if (findCustom(n)) { fixName = n; break; } }
+        h += '<div class="untag"><span class="uico">⚠️</span><span>У ' + map.untagged.length + ' ' + untagExWord(map.untagged.length) +
+            ' не указаны группы — карта может быть неполной</span>' +
+            (fixName ? '<button data-act="mapUntagFix" data-a="' + escAttr(fixName) + '">Указать</button>' : '') +
+            '</div>';
+    }
+    return h + '</div>';
+}
+/* шит группы (Э2, §6.3): строки упражнений группы — подходы + вклад в тоннаж
+   (avgNum; 0 кг — «без веса»); сортировка по убыванию подходов, при равенстве — по тоннажу */
+function mapGroupSheetHtml(g) {
+    const tag = 'm:' + g;
+    let total = 0;
+    const items = [];
+    for (const name in MAPVIEW.map.rows) {
+        const r = MAPVIEW.map.rows[name];
+        if (r.ms.indexOf(tag) === -1) continue;
+        total += r.sets;
+        items.push({ n: name, sets: r.sets, ton: r.ton });
+    }
+    items.sort(function (a, b) { return b.sets - a.sets || b.ton - a.ton; });
+    let h = '<p class="msub">Задействованная группа</p>' +
+        '<p class="mtitle">' + esc(mapGroupName(g)) + ' · ' + total + ' подх.</p>';
+    for (const it of items) {
+        h += '<div class="grrow"><span class="gn"><b>' + esc(it.n) + '</b><span>' + it.sets + ' ' + setsWord(it.sets) +
+            ' · ' + (it.ton > 0 ? '≈' + fmtW(Math.round(it.ton)) + ' кг' : 'без веса') + '</span></span>' +
+            '<span class="gv">' + it.sets + ' <small>подх.</small></span></div>';
+    }
+    h += '<div class="btnrow"><button class="btn sec wide" data-act="closeModal">Закрыть</button></div>';
+    return h;
 }
 
 /* ============ [ANA-T8] пикер периода «Статистики» (docs/spec-ana-t7-periods.md) ============ */
@@ -4785,13 +4997,14 @@ function finishWorkout(id) {
             if (!goalHit) goalHit = g;
         }
     }
-    /* [UX-T13] после завершения — сразу список истории, экран карточки закрывается;
-       тост цели важнее обычного «Тренировка завершена» (аналог приоритета §11) */
+    /* [FIT-T1] решение владельца 23.11 (1-А, меняет [UX-T13]): после завершения
+       остаёмся в открытой карточке — карта мышц видна сразу; viewWid и стек навигации
+       не трогаем, backbar сам переключится на завершённый набор 🗑/↻/←, «← Назад»/
+       BackButton ведут в историю как раньше; тост цели важнее обычного
+       «Тренировка завершена» (аналог приоритета §11) */
     scrollDropAll(); /* [UX-I22] история/рекорды пересчитаны — старые позиции невалидны */
     save().then(function (r) {
         if (r === 'ok') toast(goalHit ? '🏆 Цель достигнута! ' + goalNameFull(goalHit) : '✅ Тренировка завершена');
-        viewWid = 0;
-        navPop('workout'); /* [UX-T42] */
         render();
     });
 }
@@ -4856,30 +5069,33 @@ function findCustom(name) {
     return (G.customEx || []).find(x => (x.n || '').toLowerCase() === q) || null;
 }
 function customBase() { return customNames(); }
-/* [EXR-T18] томстоны удалённых «своих»: localStorage string[] (gymCustomExHidden).
-   Старые пользователи без ключа — читается как []; битый JSON — тоже (§8.3) */
+/* [EXR-T19] томстоны удалённых «своих»: серверные данные (G.customExHidden: string[]).
+   Старый файл/клиент без поля — читается как [] (дефолт сервера + guard G/Array.isArray) */
 function customHidden() {
-    try {
-        const a = JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]');
-        return Array.isArray(a) ? a : [];
-    } catch (e) { return []; }
+    return (G && Array.isArray(G.customExHidden)) ? G.customExHidden : [];
 }
 /* [EXR-T14] миграция localStorage (gymCustomEx/gymFavs) → сервер (сценарий G §11):
    на сервере поля отсутствуют или пусты, а локально есть — имена, которых нет на
    сервере, добавляются; ключи localStorage очищаются. Сервер приоритетен: при
    непустых серверных полях локальное игнорируется (конфликт — побеждает серверная
-   запись с тегами). Имена, совпавшие с каталогом, не переносятся (они и так каталог). */
+   запись с тегами). Имена, совпавшие с каталогом, не переносятся (они и так каталог).
+   [EXR-T19] томстоны gymCustomExHidden → G.customExHidden: merge НЕДОСТАЮЩИХ имён
+   (серверный список — уже правда, не перезатирается: удаляли и на втором устройстве);
+   имена каталога и живых «своих» не переносятся (томстон для них бессмысленен). */
 function migrateCustomFavs() {
     if (!G) return;
-    let rawC = null, rawF = null;
+    let rawC = null, rawF = null, rawH = null;
     try { rawC = localStorage.getItem('gymCustomEx'); } catch (e) { rawC = null; }
     try { rawF = localStorage.getItem('gymFavs'); } catch (e) { rawF = null; }
-    if (rawC == null && rawF == null) return;
-    let lsC = [], lsF = [];
+    try { rawH = localStorage.getItem('gymCustomExHidden'); } catch (e) { rawH = null; }
+    if (rawC == null && rawF == null && rawH == null) return;
+    let lsC = [], lsF = [], lsH = [];
     try { lsC = JSON.parse(rawC || '[]') || []; } catch (e) { lsC = []; }
     try { lsF = JSON.parse(rawF || '[]') || []; } catch (e) { lsF = []; }
+    try { lsH = JSON.parse(rawH || '[]') || []; } catch (e) { lsH = []; }
     if (!Array.isArray(lsC)) lsC = [];
     if (!Array.isArray(lsF)) lsF = [];
+    if (!Array.isArray(lsH)) lsH = [];
     let migrated = false;
     if ((!G.customEx || !G.customEx.length) && lsC.length) {
         G.customEx = [];
@@ -4901,15 +5117,32 @@ function migrateCustomFavs() {
             migrated = true;
         }
     }
+    /* [EXR-T19] томстоны: merge без учёта регистра (имя «своего» — ключ без регистра);
+       имя без удаления не скрыть на втором устройстве — добавляем только отсутствующие */
+    if (lsH.length) {
+        if (!G.customExHidden) G.customExHidden = [];
+        for (const n of lsH) {
+            if (typeof n !== 'string') continue;
+            const name = n.trim();
+            if (!name || name.length > 60 || findCatalog(name) || findCustom(name)) continue;
+            if (G.customExHidden.some(function (h) { return String(h).toLowerCase() === name.toLowerCase(); })) continue;
+            G.customExHidden.push(name);
+            migrated = true;
+        }
+    }
     /* [EXR-T14 ревью] ключи localStorage удаляются ПОСЛЕ подтверждённого сохранения
        ('ok' от doSave); при 'err'/'conflict' ключи остаются — миграция повторится при
        следующем init (идемпотентно: если save прошёл частично, вторая волна ничего
-       не добавит — серверные поля уже непусты). Если мигрировать нечего (серверные
-       поля непусты / ls пуст / битый JSON) — stale-ключи всё равно очищаются: данные
-       из них игнорируются (сервер приоритетен), а удаление предотвращает их
-       «воскрешение» при будущей полной очистке «Своих» на сервере. */
+       не добавит — серверные поля уже непусты / томстоны уже в списке). Если
+       мигрировать нечего (серверные поля непусты / ls пуст / битый JSON) — stale-ключи
+       всё равно очищаются: данные из них игнорируются (сервер приоритетен), а удаление
+       предотвращает их «воскрешение» при будущей полной очистке «Своих» на сервере. */
     const clearKeys = function () {
-        try { localStorage.removeItem('gymCustomEx'); localStorage.removeItem('gymFavs'); } catch (e) { /* noop */ }
+        try {
+            localStorage.removeItem('gymCustomEx');
+            localStorage.removeItem('gymFavs');
+            localStorage.removeItem('gymCustomExHidden'); /* [EXR-T19] */
+        } catch (e) { /* noop */ }
     };
     if (migrated) {
         save().then(function (r) { if (r === 'ok') clearKeys(); }); /* ошибки показывает doSave */
@@ -5125,16 +5358,41 @@ function createCustom() {
     }
     if (!G.customEx) G.customEx = [];
     G.customEx.push({ n: name, tags: CUSTOM_DRAFT.tags.slice() });
-    /* [EXR-T18] пересоздание удалённого имени снимает томстон — снова в подсказках (§8.3) */
-    try {
-        const hid = customHidden();
-        if (hid.includes(name)) localStorage.setItem('gymCustomExHidden', JSON.stringify(hid.filter(n => n !== name)));
-    } catch (e) { /* noop */ }
+    /* [EXR-T18] пересоздание удалённого имени снимает томстон — снова в подсказках
+       (§8.3); [EXR-T19] томстон живёт на сервере (G.customExHidden), уедет с save() */
+    if (G.customExHidden && G.customExHidden.includes(name)) {
+        G.customExHidden.splice(G.customExHidden.indexOf(name), 1);
+    }
     save(); /* создание уходит на сервер (§11); ошибки показывает doSave */
     closeCurrentExercise();
     const e = startExercise(w, name);
     closeModal();
     openEntryModalIdx(w, w.exercises.indexOf(e), -1);
+}
+
+/* ---------- [FIT-T2] редактор групп существующего «своего» ---------- */
+/* те же 8 чипов, что при создании (FILTERS.muscle), выбор опционален; открыт из
+   плашки untagged блока карты («Указать») — мягкий вход вместо принудительного шага */
+let CUSTOM_EDIT = null;
+function customEditModal(name) {
+    const cu = findCustom(name);
+    if (!cu) return;
+    CUSTOM_EDIT = { name: cu.n, tags: (cu.tags || []).filter(function (t) { return String(t).indexOf('m:') === 0; }).slice() };
+    openModal('<p class="msub">✍️ Своё упражнение</p>' +
+        '<p class="mtitle">' + esc(cu.n) + '</p>' +
+        '<div class="flabel" style="margin:14px 0 6px">Группы мышц<span class="opt">необязательно</span></div>' +
+        '<div class="secrow" id="mEditMuscles" style="margin:0 0 8px">' + customEditChips() + '</div>' +
+        '<p class="mhint">Для карты мышц в карточке тренировки: можно выбрать несколько или пропустить</p>' +
+        '<div class="btnrow"><button class="btn prime wide" data-act="customEditSave">✓ Сохранить</button>' +
+        '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>');
+}
+function customEditChips() {
+    let h = '';
+    for (const it of FILTERS.muscle.items) {
+        const on = CUSTOM_EDIT.tags.indexOf(it.id) !== -1;
+        h += '<button class="chip' + (on ? ' on' : '') + '" data-act="customEditMuscle" data-a="' + escAttr(it.id) + '">' + esc(it.n) + '</button>';
+    }
+    return h;
 }
 
 /* ---------- [EXR-T18] удаление «своих»: долгий тап → меню → подтверждение ---------- */
@@ -5144,11 +5402,10 @@ function createCustom() {
 function removeCustom(name) {
     const cu = findCustom(name);
     if (cu) G.customEx.splice(G.customEx.indexOf(cu), 1);
-    try {
-        const hid = customHidden();
-        if (!hid.includes(name)) hid.push(name);
-        localStorage.setItem('gymCustomExHidden', JSON.stringify(hid));
-    } catch (e) { /* noop */ }
+    /* [EXR-T18] томстон: удалённое не воскресает из истории; [EXR-T19] на сервере
+       (G.customExHidden) — уезжает с save(), виден на всех устройствах */
+    if (!G.customExHidden) G.customExHidden = [];
+    if (!G.customExHidden.includes(name)) G.customExHidden.push(name);
     /* ★ Любимые: без чистки осталась бы призрачная звезда упражнения вне базы (§10) */
     if (G.favs && G.favs.includes(name)) G.favs.splice(G.favs.indexOf(name), 1);
     save(); /* удаление из базы уходит на сервер (§11); ошибки показывает doSave */

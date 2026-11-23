@@ -235,7 +235,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.expill .exname')).toContainText('Жим стоя', { timeout: 5000 });
     });
 
-    test('завершение тренировки: сразу список истории, дата и пилюля в превью', async ({ page }) => {
+    test('завершение тренировки: остаёмся в карточке с картой мышц, Назад → история', async ({ page }) => {
         await openApp(page);
         await startAndPick(page, EX);
         await page.locator('#mWeight').fill('100');
@@ -247,11 +247,16 @@ test.describe('GymHelper e2e', function () {
         await openActiveDetail(page);
         /* [UX-T22] завершение — из нижней кнопки backbar (✓ из шапки убрана) */
         await page.locator('.backbar [data-act="finishWorkout"]').click();
-        /* [UX-T13] после завершения — сразу список истории, экран карточки закрыт */
+        /* [FIT-T1] решение владельца 23.11 (1-А, меняет [UX-T13]): после завершения
+           остаёмся в открытой карточке — блок карты мышц виден сразу */
+        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* backbar переключился на завершённый набор 🗑/↻/← */
+        await expect(page.locator('.backbar', { hasText: 'Повторить' })).toBeVisible({ timeout: 5000 });
+        /* «← Назад» ведёт в историю как раньше: превью без пилюли «⚫ идёт» */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.backbar')).not.toBeVisible({ timeout: 5000 });
         await expect(page.locator('.pc-date')).toContainText('.', { timeout: 5000 });
-        /* тренировка реально завершена: пилюля «⚫ идёт» у превью исчезла */
         await expect(page.locator('.pc-pill')).toHaveCount(0);
     });
 
@@ -531,7 +536,9 @@ test.describe('GymHelper e2e', function () {
         await page.locator('[data-act="saveTime"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="finishWorkout"]').click();
-        await expect(page.locator('.wpill', { hasText: '10:00–11:30' })).toBeVisible({ timeout: 5000 });
+        /* [FIT-S2] у завершённой вместо пилюли — блок карты; продолжительность 10:00–11:30 = 1 ч 30 м */
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Продолжительность' })).toContainText('1 ч 30 м', { timeout: 5000 });
     });
 
     test('своё упражнение сохраняется в базе', async ({ page }) => {
@@ -568,7 +575,7 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.wctitles .t1', { hasText: 'Спина и грудь' })).toBeVisible({ timeout: 5000 });
     });
 
-    test('шапка карточки: название на уровне иконок, время/длительность/ккал в пилюлях', async ({ page, request }) => {
+    test('шапка карточки: название на уровне иконок; у завершённой метрики — в плитках карты мышц', async ({ page, request }) => {
         /* готовая завершённая тренировка: интервал 09:30–10:30, упражнение 29 минут — ккал гарантированно > 0 */
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
@@ -588,16 +595,16 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.pcard').first().click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
 
-        /* ровно три значения: время, ккал, подходы. Длительности внутри быть не должно */
-        await expect(page.locator('.wpill.wp-r')).toContainText('09:30–10:30', { timeout: 5000 });
-        await expect(page.locator('.wpill.wp-k')).toContainText('ккал', { timeout: 5000 });
-        await expect(page.locator('.wpill.wp-s')).toContainText('подх.', { timeout: 5000 });
-        /* часовая тренировка с записями, занесёнными за минуту: ккал считаем по длительности ТРЕНИРОВКИ */
-        const kcalDigits = ((await page.locator('.wpill.wp-k').textContent()).match(/\d+/) || ['0'])[0];
+        /* [FIT-S2] пилюли метрик у завершённой заменены блоком карты: три плитки
+           «Продолжительность / Объём / Калории» (данные те же, вид как в референсе) */
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.mapcard .statgrid.map3 .sg')).toHaveCount(3);
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Продолжительность' })).toContainText('1 ч');
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Объём' })).toContainText('≈2700 кг');
+        const kcalTile = page.locator('.statgrid.map3 .sg', { hasText: 'Калории' });
+        await expect(kcalTile).toContainText('ккал');
+        const kcalDigits = ((await kcalTile.textContent()).match(/\d+/) || ['0'])[0];
         if (+kcalDigits < 100) throw new Error('ккал подозрительно мало для часовой тренировки: ' + kcalDigits);
-        const wpillCount = await page.locator('.wpill').count();
-        if (wpillCount !== 3) throw new Error('строк в пилюле: ' + wpillCount + ', ожидалось 3');
-        if (await page.locator('.wpill.wp-d').count()) throw new Error('длительность осталась в пилюле');
 
         /* название тренировки и иконки карандаша/часов/корзины — на одном уровне */
         const t1 = await page.locator('.wchead .t1').boundingBox();
@@ -606,30 +613,11 @@ test.describe('GymHelper e2e', function () {
         const d = Math.abs((t1.y + t1.height / 2) - (icons.y + icons.height / 2));
         if (d > 8) throw new Error('название и иконки не на одном уровне: ' + d.toFixed(1) + 'px');
 
-        /* инфо-лента: одна строка на всю ширину ниже названия, три значения на одном уровне */
-        const pillBox = await page.locator('.wcpill').boundingBox();
-        const icBox = await page.locator('.wcicons').boundingBox();
-        const t1Box = await page.locator('.wctitles .t1').boundingBox();
-        if (!pillBox || !icBox || !t1Box) throw new Error('шапка карточки не найдена');
-        const edge = Math.abs((pillBox.x + pillBox.width) - (icBox.x + icBox.width));
-        if (edge > 2) throw new Error('пилюля не растянута до правого края: ' + edge.toFixed(1) + 'px');
-        if (pillBox.y < t1Box.y) throw new Error('пилюля выше названия');
-        const rows = await page.locator('.wpill').all();
-        const centers = [];
-        const hs = [];
-        for (const p of rows) {
-            const bb = await p.boundingBox();
-            centers.push(bb.y + bb.height / 2);
-            hs.push(bb.height);
-        }
-        const centerSpread = Math.max.apply(null, centers) - Math.min.apply(null, centers);
-        if (centerSpread > 2) throw new Error('значения пилюли не в одной строке: ' + centerSpread.toFixed(1) + 'px');
-        if (Math.max.apply(null, hs) - Math.min.apply(null, hs) > 2) throw new Error('значения пилюли разной высоты');
-
-        /* ккал не «выпадает» из шапки: пилюля выше карточек упражнений */
-        const kcal = await page.locator('.wpill.wp-k').boundingBox();
+        /* блок карты стоит под шапкой и выше карточек упражнений (не «проваливается») */
+        const mapBox = await page.locator('.mapcard').boundingBox();
         const firstEx = await page.locator('.expill').first().boundingBox();
-        if (kcal.y + kcal.height > firstEx.y) throw new Error('пилюля ккал провалилась ниже карточки упражнения');
+        if (mapBox.y < t1.y) throw new Error('блок карты выше названия');
+        if (mapBox.y + mapBox.height > firstEx.y) throw new Error('блок карты провалился ниже карточки упражнения');
     });
 
     test('статистика: карточка рекорда периода со шкалой', async ({ page, request }) => {
@@ -2772,8 +2760,9 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         if (!fin || String(fin.started).slice(11, 16) !== '07:00' || String(fin.ended).slice(11, 16) !== '08:00') {
             throw new Error('время завершённой не сохранилось: ' + JSON.stringify(fin));
         }
-        /* пилюля времени в карточке перерисовалась */
-        await expect(page.locator('.wpill', { hasText: '07:00–08:00' })).toBeVisible({ timeout: 5000 });
+        /* [FIT-S2] у завершённой метрики в плитках карты: 07:00–08:00 = «1 ч» */
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Продолжительность' })).toContainText('1 ч', { timeout: 5000 });
     });
 
     test('[UX-T23] таймер отдыха поднимается над backbar завершённой карточки (restRaised)', async ({ page, request }) => {
@@ -6407,9 +6396,11 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0);
         await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
         await expect(page.locator('#techList .lphint')).toBeVisible();
-        /* томстон в localStorage */
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(OWN2) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* томстон на сервере [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN2);
+        }).toBeGreaterThanOrEqual(0);
         /* сервер: база и ★ почистились, тренировка нетронута (сеты, вес, имя) */
         await expect.poll(async function () {
             const s = await (await request.get('/api/state')).json();
@@ -6532,9 +6523,91 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
             || w.exercises[0].sets.length !== 1 || w.exercises[0].sets[0].s !== 3) {
             throw new Error('тренировка изменилась после удаления: ' + JSON.stringify(w));
         }
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(OWN1) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* сервер: томстон [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN1);
+        }).toBeGreaterThanOrEqual(0);
     });
+
+    /* [EXR-T19] миграция: старый клиент [EXR-T18] держал томстоны в localStorage
+       (gymCustomExHidden). При загрузке имена, которых нет на сервере, переносятся в
+       G.customHidden → сервер (merge), ключ localStorage очищается, подсказки имя
+       не показывают (union-воскрешение из истории глушится уже при первом рендере). */
+    test('миграция: localStorage-томстон переезжает на сервер, ключ чистится, подсказки имя не показывают', async ({ page, request }) => {
+        const now = new Date();
+        const day = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3));
+        /* сервер: база с OWN1 + история с OWN2 (в базе T18-клиента OWN2 уже НЕТ — удалён:
+           removeCustom убирал имя из базы и клал томстон в localStorage) — union без
+           томстона воскресил бы карточку из истории */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        /* сеем legacy-ключ старого клиента до загрузки app.js */
+        await page.addInitScript(function (n) {
+            try { localStorage.setItem('gymCustomExHidden', JSON.stringify([n])); } catch (e) { /* noop */ }
+        }, OWN2);
+        await openOwnTech(page);
+        /* подсказки не показывают удалённое (фильтр работает уже при первом рендере) */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
+        /* томстон оказался на сервере */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN2);
+        }).toBeGreaterThanOrEqual(0);
+        /* localStorage-ключ почищен после подтверждённого сохранения */
+        await expect.poll(async function () {
+            return page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        }).toBe(null);
+    });
+
+    /* [EXR-T19] fail-path миграции: save падает — ключ gymCustomExHidden ЖИВЁТ
+       (миграция повторится при следующем init — идемпотентно), томстона на сервере
+       ещё нет; retry (reload без сбоя) — ключ почищен, томстон на сервере */
+    test('миграция: save-error держит ключ gymCustomExHidden; retry чистит и льёт томстон на сервер', async ({ page, request }) => {
+        const day = isoDate(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 3));
+        /* сервер: база с OWN1 + история с OWN2 — union без томстона воскресил бы карточку */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        let failSave = true;
+        await page.route('/api/save', async function (route) {
+            if (failSave) await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+            else await route.continue();
+        });
+        await page.addInitScript(function (n) {
+            try { localStorage.setItem('gymCustomExHidden', JSON.stringify([n])); } catch (e) { /* noop */ }
+        }, OWN2);
+        await openOwnTech(page); /* init → migrateCustomFavs → save (падает) */
+        /* ключ пережил сбой сохранения */
+        const k = await page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        if (k === null) throw new Error('gymCustomExHidden должен пережить save-error, а ключ пуст');
+        /* томстон не доехал до сервера */
+        const s1 = await (await request.get('/api/state')).json();
+        if ((s1.customExHidden || []).length !== 0) {
+            throw new Error('томстон утёк на сервер при save-error: ' + JSON.stringify(s1.customExHidden));
+        }
+        failSave = false;
+        await page.reload();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.secrow .chip', { hasText: 'Своё' }).first().click();
+        /* подсказки имя не показывают уже при первом рендере после retry */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0, { timeout: 5000 });
+        /* ключ почищен после подтверждённого 'ok', томстон на сервере */
+        await expect.poll(async function () {
+            return page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        }, { timeout: 8000 }).toBe(null);
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).length;
+        }, { timeout: 8000 }).toBe(1);
+    });
+
 
     /* acc §12.12: активная тренировка с удаляемым упражнением — запись продолжается,
        после завершения история на месте */
@@ -6569,8 +6642,10 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await expect(pill.locator('.entry')).toHaveCount(2, { timeout: 5000 });
-        /* завершение: история на месте — превью с «своим» упражнением */
+        /* завершение: остаёмся в карточке [FIT-T1]; история на месте — превью с «своим» упражнением */
         await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await page.locator('.backbar [data-act="closeHistory"]').click();
         await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
         await expect(page.locator('.pc-ex', { hasText: OWN1 }).first()).toBeVisible({ timeout: 5000 });
         const st = await (await request.get('/api/state')).json();
@@ -6610,8 +6685,11 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         await modal.locator('[data-act="ctxRemove"]').click();
         await expect(page.locator('.modal.open')).toHaveCount(0);
         await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(0);
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(XSS) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* томстон на сервере [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(XSS);
+        }).toBeGreaterThanOrEqual(0);
         if (dialogs.length) throw new Error('alert сработал (XSS исполнился): ' + JSON.stringify(dialogs));
         if (problems.length) throw new Error('ошибки страницы/консоли: ' + JSON.stringify(problems.slice(0, 5)));
     });
@@ -6815,10 +6893,11 @@ test.describe('[UX-S17] заметка тренировки', function () {
         });
         await ta.fill(NOTE);
         expect((await noteSaved).status()).toBe(200);
-        /* завершение — список истории ([UX-T13]); открываем завершённую карточку */
+        /* [FIT-T1] решение владельца 1-А (23.11, меняет [UX-T13]): после завершения
+           остаёмся в открытой карточке — заметка на месте в ней же (§9.5);
+           backbar переключается на завершённый набор, «← Назад» — в историю как раньше */
         await page.locator('.backbar [data-act="finishWorkout"]').click();
-        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
-        await page.locator('.pcard').first().click();
+        await expect(page.locator('.backbar', { hasText: 'Повторить' })).toBeVisible({ timeout: 5000 });
         const fin = page.locator('textarea.notefield');
         await expect(fin).toHaveValue(NOTE, { timeout: 5000 });
         /* редактируется тем же полем: правка + blur — flush до сервера */
@@ -7015,8 +7094,13 @@ test.describe('[UX-T49] scroll restoration', function () {
         await expectScrollNear(page, 0, 1); /* карточка — верх */
         await page.locator('[data-act="finishWorkout"]').click();
         await expect(page.locator('.toast.show')).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.backbar')).toHaveCount(0);
-        await expectScrollNear(page, 0, 1); /* завершение: список с верха, старые позиции долой */
+        /* [FIT-T1] решение 1-А: после завершения остаёмся в карточке — backbar завершённого
+           набора (🗑/↻/←), скачка скролла нет; «Назад» — история с верха (позиции долой) */
+        await expect(page.locator('.backbar', { hasText: 'Повторить' })).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1);
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1);
     });
 
     test('живой поиск §10.7: карточка туда-сюда — позиция восстановлена под ключом с q=', async ({ page, request }) => {
@@ -7498,3 +7582,230 @@ test.describe('[ONB-T10] импорт из Strong', function () {
         await noHScroll(page, 'История с импортом');
     });
 });
+
+/* ============ [FIT-S2] карта мышц тренировки (docs/spec-fit-s2-muscle-map.md) ============ */
+/* сид: Подтягивания 4 подх. (m:back) + Жим штанги лёжа 2 подх. (m:chest) —
+   back=4 (lvl3), chest=2/4=0.5 → lvl2, остальные группы без подсветки */
+async function seedMapWorkout(request, sex, extra) {
+    const day = isoDate(new Date());
+    const data = {
+        nextId: 2, del: [],
+        profile: { sex: sex || 'м', age: 30, height: 180, weight: 90 },
+        workouts: [doneWorkout(1, day, 'Подтягивания', '0', 4)]
+    };
+    data.workouts[0].exercises.push({ name: EX, st: day + 'T09:35:00', en: day + 'T10:00:00',
+        sets: [{ w: '60', s: 2, r: '10', t: day + 'T09:40:00' }] });
+    if (extra) extra(data, day);
+    await request.post('/api/save', { data: { initData: '', rev: 1, data: data } });
+}
+
+test.describe('[FIT-S2] карта мышц', function () {
+
+    test('карта рендерится на завершённой: фигуры, легенда, msum, плитки; ступени по доле подходов', async ({ page, request }) => {
+        await seedMapWorkout(request, 'м');
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* две фигуры front/back с non-scaling-stroke зонами; подписи «Спереди»/«Сзади» */
+        await expect(page.locator('#bmF svg')).toBeVisible();
+        await expect(page.locator('#bmB svg')).toBeVisible();
+        await expect(page.locator('.bodywrap .bname', { hasText: 'Спереди' })).toBeVisible();
+        await expect(page.locator('.bodywrap .bname', { hasText: 'Сзади' })).toBeVisible();
+        /* msum: 2 группы · 6 подх. (сумма вкладов групп, не число подходов тренировки) */
+        await expect(page.locator('.maphead .msum')).toHaveText('2 группы · 6 подх.');
+        /* легенда по убыванию подходов: Спина 4 (lvl3), Грудь 2 (lvl2) */
+        const legend = page.locator('.legend .lg');
+        await expect(legend).toHaveCount(2);
+        await expect(legend.nth(0)).toContainText('Спина');
+        await expect(legend.nth(0)).toContainText('4 подх.');
+        await expect(legend.nth(1)).toContainText('Грудь');
+        await expect(legend.nth(1)).toContainText('2 подх.');
+        await expect(page.locator('.legend .dot.lvl3')).toHaveCount(1);
+        await expect(page.locator('.legend .dot.lvl2')).toHaveCount(1);
+        /* ступени на зонах: доля ≥ 2/3 → lvl3; 1/3..2/3 → lvl2; без подходов — idle-рельеф */
+        await expect(page.locator('#bmF path.mz.lvl3[data-a="back"]').first()).toBeVisible();
+        await expect(page.locator('#bmF path.mz.lvl2[data-a="chest"]')).toHaveCount(2); /* обе пластины груди */
+        await expect(page.locator('#bmB path.mz.lvl3[data-a="back"]').first()).toBeVisible();
+        const litFront = await page.locator('#bmF path.mz.lvl1, #bmF path.mz.lvl2, #bmF path.mz.lvl3').count();
+        const idleFront = await page.locator('#bmF path.mz:not(.lvl1):not(.lvl2):not(.lvl3)').count();
+        if (!litFront || !idleFront) throw new Error('ожидались и подсвеченные, и idle-зоны: lit=' + litFront + ' idle=' + idleFront);
+        /* зоны тапабельны только у подсвеченных групп из легенды: idle-зоны без data-act */
+        await expect(page.locator('#bmF path.mz[data-act="mapZone"]:not(.lvl1):not(.lvl2):not(.lvl3)')).toHaveCount(0);
+        /* плитки метрик вместо пилюль */
+        await expect(page.locator('.mapcard .statgrid.map3 .sg')).toHaveCount(3);
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Продолжительность' })).toBeVisible();
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Объём' })).toContainText('≈1200 кг');
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Калории' })).toContainText('ккал');
+    });
+
+    test('сегмент м/ж: дефолт — пол профиля, переключение перерисовывает тела, выбор не сохраняется', async ({ page, request }) => {
+        await seedMapWorkout(request, 'ж');
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* женское тело по умолчанию (родные наборы ассета: свой viewBox) */
+        await expect(page.locator('#bmF svg')).toHaveAttribute('viewBox', /1538/);
+        await expect(page.locator('.mapseg .seg-btn', { hasText: 'Женское' })).toHaveClass(/on/);
+        await expect(page.locator('.mapsexnote')).toHaveText('пол профиля: ж');
+        /* ручной выбор «Мужское»: тела перерисовались, уровни не изменились */
+        await page.locator('.mapseg .seg-btn', { hasText: 'Мужское' }).click();
+        await expect(page.locator('#bmF svg')).toHaveAttribute('viewBox', /^0 0 724 1448$/);
+        await expect(page.locator('#bmB svg')).toHaveAttribute('viewBox', /^724 0 724 1448$/);
+        await expect(page.locator('.mapseg .seg-btn', { hasText: 'Мужское' })).toHaveClass(/on/);
+        await expect(page.locator('#bmF path.mz.lvl3[data-a="back"]').first()).toBeVisible();
+        /* повторное открытие карточки — снова дефолт из профиля (ручной выбор не хранится) */
+        await page.locator('.backbar [data-act="closeHistory"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#bmF svg')).toHaveAttribute('viewBox', /1538/);
+    });
+
+    test('тап по подсвеченной зоне — шит группы; по неактивной — ничего', async ({ page, request }) => {
+        await seedMapWorkout(request, 'м');
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* [FIT-T1 тест-фикс iphone13] тап по трапециям «Спина» на фигуре СПЕРЕДИ (~8×7px в
+           ассете) детерминированно мимо в WebKit — locator.click и force в центр bbox оба
+           не попадают в тонкий путь; продукт исправен. Схема tester'а: тапаем по крупным
+           зонам — грудные пластины на фронте (~22×25px) и спина на виде сзади (~16×37px) */
+        /* тап по зоне «Грудь» на фигуре спереди → шит: группа, строка с подходами и тоннажем */
+        await page.locator('#bmF path.mz.lvl2[data-a="chest"]').first().click();
+        const modal = page.locator('.modal.open');
+        await expect(modal).toBeVisible({ timeout: 5000 });
+        await expect(modal.locator('.msub')).toHaveText('Задействованная группа');
+        await expect(modal.locator('.mtitle')).toHaveText('Грудь · 2 подх.');
+        await expect(modal.locator('.grrow')).toHaveCount(1);
+        await expect(modal.locator('.grrow').first()).toContainText('Жим штанги лёжа');
+        await expect(modal.locator('.grrow').first()).toContainText('2 подхода · ≈1200 кг');
+        await expect(modal.locator('.grrow', { hasText: 'Подтягивания' })).toHaveCount(0);
+        await modal.locator('[data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* повторный тап по зоне «Спина» на фигуре сзади — та же модалка без стеков */
+        await page.locator('#bmB path.mz.lvl3[data-a="back"]').first().click();
+        await expect(page.locator('.modal.open .mtitle')).toHaveText('Спина · 4 подх.', { timeout: 5000 });
+        await expect(page.locator('.modal.open .grrow').first()).toContainText('Подтягивания');
+        await expect(page.locator('.modal.open .grrow').first()).toContainText('4 подхода · без веса');
+        await page.locator('.modal.open [data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* тап по не подсвеченной зоне — шит не открывается (§6.5). dispatchEvent вместо
+           физического клика: смысл проверки — отсутствие ДЕЙСТВИЯ на уровне диспетчера
+           (у idle-зоны data-act нет), физический hit-test тонких idle-путей не при чём */
+        await page.locator('#bmF path.mz:not(.lvl1):not(.lvl2):not(.lvl3)').first().dispatchEvent('click');
+        await expect(page.locator('.modal.open')).toHaveCount(0);
+    });
+
+    test('кардио-тренировка: силуэты без подсветки, пояснение, объём «—»', async ({ page, request }) => {
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [doneWorkout(1, day, 'Беговая дорожка', '', 1)]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* каталог без m:-тегов (кардио) — норма данных: не untagged, плашки нет */
+        await expect(page.locator('.mapempty', { hasText: 'Нет силовых упражнений' })).toBeVisible();
+        await expect(page.locator('.legend')).toHaveCount(0);
+        await expect(page.locator('.untag')).toHaveCount(0);
+        await expect(page.locator('#bmF path.mz.lvl1, #bmF path.mz.lvl2, #bmF path.mz.lvl3')).toHaveCount(0);
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Объём' })).toContainText('—');
+        await expect(page.locator('.statgrid.map3 .sg', { hasText: 'Калории' })).toContainText('ккал');
+    });
+
+    test('подход с пустым s (0 подходов): группа не подсвечивается и не попадает в легенду (§6.5)', async ({ page, request }) => {
+        /* [FIT-T1 ревью] у «Жима» подход-пустышка (s не заполнено, §4.3): вклад 0 —
+           единственная его группа не создаёт ключ с нулём; контраст — «Тяга» 4 подх. */
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: day, started: day + 'T09:30:00', ended: day + 'T10:00:00', finished: true, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: day + 'T09:31:00', en: day + 'T09:40:00', sets: [{ w: '60', s: 0, r: '10', t: day + 'T09:32:00' }] },
+                    { name: 'Тяга верхнего блока', st: day + 'T09:41:00', en: day + 'T10:00:00', sets: [{ w: '55', s: 4, r: '12', t: day + 'T09:42:00' }] }
+                ] }]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* легенда — только Спина 4 подх.; строк «0 подх.» нет */
+        await expect(page.locator('.legend .lg')).toHaveCount(1);
+        await expect(page.locator('.legend .lg', { hasText: 'Спина' })).toContainText('4 подх.');
+        await expect(page.locator('.legend .lg b', { hasText: '0 подх.' })).toHaveCount(0);
+        /* зона груди (группа с единственным нулевым вкладом) — без дим-подсветки */
+        await expect(page.locator('#bmF path.mz.lvl1[data-a="chest"], #bmF path.mz.lvl2[data-a="chest"], #bmF path.mz.lvl3[data-a="chest"]')).toHaveCount(0);
+        /* подсвечена только спина (lvl3), лишних уровней нет */
+        await expect(page.locator('.legend .dot.lvl3')).toHaveCount(1);
+        await expect(page.locator('#bmF path.mz.lvl3[data-a="back"]').first()).toBeVisible();
+        await expect(page.locator('#bmF path.mz.lvl1, #bmF path.mz.lvl2')).toHaveCount(0);
+    });
+
+    test('[FIT-T2] «свои»: с группами подсвечиваются; без групп — плашка и редактор «Указать»', async ({ page, request }) => {
+        const OWN_G = 'Тяга в своей раме';   /* с группами (m:shoulders) */
+        const OWN_E = 'Жим в своей раме';    /* без групп */
+        await seedMapWorkout(request, 'м', function (data, day) {
+            data.customEx = [
+                { n: OWN_G, tags: ['m:shoulders'] },
+                { n: OWN_E, tags: [] }
+            ];
+            data.workouts[0].exercises.push(
+                { name: OWN_G, st: day + 'T09:41:00', en: day + 'T09:50:00', sets: [{ w: '30', s: 2, r: '12', t: day + 'T09:42:00' }] },
+                { name: OWN_E, st: day + 'T09:51:00', en: day + 'T10:00:00', sets: [{ w: '40', s: 1, r: '10', t: day + 'T09:52:00' }] }
+            );
+        });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* «своё» с группами учтено: Плечи 2 подх. (lvl2: 2/4); база — Спина 4, Грудь 2 */
+        await expect(page.locator('.legend .lg')).toHaveCount(3);
+        await expect(page.locator('.legend .lg', { hasText: 'Плечи' })).toContainText('2 подх.');
+        /* «своё» без групп — тихая плашка с кнопкой, карта считается без него */
+        await expect(page.locator('.untag')).toContainText('У 1 упражнения не указаны группы');
+        await page.locator('.untag button', { hasText: 'Указать' }).click();
+        /* редактор групп — те же 8 чипов, что при создании; сохранение с выбором */
+        const modal = page.locator('.modal.open');
+        await expect(modal.locator('.mtitle')).toHaveText(OWN_E, { timeout: 5000 });
+        await modal.locator('.chip', { hasText: 'Грудь' }).click();
+        await expect(modal.locator('.chip', { hasText: 'Грудь' })).toHaveClass(/on/);
+        await modal.locator('[data-act="customEditSave"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* карта пересчиталась на лету: Грудь 2+1=3 подх. (lvl3: 3/4 ≥ 2/3), плашка ушла;
+           состав групп не изменился (Грудь уже была от «Жима») — изменился вклад */
+        await expect(page.locator('.legend .lg', { hasText: 'Грудь' })).toContainText('3 подх.', { timeout: 5000 });
+        await expect(page.locator('.legend .lg')).toHaveCount(3);
+        await expect(page.locator('.untag')).toHaveCount(0);
+        await expect(page.locator('#bmF path.mz.lvl3[data-a="chest"]').first()).toBeVisible();
+        /* группы доехали до сервера (G.customEx[].tags) */
+        const st = await (await request.get('/api/state')).json();
+        const cu = (st.customEx || []).find(function (x) { return x.n === OWN_E; });
+        if (!cu || JSON.stringify(cu.tags) !== JSON.stringify(['m:chest'])) {
+            throw new Error('теги «своего» не сохранились: ' + JSON.stringify(cu));
+        }
+    });
+
+    test('[FIT-T2] редактор групп: сохранение с пустым выбором — упражнение остаётся без групп', async ({ page, request }) => {
+        const OWN_E = 'Жим в своей раме';
+        await seedMapWorkout(request, 'м', function (data, day) {
+            data.customEx = [{ n: OWN_E, tags: [] }];
+            data.workouts[0].exercises.push(
+                { name: OWN_E, st: day + 'T09:51:00', en: day + 'T10:00:00', sets: [{ w: '40', s: 1, r: '10', t: day + 'T09:52:00' }] }
+            );
+        });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.untag')).toContainText('У 1 упражнения не указаны группы', { timeout: 5000 });
+        /* база легенды — из каталога: Спина 4 + Грудь 2 (сид); «своё» без групп не в легенде */
+        await expect(page.locator('.legend .lg')).toHaveCount(2);
+        await page.locator('.untag button', { hasText: 'Указать' }).click();
+        await page.locator('.modal.open [data-act="customEditSave"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        /* группы не выбраны — плашка остаётся, легенда без «своего» (Спина + Грудь) */
+        await expect(page.locator('.untag')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.legend .lg')).toHaveCount(2);
+        await expect(page.locator('.legend .lg', { hasText: 'Спина' })).toBeVisible();
+    });
+});
+
