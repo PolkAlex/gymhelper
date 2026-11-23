@@ -1,0 +1,671 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[ONB-S6] #368 · Переезд из Strong (импорт CSV) · Amber Glass · ред. 1</title>
+<style>
+/* ============ страница-презентация (каркас как ux-s17-notes.html) ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.caption { margin: 42px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.note b { color: #a9aeb8; font-weight: 600; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+.note .live { color: #ffc220; font-weight: 600; }
+
+/* ============ телефон 390px, тёмная Amber Glass (токены web/style.css) ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+.p {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e; --ok: #3ddc97;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --nested: rgba(0,0,0,.18); --nestedbrd: rgba(255,255,255,.05);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    --field: rgba(0,0,0,.22); --fieldbrd: rgba(255,255,255,.12);
+    position: relative;
+    height: 100%; overflow-y: auto; overflow-x: hidden; background: var(--bg);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.45; color: var(--text);
+    font-variant-numeric: tabular-nums;
+    scrollbar-width: none;
+}
+.p::-webkit-scrollbar { display: none; }
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+
+.glass {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-top: 10px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 10px 30px rgba(0,0,0,.28);
+}
+
+.tgchrome {
+    position: sticky; top: 0; z-index: 20;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    padding: 10px 14px 12px;
+}
+.statusrow { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--text); opacity: .85; }
+.statusrow .sig { font-size: 10px; color: var(--muted); letter-spacing: 1px; }
+.apphead { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.apphead .ttl { flex: 1; min-width: 0; font-size: 17px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tbtn {
+    width: 30px; height: 30px; border-radius: 9px; border: none; flex: none;
+    background: rgba(255,255,255,.07); color: var(--muted); font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+}
+.tbtn.back { background: none; padding-left: 0; }
+.content { padding: 4px 12px 130px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 20;
+    margin: 0 -12px; padding: 8px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { font-size: 19px; line-height: 1; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px; transform: translateY(-12px);
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent); font-size: 24px; font-weight: 700;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+
+/* кнопки */
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn {
+    border: 1px solid var(--btnbrd); border-radius: 14px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+    background: var(--btn); color: var(--text); text-align: center;
+}
+.btn.sec { background: var(--btn); }
+.btn.prime {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent; color: var(--on-accent); font-weight: 700;
+    box-shadow: 0 8px 26px rgba(255,194,32,.22);
+}
+.btn.wide { flex: 1 1 100%; }
+.t1 { font-size: 15.5px; font-weight: 700; margin: 0; }
+.meta { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; line-height: 1.45; }
+.hr { height: 1px; background: var(--glassbrd); margin: 12px 0; }
+
+/* сегмент (кг/фунты) — как .seg в web/style.css */
+.seg { display: flex; background: var(--nested); border: 1px solid var(--nestedbrd); border-radius: 12px; padding: 3px; gap: 3px; }
+.seg .seg-btn {
+    flex: 1; border: none; cursor: pointer; font-family: inherit;
+    border-radius: 9px; padding: 7px 0; font-size: 13px; font-weight: 600;
+    background: none; color: var(--muted);
+}
+.seg .seg-btn.on { background: rgba(255,194,32,.14); color: var(--accent); }
+.unitrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.unitrow .ulbl { font-size: 14px; font-weight: 600; }
+.unitseg { width: 170px; flex: none; }
+
+/* аккордеон-инструкция */
+details.acc { margin-top: 10px; }
+details.acc summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+    background: var(--nested); border: 1px solid var(--nestedbrd);
+    border-radius: 14px; padding: 11px 12px; font-size: 14px; font-weight: 600;
+    color: var(--text);
+}
+details.acc summary::-webkit-details-marker { display: none; }
+details.acc summary .chev { margin-left: auto; color: var(--muted); transition: transform .15s; font-size: 12px; }
+details.acc[open] summary .chev { transform: rotate(90deg); }
+details.acc .accbody { padding: 12px 4px 2px; }
+.step { display: flex; gap: 10px; padding: 7px 0; font-size: 13.5px; line-height: 1.45; color: #d5d8de; }
+.step .n {
+    flex: none; width: 22px; height: 22px; border-radius: 50%; margin-top: 1px;
+    background: rgba(255,194,32,.14); border: 1px solid var(--glowbrd); color: var(--accent);
+    font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center;
+}
+.step code { font-family: inherit; color: var(--accent); font-weight: 600; }
+
+/* список строк сводки */
+.krow { display: flex; align-items: baseline; gap: 8px; padding: 7px 0; font-size: 14px; }
+.krow .k { color: var(--muted); flex: none; }
+.krow .v { font-weight: 600; }
+.krow .v.dim { font-weight: 400; color: var(--muted); }
+.bignum { font-size: 30px; font-weight: 800; letter-spacing: -.4px; margin: 2px 0 4px; }
+.bignum small { font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+
+/* details-плашки предпросмотра (жёлтая — внимание) */
+details.warn { margin-top: 10px; }
+details.warn summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+    border-radius: 12px; padding: 9px 12px; font-size: 13px; font-weight: 600;
+    background: rgba(255,194,32,.08); border: 1px solid var(--glowbrd); color: var(--accent);
+}
+details.warn summary::-webkit-details-marker { display: none; }
+details.warn summary .chev { margin-left: auto; transition: transform .15s; font-size: 11px; }
+details.warn[open] summary .chev { transform: rotate(90deg); }
+details.plain { margin-top: 10px; }
+details.plain summary {
+    cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px;
+    border-radius: 12px; padding: 9px 12px; font-size: 13px; font-weight: 600;
+    background: var(--nested); border: 1px solid var(--nestedbrd); color: var(--text);
+}
+details.plain summary::-webkit-details-marker { display: none; }
+details.plain summary .chev { margin-left: auto; color: var(--muted); transition: transform .15s; font-size: 11px; }
+details.plain[open] summary .chev { transform: rotate(90deg); }
+.ddlist { padding: 10px 2px 0; }
+.ddlist .li { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 5px 0; color: #d5d8de; }
+.ddlist .li .cnt { color: var(--muted); flex: none; }
+.ddlist .li.err { color: var(--danger); }
+.ddlist .li.err .cnt { color: var(--danger); opacity: .8; }
+
+/* парсинг: прогресс */
+.pbar { height: 8px; border-radius: 999px; background: var(--nested); overflow: hidden; margin: 12px 0 8px; }
+.pbar .fill {
+    height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent));
+    box-shadow: 0 0 14px rgba(255,194,32,.45);
+    animation: slide 2.6s ease-in-out infinite alternate;
+}
+@keyframes slide { from { width: 46%; } to { width: 74%; } }
+.ph { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13.5px; }
+.ph .ic { flex: none; width: 20px; text-align: center; }
+.ph.done { color: var(--muted); }
+.ph.done .ic { color: var(--ok); }
+.ph.act { color: var(--text); font-weight: 600; }
+.ph.act .ic { color: var(--accent); }
+.ph.wait { color: #6d737d; }
+.filetag {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 10px;
+    background: var(--nested); border: 1px solid var(--nestedbrd);
+    border-radius: 10px; padding: 6px 10px; font-size: 12.5px; color: var(--muted);
+}
+
+/* результат / ошибки */
+.resicon {
+    width: 52px; height: 52px; border-radius: 50%; margin: 4px auto 10px;
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+}
+.resicon.ok { background: rgba(61,220,151,.12); border: 1px solid rgba(61,220,151,.35); color: var(--ok); }
+.resicon.bad { background: rgba(255,107,94,.10); border: 1px solid rgba(255,107,94,.30); color: var(--danger); }
+.resttl { text-align: center; font-size: 17px; font-weight: 800; margin: 0 0 2px; }
+
+/* карточка в настройках (строка-стрелка как .arow) */
+.arow {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: none; border: none; cursor: pointer; font-family: inherit;
+    color: var(--text); font-size: 14.5px; font-weight: 600; padding: 11px 0;
+    border-bottom: 1px solid var(--glassbrd);
+}
+.arow:last-child { border-bottom: none; }
+.arow .aico {
+    width: 32px; height: 32px; border-radius: 10px; flex: none;
+    background: rgba(255,194,32,.12); border: 1px solid var(--glowbrd);
+    display: inline-flex; align-items: center; justify-content: center; font-size: 16px;
+}
+.arow .asub { display: block; font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.arow .chevr { margin-left: auto; color: var(--muted); font-size: 13px; flex: none; }
+.newpill {
+    flex: none; margin-left: 6px; font-size: 10px; font-weight: 700; letter-spacing: .4px;
+    text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--glowbrd); background: rgba(255,194,32,.1);
+    border-radius: 999px; padding: 1px 7px;
+}
+.arow .wrap { flex: 1; min-width: 0; }
+
+/* пустая история */
+.emptyhist { text-align: center; padding: 46px 12px 10px; color: var(--muted); }
+.emptyhist .big { font-size: 21px; font-weight: 700; color: var(--text); margin: 0 0 6px; }
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+    <div class="caption">Переезд из Strong — импорт тренировок из CSV <span>[ONB-S6] #368 · Amber Glass · ред. 1 · 23.11.2026</span></div>
+    <div class="note"><b>Суть:</b> одноразовый импорт CSV-выгрузки Strong целиком на клиенте
+    Mini App — файл разбирается в телефоне (без библиотек и без сервера), предпросмотр-сводка,
+    подтверждение — и тренировки дописываются в обычный <code>GymData.workouts</code> через
+    существующий <code>save()</code>. Бот, сервер и формат данных не меняются. Незнакомые
+    каталогу упражнения становятся «Своими» существующей механикой. Тон — на «Вы» (ONB).<br>
+    Спека: <code>docs/spec-onb-s6-import.md</code>.<br>
+    <span class="live">Макет живой:</span> аккордеоны раскрываются, сегмент кг/фунты
+    переключается.</div>
+
+    <!-- ================= Э1 · ТОЧКА ВХОДА: НАСТРОЙКИ ================= -->
+    <div class="caption">Э1 · Точка входа — Настройки <span>основная · карточка «📦 Переезд из Strong»</span></div>
+    <div class="note">Новая карточка между «⏱ Таймер отдыха» и «ℹ️ О приложении»: строка-стрелка
+    с иконкой-бейджем и подписью. Разовое служебное действие — место рядом с «О приложении».
+    Онбординг не трогаем (одобрен ред. 5), вторичная точка входа — плашка в пустой Истории (Э9).</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:41</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">⚙️ Настройки</div><button class="tbtn">📅</button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <p class="t1">🎨 Оформление</p>
+                <div class="arow"><span class="wrap">Тёмная тема<span class="asub">Без выбора — тема как в клиенте Telegram</span></span><span class="chevr">вкл</span></div>
+            </div>
+            <div class="glass">
+                <p class="t1">⏱ Таймер отдыха</p>
+                <div class="arow"><span class="wrap">Длительность и звук<span class="asub">90 сек · звук включён</span></span><span class="chevr">›</span></div>
+            </div>
+
+            <!-- [ONB-S6] новая карточка импорта -->
+            <div class="glass" style="border-color: var(--glowbrd);">
+                <p class="t1">📦 Данные</p>
+                <button class="arow"><span class="aico">📦</span><span class="wrap">Переезд из Strong<span class="asub">Импорт тренировок из CSV-выгрузки</span></span><span class="newpill">новое</span><span class="chevr">›</span></button>
+            </div>
+
+            <div class="glass">
+                <p class="t1">ℹ️ О приложении</p>
+                <div class="arow"><span class="aico" style="background: rgba(255,255,255,.07); border-color: var(--glassbrd);">?</span><span class="wrap">Помощь и FAQ</span><span class="chevr">›</span></div>
+                <div class="arow"><span class="aico" style="background: rgba(255,255,255,.07); border-color: var(--glassbrd);">✦</span><span class="wrap">Что нового</span><span class="chevr">›</span></div>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn on"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э2 · ШАГ 1: ВЫБОР ФАЙЛА ================= -->
+    <div class="caption">Э2 · Шаг 1 — выбор файла <span>инструкция · единицы · приватность</span></div>
+    <div class="note">Заголовок-обещание «Переедем за минуту». Сегмент <b>кг/фунты</b> — у части
+    пользователей Strong веса в фунтах, без конвертации приедут ×2.2 (вопрос 5 спеки).
+    Аккордеон-инструкция раскрыт при первом входе (3 шага выгрузки). Приватность — строкой
+    под кнопкой: файл разбирается в телефоне. Кнопка открывает нативный file picker.</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:42</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">📦 Переезд из Strong</div><button class="tbtn"> </button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <p class="t1">Переедем за минуту</p>
+                <p class="meta">Тренировки приедут в дневник — с датами, упражнениями, весами и подходами. Существующие записи не изменятся.</p>
+
+                <div class="unitrow">
+                    <span class="ulbl">Веса в выгрузке Strong</span>
+                    <div class="seg unitseg" role="group" aria-label="Единицы">
+                        <button class="seg-btn on">кг</button>
+                        <button class="seg-btn">фунты</button>
+                    </div>
+                </div>
+                <p class="meta">Посмотреть в Strong: Настройки → Units</p>
+
+                <details class="acc" open>
+                    <summary>Как выгрузить CSV из Strong<span class="chev">▸</span></summary>
+                    <div class="accbody">
+                        <div class="step"><span class="n">1</span><span>В Strong откройте <b>⚙️ Настройки</b> → <code>Export Data</code></span></div>
+                        <div class="step"><span class="n">2</span><span>На почту из аккаунта Strong придёт письмо с CSV-файлом</span></div>
+                        <div class="step"><span class="n">3</span><span>Скачайте файл на телефон («Файлы» → «Загрузки») и выберите его здесь</span></div>
+                    </div>
+                </details>
+
+                <div class="btnrow" style="margin-top:12px">
+                    <button class="btn prime wide">📄 Выбрать файл CSV</button>
+                </div>
+                <p class="meta" style="text-align:center">Файл разбирается прямо в телефоне — никуда не отправляется.<br>Поддерживается только выгрузка Strong (CSV).</p>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э3 · ШАГ 2: ПАРСИНГ ================= -->
+    <div class="caption">Э3 · Шаг 2 — парсинг <span>прогресс · фазы</span></div>
+    <div class="note">Файлы до ~200 КБ разбираются мгновенно — кадр не показывается. Крупная
+    выгрузка (годы истории) — чанками с прогресс-полосой и счётчиками. Фазы: чтение заголовков →
+    разбор подходов → сборка тренировок. Полоса в макете анимирована, в продукте — реальный
+    процент. Отмена — «← Назад».</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:42</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">📦 Переезд из Strong</div><button class="tbtn"> </button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <p class="t1">Читаем файл…</p>
+                <div class="pbar"><div class="fill" style="width:62%"></div></div>
+
+                <div class="ph done"><span class="ic">✓</span><span>Заголовки — 12 колонок</span></div>
+                <div class="ph act"><span class="ic">⏳</span><span>Разбираем подходы — 2 431 из 4 812</span></div>
+                <div class="ph wait"><span class="ic">○</span><span>Собираем тренировки</span></div>
+
+                <span class="filetag">📄 strong-export.csv · 3,8 МБ</span>
+                <p class="meta">Даже несколько лет истории — пара секунд.</p>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э4 · ШАГ 3: ПРЕДПРОСМОТР (СВЁРНУТ) ================= -->
+    <div class="caption">Э4 · Шаг 3 — предпросмотр, свёрнутый <span>сводка + плашки-раскрытия</span></div>
+    <div class="note">Сводка отвечает на три вопроса: сколько, за какой период, что с
+    упражнениями. Две плашки-раскрытия: «не из каталога» (станут «Своими») и жёлтая —
+    «даты совпадают с дневником» (рекомендация «оба + предупреждение», вопрос 2 спеки).
+    Полного списка 128 тренировок нет — вопрос 3 спеки.</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:43</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">📦 Переезд из Strong</div><button class="tbtn"> </button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <p class="t1">Проверьте перед импортом</p>
+                <div class="bignum">128 <small>тренировок</small></div>
+                <div class="krow"><span class="k">🗓</span><span class="v">12.03.2021 — 18.11.2026</span></div>
+                <div class="krow"><span class="k">🏋</span><span class="v">4 812 подходов</span></div>
+                <div class="krow"><span class="k">📚</span><span class="v">52 упражнения</span></div>
+
+                <details class="plain">
+                    <summary>5 упражнений не из каталога — станут «Своими»<span class="chev">▸</span></summary>
+                    <div class="ddlist">
+                        <div class="li"><span>Bench Press (Barbell)</span><span class="cnt">18 трен.</span></div>
+                        <div class="li"><span>Lat Pulldown</span><span class="cnt">12</span></div>
+                        <div class="li"><span>Incline Dumbbell Press</span><span class="cnt">9</span></div>
+                        <div class="li"><span>Face Pull</span><span class="cnt">7</span></div>
+                        <div class="li"><span>Hip Thrust</span><span class="cnt">5</span></div>
+                    </div>
+                    <p class="meta">Они приедут как «Свои»: вся статистика, рекорды и калории по ним будут работать.</p>
+                </details>
+
+                <details class="warn">
+                    <summary>⚠️ 3 даты совпадают с дневником<span class="chev">▸</span></summary>
+                    <div class="ddlist">
+                        <div class="li"><span>18.11.2026</span><span class="cnt">уже есть тренировка</span></div>
+                        <div class="li"><span>14.11.2026</span><span class="cnt">уже есть</span></div>
+                        <div class="li"><span>07.11.2026</span><span class="cnt">уже есть</span></div>
+                    </div>
+                    <p class="meta">В эти дни останутся обе тренировки — импортированная и Ваша. Лишнюю можно удалить в Истории.</p>
+                </details>
+
+                <div class="btnrow" style="margin-top:12px">
+                    <button class="btn prime wide">Импортировать 128 тренировок</button>
+                    <button class="btn sec wide">Выбрать другой файл</button>
+                </div>
+                <p class="meta" style="text-align:center">После импорта его можно отменить одной кнопкой.</p>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э5 · ПРЕДПРОСМОТР (РАЗВЁРНУТ) ================= -->
+    <div class="caption">Э5 · Предпросмотр — раскрытия <span>та же сводка, списки открыты</span></div>
+    <div class="note">Обе плашки открыты: список незнакомых упражнений с числом тренировок и
+    список совпавших дат. Аккордеоны нативные <code>details/summary</code> — в макете можно
+    свернуть/развернуть. Списки длиннее ~10 строк обрезаются «и ещё N».</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:43</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">📦 Переезд из Strong</div><button class="tbtn"> </button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <p class="t1">Проверьте перед импортом</p>
+                <div class="bignum">128 <small>тренировок</small></div>
+                <div class="krow"><span class="k">🗓</span><span class="v">12.03.2021 — 18.11.2026</span></div>
+                <div class="krow"><span class="k">🏋</span><span class="v">4 812 подходов</span></div>
+                <div class="krow"><span class="k">📚</span><span class="v">52 упражнения</span></div>
+
+                <details class="plain" open>
+                    <summary>5 упражнений не из каталога — станут «Своими»<span class="chev">▾</span></summary>
+                    <div class="ddlist">
+                        <div class="li"><span>Bench Press (Barbell)</span><span class="cnt">18 трен.</span></div>
+                        <div class="li"><span>Lat Pulldown</span><span class="cnt">12</span></div>
+                        <div class="li"><span>Incline Dumbbell Press</span><span class="cnt">9</span></div>
+                        <div class="li"><span>Face Pull</span><span class="cnt">7</span></div>
+                        <div class="li"><span>Hip Thrust</span><span class="cnt">5</span></div>
+                    </div>
+                    <p class="meta">Они приедут как «Свои»: вся статистика, рекорды и калории по ним будут работать.</p>
+                </details>
+
+                <details class="warn" open>
+                    <summary>⚠️ 3 даты совпадают с дневником<span class="chev">▾</span></summary>
+                    <div class="ddlist">
+                        <div class="li"><span>18.11.2026</span><span class="cnt">уже есть тренировка</span></div>
+                        <div class="li"><span>14.11.2026</span><span class="cnt">уже есть</span></div>
+                        <div class="li"><span>07.11.2026</span><span class="cnt">уже есть</span></div>
+                    </div>
+                    <p class="meta">В эти дни останутся обе тренировки — импортированная и Ваша. Лишнюю можно удалить в Истории.</p>
+                </details>
+
+                <div class="btnrow" style="margin-top:12px">
+                    <button class="btn prime wide">Импортировать 128 тренировок</button>
+                    <button class="btn sec wide">Выбрать другой файл</button>
+                </div>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э6 · РЕЗУЛЬТАТ ================= -->
+    <div class="caption">Э6 · Результат — успех <span>итоги + построчные пропуски + отмена</span></div>
+    <div class="note">Ответ на вопрос 4 спеки: экран результата внутри флоу (тоста мало —
+    информации много). Итоги-строки, раскрытие «Не перенеслось» с причинами по строкам файла
+    (до 10, дальше «и ещё N»). «Отменить импорт» — удаляет все добавленные этим импортом
+    тренировки (список id в памяти) и возвращает к шагу 1 — страховка на случай «файл не тот».</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:44</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">📦 Переезд из Strong</div><button class="tbtn"> </button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <div class="resicon ok">✓</div>
+                <p class="resttl">Готово — 128 тренировок в дневнике!</p>
+
+                <div class="krow"><span class="k">✓</span><span class="v">4 812 подходов</span></div>
+                <div class="krow"><span class="k">✓</span><span class="v">Период 12.03.2021 — 18.11.2026</span></div>
+                <div class="krow"><span class="k">📚</span><span class="v dim">«Своих» упражнений: 5</span></div>
+                <div class="krow"><span class="k">🔥</span><span class="v dim">Рекорды и калории пересчитались сами</span></div>
+
+                <details class="warn" open style="margin-top:12px">
+                    <summary>Не перенеслось: 3 строки<span class="chev">▾</span></summary>
+                    <div class="ddlist">
+                        <div class="li err"><span>строка 214 — нет названия упражнения</span></div>
+                        <div class="li err"><span>строка 830 — кардио-подход (время/дистанция)</span></div>
+                        <div class="li err"><span>строка 1 204 — пустые повторения</span></div>
+                    </div>
+                </details>
+
+                <div class="btnrow" style="margin-top:12px">
+                    <button class="btn prime wide">Открыть историю</button>
+                    <button class="btn sec wide">Отменить импорт</button>
+                    <button class="btn sec wide">Готово</button>
+                </div>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э7 · ОШИБКА: НЕ STRONG ================= -->
+    <div class="caption">Э7 · Ошибка — «Не похоже на выгрузку Strong» <span>чужой / кривой CSV</span></div>
+    <div class="note">Файл без узнаваемых колонок Strong (фото, выгрузка другого приложения,
+    переименованный файл). Текст ведёт к причине и к выходу: выбрать другой файл или назад.
+    Отмена нативного picker'а — не ошибка: молча возвращаемся к шагу 1.</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:43</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">📦 Переезд из Strong</div><button class="tbtn"> </button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <div class="resicon bad">⚠️</div>
+                <p class="resttl">Не похоже на выгрузку Strong</p>
+                <p class="meta" style="text-align:center">В файле нет колонок Strong — Date, Exercise Name и остальные. Убедитесь, что выбрали CSV из письма Export Data, и попробуйте ещё раз.</p>
+
+                <div class="btnrow" style="margin-top:14px">
+                    <button class="btn prime wide">Выбрать другой файл</button>
+                    <button class="btn sec wide">← Назад</button>
+                </div>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э8 · ОШИБКА: ПУСТОЙ ФАЙЛ ================= -->
+    <div class="caption">Э8 · Ошибка — «В файле нет тренировок» <span>пустой CSV</span></div>
+    <div class="note">Файл Strong опознан (заголовки на месте), но данных нет — экспорт
+    пустого дневника. Отдельный текст от Э7: причина другая, совет другой.</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:43</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><button class="tbtn back">←</button><div class="ttl">📦 Переезд из Strong</div><button class="tbtn"> </button></div>
+        </div>
+        <div class="content">
+            <div class="glass">
+                <div class="resicon bad">⚠️</div>
+                <p class="resttl">В файле нет тренировок</p>
+                <p class="meta" style="text-align:center">В этом CSV только заголовки — тренировок не нашлось. Возможно, экспорт был пустым.</p>
+
+                <div class="btnrow" style="margin-top:14px">
+                    <button class="btn prime wide">Выбрать другой файл</button>
+                    <button class="btn sec wide">← Назад</button>
+                </div>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <!-- ================= Э9 · ВТОРИЧНАЯ ТОЧКА ВХОДА: ПУСТАЯ ИСТОРИЯ ================= -->
+    <div class="caption">Э9 · Вторичная точка входа — пустая История <span>плашка-приглашение</span></div>
+    <div class="note">Пока дневник пуст, под «Пока пусто 💪» — карточка-приглашение. Никаких
+    флагов: после импорта история непуста, и плашка исчезает сама. Тап — открывает флоу с Э2.
+    Онбординг не трогаем (аргументы — спека §В.1).</div>
+
+    <div class="phone"><div class="p">
+        <div class="tgchrome">
+            <div class="statusrow"><span>9:40</span><span class="sig">TELEGRAM · GYMHELPER</span><span>100%</span></div>
+            <div class="apphead"><div class="ttl">🏋️ Дневник</div><button class="tbtn">📅</button><button class="tbtn">⚙️</button></div>
+        </div>
+        <div class="content">
+            <div class="emptyhist">
+                <p class="big">Пока пусто 💪</p>
+                <p class="meta">Жёлтый «+» внизу — старт первой тренировки</p>
+            </div>
+            <div class="glass" style="border-color: var(--glowbrd);">
+                <p class="t1">📦 Переезд из Strong?</p>
+                <p class="meta">Импортируйте историю из Strong — тренировки приедут с датами, весами и подходами.</p>
+                <div class="btnrow">
+                    <button class="btn prime wide">Импортировать CSV</button>
+                </div>
+            </div>
+        </div>
+        <div class="nav">
+            <button class="nbtn on"><span class="nic">📔</span>Дневник</button>
+            <button class="nbtn"><span class="nic">📊</span>Стата</button>
+            <button class="nfab">+</button>
+            <button class="nbtn"><span class="nic">🗓</span>Календарь</button>
+            <button class="nbtn"><span class="nic">👤</span>Профиль</button>
+        </div>
+    </div></div>
+
+    <div class="caption">Итог ред. 1 <span>коротко</span></div>
+    <div class="note">① Точки входа: Настройки (основная) + плашка пустой Истории (вторичная);
+    онбординг не трогаем. ② Импорт целиком на клиенте: парсинг в телефоне, запись через
+    существующий <code>save()</code> — сервер, бот и формат данных не меняются. ③ Предпросмотр:
+    сводка + раскрытия («Свои», совпавшие даты); дубли — «оба + предупреждение».
+    ④ Результат: итоги + построчные пропуски + «Отменить импорт». ⑤ Незнакомые каталогу
+    упражнения становятся «Своими» существующей механикой — статистика, рекорды и калории
+    работают.<br><br>
+    <b>Открытые вопросы владельцу</b> (спека §10): 1 — точки входа; 2 — дубликаты дат;
+    3 — сводка vs полный список; 4 — экран результата и «Отменить импорт»; 5 — сегмент
+    кг/фунты; 6 — мерж подряд одинаковых подходов; 7 — перенос названий тренировок;
+    8 — «Свои» без словаря переводов (этап 2 — [EXR]).</div>
+
+</div>
+</body>
+<script>
+/* [ONB-S6] демо сегмента кг/фунты — в макете для интерактива владельца. */
+(function () {
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.seg .seg-btn') : null;
+        if (!b) return;
+        var seg = b.parentElement;
+        var btns = seg.querySelectorAll('.seg-btn');
+        for (var i = 0; i < btns.length; i++) btns[i].classList.remove('on');
+        b.classList.add('on');
+    });
+})();
+</script>
+</html>
