@@ -641,7 +641,10 @@ window.addEventListener('focus', function () {
    [UX-T29] saveProfile — тоже: поправил дату после тоста-ошибки и сразу жмёшь «Сохранить» */
 const NO_DEDUP = {
     wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1, planTake: 1,
-    saveProfile: 1
+    saveProfile: 1,
+    /* [TRN-T2] тогл аватара формы тренера обновляется на месте (без render) — двойной
+       тап туда-обратно легален, дедуп одного элемента его гасил */
+    trAv: 1
 };
 function dispatchFromEl(el, ev) {
     const act0 = el.getAttribute('data-act');
@@ -1674,7 +1677,66 @@ const ACTIONS = {
         try { localStorage.removeItem('gymBg'); } catch (e) { /* noop */ }
         document.documentElement.classList.remove('has-bg');
         toast('Фон убран');
-    }
+    },
+    /* [TRN-T2] режим «Я тренер»: тогл, форма, сохранение/отправка/выключение (§5.1–5.4) */
+    trToggle: function () {
+        if (!trAgeOk()) { toast('Раздел «Тренер» доступен с 18 лет', true); return; }
+        trInitDraft(null);
+        render();
+    },
+    trToggleMinor: function () { toast('Раздел «Тренер» доступен с 18 лет', true); },
+    trOpen: function () { trInitDraft(null); render(); },
+    trSubmit: function () { trSaveCard(true); },
+    trSaveDraft: function () { trSaveCard(false); },
+    trChip: function (a) {
+        const i = TR.specs.indexOf(a);
+        if (i >= 0) TR.specs.splice(i, 1);
+        else {
+            if (TR.specs.length >= 3) { toast('Не больше трёх специализаций', true); return; }
+            TR.specs.push(a);
+        }
+        refreshTrChips();
+    },
+    trCap: function (a) { TR.cap = +a; refreshTrCapChips(); },
+    trAv: function () {
+        TR.av = !TR.av;
+        const el = document.querySelector('[data-act="trAv"]');
+        if (el) {
+            el.classList.toggle('on', TR.av);
+            el.setAttribute('aria-checked', TR.av ? 'true' : 'false');
+        }
+    },
+    trAddRow: function (a) {
+        const max = a === 'sched' ? 3 : 5;
+        if (TR.slots[a] >= max) return;
+        const pfx = a === 'ach' ? 'trAch' : a === 'edu' ? 'trEdu' : 'trSched';
+        const el = document.getElementById(pfx + TR.slots[a]);
+        if (el) el.classList.remove('tr-hid');
+        TR.slots[a]++;
+    },
+    trLeave: function () { trLeaveMode(); },
+    /* [TRN-T3] поиск: чипы/сброс/повтор/карточка; «Сообщество» — до [TRN-T6] */
+    trFind: function () { ACTIONS.switchTab('coach'); },
+    trCommunity: function () { toast('Сообщество появится в следующем обновлении'); },
+    trSpecChip: function (a) {
+        const i = TR.fspecs.indexOf(a);
+        if (i >= 0) TR.fspecs.splice(i, 1);
+        else TR.fspecs.push(a);
+        refreshTrSpecChips();
+        trSearchSoon();
+    },
+    trReset: function () {
+        TR.q = '';
+        TR.fspecs = [];
+        const q = document.getElementById('trQ');
+        if (q) q.value = '';
+        refreshTrSpecChips();
+        trSearchDo();
+    },
+    trRetry: function () { trSearchDo(); },
+    trOpenCard: function (a) { TR.view = +a; render(); },
+    trBack: function () { TR.view = 0; render(); },
+    trEdit: function () { trInitDraft(null); ACTIONS.switchTab('profile'); }
     /* [UX-T43] тогл полноэкранного режима удалён вместе с самим режимом (решение владельца 20.11) */
 };
 
@@ -1748,6 +1810,15 @@ function render() {
     if (gwOpen && GW && GW.type === 1 && gwStep === 1) {
         const gwq = document.getElementById('gwQ');
         if (gwq) gwq.addEventListener('input', function () { GW.q = this.value; refreshGwList(); });
+    }
+    /* [TRN-T3] живой поиск тренера: ввод — дебаунс-запрос (фокус в поле остаётся);
+        первый вход на таб — сразу автопоиск пустыми фильтрами */
+    if (tab === 'coach' && !TR.view) {
+        const trq = document.getElementById('trQ');
+        if (trq) {
+            trq.addEventListener('input', function () { TR.q = this.value; trSearchSoon(); });
+            if (!TR.done) trSearchDo();
+        }
     }
     /* [UX-T29] живая строка возраста: change на select-ах даты рождения */
     if (tab === 'profile') pfBirthBind();
@@ -3396,6 +3467,10 @@ function renderTechTab() {
     /* [UX-T20] кнопка «Назад» переехала из заголовка карточки в topbar;
        [UX-T23] topbar-стрелка убрана — возврат к списку только через «К упражнениям» */
     let h = '<div class="card"><div class="exhead"><p class="t1">📖 Техника упражнений</p></div>' +
+        /* [TRN-T3] инфо-кнопка «Найти тренера» (#52, §6.1): техника рекомендательна —
+           прямой сценарий «посмотрел технику → понял, что нужен тренер» */
+        '<div class="hint"><span class="hico">🧑‍🏫</span><span>Техника носит рекомендательный характер. При травмах и ограничениях здоровья нагрузки лучше подобрать со специалистом.</span></div>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="trFind">🧑‍🏫 Найти тренера</button></div>' +
         '<div class="searchbox"><input id="techQ" type="text" placeholder="Поиск упражнения..." value="' + esc(TECH.q) + '"></div>' +
         techChipsHtml() + '</div>';
     h += '<div id="techList">' + techResultsHtml() + '</div>';
@@ -3833,11 +3908,397 @@ function e1rmCardHtml(byEx) {
     return h + '</div>';
 }
 
-/* ---------- тренер ---------- */
+/* ---------- [TRN-T2/T3] соцслой «Тренер» (спека [TRN-S1] docs/spec-trn-s1-trainer.md) ---------- */
+/* T2: режим «Я тренер» (Профиль → карточка «Тренер», экраны 1–2 макета): тогл 18+,
+   форма карточки §5.2, статусы draft/pending/verified/rejected/hidden.
+   T3: поиск тренера (таб «Тренер»: город/зал + чипы, только verified, §6) и детальная
+   карточка (без контакта — решение №5; кнопка заявки — каркас до [TRN-T4]).
+   Новые тексты — на «Вы» (решение 12.11 №1). */
+const TR = {
+    me: null,          /* ответ /api/social/me: card, linksAsTrainer/Student, requests, myRequest, inviteCode */
+    loaded: false,
+    open: false,       /* форма карточки развёрнута (аккордеон в Профиле, §5.1) */
+    specs: [],         /* черновик чипов формы */
+    cap: 5,            /* черновик лимита подопечных */
+    av: true,          /* черновик тогла аватара */
+    slots: { ach: 2, edu: 2, sched: 2 }, /* видимые слоты списков формы (остальные открывает «＋») */
+    q: '',             /* поиск: город или зал */
+    fspecs: [],        /* поиск: выбранные специализации */
+    results: null,     /* результаты поиска */
+    done: false,       /* поиск выполнялся хоть раз (выбор заглушки) */
+    err: false,        /* последняя ошибка сети поиска */
+    view: 0            /* userId открытой детальной карточки */
+};
+const TR_SPECS = [
+    ['rehab', 'Реабилитация'], ['loss', 'Похудение'], ['mass', 'Набор массы'],
+    ['comp', 'Соревнования'], ['power', 'Сила'], ['begin', 'Новички и база'],
+    ['mobility', 'Растяжка и мобильность'], ['group', 'Групповые тренировки']
+];
+function trMe() { return TR.me || {}; }
+function trMyId() {
+    const u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+    return u ? +u.id : 0;
+}
+/* 18+ для соцфункций (решение 12.11 №12): возраст из birth-данных профиля — тот же
+   ageOf, что в Профиле; дата рождения нигде не публикуется */
+function trAgeOk() {
+    return G.profile ? ageOf(G.profile) >= 18 : false;
+}
+function trBadge(status) {
+    if (status === 'verified') return '<span class="tr-badge ok">✔ Подтверждён</span>';
+    if (status === 'pending') return '<span class="tr-badge wait">⏳ На проверке</span>';
+    if (status === 'rejected') return '<span class="tr-badge err">✖ Отклонена</span>';
+    return '<span class="tr-badge">Черновик</span>';
+}
+function trSpecName(id) {
+    const f = TR_SPECS.find(s => s[0] === id);
+    return f ? f[1] : String(id || '');
+}
+async function trLoad() {
+    if (!INIT) return;
+    try {
+        const r = await fetch('/api/social/me', { method: 'POST', body: JSON.stringify({ initData: INIT }) });
+        const j = await r.json();
+        if (j.ok) {
+            TR.me = j;
+            TR.loaded = true;
+            if (tab === 'profile' || tab === 'coach') render();
+        }
+    } catch (e) { /* оффлайн: догрузим при следующем действии */ }
+}
+/* сбор полей формы из DOM → payload карточки; лимиты §5.2 дублирует сервер */
+function trCollect() {
+    const v = function (id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
+    const list = function (pfx, n) {
+        const out = [];
+        for (let i = 0; i < n; i++) { const s = v(pfx + i); if (s) out.push(s); }
+        return out;
+    };
+    const years = parseInt(v('trYears'), 10);
+    return {
+        displayName: v('trName'),
+        bio: v('trBio'),
+        specs: TR.specs.slice(),
+        city: v('trCity'),
+        gyms: v('trGyms'),
+        years: isNaN(years) ? 0 : Math.max(0, Math.min(years, 60)),
+        achievements: list('trAch', 5),
+        education: list('trEdu', 5),
+        schedule: list('trSched', 3),
+        cap: TR.cap,
+        useTgAvatar: TR.av
+    };
+}
+async function trSaveCard(submit) {
+    const card = trCollect();
+    if (!card.displayName) { toast('Укажите отображаемое имя', true); return; }
+    try {
+        const r = await fetch('/api/social/card', { method: 'POST',
+            /* [TRN-T2 фикс] enabled:true — при первом включении создаёт серверную карточку
+               (card + enabled без prev), при повторном включении hidden сервер вернёт
+               статус draft по своим правилам (§5.4) */
+            body: JSON.stringify({ initData: INIT, card: card, submit: !!submit, enabled: true }) });
+        let j = {};
+        try { j = await r.json(); } catch (e2) { /* noop */ }
+        if (r.status === 403) {
+            if (j.reason === 'age') toast('Раздел «Тренер» доступен с 18 лет', true);
+            else if (j.reason === 'cooldown') toast('Повторная отправка — через ' + j.retryInDays + ' дн.', true);
+            else toast('Действие недоступно', true);
+            return;
+        }
+        if (!j.ok) { toast('Не удалось сохранить: сервер ответил ' + r.status, true); return; }
+        if (TR.me) TR.me.card = j.card;
+        else TR.me = { card: j.card, linksAsTrainer: [], linksAsStudent: [], requests: [], myRequest: null, inviteCode: null };
+        TR.loaded = true;
+        toast(submit ? 'Карточка отправлена на проверку' : 'Черновик сохранён');
+        render();
+    } catch (e) { toast('Нет связи с сервером', true); }
+}
+async function trLeaveMode() {
+    /* выключение режима (§5.4): скрытие из поиска; связи сохраняются — сервер вернёт warning */
+    try {
+        const r = await fetch('/api/social/card', { method: 'POST',
+            body: JSON.stringify({ initData: INIT, enabled: false }) });
+        const j = await r.json();
+        if (!j.ok) { toast('Не удалось выключить режим: ' + r.status, true); return; }
+        if (TR.me) TR.me.card = j.card;
+        TR.open = false;
+        if (j.warning) toast(j.warning, true);
+        else toast('Режим тренера выключен');
+        render();
+    } catch (e) { toast('Нет связи с сервером', true); }
+}
+function trInitDraft(card) {
+    card = card || trMe().card || {};
+    TR.open = true;
+    TR.specs = (card.specs || []).slice();
+    TR.cap = card.cap || 5;
+    TR.av = card.useTgAvatar !== false;
+    TR.slots = { ach: 2, edu: 2, sched: 2 };
+}
+function trProfileCardHtml() {
+    const card = trMe().card;
+    const hidden = card && card.status === 'hidden';
+    const on = !!(card && !hidden);
+    let h = '<div class="card"><p class="t1">🧑‍🏫 Тренер</p>';
+    if (!trAgeOk()) {
+        /* 18+ (решение 12.11 №12): тогл виден, включение отклоняется с подсказкой */
+        h += '<div class="setrow"><span class="lbl"><b>Я тренер</b>' +
+            '<span>Раздел доступен с 18 лет. Укажите дату рождения выше — она не публикуется.</span></span>' +
+            swToggleHtml(false, 'trToggleMinor', null, 'Я тренер') + '</div>';
+        return h + '<div class="hr"></div>' + trFindRow() + trCommunityRow() + '</div>';
+    }
+    if (!on) {
+        if (TR.open) {
+            /* [TRN-T2 фикс] тогл раскрыл форму (§5.1, макет Э-2): для первого включения —
+               пустой черновик (серверной карточки ещё нет, card:null), для повторного
+               включения hidden — форма с сохранённым контентом (правка hidden → draft,
+               серверные правила статусов); сохранение шлёт enabled:true и создаёт/возвращает
+               серверную карточку */
+            h += '<div class="trhead"><span class="lbl"><b>Режим тренера</b><span>'
+                + (hidden ? 'Карточка была выключена — проверьте данные и отправьте заново'
+                    : 'Новая карточка — заполните и сохраните')
+                + '</span></span>' + trBadge('draft') + '</div>';
+            h += trFormHtml(hidden ? card : { status: 'draft' });
+        } else {
+            h += '<div class="setrow"><span class="lbl"><b>Я тренер</b>' +
+                '<span>Включите, чтобы создать публичную карточку тренера. В поиске карточка появится только после подтверждения владельцем.</span></span>' +
+                swToggleHtml(false, 'trToggle', null, 'Я тренер') + '</div>';
+            if (hidden) h += '<p class="meta">Режим был выключен — включите тогл и отправьте карточку на проверку заново.</p>';
+        }
+        return h + '<div class="hr"></div>' + trFindRow() + trCommunityRow() + '</div>';
+    }
+    /* режим включён: статус + форма (аккордеон, §5.1) */
+    const st = card.status;
+    h += '<div class="trhead"><span class="lbl"><b>Режим тренера</b>';
+    if (st === 'pending') h += '<span>Карточка подана на проверку</span>';
+    else if (st === 'verified') h += '<span>Карточка опубликована в поиске</span>';
+    else if (st === 'rejected') h += '<span>Карточка отклонена владельцем</span>';
+    else h += '<span>Черновик карточки</span>';
+    h += '</span>' + trBadge(st) + '</div>';
+    if (st === 'rejected' && card.statusNote) h += '<p class="meta">Причина: ' + esc(card.statusNote) + '</p>';
+    const left = trCooldownLeft(card);
+    if (st === 'rejected' && left > 0) h += '<p class="meta">Повторная отправка — через ' + left + ' ' + trDayWord(left) + '.</p>';
+    if (TR.open) h += '<div class="hr"></div>' + trFormHtml(card);
+    else h += '<div class="btnrow"><button class="btn sec wide" data-act="trOpen">✏️ Карточка тренера</button></div>';
+    h += '<div class="hr"></div>' + trFindRow() + trCommunityRow();
+    h += '<div class="hr"></div><button class="arow" data-act="trLeave"><span class="aico">🔒</span>Выключить режим' +
+        '<span class="chevr">' + ICONS.chevR + '</span></button>';
+    if (trMe().linksAsTrainer && trMe().linksAsTrainer.length) {
+        h += '<p class="meta">Подопечные (' + trMe().linksAsTrainer.length + ') останутся связанными — разорвать связи можно после выключения.</p>';
+    }
+    return h + '</div>';
+}
+function trFindRow() {
+    return '<button class="arow" data-act="trFind"><span class="aico">' + ICONS.search + '</span>Найти тренера' +
+        '<span class="chevr">' + ICONS.chevR + '</span></button>';
+}
+function trCommunityRow() {
+    /* «Сообщество» — Telegram-группа, появится в [TRN-T6]; сейчас мягкая заглушка */
+    return '<button class="arow" data-act="trCommunity"><span class="aico">💬</span>' +
+        '<span style="flex:1;min-width:0;">Сообщество<span class="tr-sub">Чат единомышленников в Telegram</span></span>' +
+        '<span class="chevr">' + ICONS.chevR + '</span></button>';
+}
+function trCooldownLeft(card) {
+    if (!card || !card.rejectedAt) return 0;
+    const end = new Date(card.rejectedAt).getTime() + 30 * 86400000;
+    return Math.max(0, Math.ceil((end - Date.now()) / 86400000));
+}
+function trDayWord(n) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'день';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'дня';
+    return 'дней';
+}
+/* форма карточки тренера (§5.2, экран 2 макета) */
+function trFormHtml(card) {
+    let h = '<div class="flabel" style="margin-top:10px;">Отображаемое имя</div>' +
+        '<input id="trName" maxlength="40" value="' + escAttr(card.displayName || '') + '" placeholder="Как Вас видно в поиске">' +
+        '<div class="flabel">О себе</div>' +
+        '<textarea id="trBio" maxlength="300" rows="3" placeholder="Чем занимаетесь, Ваш подход к работе">' + esc(card.bio || '') + '</textarea>' +
+        '<div class="flabel">Специализации · до 3</div><div class="chips">';
+    for (const sp of TR_SPECS) {
+        h += '<button class="chip' + (TR.specs.indexOf(sp[0]) >= 0 ? ' on' : '') + '" data-act="trChip" data-a="' + sp[0] + '">' + sp[1] + '</button>';
+    }
+    h += '</div><div class="brow">' +
+        '<div class="bf"><label for="trCity">Город</label><input id="trCity" maxlength="40" value="' + escAttr(card.city || '') + '"></div>' +
+        '<div class="bf"><label for="trGyms">Зал(ы)</label><input id="trGyms" maxlength="80" value="' + escAttr(card.gyms || '') + '" placeholder="«Атлет», «Олимп»"></div></div>' +
+        '<div class="brow">' +
+        '<div class="bf"><label for="trYears">Стаж, лет</label><input id="trYears" type="number" inputmode="numeric" min="0" max="60" value="' + (card.years || 0) + '"></div>' +
+        '<div class="bf"><label>Лимит подопечных</label><div class="chips" style="margin-top:0;">';
+    for (const c of [3, 5, 10, 20]) {
+        h += '<button class="chip' + (TR.cap === c ? ' on' : '') + '" data-act="trCap" data-a="' + c + '">' + c + '</button>';
+    }
+    h += '</div></div></div><div class="hr"></div>';
+    h += trListInputs('Достижения · до 5', 'trAch', card.achievements || [], 5, 'КМС по пауэрлифтингу, 2019', 'ach');
+    h += trListInputs('Образование и курсы · до 5', 'trEdu', card.education || [], 5, 'РГУФК, 2015', 'edu');
+    h += trListInputs('Расписание · до 3', 'trSched', card.schedule || [], 3, 'Пн–Пт 07:00–21:00', 'sched');
+    h += '<div class="setrow"><span class="lbl"><b>Показывать мой аватар Telegram</b>' +
+        '<span>Если выключить — в карточке будут Ваши инициалы</span></span>' +
+        '<button class="switch' + (TR.av ? ' on' : '') + '" role="switch" aria-checked="' + (TR.av ? 'true' : 'false') +
+        '" aria-label="Аватар Telegram" data-act="trAv"><span class="sw-track"><span class="sw-knob"></span></span></button></div>' +
+        '<div class="hint"><span>🔒</span><span>Карточка видна в поиске только после подтверждения владельцем. Изменение карточки возвращает её на проверку. Контакты указывать не нужно — их видят только Ваши подопечные.</span></div>' +
+        '<div class="btnrow">';
+    const st = card.status;
+    if (st === 'draft' || st === 'rejected' || st === 'hidden') {
+        h += '<button class="btn prime wide" data-act="trSubmit">📤 Отправить на проверку</button>';
+    }
+    h += '<button class="btn wide" data-act="trSaveDraft">💾 Сохранить черновик</button></div>';
+    if (st === 'verified') h += '<p class="meta">Правка содержимого вернёт карточку на проверку.</p>';
+    if (st === 'pending') h += '<p class="meta">Карточка уже на проверке — правки сохраняются в черновик.</p>';
+    return h;
+}
+/* слоты списков: первые 2 видны, остальные открывает «＋» (без render — ввод не теряется) */
+function trListInputs(label, pfx, values, max, ph, slotKey) {
+    let h = '<div class="flabel">' + label + '</div>';
+    if (TR.slots[slotKey] < Math.min(values.length + 1, max)) TR.slots[slotKey] = Math.min(values.length + 1, max);
+    for (let i = 0; i < max; i++) {
+        const hidden = i >= TR.slots[slotKey];
+        h += '<input id="' + pfx + i + '" maxlength="80" class="' + (hidden ? 'tr-hid' : '') + '"' +
+            ' value="' + escAttr(values[i] || '') + '" placeholder="' + ph + '">';
+    }
+    if (TR.slots[slotKey] < max) {
+        h += '<button class="btn sec tr-add" data-act="trAddRow" data-a="' + slotKey + '">＋ Добавить строку</button>';
+    }
+    return h;
+}
+/* живое обновление чипов формы без render (поля ввода не теряют фокус/текст) */
+function refreshTrChips() {
+    document.querySelectorAll('[data-act="trChip"]').forEach(function (el) {
+        el.classList.toggle('on', TR.specs.indexOf(el.getAttribute('data-a')) >= 0);
+    });
+}
+function refreshTrCapChips() {
+    document.querySelectorAll('[data-act="trCap"]').forEach(function (el) {
+        el.classList.toggle('on', +el.getAttribute('data-a') === TR.cap);
+    });
+}
+function refreshTrSpecChips() {
+    document.querySelectorAll('[data-act="trSpecChip"]').forEach(function (el) {
+        el.classList.toggle('on', TR.fspecs.indexOf(el.getAttribute('data-a')) >= 0);
+    });
+}
+
+/* ---------- [TRN-T3] поиск тренера (таб «Тренер», §6): только verified, §6.2 ---------- */
 function renderCoachTab() {
-    return '<div class="card hero"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
-        '<p class="muted">Раздел в разработке: здесь появятся персональные программы тренировок, разборы техники и советы по питанию.</p>' +
-        '<p class="meta">Следи за обновлениями 💪</p></div>';
+    if (TR.view) {
+        const c = (TR.results || []).find(x => +x.userId === TR.view);
+        if (c) return trDetailHtml(c);
+        TR.view = 0; /* карточка могла уйти из выдачи — вернёмся к поиску */
+    }
+    if (!TR.loaded && INIT) trLoad();
+    let h = '<div class="card"><p class="t1">🔎 Найти тренера</p>' +
+        '<div class="searchbox"><input id="trQ" type="text" placeholder="Город или зал…" value="' + escAttr(TR.q) + '"></div>' +
+        '<div class="flabel" style="margin-top:8px;">Специализация</div><div class="chips">';
+    for (const sp of TR_SPECS) {
+        h += '<button class="chip' + (TR.fspecs.indexOf(sp[0]) >= 0 ? ' on' : '') + '" data-act="trSpecChip" data-a="' + sp[0] + '">' + sp[1] + '</button>';
+    }
+    h += '</div></div><div id="trList">' + trResultsHtml() + '</div>';
+    return h;
+}
+function trResultsHtml() {
+    if (TR.err) return '<div class="empty">Не удалось загрузить. Проверьте связь и попробуйте ещё раз.' +
+        '<br><button class="btn sec" data-act="trRetry" style="margin-top:10px;">Повторить</button></div>';
+    if (!TR.done) return '<div class="empty">Загрузка…</div>';
+    if (!TR.results || !TR.results.length) {
+        if (!TR.q && !TR.fspecs.length) {
+            /* пустой каталог (§6.4) — важно для первых дней */
+            return '<div class="empty">Пока нет подтверждённых тренеров.<br>Загляните позже — карточки публикуются после проверки владельцем.</div>';
+        }
+        /* ничего не найдено (§6.4) + сброс */
+        return '<div class="empty">Ничего не нашлось. Попробуйте другой город или снимите фильтры.' +
+            '<br><button class="btn sec" data-act="trReset" style="margin-top:10px;">Сбросить</button></div>';
+    }
+    let h = '';
+    for (const c of TR.results) {
+        const place = [c.city, c.gyms].filter(Boolean).join(' · ');
+        h += '<button class="tr-res" data-act="trOpenCard" data-a="' + c.userId + '">' + trAvaHtml(c, 44) +
+            '<span style="flex:1;min-width:0;"><span class="tr-nm">' + esc(c.displayName) + ' <span class="tr-v">✔</span></span>' +
+            '<span class="tr-sub">' + esc(place || 'Город не указан') +
+            (c.years > 0 ? ' · стаж ' + c.years + ' ' + trYearsWord(c.years) : '') + '</span>' +
+            '<span class="tr-minis">' + (c.specs || []).slice(0, 3).map(function (s) { return '<span class="tr-mini">' + esc(trSpecName(s)) + '</span>'; }).join('') +
+            '</span></span></button>';
+    }
+    return h;
+}
+function trYearsWord(n) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'год';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'года';
+    return 'лет';
+}
+/* аватар: фото Telegram (тогл включён и ссылка есть) либо инициалы (§5.2);
+   фото может протухнуть на CDN Telegram — onerror разворачивает инициалы (ревью) */
+function trAvaHtml(c, size) {
+    const ini = String(c.displayName || '?').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase();
+    if (c.useTgAvatar && c.photoUrl) {
+        const fb = '<span class="tr-ava" style="width:' + size + 'px;height:' + size + 'px;">' + esc(ini || '?') + '</span>';
+        return '<img class="tr-ava" src="' + escAttr(c.photoUrl) + '" data-fb="' + escAttr(fb) + '"' +
+            ' onerror="this.outerHTML=this.dataset.fb" width="' + size + '" height="' + size +
+            '" alt="" loading="lazy" referrerpolicy="no-referrer">';
+    }
+    return '<span class="tr-ava" style="width:' + size + 'px;height:' + size + 'px;">' + esc(ini || '?') + '</span>';
+}
+let __trSearchTimer = null;
+function trSearchSoon() {
+    if (__trSearchTimer) clearTimeout(__trSearchTimer);
+    __trSearchTimer = setTimeout(trSearchDo, 350);
+}
+async function trSearchDo() {
+    const box = document.getElementById('trList');
+    if (box) box.innerHTML = '<div class="empty">Загрузка…</div>';
+    try {
+        const r = await fetch('/api/social/search', { method: 'POST',
+            body: JSON.stringify({ initData: INIT, city: TR.q, specs: TR.fspecs }) });
+        const j = await r.json();
+        TR.err = !j.ok;
+        if (j.ok) TR.results = j.cards || [];
+        TR.done = true;
+    } catch (e) { TR.err = true; TR.done = true; }
+    refreshTrList();
+}
+function refreshTrList() {
+    const box = document.getElementById('trList');
+    if (box) box.innerHTML = trResultsHtml();
+}
+/* детальная карточка тренера (§6.3): контакта нет — раскрывается только после связки
+   (решение №5); кнопка заявки — каркас до [TRN-T4] */
+function trDetailHtml(c) {
+    let h = '<div class="card"><div class="exhead">' + trAvaHtml(c, 56) +
+        '<span class="t1" style="flex:1;min-width:0;">' + esc(c.displayName) + ' <span class="tr-v">✔</span></span>' +
+        '<button class="barebtn" data-act="trBack" title="К поиску" aria-label="К поиску">' + ICONS.back + '</button></div>';
+    const place = [c.city, c.gyms].filter(Boolean).join(' · ');
+    if (place) h += '<p class="meta">' + esc(place) + '</p>';
+    if (c.years > 0) h += '<p class="meta">Стаж: ' + c.years + ' ' + trYearsWord(c.years) + '</p>';
+    if (c.specs && c.specs.length) {
+        h += '<div class="tr-minis" style="margin-top:6px;">' +
+            c.specs.map(function (s) { return '<span class="tr-mini acc">' + esc(trSpecName(s)) + '</span>'; }).join('') + '</div>';
+    }
+    if (+c.userId === trMyId()) {
+        /* своя карточка в поиске — «Это Вы» (§6.4): кнопка заявки заменена на редактирование */
+        h += '<div class="tr-self">Это Вы</div><div class="btnrow"><button class="btn sec wide" data-act="trEdit">✏️ Редактировать карточку</button></div>';
+    } else {
+        h += '<div class="btnrow"><button class="btn prime wide" disabled>🤝 Стать подопечным</button></div>' +
+            '<p class="meta">Заявки в подопечные появятся в следующем обновлении.</p>';
+    }
+    h += '</div>';
+    if (c.bio) h += '<div class="card"><p class="mtitle">О себе</p><p class="exdesc">' + esc(c.bio) + '</p></div>';
+    if (c.schedule && c.schedule.length) {
+        h += '<div class="card"><p class="mtitle">Расписание</p>';
+        for (const s of c.schedule) h += '<p class="meta">' + esc(s) + '</p>';
+        h += '</div>';
+    }
+    if (c.achievements && c.achievements.length) {
+        h += '<div class="card"><p class="mtitle">Достижения</p>';
+        for (const s of c.achievements) h += '<p class="meta">🏆 ' + esc(s) + '</p>';
+        h += '</div>';
+    }
+    if (c.education && c.education.length) {
+        h += '<div class="card"><p class="mtitle">Образование и курсы</p>';
+        for (const s of c.education) h += '<p class="meta">🎓 ' + esc(s) + '</p>';
+        h += '</div>';
+    }
+    return h;
 }
 
 /* ============ [GOA-S1] цели тренировок (docs/spec-goa-s1-goals.md §3/§4/§8) ============ */
@@ -4639,6 +5100,9 @@ function renderProfileTab() {
     h += '<div class="card"><p class="t1">⭐ Любимые упражнения</p>' +
         '<p class="meta">Упражнения, отмеченные ★ — каталог и свои</p>' +
         '<div class="btnrow"><button class="btn sec wide" data-act="openFavs">Открыть в технике</button></div></div>';
+    /* [TRN-T2] карточка «Тренер» (§5.1: после «Любимых упражнений»): тогл режима,
+        форма карточки, статусы верификации. Данные — из /api/social/me (догрузка ленивая) */
+    h += trProfileCardHtml();
     /* [UX-T27] настройки (тема/фон/таймер/тренер) переехали в экран «Настройки» [UX-S4 §7];
        [UX-T43] полноэкранный режим удалён (решение владельца 20.11) */
     /* [UX-T18] обёртка .prof: компактные карточки/поля (стиль токенов не менялся) */
@@ -6695,6 +7159,7 @@ async function init() {
             if (typeof j.botUsername === 'string' && j.botUsername) BOT_NAME = j.botUsername;
             render();
             onbGate(); /* [ONB] приветствие/«Что нового» — после первого рендера приложения */
+            trLoad(); /* [TRN-T2] соцданные (карточка/связки) — после первого рендера */
         } else {
             failMsg = 'HTTP ' + r.status;
         }
