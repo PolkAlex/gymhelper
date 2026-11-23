@@ -6405,9 +6405,11 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0);
         await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
         await expect(page.locator('#techList .lphint')).toBeVisible();
-        /* томстон в localStorage */
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(OWN2) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* томстон на сервере [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN2);
+        }).toBeGreaterThanOrEqual(0);
         /* сервер: база и ★ почистились, тренировка нетронута (сеты, вес, имя) */
         await expect.poll(async function () {
             const s = await (await request.get('/api/state')).json();
@@ -6530,9 +6532,91 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
             || w.exercises[0].sets.length !== 1 || w.exercises[0].sets[0].s !== 3) {
             throw new Error('тренировка изменилась после удаления: ' + JSON.stringify(w));
         }
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(OWN1) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* сервер: томстон [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN1);
+        }).toBeGreaterThanOrEqual(0);
     });
+
+    /* [EXR-T19] миграция: старый клиент [EXR-T18] держал томстоны в localStorage
+       (gymCustomExHidden). При загрузке имена, которых нет на сервере, переносятся в
+       G.customHidden → сервер (merge), ключ localStorage очищается, подсказки имя
+       не показывают (union-воскрешение из истории глушится уже при первом рендере). */
+    test('миграция: localStorage-томстон переезжает на сервер, ключ чистится, подсказки имя не показывают', async ({ page, request }) => {
+        const now = new Date();
+        const day = isoDate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 3));
+        /* сервер: база с OWN1 + история с OWN2 (в базе T18-клиента OWN2 уже НЕТ — удалён:
+           removeCustom убирал имя из базы и клал томстон в localStorage) — union без
+           томстона воскресил бы карточку из истории */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        /* сеем legacy-ключ старого клиента до загрузки app.js */
+        await page.addInitScript(function (n) {
+            try { localStorage.setItem('gymCustomExHidden', JSON.stringify([n])); } catch (e) { /* noop */ }
+        }, OWN2);
+        await openOwnTech(page);
+        /* подсказки не показывают удалённое (фильтр работает уже при первом рендере) */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN1 })).toHaveCount(1);
+        /* томстон оказался на сервере */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(OWN2);
+        }).toBeGreaterThanOrEqual(0);
+        /* localStorage-ключ почищен после подтверждённого сохранения */
+        await expect.poll(async function () {
+            return page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        }).toBe(null);
+    });
+
+    /* [EXR-T19] fail-path миграции: save падает — ключ gymCustomExHidden ЖИВЁТ
+       (миграция повторится при следующем init — идемпотентно), томстона на сервере
+       ещё нет; retry (reload без сбоя) — ключ почищен, томстон на сервере */
+    test('миграция: save-error держит ключ gymCustomExHidden; retry чистит и льёт томстон на сервер', async ({ page, request }) => {
+        const day = isoDate(new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() - 3));
+        /* сервер: база с OWN1 + история с OWN2 — union без томстона воскресил бы карточку */
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            customEx: [{ n: OWN1, tags: [] }],
+            workouts: [doneWorkout(1, day, OWN2, '20', 3)]
+        } } });
+        let failSave = true;
+        await page.route('/api/save', async function (route) {
+            if (failSave) await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) });
+            else await route.continue();
+        });
+        await page.addInitScript(function (n) {
+            try { localStorage.setItem('gymCustomExHidden', JSON.stringify([n])); } catch (e) { /* noop */ }
+        }, OWN2);
+        await openOwnTech(page); /* init → migrateCustomFavs → save (падает) */
+        /* ключ пережил сбой сохранения */
+        const k = await page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        if (k === null) throw new Error('gymCustomExHidden должен пережить save-error, а ключ пуст');
+        /* томстон не доехал до сервера */
+        const s1 = await (await request.get('/api/state')).json();
+        if ((s1.customExHidden || []).length !== 0) {
+            throw new Error('томстон утёк на сервер при save-error: ' + JSON.stringify(s1.customExHidden));
+        }
+        failSave = false;
+        await page.reload();
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('.secrow .chip', { hasText: 'Своё' }).first().click();
+        /* подсказки имя не показывают уже при первом рендере после retry */
+        await expect(page.locator('#techList .excard[data-custom]', { hasText: OWN2 })).toHaveCount(0, { timeout: 5000 });
+        /* ключ почищен после подтверждённого 'ok', томстон на сервере */
+        await expect.poll(async function () {
+            return page.evaluate(function () { return localStorage.getItem('gymCustomExHidden'); });
+        }, { timeout: 8000 }).toBe(null);
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).length;
+        }, { timeout: 8000 }).toBe(1);
+    });
+
 
     /* acc §12.12: активная тренировка с удаляемым упражнением — запись продолжается,
        после завершения история на месте */
@@ -6608,8 +6692,11 @@ test.describe('[EXR-T18] удаление «своих» упражнений', 
         await modal.locator('[data-act="ctxRemove"]').click();
         await expect(page.locator('.modal.open')).toHaveCount(0);
         await expect(page.locator('#techList .excard[data-custom]')).toHaveCount(0);
-        const hid = await page.evaluate(function () { return JSON.parse(localStorage.getItem('gymCustomExHidden') || '[]'); });
-        if (hid.indexOf(XSS) === -1) throw new Error('томстон не записан: ' + JSON.stringify(hid));
+        /* томстон на сервере [EXR-T19] */
+        await expect.poll(async function () {
+            const s = await (await request.get('/api/state')).json();
+            return (s.customExHidden || []).indexOf(XSS);
+        }).toBeGreaterThanOrEqual(0);
         if (dialogs.length) throw new Error('alert сработал (XSS исполнился): ' + JSON.stringify(dialogs));
         if (problems.length) throw new Error('ошибки страницы/консоли: ' + JSON.stringify(problems.slice(0, 5)));
     });

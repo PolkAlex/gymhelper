@@ -247,6 +247,8 @@ function handle(req, res) {
                 /* [EXR-T13] «Свои»/«Любимые» — merge по образцу goals (замещение при наличии ключа) */
                 if (Array.isArray(d.customEx)) store.customEx = d.customEx;
                 if (Array.isArray(d.favs)) store.favs = d.favs;
+                /* [EXR-T19] томстоны удалённых «своих» — merge по образцу customEx/favs */
+                if (Array.isArray(d.customExHidden)) store.customExHidden = d.customExHidden;
                 /* restSec: merge-политика реального WebServer — null у клиента (ещё не настраивал)
                    серверное значение не затирает [UX-T4/T5, спека §0.1] */
                 if (typeof d.restSec === 'number') store.restSec = d.restSec;
