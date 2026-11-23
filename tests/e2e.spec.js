@@ -7407,3 +7407,202 @@ test.describe('[FIT-S2] карта мышц', function () {
     });
 });
 
+/* ============ [FIT-T1 пост-мерж 23.11] регресс-добор цикла FIT + совместная вёрстка ============ */
+test.describe('[FIT-T1 пост-мерж] регресс-добор и карта+заметка', function () {
+
+    const NOTE_P1 = 'Тяга пошла легче: попробовать 50 кг.';
+    const NOTE_P2 = 'Тяга пошла легче: попробовать 50 кг. Дописал после тренировки.';
+
+    /* (а) мульти-теговое каталоговое упражнение: «Становая тяга» (m:back+m:legs+m:glutes) -
+       полное зачисление каждой группе (§4.2): 3 легенды по 3 подх., все lvl3, шиты всех групп */
+    test('становая тяга: три группы в легенде, зоны обеих фигур, шиты по 3 подх.', async ({ page, request }) => {
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: day, started: day + 'T09:30:00', ended: day + 'T10:00:00', finished: true, title: '', nutrition: '',
+                exercises: [{ name: 'Становая тяга', st: day + 'T09:31:00', en: day + 'T10:00:00',
+                    sets: [{ w: '100', s: 3, r: '10', t: day + 'T09:32:00' }] }] }]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.maphead .msum')).toHaveText('3 группы · 9 подх.');
+        const legend = page.locator('.legend .lg');
+        await expect(legend).toHaveCount(3);
+        await expect(legend.nth(0)).toContainText('Ноги');
+        await expect(legend.nth(1)).toContainText('Спина');
+        await expect(legend.nth(2)).toContainText('Ягодицы');
+        for (let i = 0; i < 3; i++) await expect(legend.nth(i)).toContainText('3 подх.');
+        await expect(page.locator('.legend .dot.lvl3')).toHaveCount(3);
+        await expect(page.locator('.legend .dot.lvl1, .legend .dot.lvl2')).toHaveCount(0);
+        /* зоны всех трёх групп подсвечены: ноги и спина на фигуре спереди, ягодицы и ноги сзади */
+        await expect(page.locator('#bmF path.mz.lvl3[data-a="legs"]').first()).toBeVisible();
+        await expect(page.locator('#bmF path.mz.lvl3[data-a="back"]').first()).toBeVisible();
+        await expect(page.locator('#bmB path.mz.lvl3[data-a="glutes"]').first()).toBeVisible();
+        await expect(page.locator('#bmB path.mz.lvl3[data-a="legs"]').first()).toBeVisible();
+        /* шит каждой группы: полное зачисление - 3 подхода и тоннаж 3000 кг (100x3x10 повторов) */
+        const sheets = [
+            ['#bmF path.mz.lvl3[data-a="legs"]', 'Ноги · 3 подх.'],
+            ['#bmB path.mz.lvl3[data-a="glutes"]', 'Ягодицы · 3 подх.'],
+            ['#bmB path.mz.lvl3[data-a="back"]', 'Спина · 3 подх.']
+        ];
+        for (let i = 0; i < sheets.length; i++) {
+            await page.locator(sheets[i][0]).first().dispatchEvent('click');
+            const modal = page.locator('.modal.open');
+            await expect(modal.locator('.mtitle')).toHaveText(sheets[i][1], { timeout: 5000 });
+            await expect(modal.locator('.grrow')).toHaveCount(1);
+            await expect(modal.locator('.grrow').first()).toContainText('Становая тяга');
+            await expect(modal.locator('.grrow').first()).toContainText('3 подхода · ≈3000 кг');
+            await modal.locator('[data-act="closeModal"]').click();
+            await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        }
+    });
+
+    /* (б) то же упражнение дважды в тренировке: подходы и тоннаж суммируются
+       (rows по имени, §4.2): в легенде 4 подх., в шите одна строка с суммой */
+    test('упражнение дважды в тренировке: сумма подходов в легенде и шите', async ({ page, request }) => {
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [{ id: 1, date: day, started: day + 'T09:30:00', ended: day + 'T10:00:00', finished: true, title: '', nutrition: '',
+                exercises: [
+                    { name: EX, st: day + 'T09:31:00', en: day + 'T09:45:00', sets: [{ w: '60', s: 2, r: '10', t: day + 'T09:32:00' }] },
+                    { name: EX, st: day + 'T09:46:00', en: day + 'T10:00:00', sets: [{ w: '80', s: 2, r: '10', t: day + 'T09:47:00' }] }
+                ] }]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        /* легенда: Грудь 4 подх. (2+2), единственная группа - lvl3 */
+        await expect(page.locator('.maphead .msum')).toHaveText('1 группа · 4 подх.');
+        const legend = page.locator('.legend .lg');
+        await expect(legend).toHaveCount(1);
+        await expect(legend.nth(0)).toContainText('Грудь');
+        await expect(legend.nth(0)).toContainText('4 подх.');
+        await expect(page.locator('.legend .dot.lvl3')).toHaveCount(1);
+        /* шит: обе записи схлопнуты в одну строку - 4 подхода, тоннаж 1200+1600=2800 кг */
+        await page.locator('#bmF path.mz.lvl3[data-a="chest"]').first().dispatchEvent('click');
+        const modal = page.locator('.modal.open');
+        await expect(modal.locator('.mtitle')).toHaveText('Грудь · 4 подх.', { timeout: 5000 });
+        await expect(modal.locator('.grrow')).toHaveCount(1);
+        await expect(modal.locator('.grrow').first()).toContainText('Жим штанги лёжа');
+        await expect(modal.locator('.grrow').first()).toContainText('4 подхода · ≈2800 кг');
+        await modal.locator('[data-act="closeModal"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+    });
+
+    /* совместная вёрстка (главный риск мержа): карта мышц и textarea заметки живут
+       в одной завершённой карточке. Порядок блоков (карта на месте wcpill, заметка
+       после «Поделиться», до details), noteFitAll при рендере, 320px/360px без
+       горизонтального overflow, перерисовка фигур м/ж заметку не ломает */
+    test('завершённая: карта и заметка вместе; порядок; 320/360 без overflow', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        const note3 = 'Строка один\nСтрока два\nСтрока три';
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            profile: { sex: 'м', age: 30, height: 180, weight: 90 },
+            workouts: [Object.assign(doneWorkout(1, today, EX, '120', 3), { note: note3 })]
+        } } });
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toBeVisible({ timeout: 5000 });
+        await expect(ta).toHaveValue(note3);
+        /* порядок блоков карточки: карта (на месте wcpill) - «Поделиться» - заметка - details */
+        const order = await page.evaluate(function () {
+            const ta = document.querySelector('textarea.notefield');
+            const card = document.getElementById('w' + ta.getAttribute('data-wid'));
+            const seq = Array.prototype.map.call(card.children, function (el) {
+                if (el.classList.contains('mapcard')) return 'map';
+                if (el.tagName === 'TEXTAREA' && el.classList.contains('notefield')) return 'note';
+                if (el.tagName === 'DETAILS') return 'details';
+                if (el.classList.contains('btnrow') && el.textContent.indexOf('Поделиться') >= 0) return 'share';
+                return '';
+            }).filter(Boolean);
+            return seq.join('>');
+        });
+        expect(order.indexOf('map>share>note>details')).toBe(0);
+        /* noteFitAll при рендере: высота по контенту (3 строки) - не схлопнута и не выше капа */
+        const fit = await page.evaluate(function () {
+            const ta = document.querySelector('textarea.notefield');
+            const cs = getComputedStyle(ta);
+            const lh = parseFloat(cs.lineHeight) || 21;
+            const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+            return { h: ta.getBoundingClientRect().height, sh: ta.scrollHeight, cap: 4 * lh + pad };
+        });
+        expect(fit.h).toBeGreaterThanOrEqual(fit.sh - 2);
+        expect(fit.h).toBeLessThanOrEqual(fit.cap + 2);
+        /* 320px и 360px: блоки карты/заметки не вылезают за ширину вьюпорта */
+        for (const vp of [[320, 640], [360, 740]]) {
+            await page.setViewportSize({ width: vp[0], height: vp[1] });
+            const m = await page.evaluate(function () {
+                const vw = window.innerWidth;
+                const bad = [];
+                const sel = ['.mapcard', '.mapcard svg', '.legend .lg', 'textarea.notefield', '.statgrid.map3 .sg', '.btnrow .btn'];
+                for (let i = 0; i < sel.length; i++) {
+                    document.querySelectorAll(sel[i]).forEach(function (el) {
+                        const r = el.getBoundingClientRect();
+                        if (r.width > 0 && (r.right > vw + 1 || r.left < -1)) bad.push(sel[i] + ' right=' + Math.round(r.right) + '/' + vw);
+                    });
+                }
+                return { vw: vw, sw: document.documentElement.scrollWidth, bad: bad };
+            });
+            expect(m.sw).toBeLessThanOrEqual(m.vw + 1);
+            expect(m.bad).toEqual([]);
+        }
+        /* перерисовка фигур м/ж (без рендера карточки): заметка на месте */
+        await page.locator('.mapseg .seg-btn', { hasText: 'Женское' }).click();
+        await expect(page.locator('#bmF svg')).toHaveAttribute('viewBox', /1538/, { timeout: 5000 });
+        await expect(page.locator('textarea.notefield')).toHaveValue(note3);
+    });
+
+    /* флоу-интеракция: заметка в активной -> завершение (1-А, остаёмся в карточке) ->
+       в одной карточке видны и карта, и заметка; правка доезжает до сервера;
+       после перезагрузки ничего не потеряно */
+    test('заметка в активной -> завершить -> карта и заметка вместе; reload ничего не теряет', async ({ page, request }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('50');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toBeVisible({ timeout: 5000 });
+        const noteSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST'
+                && (r.request().postData() || '').indexOf('note') >= 0;
+        });
+        await ta.fill(NOTE_P1);
+        expect((await noteSaved).status()).toBe(200);
+        /* 1-А: после завершения остаёмся в карточке - карта и заметка рядом */
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.backbar', { hasText: 'Повторить' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.maphead .msum')).toHaveText('1 группа · 3 подх.');
+        const fin = page.locator('textarea.notefield');
+        await expect(fin).toHaveValue(NOTE_P1, { timeout: 5000 });
+        /* правка заметки в завершённой с картой: blur - немедленный flush до сервера */
+        const editSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST'
+                && (r.request().postData() || '').indexOf('note') >= 0;
+        });
+        await fin.fill(NOTE_P2);
+        await fin.blur();
+        expect((await editSaved).status()).toBe(200);
+        /* reload: и карта, и заметка на месте */
+        await page.reload();
+        await openApp(page);
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('textarea.notefield')).toHaveValue(NOTE_P2, { timeout: 10000 });
+        const st = await (await request.get('/api/state')).json();
+        const finW = (st.workouts || []).filter(function (x) { return x.finished; })[0];
+        if (!finW) throw new Error('завершённой тренировки нет на сервере');
+        if (finW.note !== NOTE_P2) throw new Error('заметка потеряна: ' + JSON.stringify(finW.note));
+    });
+});
