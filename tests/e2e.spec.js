@@ -6633,7 +6633,10 @@ test.describe('[UX-S17] заметка тренировки', function () {
         expect(await ta.inputValue()).toBe('');
         /* порядок блоков карточки: «Добавить упражнение» < заметка < details */
         const order = await page.evaluate(function () {
-            const card = document.querySelector('.card');
+            const ta = document.querySelector('textarea.notefield');
+            if (!ta) return 'нет поля заметки';
+            const card = document.getElementById('w' + ta.getAttribute('data-wid'));
+            if (!card || !card.contains(ta)) return 'карточка w<id> не найдена';
             const seq = Array.prototype.map.call(card.children, function (el) {
                 if (el.tagName === 'TEXTAREA' && el.classList.contains('notefield')) return 'note';
                 if (el.tagName === 'DETAILS') return 'details';
@@ -6788,5 +6791,45 @@ test.describe('[UX-S17] заметка тренировки', function () {
         const opened = await page.evaluate(function () { return window.Telegram.WebApp.__opened; });
         expect(opened.length).toBe(1);
         expect(decodeURIComponent(opened[0])).toContain('/w/' + sid);
+    });
+
+    /* чек-лист §9.5: заметка переживает завершение тренировки — на месте в завершённой карточке,
+       редактируется тем же полем; правка доезжает до сервера */
+    test('заметка переживает завершение тренировки', async ({ page, request }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('50');
+        await page.locator('#mSets').fill('1');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        const ta = page.locator('textarea.notefield');
+        await expect(ta).toBeVisible({ timeout: 5000 });
+        /* ждём сейв с заметкой в пейлоаде (не фоновый сейв записи) */
+        const noteSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST'
+                && (r.request().postData() || '').indexOf('note') >= 0;
+        });
+        await ta.fill(NOTE);
+        expect((await noteSaved).status()).toBe(200);
+        /* завершение — список истории ([UX-T13]); открываем завершённую карточку */
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+        await page.locator('.pcard').first().click();
+        const fin = page.locator('textarea.notefield');
+        await expect(fin).toHaveValue(NOTE, { timeout: 5000 });
+        /* редактируется тем же полем: правка + blur — flush до сервера */
+        const editSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST'
+                && (r.request().postData() || '').indexOf('note') >= 0;
+        });
+        await fin.fill(NOTE_MORE);
+        await fin.blur();
+        expect((await editSaved).status()).toBe(200);
+        const st = await (await request.get('/api/state')).json();
+        const finW = (st.workouts || []).filter(function (x) { return x.finished; })[0];
+        if (!finW) throw new Error('завершённой тренировки нет на сервере');
+        if (finW.note !== NOTE_MORE) throw new Error('правка не сохранилась: ' + JSON.stringify(finW.note));
     });
 });
