@@ -1542,7 +1542,7 @@ public class GymContractTest {
             check(pngR[0] == (byte) 0x89 && pngR[1] == 0x50 && pngR.length > 30_000, "poster: CardRender.render — PNG");
 
             /* [UX-B19] длинное имя упражнения в рекорде: полный рендер с переносом
-               заголовка на 2 строки (карточка y=700 h=290) — PNG без исключения;
+               заголовка на 2 строки (карточка y=740 h=290) — PNG без исключения;
                до фикса этот путь вообще не покрывался (recLine выше — короткий) */
             GymData longCa = new GymData();
             longCa.nextId = 2;
