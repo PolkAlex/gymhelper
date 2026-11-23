@@ -222,12 +222,32 @@ try {
     }
     rows = S.parseCsv('a;b\n1;2');
     if (rows[0][1] !== 'b' || rows[1][1] !== '2') fails.push('parseCsv: ;-разделитель не распознан');
+    /* пустые строки сохраняются (нумерация skipped.line по исходному файлу) — их
+       пропускает сам parseStrongCsv; хвостовой \n даёт пустую строку в конце */
     rows = S.parseCsv('a,b\n1,2\n\n');
-    if (rows.length !== 2) fails.push('parseCsv: пустые хвостовые строки должны отбрасываться');
+    if (rows.length !== 3 || rows[2].length !== 1 || rows[2][0] !== '') {
+        fails.push('parseCsv: пустые строки должны сохраняться для нумерации: ' + JSON.stringify(rows));
+    }
+
+    /* пустой / whitespace-only файл → Э8 «нет тренировок», не Э7 «не Strong» (§4.5) */
+    const r0 = S.parseStrongCsv('', { unit: 'kg' });
+    if (r0.status !== 'empty') fails.push('parseStrongCsv: пустой файл — ' + r0.status + ', ожидалось empty');
+    const rWs = S.parseStrongCsv('\n  \n\n', { unit: 'kg' });
+    if (rWs.status !== 'empty') fails.push('parseStrongCsv: whitespace-only файл — ' + rWs.status + ', ожидалось empty');
 
     /* 10 колонок Strong: Date, Workout Name, Duration, Exercise Name, Set Order, Weight, Reps, Distance, Time, Weight Unit */
     const HEAD = 'Date,Workout Name,Duration,Exercise Name,Set Order,Weight,Reps,Distance,Time,Weight Unit\n';
     const RU_BENCH = 'Жим штанги лёжа'; /* имя из каталога — не должно попасть в unknown */
+
+    /* нумерация пропусков учитывает пустые строки файла (ревью [ONB-T9]): заголовок=1,
+       бланк=2, Push-up=3 (ок), Plank=4 (пропуск «пустые повторения» → строка 4) */
+    const resBlank = S.parseStrongCsv(HEAD +
+        '\n' +
+        '2024-11-18 07:00,Gym,,Push-up,1,,15,,,\n' +
+        '2024-11-18 07:00,Gym,,Plank,2,30,0,,,\n', { unit: 'kg' });
+    if (resBlank.status !== 'ok' || resBlank.skipped.length !== 1 || resBlank.skipped[0].line !== 4) {
+        fails.push('parseStrongCsv: номер строки пропуска с бланк-строкой — ' + JSON.stringify(resBlank.skipped));
+    }
 
     /* happy path: маппинг, сортировка по SET ORDER, схлопывание 60×8×3, title/duration */
     const csvOk = HEAD +

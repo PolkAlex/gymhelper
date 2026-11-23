@@ -2770,14 +2770,8 @@ details.plain[open] summary .chev, details.warn[open] summary .chev { transform:
     box-shadow: 0 0 14px rgba(255,194,32,.45);
     transition: width .25s ease;
 }
-.imp-saving .pbar .fill { animation: impslide 2.2s ease-in-out infinite alternate; }
+.imp-busy .pbar .fill { animation: impslide 2.2s ease-in-out infinite alternate; }
 @keyframes impslide { from { width: 46%; } to { width: 74%; } }
-.ph { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13.5px; }
-.ph .ic { flex: none; width: 20px; text-align: center; }
-.ph.done { color: var(--muted); }
-.ph.act { color: var(--text); font-weight: 600; }
-.ph.act .ic { color: var(--accent); }
-.ph.wait { color: var(--nav-idle); }
 .filetag {
     display: inline-flex; align-items: center; gap: 6px; margin-top: 10px; max-width: 100%;
     background: var(--nested); border: 1px solid var(--nested-brd);

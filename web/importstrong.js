@@ -41,8 +41,9 @@
             else if (c !== '\r') cur += c;
         }
         if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
-        /* полностью пустые строки (в т.ч. хвостовой перевод строки) — не данные */
-        return rows.filter(function (r) { return r.length > 1 || (r.length === 1 && r[0].trim() !== ''); });
+        /* пустые строки НЕ выбрасываем: skipped.line нумеруется по исходному файлу —
+           бланк-строки пропускает сам parseStrongCsv (ревью [ONB-T9]: «строка 214» точна) */
+        return rows;
     }
 
     /* «80,5» → 80.5; мусор → null */
@@ -148,18 +149,29 @@
     function parseStrongCsv(text, opts) {
         opts = opts || {};
         const rows = parseCsv(text);
-        if (!rows.length) return { status: 'notstrong' };
-        const hi = mapHeaders(rows[0]);
+        /* пустой / whitespace-only файл → «В файле нет тренировок» (Э8), не «не Strong» (§4.5) */
+        const hasData = rows.some(function (r) { return r.length > 1 || (r.length === 1 && r[0].trim() !== ''); });
+        if (!hasData) return { status: 'empty' };
+        /* заголовки — первая содержательная строка; пустые строки до них не мешают */
+        let first = -1;
+        for (let i = 0; i < rows.length; i++) {
+            const r = rows[i];
+            if (r.length > 1 || (r.length === 1 && r[0].trim() !== '')) { first = i; break; }
+        }
+        const hi = mapHeaders(rows[first]);
         if (hi.date < 0 || hi.ex < 0) return { status: 'notstrong' }; /* нет Date/Exercise Name */
-        const total = rows.length - 1;
+        const total = rows.length - first - 1;
         if (total <= 0) return { status: 'empty' }; /* только заголовки */
 
         /* группировка: одна строка CSV = один подход; тренировка = блок строк с одной
            датой-временем и названием (несколько тренировок дня различаются временем) */
         const groups = new Map();
         const skipped = [];
-        for (let i = 1; i < rows.length; i++) {
+        for (let i = first + 1; i < rows.length; i++) {
             const r = rows[i];
+            /* пустая строка — не данные, пропускаем молча; нумерация skipped.line — по
+               исходному индексу строки файла (включая пустые), чтобы «строка 214» была точной */
+            if (!(r.length > 1 || (r.length === 1 && r[0].trim() !== ''))) continue;
             const line = i + 1; /* «строка N» в результате: заголовок = строка 1 */
             const exName = cell(r, hi.ex);
             if (!exName) { skipped.push({ line: line, why: 'нет названия упражнения' }); continue; }

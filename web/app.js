@@ -5766,12 +5766,6 @@ function impHumanSize(bytes) {
     if (bytes >= 1024 * 1024) return impRuNum(Math.round(bytes / (1024 * 1024) * 10) / 10).replace('.', ',') + ' МБ';
     return Math.max(1, Math.round(bytes / 1024)) + ' КБ';
 }
-function impPhaseText() {
-    if (!IMP) return '';
-    if (IMP.phase === 'read') return 'Читаем файл…';
-    if (IMP.phase === 'group') return 'Собираем тренировки — ' + impRuNum(IMP.pdone) + ' из ' + impRuNum(IMP.ptotal);
-    return 'Разбираем подходы — ' + impRuNum(IMP.pdone) + ' из ' + impRuNum(IMP.ptotal);
-}
 function renderImport() {
     if (!IMP) return '';
     if (IMP.step === 'choose') return impChooseHtml();
@@ -5802,14 +5796,12 @@ function impChooseHtml() {
         '</div>';
     return h;
 }
-/* Шаг 2 — парсинг (Э3): кадр показывается только для крупных файлов (>200 КБ) */
+/* Шаг 2 — парсинг (Э3): один честный кадр «Читаем файл…» (без преждевременных «✓» —
+   ревью [ONB-T10]; живые счётчики фаз — отдельный follow-тикет). Кадр виден только
+   для крупных файлов (>200 КБ); разбор синхронный — полоса анимированная неопределённая */
 function impParsingHtml() {
-    const pct = IMP.ptotal ? Math.max(6, Math.min(96, Math.round((IMP.pdone || 0) / IMP.ptotal * 100))) : 8;
-    return '<div class="card"><p class="t1" id="impPhaseTxt">' + esc(impPhaseText()) + '</p>' +
-        '<div class="pbar"><div class="fill" id="impBarFill" style="width:' + pct + '%"></div></div>' +
-        '<div class="ph done"><span class="ic">✓</span><span>Заголовки распознаны</span></div>' +
-        '<div class="ph' + (IMP.phase === 'sets' ? ' act' : ' done') + '"><span class="ic">' + (IMP.phase === 'sets' ? '⏳' : '✓') + '</span><span>Разбираем подходы</span></div>' +
-        '<div class="ph' + (IMP.phase === 'group' ? ' act' : ' wait') + '"><span class="ic">' + (IMP.phase === 'group' ? '⏳' : '○') + '</span><span>Собираем тренировки</span></div>' +
+    return '<div class="card imp-busy"><p class="t1">Читаем файл…</p>' +
+        '<div class="pbar"><div class="fill"></div></div>' +
         (IMP.file ? '<span class="filetag">📄 ' + esc(IMP.file.name) + ' · ' + impHumanSize(IMP.file.size) + '</span>' : '') +
         '<p class="meta">Даже несколько лет истории — пара секунд.</p></div>';
 }
@@ -5848,7 +5840,7 @@ function impPreviewHtml() {
 }
 /* Шаг 4 — запись: один save() на весь импорт (§В.2); кадр виден только при медленной сети */
 function impSavingHtml() {
-    return '<div class="card imp-saving"><p class="t1">Добавляем в дневник…</p>' +
+    return '<div class="card imp-busy"><p class="t1">Добавляем в дневник…</p>' +
         '<div class="pbar"><div class="fill"></div></div>' +
         '<p class="meta">Не закрывайте приложение.</p></div>';
 }
@@ -5910,13 +5902,17 @@ async function impHandleFile(f) {
     IMP.file = { name: f.name, size: f.size };
     const big = f.size > 200 * 1024; /* мелкий файл — мгновенно, без кадра парсинга (§4.2) */
     if (big) {
-        IMP.step = 'parsing'; IMP.phase = 'read'; IMP.pdone = 0; IMP.ptotal = 0;
+        IMP.step = 'parsing';
         render();
         await new Promise(function (r) { setTimeout(r, 350); }); /* кадр «Читаем файл…» успевает отрисоваться */
         if (IMP !== my) return; /* флоу закрыли, пока ждали кадр */
     }
     let text = '';
-    try { text = await f.text(); } catch (e) { return; /* чтение не удалось — тихо к шагу 1 (§4.5) */ }
+    try { text = await f.text(); } catch (e) {
+        /* чтение не удалось — молча к шагу 1 (§4.5); кадр parsing не должен зависнуть */
+        if (IMP === my) { IMP.step = 'choose'; render(); }
+        return;
+    }
     if (IMP !== my) return;
     const existing = {};
     for (const w of G.workouts) if (w.date) existing[w.date] = true;
