@@ -2453,10 +2453,13 @@ let SKEEP = { cur: '', tops: {} }; /* cur — ключ вида на экран�
 
 /* ключ текущего вида из живого состояния: хранимые — префиксы tab:/cal:,
    подэкраны и карточки — буквальные имена navScreen() (вход на них — всегда верх).
-   Календарь проверяется ПЕРВЫМ: navScreen() вернул бы общее 'cal' без вида/даты */
+   Приоритет — navScreen(): подэкраны поверх календаря (Настройки из Календаря)
+   получают свой нехранимый ключ, а не 'cal:' — иначе same-key skip блокирует
+   верх, а closeSettings перезаписывает снапшот календаря текущим скроллом.
+   cal-ветка разворачивает общее 'cal' navScreen() в ключ с видом/датой */
 function scrollKey() {
-    if (calVisible()) return 'cal:' + CAL.view + ':' + CAL.date;
     const s = navScreen();
+    if (s === 'cal') return 'cal:' + CAL.view + ':' + CAL.date;
     if (s !== 'tab') return s; /* settings/help/goals/gw/workout/techCard */
     if (tab === 'history') return 'tab:h';
     if (tab === 'stats') return 'tab:s|' + STATS.period;
@@ -4042,6 +4045,7 @@ async function goalCancelGo(id) {
     g.status = 4; /* в JSON статус 4 остаётся, в интерфейсе не показывается (§8.3) */
     const r = await save();
     if (r !== 'ok') { render(); return; } /* сбой сети: цель не отменена — правку откатит перечитывание */
+    scrollDropAll(); /* [UX-I22] активных целей стало меньше — устаревшие позиции долой */
     render();
 }
 /* удаление из архива — безвозвратно и без confirm (§4.3: архив на расчёты не влияет) */
@@ -4049,6 +4053,7 @@ async function goalArchiveDelGo(id) {
     const i = (G.goals || []).findIndex(g => g.id === +id);
     if (i < 0) return;
     G.goals.splice(i, 1);
+    scrollDropAll(); /* [UX-I22] архив сократился — устаревшие позиции долой */
     const r = await save();
     if (r === 'ok') toast('Удалено из архива');
     render();

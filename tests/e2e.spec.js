@@ -6797,4 +6797,80 @@ test.describe('[UX-T49] scroll restoration', function () {
         await expect(page.locator('.backbar')).toHaveCount(0);
         await expectScrollNear(page, 0, 1); /* завершение: список с верха, старые позиции долой */
     });
+
+    test('живой поиск §10.7: карточка туда-сюда — позиция восстановлена под ключом с q=', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        /* fill диспатчит input — живой поиск фильтрует список (§4.4: SKEEP.cur следует за q) */
+        await page.locator('#techQ').fill('жим');
+        await expect(page.locator('#techList .excard').first()).toContainText('Жим штанги лёжа');
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
+        await pageScrollTo(page, 300);
+        await jsClick(page.locator('#techList .excard'));
+        await expect(page.locator('[data-act="techBack"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* карточка — верх */
+        await page.locator('[data-act="techBack"]').click();
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        /* список по-прежнему отфильтрован, позиция — под НОВЫМ ключом (с q=жим), не под старым */
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
+        await expectScrollNear(page, 300, 40); /* lazy-визуалы карточек — допуск (спека §7) */
+    });
+
+    test('живой поиск: уход-возврат хранит фильтр и позицию (q= в ключе); смена вкладки — сброс [UX-T20]', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        await page.locator('#techQ').fill('жим');
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
+        await pageScrollTo(page, 300);
+        /* подэкран туда-сюда: q живёт в состоянии TECH — возврат под ключом с q= */
+        await jsClick(page.locator('.topbar [data-act="openSettings"]'));
+        await expect(page.locator('[data-act="closeSettings"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* Настройки — верх */
+        await page.locator('[data-act="closeSettings"]').first().click();
+        await expect(page.locator('#techList .excard').first()).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' })).toHaveCount(0);
+        await expectScrollNear(page, 300, 40); /* позиция восстановлена корректно */
+        /* нижнее меню — другой механизм: вход на Технику сбрасывает поиск [UX-T20]:
+           свежий ключ без q → полный список С ВЕРХА, устаревший снапшот под q-ключом
+           не применяется (без синхронизации §4.4 сюда приехал бы y=300 полного списка) */
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="stats"]').click();
+        await expect(page.locator('.statgrid')).toBeVisible({ timeout: 5000 });
+        await page.locator('.nav .nbtn[data-act="switchTab"][data-a="tech"]').click();
+        await expect(page.locator('#techList .excard', { hasText: 'Приседания со штангой' }).first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1);
+    });
+
+    test('Настройки из Календаря: вход — верх, выход — позиция календаря восстановлена', async ({ page, request }) => {
+        /* по живому прогону ревьюера: годовой вид, cal на y=77; настройки поверх календаря
+           получали ключ cal:… — same-key skip блокировал верх, closeSettings перезаписывал
+           снапшот календаря. scrollKey теперь берёт приоритет из navScreen(): settings > cal */
+        await seedLongHistory(request);
+        await openApp(page);
+        await page.locator('.topbar [data-act="openCal"]').click();
+        await expect(page.locator('.card.cal')).toBeVisible({ timeout: 5000 });
+        await jsClick(page.locator('.topbar [data-act="openCalPicker"]'));
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+        await page.locator('.modal.open .pli', { hasText: 'Год' }).click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.cal-title')).toContainText(String(new Date().getFullYear()));
+        /* годовой вид чуть выше вьюпорта: целимся в y=77 (прогон ревьюера), но не глубже max */
+        const y = await page.evaluate(function () {
+            const max = document.documentElement.scrollHeight - window.innerHeight;
+            window.scrollTo(0, Math.min(77, max));
+            return window.scrollY;
+        });
+        expect(y).toBeGreaterThan(0); /* страница скроллится — проверка восстановления осмысленна */
+        await expectScrollNear(page, y, 1);
+        /* ⚙ поверх календаря: calOpen остаётся взведённым — ключ должен стать 'settings' */
+        await jsClick(page.locator('.topbar [data-act="openSettings"]'));
+        await expect(page.locator('[data-act="closeSettings"]').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* верх, а не y (ранее same-key skip блокировал) */
+        await page.locator('[data-act="closeSettings"]').first().click();
+        await expect(page.locator('.card.cal')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, y, 3); /* снапшот календаря не перезаписан скроллом Настроек */
+    });
 });
