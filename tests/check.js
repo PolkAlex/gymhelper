@@ -3,6 +3,10 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const app = fs.readFileSync(path.join(root, 'web', 'app.js'), 'utf8');
 const cat = fs.readFileSync(path.join(root, 'web', 'catalog.js'), 'utf8');
+/* [FIT-S2] bodymap.js — модуль карты мышц: свой разметочный data-act="mapZone" (bodySvg),
+   participates в проверке пары «data-act ↔ ACTIONS» наравне с app.js */
+const bodymap = fs.readFileSync(path.join(root, 'web', 'bodymap.js'), 'utf8');
+const appUi = app + bodymap;
 const fails = [];
 
 if (/\.startedAt|\.endedAt/.test(app)) {
@@ -16,8 +20,8 @@ if (!actBlock) {
     const keys = new Set();
     for (const m of actBlock[1].matchAll(/([a-zA-Z]+):\s*(?:async\s+)?function/g)) keys.add(m[1]);
     const used = new Set();
-    for (const m of app.matchAll(/data-act="([a-zA-Z]+)"/g)) used.add(m[1]);
-    for (const m of app.matchAll(/data-b="([a-zA-Z]+)"/g)) used.add(m[1]);
+    for (const m of appUi.matchAll(/data-act="([a-zA-Z]+)"/g)) used.add(m[1]);
+    for (const m of appUi.matchAll(/data-b="([a-zA-Z]+)"/g)) used.add(m[1]);
     for (const m of app.matchAll(/confirmModal\([^,]+,\s*'([a-zA-Z]+)'/g)) used.add(m[1]);
     for (const u of used) {
         if (!keys.has(u)) fails.push('data-act/data-b без обработчика в ACTIONS: ' + u);
@@ -28,7 +32,7 @@ if (!actBlock) {
            tplSaveModal [UX-T18]: иконка «💾 В шаблоны» из шапки завершённой убрана,
            ACTION и модалка сохранения остались (фича живёт в боте) */
         if (k === 'nutrModal' || k === 'autoTitle' || k === 'deleteSet' || k === 'tplSaveModal') continue;
-        if (!app.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"') && !app.includes("'" + k + "'")) {
+        if (!appUi.includes('data-act="' + k + '"') && !app.includes('data-b="' + k + '"') && !app.includes("'" + k + "'")) {
             fails.push('обработчик ACTIONS никогда не используется: ' + k);
         }
     }
