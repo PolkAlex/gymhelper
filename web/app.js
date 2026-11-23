@@ -629,7 +629,10 @@ window.addEventListener('focus', function () {
    [UX-T29] saveProfile — тоже: поправил дату после тоста-ошибки и сразу жмёшь «Сохранить» */
 const NO_DEDUP = {
     wAdd: 1, wSet: 1, wClr: 1, setsSet: 1, repsSet: 1, repsAdd: 1, rClr: 1, sClr: 1, saveEntry: 1, planTake: 1,
-    saveProfile: 1
+    saveProfile: 1,
+    /* [TRN-T2] тогл аватара формы тренера обновляется на месте (без render) — двойной
+       тап туда-обратно легален, дедуп одного элемента его гасил */
+    trAv: 1
 };
 function dispatchFromEl(el, ev) {
     const act0 = el.getAttribute('data-act');
@@ -3713,7 +3716,10 @@ async function trSaveCard(submit) {
     if (!card.displayName) { toast('Укажите отображаемое имя', true); return; }
     try {
         const r = await fetch('/api/social/card', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, card: card, submit: !!submit }) });
+            /* [TRN-T2 фикс] enabled:true — при первом включении создаёт серверную карточку
+               (card + enabled без prev), при повторном включении hidden сервер вернёт
+               статус draft по своим правилам (§5.4) */
+            body: JSON.stringify({ initData: INIT, card: card, submit: !!submit, enabled: true }) });
         let j = {};
         try { j = await r.json(); } catch (e2) { /* noop */ }
         if (r.status === 403) {
@@ -3765,10 +3771,23 @@ function trProfileCardHtml() {
         return h + '<div class="hr"></div>' + trFindRow() + trCommunityRow() + '</div>';
     }
     if (!on) {
-        h += '<div class="setrow"><span class="lbl"><b>Я тренер</b>' +
-            '<span>Включите, чтобы создать публичную карточку тренера. В поиске карточка появится только после подтверждения владельцем.</span></span>' +
-            swToggleHtml(false, 'trToggle', null, 'Я тренер') + '</div>';
-        if (hidden) h += '<p class="meta">Режим был выключен — включите тогл и отправьте карточку на проверку заново.</p>';
+        if (TR.open) {
+            /* [TRN-T2 фикс] тогл раскрыл форму (§5.1, макет Э-2): для первого включения —
+               пустой черновик (серверной карточки ещё нет, card:null), для повторного
+               включения hidden — форма с сохранённым контентом (правка hidden → draft,
+               серверные правила статусов); сохранение шлёт enabled:true и создаёт/возвращает
+               серверную карточку */
+            h += '<div class="trhead"><span class="lbl"><b>Режим тренера</b><span>'
+                + (hidden ? 'Карточка была выключена — проверьте данные и отправьте заново'
+                    : 'Новая карточка — заполните и сохраните')
+                + '</span></span>' + trBadge('draft') + '</div>';
+            h += trFormHtml(hidden ? card : { status: 'draft' });
+        } else {
+            h += '<div class="setrow"><span class="lbl"><b>Я тренер</b>' +
+                '<span>Включите, чтобы создать публичную карточку тренера. В поиске карточка появится только после подтверждения владельцем.</span></span>' +
+                swToggleHtml(false, 'trToggle', null, 'Я тренер') + '</div>';
+            if (hidden) h += '<p class="meta">Режим был выключен — включите тогл и отправьте карточку на проверку заново.</p>';
+        }
         return h + '<div class="hr"></div>' + trFindRow() + trCommunityRow() + '</div>';
     }
     /* режим включён: статус + форма (аккордеон, §5.1) */
