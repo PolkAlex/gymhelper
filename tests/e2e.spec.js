@@ -6891,10 +6891,11 @@ test.describe('[UX-S17] заметка тренировки', function () {
         });
         await ta.fill(NOTE);
         expect((await noteSaved).status()).toBe(200);
-        /* завершение — список истории ([UX-T13]); открываем завершённую карточку */
+        /* [FIT-T1] решение владельца 1-А (23.11, меняет [UX-T13]): после завершения
+           остаёмся в открытой карточке — заметка на месте в ней же (§9.5);
+           backbar переключается на завершённый набор, «← Назад» — в историю как раньше */
         await page.locator('.backbar [data-act="finishWorkout"]').click();
-        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
-        await page.locator('.pcard').first().click();
+        await expect(page.locator('.backbar', { hasText: 'Повторить' })).toBeVisible({ timeout: 5000 });
         const fin = page.locator('textarea.notefield');
         await expect(fin).toHaveValue(NOTE, { timeout: 5000 });
         /* редактируется тем же полем: правка + blur — flush до сервера */
