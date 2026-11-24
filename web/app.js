@@ -1743,6 +1743,14 @@ const ACTIONS = {
     trCodeOpen: function () { TR.codeOpen = true; render(); },
     trCodeClose: function () { TR.codeOpen = false; render(); },
     trCodeApply: function () { trCodeApply(); },
+    /* [TRN-T4, решение №5] контакт тренера после связки: t.me/<username> */
+    trContact: function (a) {
+        const url = 'https://t.me/' + String(a || '').replace(/[^a-z0-9_]/g, '');
+        if (!url.endsWith('_') && url.length > 'https://t.me/'.length) {
+            if (tg && tg.openLink) tg.openLink(url);
+            else window.open(url, '_blank');
+        }
+    },
     /* [TRN-T3] поиск: чипы/сброс/повтор/карточка; [TRN-T6] «Сообщество» — открытая TG-группа */
     trFind: function () { ACTIONS.switchTab('coach'); },
     trCommunity: function () {
@@ -4193,6 +4201,11 @@ function trMyTrainerHtml() {
     h += '<div class="btnrow"><button class="btn sec" data-act="trGrantAll" data-a="1">Открыть всё</button>' +
         '<button class="btn sec" data-act="trGrantAll" data-a="0">Закрыть всё</button></div>' +
         '<p class="meta">Изменения применяются сразу — тренер видит актуальное состояние.</p>';
+    /* [TRN-T4, решение №5] контакт тренера — раскрыт только после связки; username
+       скрыт настройками Telegram — кнопка не рендерится (без заглушек) */
+    if (l.tgUsername) {
+        h += '<div class="btnrow"><button class="btn sec wide" data-act="trContact" data-a="' + escAttr(l.tgUsername) + '">✉️ Написать в Telegram</button></div>';
+    }
     const log = trMe().grantLog || [];
     if (log.length) {
         h += '<details class="plain"><summary>Журнал согласий<span class="chev">▸</span></summary><div class="ddlist">';
@@ -4646,6 +4659,10 @@ function trDetailHtml(c) {
         const pending = (trMe().myRequest && +trMe().myRequest.trainer === +c.userId) || TR.applySent[+c.userId];
         if (myTrainer) {
             h += '<div class="btnrow"><button class="btn sec wide" disabled>Уже Ваш тренер ✓</button></div>';
+            /* [TRN-T4, решение №5] контакт раскрыт после связки (tgUsername из search для связанного) */
+            if (c.tgUsername) {
+                h += '<div class="btnrow"><button class="btn sec wide" data-act="trContact" data-a="' + escAttr(c.tgUsername) + '">✉️ Написать в Telegram</button></div>';
+            }
         } else if (pending) {
             h += '<div class="btnrow"><button class="btn sec wide" disabled>Заявка отправлена ⏳</button></div>' +
                 '<p class="meta">Тренер получит уведомление. Заявка висит 14 дней.</p>';

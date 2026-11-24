@@ -1105,8 +1105,8 @@ public final class WebServer {
         List<Object> asTrainer = new ArrayList<>();
         List<Object> asStudent = new ArrayList<>();
         for (SocialLink l : d.links) {
-            if (l.trainer == userId) asTrainer.add(linkView(l, d.trainers.get(l.student)));
-            if (l.student == userId) asStudent.add(linkView(l, d.trainers.get(l.trainer)));
+            if (l.trainer == userId) asTrainer.add(linkView(l, d.trainers.get(l.student), null));
+            if (l.student == userId) asStudent.add(linkView(l, d.trainers.get(l.trainer), d.trainers.get(l.trainer)));
         }
         resp.put("linksAsTrainer", asTrainer);
         resp.put("linksAsStudent", asStudent);
@@ -1134,9 +1134,16 @@ public final class WebServer {
     /* связка для /api/social/me: данные как в файле + имя контрагента (после связки
        контакт раскрыт — §13.1). Имя тренера — из его карточки; имя подопечного —
        снимок из initData при связке (studentName); карточки у контрагента нет — null */
-    private Map<String, Object> linkView(SocialLink l, TrainerCard peer) {
+    /* связка для /api/social/me: данные как в файле + имя контрагента (после связки
+       контакт раскрыт — §13.1). Имя тренера — из его карточки; имя подопечного —
+       снимок из initData при связке (studentName); карточки у контрагента нет — null.
+       [TRN-T4, решение №5] username тренера — только СВОЕМУ подопечному (trainerCard). */
+    private Map<String, Object> linkView(SocialLink l, TrainerCard peer, TrainerCard trainerCard) {
         Map<String, Object> m = l.toJson();
         m.put("peerName", peer == null ? null : peer.displayName);
+        if (trainerCard != null && !trainerCard.tgUsername.isEmpty()) {
+            m.put("tgUsername", trainerCard.tgUsername);
+        }
         return m;
     }
 
@@ -1200,6 +1207,11 @@ public final class WebServer {
                пустой photo_url (Telegram не дал ссылку) прежний аватар не затирает */
             String photo = initUserPhoto((String) body.get("initData"));
             if (!photo.isEmpty()) card.photoUrl = photo;
+            /* [TRN-T4, решение №5] username тренера — снимок из initData (служебное поле,
+               контакт подопечному раскрывается только после связки); пустой/скрытый
+               username прежний не затирает */
+            String uname = initUserUsername((String) body.get("initData"));
+            if (!uname.isEmpty()) card.tgUsername = uname;
             card.updatedAt = nowIso();
             /* [TRN-T2] правка содержимого возвращает подтверждённую карточку на проверку (§5.3) */
             if (TrainerCard.STATUS_VERIFIED.equals(card.status)) card.status = TrainerCard.STATUS_PENDING;
@@ -1327,6 +1339,11 @@ public final class WebServer {
         for (Map.Entry<Long, TrainerCard> e : hits) {
             Map<String, Object> cm = e.getValue().publicMap();
             cm.put("userId", e.getKey());
+            /* [TRN-T4, решение №5] контакт — только запрашивающему, связанному с этим
+               тренером (после связки §13.1); остальным поиск контакта не отдаёт */
+            if (!e.getValue().tgUsername.isEmpty() && d.linkBetween(e.getKey(), userId) != null) {
+                cm.put("tgUsername", e.getValue().tgUsername);
+            }
             cards.add(cm);
         }
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -1597,6 +1614,33 @@ public final class WebServer {
         sendJson(ex, 400, Map.of("ok", false));
     }
 
+    /* [TRN-T4, решение №5] Telegram-username тренера из ПОДПИСАННОГО initData
+       (user.username) — server-owned ПДн, клиентский payload не доверенный.
+       Нормализация: trim/lowercase/ведущий @ отрезается, [a-z0-9_]{5,32};
+       мусор или скрытый username → пусто (кнопка контакта не рендерится). */
+    static String initUserUsername(String initData) {
+        if (initData == null || initData.isEmpty()) return "";
+        try {
+            Map<String, String> params = new HashMap<>();
+            for (String pair : initData.split("&")) {
+                int i = pair.indexOf('=');
+                if (i <= 0) continue;
+                params.put(URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8),
+                    URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8));
+            }
+            String userJson = params.get("user");
+            if (userJson == null) return "";
+            Map<String, Object> user = Json.map(Json.parse(userJson));
+            String u = Json.str(user, "username");
+            if (u == null) return "";
+            u = u.strip().toLowerCase();
+            if (u.startsWith("@")) u = u.substring(1);
+            return u.matches("[a-z0-9_]{5,32}") ? u : "";
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
     /* 6 символов, алфавит без похожих (§7.2); коллизия в пределах активных кодов
        исключена перегенерацией (как newShareId) */
     private static final String INVITE_ALPHABET = "ABCDEFGHJKLMNPRTUVWXY23456789";
@@ -1699,6 +1743,11 @@ public final class WebServer {
         resp.put("name", link.studentName.isEmpty() ? "Подопечный" : link.studentName);
         resp.put("since", link.since);
         resp.put("grants", link.toJson().get("grants"));
+        /* [TRN-T4, №5] контакт запрашивающего тренера — его подопечному */
+        TrainerCard selfCard = d.trainers.get(userId);
+        if (selfCard != null && !selfCard.tgUsername.isEmpty()) {
+            resp.put("tgUsername", selfCard.tgUsername);
+        }
         GymData g = storage.load(studentId);
         LocalDateTime now = LocalDateTime.now();
         String cutoff = now.minusDays(30).toLocalDate().toString();

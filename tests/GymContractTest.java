@@ -2497,7 +2497,7 @@ public class GymContractTest {
             stB2.save(601, adultProfile(35));
             stB2.save(602, adultProfile(26));
             stB2.save(603, adultProfile(24));
-            String idT = tgInitData("contract-test-token", 601, "Игорь Соколов");
+            String idT = tgInitData("contract-test-token", 601, "Игорь Соколов", "", "igor_trainer");
             String idS = tgInitData("contract-test-token", 602, "Анна Ковалёва");
             String idS3 = tgInitData("contract-test-token", 603, "Павел Гурин");
             check(postJson(portB2, "/api/social/card",
@@ -2505,6 +2505,14 @@ public class GymContractTest {
                     + "\"specs\":[\"rehab\"],\"years\":6,\"education\":[\"РГУФК\"],\"cap\":2}}").statusCode() == 200,
                 "b2: карточка тренера (лимит 2 подопечных) — 200");
             stB2.social().get().trainers.get(601L).status = TrainerCard.STATUS_VERIFIED;
+            /* [TRN-T4, №5] username тренера — снимок из initData, lowercase без @ */
+            check("igor_trainer".equals(stB2.social().get().trainers.get(601L).tgUsername),
+                "b2: tgUsername тренера из подписанного initData (lowercase, без @)");
+            /* публичная проекция невязанного подопечного контакта не содержит */
+            java.net.http.HttpResponse<String> rsearchNo = postJson(portB2, "/api/social/search",
+                "{\"initData\":\"" + idS + "\"}");
+            check(!rsearchNo.body().contains("igor_trainer"),
+                "b2: поиск НЕ отдаёт контакт пока подопечный не связан (решение №5)");
 
             /* заявка: пуш тренеру (имя/комментарий/кнопки разбора §14.1) + socialApply */
             check(postJson(portB2, "/api/social/apply",
@@ -2637,6 +2645,13 @@ public class GymContractTest {
             check(rst.statusCode() == 200, "b2: /api/social/student — 200");
             Map<String, Object> stMap = Json.map(Json.parse(rst.body()));
             check("Марина Лысак".equals(stMap.get("name")), "b2: имя подопечного из связки");
+            /* [TRN-T4, №5] связанному подопечному контакт раскрыт: student + search */
+            check("igor_trainer".equals(stMap.get("tgUsername")),
+                "b2: /api/social/student отдаёт контакт тренера связанному подопечному");
+            java.net.http.HttpResponse<String> rsearchL = postJson(portB2, "/api/social/search",
+                "{\"initData\":\"" + id4 + "\"}");
+            check(rsearchL.body().contains("\"tgUsername\":\"igor_trainer\""),
+                "b2: search отдаёт контакт СВЯЗАННОМУ подопечному (решение №5)");
             check(stMap.get("progress") != null && stMap.get("body") != null
                     && Json.lng(stMap.get("kcal30")) > 0 && stMap.get("goals") != null,
                 "b2: все 4 гранта включены — все агрегаты в ответе");
@@ -2650,11 +2665,13 @@ public class GymContractTest {
             check(glSt.size() == 1 && Json.lng(Json.map(glSt.get(0)).get("target")) == 100
                     && Json.lng(Json.map(glSt.get(0)).get("pct")) > 0,
                 "b2: силовая цель с прогрессом pct>0 (лучший e1RM / цель)");
-            /* без связки → 404-семантика ok:false reason nolink */
-            Map<String, Object> rstBad = Json.map(Json.parse(postJson(portB2, "/api/social/student",
-                "{\"initData\":\"" + idS + "\",\"studentId\":604}").body()));
-            check(Boolean.FALSE.equals(rstBad.get("ok")) && "nolink".equals(rstBad.get("reason")),
-                "b2: чужой студент не отдаётся — 404-семантика nolink");
+            /* без связки → 404-семантика ok:false reason nolink; username не утекает */
+            java.net.http.HttpResponse<String> rstBadRaw = postJson(portB2, "/api/social/student",
+                "{\"initData\":\"" + idS + "\",\"studentId\":604}");
+            Map<String, Object> rstBad = Json.map(Json.parse(rstBadRaw.body()));
+            check(Boolean.FALSE.equals(rstBad.get("ok")) && "nolink".equals(rstBad.get("reason"))
+                    && !rstBadRaw.body().contains("igor_trainer"),
+                "b2: чужой студент не отдаётся — 404 nolink, username не утекает");
 
             /* [TRN-T6] жалоба: уведомление владельцу + socialComplaint */
             int sentBefore = spyB2.sent.size();
@@ -2666,6 +2683,31 @@ public class GymContractTest {
                 "b2: владельцу 8888 ушла жалоба (§13.4)");
             check(Json.lng(Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body())).get("socialComplaint")) == 1,
                 "b2: socialComplaint=1 (§17)");
+            /* [TRN-T4, №5] me связанному подопечному — tgUsername в linksAsStudent */
+            Map<String, Object> meB2b = Json.map(Json.parse(
+                postJson(portB2, "/api/social/me", "{\"initData\":\"" + id4 + "\"}").body()));
+            java.util.List<Object> linksB2b = Json.list(meB2b.get("linksAsStudent"));
+            check(linksB2b != null && !linksB2b.isEmpty()
+                    && "igor_trainer".equals(Json.map(linksB2b.get(0)).get("tgUsername")),
+                "b2: /api/social/me — контакт тренера в связке своего подопечного");
+            /* legacy: старый social.json без tgUsername читается, ключ не пишется */
+            java.nio.file.Path tmpLeg = java.nio.file.Files.createTempDirectory("gymsocialtg");
+            java.nio.file.Files.writeString(tmpLeg.resolve("social.json"),
+                "{\"ver\":1,\"trainers\":{\"3\":{\"displayName\":\"Старая карточка\"}}}",
+                java.nio.charset.StandardCharsets.UTF_8);
+            TrainerCard leg = new Storage(tmpLeg).social().get().trainers.get(3L);
+            check(leg != null && "Старая карточка".equals(leg.displayName) && leg.tgUsername.isEmpty(),
+                "b2: legacy-карточка без tgUsername читается (формат совместим)");
+            check(!Json.write(leg.toMap()).contains("tgUsername"),
+                "b2: toMap legacy-карточки не пишет ключ tgUsername");
+            /* нормализация username: мусор/короткий → пусто */
+            stB2.save(606, adultProfile(30));
+            String id6 = tgInitData("contract-test-token", 606, "Пётр", "", "abc");
+            check(postJson(portB2, "/api/social/card",
+                "{\"initData\":\"" + id6 + "\",\"card\":{\"displayName\":\"Пётр\"}}").statusCode() == 200,
+                "b2: карточка с мусорным username — 200");
+            check(stB2.social().get().trainers.get(606L).tgUsername.isEmpty(),
+                "b2: username не по [a-z0-9_]{5,32} → пусто (кнопка не отрендерится)");
         } catch (Exception b2Err) {
             throw new AssertionError("CONTRACT FAIL: b2 " + b2Err);
         }
@@ -2687,10 +2729,17 @@ public class GymContractTest {
             "{\"id\":" + userId + ",\"first_name\":\"" + firstName + "\"}");
     }
 
-    /* [TRN-T3] вариант с photo_url: аватар карточки сервер берёт ТОЛЬКО из подписанного initData */
+    /* [TRN-T4, №5] вариант с photo_url + username (контакт тренера из подписанного initData) */
     static String tgInitData(String token, long userId, String firstName, String photoUrl) throws Exception {
         return tgInitDataUser(token, userId,
             "{\"id\":" + userId + ",\"first_name\":\"" + firstName + "\",\"photo_url\":\"" + photoUrl + "\"}");
+    }
+
+    static String tgInitData(String token, long userId, String firstName, String photoUrl, String username) throws Exception {
+        String u = username == null || username.isEmpty() ? ""
+            : ",\"username\":\"" + username + "\"";
+        return tgInitDataUser(token, userId,
+            "{\"id\":" + userId + ",\"first_name\":\"" + firstName + "\"" + u + ",\"photo_url\":\"" + photoUrl + "\"}");
     }
 
     /* подпись initData по правилам Telegram по готовому user-json (см. WebServer.validateInitData) */
