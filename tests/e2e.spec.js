@@ -442,8 +442,11 @@ test.describe('GymHelper e2e', function () {
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
         /* [UX-S4] тогл темы: ровно один role=switch «Тёмная тема» */
         await expect(page.locator('[role="switch"][aria-label="Тёмная тема"]')).toHaveCount(1);
-        /* раздел «Тренер» доступен из настроек: switchTab закрывает Настройки [UX-S4 §12.9] */
-        await page.locator('#app button', { hasText: 'Открыть раздел' }).click();
+        /* раздел «Тренер» доступен из Профиля: switchTab закрывает Настройки [UX-S4 §12.9;
+           TRN-T6/№14 — вход из Настроек убран, карточка «Советы и программы» — заглушка] */
+        await page.locator('.topbar [aria-label="Назад"]').click();
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await page.locator('[data-act="trFind"]', { hasText: 'Найти тренера' }).click();
         await expect(page.locator('.tb-title')).toContainText('GymHelper · Тренер', { timeout: 5000 });
     });
 
@@ -3352,7 +3355,9 @@ test.describe('UX-T27: экран «Настройки»', function () {
             await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
             await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
             await expect(page.locator('.card', { hasText: '⏱ Таймер отдыха' })).toBeVisible();
-            await expect(page.locator('.card', { hasText: '🧑‍🏫 Персональный тренер' })).toBeVisible();
+            /* [TRN-T6, решение №14] карточка «Советы и программы» (контент-заглушка,
+               вход в соцслой из Настроек убран — соцслой на вкладке «Тренер») */
+            await expect(page.locator('.card', { hasText: '📚 Советы и программы' })).toBeVisible();
             /* [ONB-T2] политика реализована: пункт есть в Настройках на любой вкладке */
             await expect(page.locator('#app button', { hasText: 'Политика конфиденциальности' })).toBeVisible({ timeout: 5000 });
             await page.locator('.topbar [aria-label="Назад"]').click();
@@ -3832,9 +3837,9 @@ test.describe('UX-S6 календарь', function () {
             await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · ' + t);
             await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
         }
-        /* «Тренер» — через Настройки («Открыть раздел») */
-        await page.locator('.topbar [data-act="openSettings"]').click();
-        await page.locator('[data-act="switchTab"][data-a="coach"]').click();
+        /* «Тренер» — через Профиль → «Найти тренера» (решение №14: вход из Настроек убран) */
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        await page.locator('[data-act="trFind"]', { hasText: 'Найти тренера' }).click();
         await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · Тренер');
         await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
         /* тап с Профиля: заголовок, «Назад», шестерёнка в topbar, календарь отрисован [S6-update5]
@@ -7239,7 +7244,8 @@ function trMeBody(card) {
     return { ok: true, card: card || null, linksAsTrainer: [], linksAsStudent: [],
         requests: [], myRequest: null, inviteCode: null };
 }
-/* мок соц-API: handlers = { me, search, card }, объект-ответ или функция(route) */
+/* мок соц-API: handlers = { me, search, card, apply, grants, invite, link, student },
+   объект-ответ или функция(route) */
 async function trMockSocial(page, handlers) {
     const wrap = function (h) {
         if (typeof h === 'function') return h;
@@ -7250,6 +7256,11 @@ async function trMockSocial(page, handlers) {
     if (handlers.me) await page.route('**/api/social/me', wrap(handlers.me));
     if (handlers.search) await page.route('**/api/social/search', wrap(handlers.search));
     if (handlers.card) await page.route('**/api/social/card', wrap(handlers.card));
+    if (handlers.apply) await page.route('**/api/social/apply', wrap(handlers.apply));
+    if (handlers.grants) await page.route('**/api/social/grants', wrap(handlers.grants));
+    if (handlers.invite) await page.route('**/api/social/invite', wrap(handlers.invite));
+    if (handlers.link) await page.route('**/api/social/link', wrap(handlers.link));
+    if (handlers.student) await page.route('**/api/social/student', wrap(handlers.student));
 }
 /* открытие приложения с идентичностью Telegram (user → initDataUnsafe) */
 async function trOpenAppAs(page, user) {
@@ -7257,11 +7268,11 @@ async function trOpenAppAs(page, user) {
     await page.goto(url);
     await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
 }
-/* вход в раздел «Тренер» через Настройки → «Открыть раздел» (§6.1) */
+/* вход в раздел «Тренер» через Профиль → «Найти тренера» (§6.1; решение владельца
+   12.11 №14 — вход из Настроек убран: карточка «Советы и программы» — контент-заглушка) */
 async function trOpenCoachViaSettings(page) {
-    await page.locator('[aria-label="Настройки"]').click();
-    await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
-    await page.locator('.card', { hasText: 'Персональный тренер' }).locator('[data-act="switchTab"][data-a="coach"]').click();
+    await page.locator('.nav button', { hasText: 'Профиль' }).click();
+    await page.locator('[data-act="trFind"]', { hasText: 'Найти тренера' }).click();
     await expect(page.locator('.tb-title')).toHaveText('GymHelper · Тренер', { timeout: 5000 });
 }
 /* карточка «Тренер» на вкладке Профиль */
@@ -7271,8 +7282,8 @@ function trProfileCard(page) {
 
 test.describe('[TRN-T2/T3] Тренер: соцслой', function () {
 
-    /* [TRN-T3 §6.1] точка входа из Настроек; автопоиск на первом входе (§6.2) */
-    test('раздел «Тренер» открывается из Настроек: автопоиск выполняется, результат рендерится', async ({ page }) => {
+    /* [TRN-T3 §6.1/точка входа] раздел «Тренер» из Профиля (после №14): автопоиск выполняется, результат рендерится */
+    test('раздел «Тренер» открывается из Профиля: автопоиск выполняется, результат рендерится', async ({ page }) => {
         let searches = 0;
         await trMockSocial(page, {
             search: function (route) {
@@ -7292,10 +7303,9 @@ test.describe('[TRN-T2/T3] Тренер: соцслой', function () {
     });
 
     /* [TRN-T2 §5.1/§4.4] 18+ гейт: плашка в карточке «Тренер», тогл отклоняется;
-       поиск несовершеннолетнего при 403 reason age показывает «Не удалось загрузить»:
-       ИЗВЕСТНОЕ МИКРО-ЗАМЕЧАНИЕ ревью, текст не различает возрастной гейт и сбой сети
-       (сервер отвечает 403 {reason:'age'}, TR.err → общий текст). Фикс в [TRN-T4] */
-    test('несовершеннолетний: плашка 18+, тогл тостом, поиск при 403 age даёт «Не удалось загрузить» (известное замечание)', async ({ page, request }) => {
+       [TRN-T5 фикс микро-замечания ревью] поиск несовершеннолетнего при 403 reason age
+       показывает возрастную плашку (текст больше не путается со сбоем сети) */
+    test('несовершеннолетний: плашка 18+, тогл тостом, поиск при 403 age — возрастная плашка', async ({ page, request }) => {
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
             profile: { sex: 'ж', age: 14, height: 160, weight: 50, birthYear: 2012, birthMonth: 1 },
@@ -7313,11 +7323,11 @@ test.describe('[TRN-T2/T3] Тренер: соцслой', function () {
         await expect(page.locator('.toast.show')).toHaveText('Раздел «Тренер» доступен с 18 лет', { timeout: 5000 });
         /* форма не открылась */
         await expect(page.locator('#trName')).toHaveCount(0);
-        /* поиск: сервер 403 age → TR.err → общий текст ошибки (замечание T4/T5) */
+        /* поиск: сервер 403 age → [TRN-T5 фикс] возрастная плашка вместо общей ошибки */
         await card.locator('[data-act="trFind"]').click();
         await expect(page.locator('.tb-title')).toHaveText('GymHelper · Тренер', { timeout: 5000 });
-        await expect(page.locator('#trList .empty')).toContainText('Не удалось загрузить', { timeout: 5000 });
-        await expect(page.locator('#trList [data-act="trRetry"]')).toBeVisible();
+        await expect(page.locator('#trList .empty')).toContainText('Раздел «Тренер» доступен с 18 лет', { timeout: 5000 });
+        await expect(page.locator('#trList [data-act="trRetry"]')).toHaveCount(0);
     });
     /* [TRN-T2 §5.1] режим выключен (взрослый): OFF-тогл, подсказка, строки поиска и сообщества */
     test('Профиль, режим выключен: OFF-тогл, подсказка, «Найти тренера» и «Сообщество» (заглушка)', async ({ page }) => {
@@ -7330,7 +7340,7 @@ test.describe('[TRN-T2/T3] Тренер: соцслой', function () {
         await expect(toggle).toHaveAttribute('aria-checked', 'false');
         await expect(card.locator('[data-act="trFind"]')).toContainText('Найти тренера');
         await card.locator('[data-act="trCommunity"]').click();
-        await expect(page.locator('.toast.show')).toHaveText('Сообщество появится в следующем обновлении', { timeout: 5000 });
+        await expect(page.locator('.toast.show')).toHaveText('Сообщество скоро — ссылку добавим в обновлении', { timeout: 5000 });
     });
 
     /* [TRN-T2 §5.2] форма карточки: лимиты имени/био/стажа, чипы до 3, лимит подопечных */
@@ -7543,15 +7553,17 @@ test.describe('[TRN-T2/T3] Тренер: соцслой', function () {
         await page.locator('#trList [data-act="trRetry"]').click();
         await expect(page.locator('#trList .tr-res', { hasText: 'Пётр Быстров' })).toBeVisible({ timeout: 5000 });
     });
-    /* [TRN-T3 §6.3] детальная карточка: инициалы без фото, ✔, секции, кнопка заявки: каркас T4 */
-    test('детальная карточка: инициалы, галка подтверждения, секции, заявка disabled, назад', async ({ page }) => {
+    /* [TRN-T3 §6.3 + TRN-T4] детальная карточка: инициалы без фото, ✔, секции,
+       заявка открывает модалку с комментарием, назад */
+    test('детальная карточка: инициалы, галка подтверждения, секции, заявка-модалка, назад', async ({ page }) => {
         await trMockSocial(page, { search: { ok: true, cards: [ {
             userId: 42, displayName: 'Игорь Соколов', city: 'Москва', gyms: '«Атлет»', years: 8,
             specs: ['loss'], useTgAvatar: false, photoUrl: null,
             bio: 'Работаю с новичками и снижением веса',
             schedule: ['Пн–Пт 07:00–21:00'],
             achievements: ['КМС по пауэрлифтингу'],
-            education: ['РГУФК, 2015'] } ] } });
+            education: ['РГУФК, 2015'] } ],
+            }, apply: { ok: true } });
         await trOpenAppAs(page, null);
         await trOpenCoachViaSettings(page);
         await page.locator('#trList .tr-res').click();
@@ -7562,9 +7574,12 @@ test.describe('[TRN-T2/T3] Тренер: соцслой', function () {
         await expect(page.locator('.card', { hasText: 'Расписание' })).toContainText('Пн–Пт 07:00–21:00');
         await expect(page.locator('.card', { hasText: 'Достижения' })).toContainText('КМС по пауэрлифтингу');
         await expect(page.locator('.card', { hasText: 'Образование' })).toContainText('РГУФК, 2015');
-        /* контакта нет, заявка: каркас до [TRN-T4] */
-        await expect(page.locator('button', { hasText: 'Стать подопечным' })).toBeDisabled();
-        await expect(page.locator('.card', { hasText: 'Стать подопечным' })).toContainText('Заявки в подопечные появятся в следующем обновлении.');
+        /* контакта нет; заявка [TRN-T4]: модалка с комментарием ≤200 */
+        await page.locator('[data-act="trApplyStart"]', { hasText: 'Стать подопечным' }).click();
+        await expect(page.locator('#trApplyComment')).toBeVisible({ timeout: 5000 });
+        await page.locator('#trApplyComment').fill('Цель — к лету, опыт 0');
+        await page.locator('[data-act="trApplySend"]').click();
+        await expect(page.locator('.btn', { hasText: 'Заявка отправлена ⏳' })).toBeVisible({ timeout: 5000 });
         /* назад к поиску */
         await page.locator('[data-act="trBack"]').click();
         await expect(page.locator('#trList .tr-res', { hasText: 'Игорь Соколов' })).toBeVisible({ timeout: 5000 });
@@ -7615,6 +7630,111 @@ test.describe('[TRN-T2/T3] Тренер: соцслой', function () {
         await expect(page.locator('.tb-title')).toHaveText('GymHelper · Тренер', { timeout: 5000 });
         /* автопоиск отработал: пустой каталог показан */
         await expect(page.locator('#trList .empty')).toContainText('Пока нет подтверждённых тренеров', { timeout: 5000 });
+    });
+
+    /* [TRN-T4 §7.1] заявка в подопечные: модалка с комментарием ≤200, payload,
+       состояние «Заявка отправлена ⏳» после ответа */
+    test('заявка в подопечные: модалка, payload trainerId+comment, кнопка ⏳', async ({ page }) => {
+        let applyPayload = null;
+        await trMockSocial(page, {
+            search: function (route) {
+                route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+                    ok: true, cards: [ { userId: 42, displayName: 'Игорь Соколов', city: 'Москва',
+                        gyms: '«Атлет»', years: 8, specs: ['loss'], useTgAvatar: false } ] }) });
+            },
+            apply: function (route) {
+                applyPayload = JSON.parse(route.request().postData());
+                route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+            }
+        });
+        await trOpenAppAs(page, { id: 9, first_name: 'Анна Ковалёва' });
+        await trOpenCoachViaSettings(page);
+        await page.locator('#trList .tr-res', { hasText: 'Игорь Соколов' }).click();
+        await page.locator('[data-act="trApplyStart"]').click();
+        await expect(page.locator('#trApplyComment')).toBeVisible({ timeout: 5000 });
+        await page.locator('#trApplyComment').fill('Хочу похудеть к лету, грыжа L5');
+        await page.locator('[data-act="trApplySend"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Заявка отправлена — тренер получит уведомление', { timeout: 5000 });
+        expect(applyPayload.trainerId).toBe(42);
+        expect(applyPayload.comment).toBe('Хочу похудеть к лету, грыжа L5');
+        await expect(page.locator('.btn', { hasText: 'Заявка отправлена ⏳' })).toBeVisible({ timeout: 5000 });
+    });
+
+    /* [TRN-T5 §8.1/§13.2] гранты: тогл payload, журнал согласий, разрыв связи */
+    test('мой тренер: гранты (тогл payload), журнал согласий, разрыв связи', async ({ page }) => {
+        let grantsPayload = null;
+        let breakCalled = false;
+        await trMockSocial(page, {
+            me: { ok: true, card: null, linksAsTrainer: [], linksAsStudent: [ {
+                trainer: 7, student: 9, since: '2026-11-20', source: 'apply',
+                peerName: 'Игорь Соколов', studentName: '',
+                grants: { progress: true, goals: false, bodyMetrics: false, kcal: false } } ],
+                requests: [], myRequest: null, inviteCode: null,
+                grantLog: [ { by: 9, trainer: 7, at: '2026-11-23T10:00:00', changes: { progress: true } } ] },
+            grants: function (route) {
+                grantsPayload = JSON.parse(route.request().postData());
+                route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+                    ok: true, grants: { progress: true, goals: true, bodyMetrics: false, kcal: false } }) });
+            },
+            link: function (route) {
+                breakCalled = true;
+                route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+            }
+        });
+        await trOpenAppAs(page, { id: 9, first_name: 'Анна' });
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const card = trProfileCard(page);
+        await expect(card).toContainText('Мой тренер', { timeout: 5000 });
+        await expect(card).toContainText('Игорь Соколов · с 20.11.2026');
+        /* тогл «Цели»: payload {trainerId, goals:true} */
+        await card.locator('[data-act="trGrant"][data-a="goals"]').click();
+        expect(grantsPayload.trainerId).toBe(7);
+        expect(grantsPayload.grants.goals).toBe(true);
+        /* журнал согласий: запись о включённом «Прогрессе» */
+        const det = page.locator('details.plain', { hasText: 'Журнал согласий' });
+        await det.locator('summary').click();
+        await expect(det).toContainText('Прогресс тренировок: вкл', { timeout: 5000 });
+        /* «Открыть всё» — один POST всеми ключами */
+        await card.locator('[data-act="trGrantAll"][data-a="1"]').click();
+        expect(grantsPayload.grants.bodyMetrics).toBe(true);
+        expect(grantsPayload.grants.kcal).toBe(true);
+        /* разрыв связи: подтверждение → POST link break */
+        await card.locator('[data-act="trBreakAsk"]').click();
+        await page.locator('[data-act="confirmYes"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Связь разорвана', { timeout: 5000 });
+        expect(breakCalled).toBe(true);
+    });
+
+    /* [TRN-T4 §7.2] код приглашения подопечным: раскрытие, payload action=use */
+    test('у меня есть код: раскрытие, payload action=use, отказ при связке скрыт', async ({ page }) => {
+        let invitePayload = null;
+        await trMockSocial(page, {
+            me: function (route) { route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(trMeBody(null)) }); },
+            invite: function (route) {
+                invitePayload = JSON.parse(route.request().postData());
+                route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+            }
+        });
+        await trOpenAppAs(page, { id: 9, first_name: 'Анна' });
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const card = trProfileCard(page);
+        await card.locator('[data-act="trCodeOpen"]').click();
+        await expect(page.locator('#trCodeInput')).toBeVisible({ timeout: 5000 });
+        await page.locator('#trCodeInput').fill('k7rm2x');
+        await page.locator('[data-act="trCodeApply"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Готово — тренер добавлен', { timeout: 5000 });
+        expect(invitePayload.action).toBe('use');
+        expect(invitePayload.code).toBe('K7RM2X'); /* верхний регистр */
+    });
+
+    /* [TRN-T6 §11] сообщество: без ссылки — заглушка-тост (ссылку владелец вписывает позже) */
+    test('сообщество: без настроенной ссылки — заглушка-тост, строка на месте', async ({ page }) => {
+        await trOpenAppAs(page, null);
+        await page.locator('.nav button', { hasText: 'Профиль' }).click();
+        const card = trProfileCard(page);
+        await expect(card).toContainText('Сообщество', { timeout: 5000 });
+        await card.locator('[data-act="trCommunity"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('Сообщество скоро — ссылку добавим в обновлении', { timeout: 5000 });
     });
 });
 

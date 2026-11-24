@@ -2351,11 +2351,22 @@ public class GymContractTest {
             check(postJson(portT2, "/api/social/link",
                 "{\"initData\":\"" + id11 + "\",\"action\":\"accept\",\"userId\":712}").statusCode() == 200,
                 "fix2a: первый accept — 200");
-            check(postJson(portT2, "/api/social/apply", "{\"initData\":\"" + id12 + "\",\"trainerId\":713}").statusCode() == 200,
-                "fix2a: заявка ко второму тренеру проходит (гейт — на accept)");
+            /* [TRN-T4] отказ на уровне заявки: apply ко второму тренеру сразу 409
+               (понятный отказ раньше; гвард accept остаётся от прямого обхода API) */
+            check(postJson(portT2, "/api/social/apply", "{\"initData\":\"" + id12 + "\",\"trainerId\":713}").statusCode() == 409,
+                "fix2a/t4: заявка ко второму тренеру при действующей связке — 409 (§7.4)");
+            check(postJson(portT2, "/api/social/link",
+                "{\"initData\":\"" + id13 + "\",\"action\":\"accept\",\"userId\":712}").statusCode() == 404,
+                "fix2a/t4: accept без заявки — 404 (заявка гвардится на apply)");
+            /* гвард accept от прямого обхода API: заявка вставлена в хранилище напрямую */
+            SocialRequest fr713 = new SocialRequest();
+            fr713.trainer = 713;
+            fr713.student = 712;
+            fr713.createdAt = java.time.LocalDateTime.now().withNano(0).toString();
+            stT2.social().get().requests.add(fr713);
             check(postJson(portT2, "/api/social/link",
                 "{\"initData\":\"" + id13 + "\",\"action\":\"accept\",\"userId\":712}").statusCode() == 409,
-                "fix2a: accept вторым тренером при действующей связке — 409 (§7.4)");
+                "fix2a: accept вторым тренером при действующей связке — 409 (гвард от прямого обхода)");
             java.net.http.HttpResponse<String> rinv13 = postJson(portT2, "/api/social/invite",
                 "{\"initData\":\"" + id13 + "\",\"action\":\"create\"}");
             check(rinv13.statusCode() == 200, "fix2a: код второго тренера — 200");
@@ -2468,6 +2479,197 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: t2 " + t2Err);
         }
 
+        /* [TRN-T4/T5/T6] связка: заявка→одобрение (пуши §14.1, статы §17), код (пуши §14.2),
+           разрыв (без пушей, §7.5), гранты + журнал согласий §13.2 (кап 20, no-op),
+           карточка подопечного /api/social/student (агрегаты по грантам, §8.3),
+           жалоба → уведомление владельцу. */
+        try {
+            java.nio.file.Path tmpB2 = java.nio.file.Files.createTempDirectory("gymsocialb2");
+            Storage stB2 = new Storage(tmpB2);
+            SpyApi spyB2 = new SpyApi();
+            WebServer wsB2 = new WebServer("contract-test-token", stB2, tmpB2,
+                new Stats(tmpB2.resolve("stats.json")), null, spyB2, 8888);
+            java.net.ServerSocket probeB2 = new java.net.ServerSocket(0);
+            int portB2 = probeB2.getLocalPort();
+            probeB2.close();
+            wsB2.start(portB2);
+            /* 601 тренер (взрослый, verified), 602/603/604 подопечные */
+            stB2.save(601, adultProfile(35));
+            stB2.save(602, adultProfile(26));
+            stB2.save(603, adultProfile(24));
+            String idT = tgInitData("contract-test-token", 601, "Игорь Соколов");
+            String idS = tgInitData("contract-test-token", 602, "Анна Ковалёва");
+            String idS3 = tgInitData("contract-test-token", 603, "Павел Гурин");
+            check(postJson(portB2, "/api/social/card",
+                "{\"initData\":\"" + idT + "\",\"card\":{\"displayName\":\"Игорь Соколов\",\"city\":\"Минск\","
+                    + "\"specs\":[\"rehab\"],\"years\":6,\"education\":[\"РГУФК\"],\"cap\":2}}").statusCode() == 200,
+                "b2: карточка тренера (лимит 2 подопечных) — 200");
+            stB2.social().get().trainers.get(601L).status = TrainerCard.STATUS_VERIFIED;
+
+            /* заявка: пуш тренеру (имя/комментарий/кнопки разбора §14.1) + socialApply */
+            check(postJson(portB2, "/api/social/apply",
+                "{\"initData\":\"" + idS + "\",\"trainerId\":601,\"comment\":\"Хочу к Вам, грыжа L5\"}").statusCode() == 200,
+                "b2: заявка — 200");
+            check(spyB2.sent.size() == 1 && spyB2.sent.get(0).startsWith("601:")
+                    && spyB2.sent.get(0).contains("Анна Ковалёва") && spyB2.sent.get(0).contains("грыжа L5")
+                    && spyB2.kbs.get(0).contains("soc:link_ok:602") && spyB2.kbs.get(0).contains("soc:link_no:602"),
+                "b2: тренеру пуш заявки (§14.1) с кнопками разбора");
+            Map<String, Object> snapB2 = Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body()));
+            check(Json.lng(snapB2.get("socialApply")) == 1, "b2: socialApply=1 (§17)");
+
+            /* accept: связка + гранты дефолтные + пуш подопечному + socialApprove */
+            check(postJson(portB2, "/api/social/link",
+                "{\"initData\":\"" + idT + "\",\"action\":\"accept\",\"userId\":602}").statusCode() == 200,
+                "b2: accept — 200");
+            check(spyB2.sent.size() == 2 && spyB2.sent.get(1).startsWith("602:")
+                    && spyB2.sent.get(1).contains("✅ Заявка принята") && spyB2.sent.get(1).contains("Игорь Соколов"),
+                "b2: подопечному пуш «принято» с именем тренера (§14.1)");
+            check(Json.lng(Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body())).get("socialApprove")) == 1,
+                "b2: socialApprove=1");
+
+            /* дубль-заявка после связки → 409 reason request; второй студент — до лимита */
+            java.net.http.HttpResponse<String> rh1 = postJson(portB2, "/api/social/apply",
+                "{\"initData\":\"" + idS3 + "\",\"trainerId\":601}");
+            check(rh1.statusCode() == 200, "b2: заявка второго студента — 200");
+            java.net.http.HttpResponse<String> rh2 = postJson(portB2, "/api/social/apply",
+                "{\"initData\":\"" + idS3 + "\",\"trainerId\":601}");
+            check(rh2.statusCode() == 409 && "request".equals(Json.str(Json.map(Json.parse(rh2.body())), "reason")),
+                "b2: дубль заявки — 409 reason request");
+            check(postJson(portB2, "/api/social/link",
+                "{\"initData\":\"" + idT + "\",\"action\":\"accept\",\"userId\":603}").statusCode() == 200,
+                "b2: accept второго — 200 (лимит 2 подопечных)");
+            java.net.http.HttpResponse<String> rb = postJson(portB2, "/api/social/link",
+                "{\"initData\":\"" + idT + "\",\"action\":\"break\",\"userId\":602}");
+            check(rb.statusCode() == 200, "b2: разрыв связи — 200");
+            /* пуши к этому моменту: заявка(601) + принято(602) + заявка(601) + принято(603) = 4;
+               при разрыве НОВЫХ пушей нет (§7.5 «мягко») */
+            check(spyB2.sent.size() == 4, "b2: при разрыве пушей нет (§7.5 «мягко»), а не " + spyB2.sent.size());
+            check(Json.lng(Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body())).get("socialLinkBreak")) == 1,
+                "b2: socialLinkBreak=1");
+
+            /* код: create → use → пуши ОБОИМ + socialInviteUse (603 без тренера после break) */
+            java.net.http.HttpResponse<String> rinvB2 = postJson(portB2, "/api/social/invite",
+                "{\"initData\":\"" + idT + "\",\"action\":\"create\"}");
+            check(rinvB2.statusCode() == 200, "b2: код создан");
+            String codeB2 = Json.str(Json.map(Json.parse(rinvB2.body())), "code");
+            stB2.save(604, adultProfile(28));
+            String id4 = tgInitData("contract-test-token", 604, "Марина Лысак");
+            java.net.http.HttpResponse<String> ruse = postJson(portB2, "/api/social/invite",
+                "{\"initData\":\"" + id4 + "\",\"action\":\"use\",\"code\":\"" + codeB2 + "\"}");
+            check(ruse.statusCode() == 200, "b2: use кода — 200");
+            check(spyB2.sent.size() == 6 && spyB2.sent.get(4).startsWith("601:")
+                    && spyB2.sent.get(4).contains("Марина Лысак")
+                    && spyB2.sent.get(5).startsWith("604:") && spyB2.sent.get(5).contains("по коду приглашения"),
+                "b2: пуши обоим по коду (§14.2): тренеру имя, подопечному «по коду приглашения»");
+            check(Json.lng(Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body())).get("socialInviteUse")) == 1,
+                "b2: socialInviteUse=1");
+
+            /* [TRN-T5] гранты + журнал согласий §13.2: real change пишет, no-op нет */
+            check(postJson(portB2, "/api/social/grants",
+                "{\"initData\":\"" + id4 + "\",\"trainerId\":601,\"grants\":{\"goals\":true,\"kcal\":true,\"bodyMetrics\":true}}").statusCode() == 200,
+                "b2: гранты goals+kcal+bodyMetrics — 200");
+            check(postJson(portB2, "/api/social/grants",
+                "{\"initData\":\"" + id4 + "\",\"trainerId\":601,\"grants\":{\"goals\":true}}").statusCode() == 200,
+                "b2: no-op грант — 200 (без записи)");
+            int glCnt = 0;
+            Map<String, Object> glFirst = null;
+            for (SocialData.GrantLogEntry ge : stB2.social().get().grantLog) {
+                if (ge.by == 604L) {
+                    glCnt++;
+                    if (glFirst == null) glFirst = ge.toJson();
+                }
+            }
+            check(glCnt == 1, "b2: журнал согласий — одна запись о реальном изменении (2 ключа), а не " + glCnt);
+            check(Json.lng(glFirst.get("by")) == 604 && Json.lng(glFirst.get("trainer")) == 601
+                    && Boolean.TRUE.equals(Json.map(glFirst.get("changes")).get("goals"))
+                    && Boolean.TRUE.equals(Json.map(glFirst.get("changes")).get("kcal")),
+                "b2: запись журнала: by/trainer/changes {goals,kcal:true}");
+            check(Json.lng(Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body())).get("socialGrantChange")) == 1,
+                "b2: socialGrantChange=1 (no-op не считался)");
+            /* me отдаёт журнал только владельца записей */
+            Map<String, Object> meB2 = Json.map(Json.parse(
+                postJson(portB2, "/api/social/me", "{\"initData\":\"" + id4 + "\"}").body()));
+            check(((java.util.List<Object>) meB2.get("grantLog")).size() == 1,
+                "b2: /api/social/me отдаёт свои записи журнала");
+            /* кап: 21 переключение goals туда-сюда (итого 22 реальных изменения) → последние 20 */
+            for (int i = 0; i < 21; i++) {
+                boolean v = i % 2 == 0;
+                postJson(portB2, "/api/social/grants",
+                    "{\"initData\":\"" + id4 + "\",\"trainerId\":601,\"grants\":{\"goals\":" + v + "}}");
+            }
+            int cnt604 = 0;
+            for (SocialData.GrantLogEntry ge : stB2.social().get().grantLog) {
+                if (ge.by == 604L) cnt604++;
+            }
+            check(cnt604 == SocialStore.GRANT_LOG_CAP,
+                "b2: кап журнала — последние " + SocialStore.GRANT_LOG_CAP + " записей на пользователя, а не " + cnt604);
+
+            /* [TRN-T5] карточка подопечного: агрегаты строго по грантам (§8.3) */
+            GymData seedStudent = new GymData();
+            seedStudent.nextId = 3;
+            seedStudent.profile = new ProfileData();
+            seedStudent.profile.sex = "ж";
+            seedStudent.profile.age = 26;
+            seedStudent.profile.height = 168;
+            seedStudent.profile.weight = 62;
+            java.time.LocalDate dS = java.time.LocalDate.now();
+            Workout wB2 = new Workout();
+            wB2.id = 1;
+            wB2.date = dS.minusDays(2).toString();
+            wB2.startedAt = dS.minusDays(2) + "T10:00:00";
+            wB2.endedAt = dS.minusDays(2) + "T11:00:00";
+            wB2.finished = true;
+            ExerciseEntry eeB2 = new ExerciseEntry("Жим лёжа");
+            eeB2.sets.add(new SetEntry("60", 3, "8"));
+            wB2.exercises.add(eeB2);
+            seedStudent.workouts.add(wB2);
+            Goal gB2 = new Goal();
+            gB2.id = 1;
+            gB2.type = 1;
+            gB2.exercise = "Жим лёжа";
+            gB2.target = 100;
+            gB2.status = 1;
+            gB2.start = dS.minusDays(5).toString();
+            seedStudent.goals.add(gB2);
+            stB2.save(604, seedStudent);
+            java.net.http.HttpResponse<String> rst = postJson(portB2, "/api/social/student",
+                "{\"initData\":\"" + idT + "\",\"studentId\":604}");
+            check(rst.statusCode() == 200, "b2: /api/social/student — 200");
+            Map<String, Object> stMap = Json.map(Json.parse(rst.body()));
+            check("Марина Лысак".equals(stMap.get("name")), "b2: имя подопечного из связки");
+            check(stMap.get("progress") != null && stMap.get("body") != null
+                    && Json.lng(stMap.get("kcal30")) > 0 && stMap.get("goals") != null,
+                "b2: все 4 гранта включены — все агрегаты в ответе");
+            Map<String, Object> prog = Json.map(stMap.get("progress"));
+            check(Json.lng(prog.get("workouts30")) == 1 && Json.lng(prog.get("volume30")) == 1440
+                    && prog.get("lastDate") != null,
+                "b2: агрегат прогресса — 1 тренировка, объём 60×3×8=1440 кг (maxWeight×sets×repsAvg)");
+            check(!rst.body().contains("\"exercises\"") && !rst.body().contains("\"sets\""),
+                "b2: §8.3 — журнала упражнений в ответе нет (только агрегаты)");
+            java.util.List<Object> glSt = Json.list(stMap.get("goals"));
+            check(glSt.size() == 1 && Json.lng(Json.map(glSt.get(0)).get("target")) == 100
+                    && Json.lng(Json.map(glSt.get(0)).get("pct")) > 0,
+                "b2: силовая цель с прогрессом pct>0 (лучший e1RM / цель)");
+            /* без связки → 404-семантика ok:false reason nolink */
+            Map<String, Object> rstBad = Json.map(Json.parse(postJson(portB2, "/api/social/student",
+                "{\"initData\":\"" + idS + "\",\"studentId\":604}").body()));
+            check(Boolean.FALSE.equals(rstBad.get("ok")) && "nolink".equals(rstBad.get("reason")),
+                "b2: чужой студент не отдаётся — 404-семантика nolink");
+
+            /* [TRN-T6] жалоба: уведомление владельцу + socialComplaint */
+            int sentBefore = spyB2.sent.size();
+            check(postJson(portB2, "/api/social/report",
+                "{\"initData\":\"" + id4 + "\",\"about\":601,\"text\":\"спам в карточке\"}").statusCode() == 200,
+                "b2: жалоба — 200");
+            check(spyB2.sent.size() == sentBefore + 1 && spyB2.sent.get(spyB2.sent.size() - 1).startsWith("8888:")
+                    && spyB2.sent.get(spyB2.sent.size() - 1).contains("Жалоба"),
+                "b2: владельцу 8888 ушла жалоба (§13.4)");
+            check(Json.lng(Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body())).get("socialComplaint")) == 1,
+                "b2: socialComplaint=1 (§17)");
+        } catch (Exception b2Err) {
+            throw new AssertionError("CONTRACT FAIL: b2 " + b2Err);
+        }
+
         System.out.println("CONTRACT OK");
         System.exit(0);
     }
@@ -2528,15 +2730,18 @@ public class GymContractTest {
         return d;
     }
 
-    /* заглушка TelegramApi для проверки уведомлений WebServer ([TRN-T2]): «chatId:text» — в sent */
+    /* заглушка TelegramApi для проверки уведомлений WebServer ([TRN-T2]): «chatId:text» — в sent,
+       клавиатура последнего сообщения — в kbs (кнопки разбора заявки [TRN-T4]) */
     static final class SpyApi extends TelegramApi {
         final java.util.List<String> sent = new java.util.ArrayList<>();
+        final java.util.List<String> kbs = new java.util.ArrayList<>();
         SpyApi() {
             super("contract-test-token");
         }
         @Override
         public void sendMessage(long chatId, String text, java.util.List<java.util.List<Map<String, Object>>> keyboard) {
             sent.add(chatId + ":" + text);
+            kbs.add(String.valueOf(keyboard));
         }
     }
 
