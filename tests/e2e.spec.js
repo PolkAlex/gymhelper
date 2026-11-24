@@ -7783,6 +7783,11 @@ test.describe('[TRN-T4..T6] Связка и гранты: батч 2', function 
     /* [TRN-T4 §7.1] отказы заявки: hasteacher и cap — точные тосты; после отказа
        кнопка не застревает в «⏳» (заявку можно повторить) */
     test('заявка: комментарий ≤200, отказы hasteacher и cap — тосты, кнопка не застревает', async ({ page }) => {
+        /* [CI 45333108712] тест идёт через навигацию и два полных раунда модалки:
+           на медленном раннере последовательные бюджеты ожиданий (goto 10с и около
+           восьми шагов по 5с) упираются в общий таймаут 30с. Поднимаем только этому
+           тесту (продакт-код и общий конфиг не трогаем) */
+        test.setTimeout(45000);
         const reasons = ['hasteacher', 'cap'];
         let call = 0;
         await trMockSocial(page, {
@@ -7802,9 +7807,17 @@ test.describe('[TRN-T4..T6] Связка и гранты: батч 2', function 
         expect(await page.locator('#trApplyComment').getAttribute('maxlength')).toBe('200');
         await page.locator('[data-act="trApplySend"]').click();
         await expect(page.locator('.toast.show')).toHaveText('У Вас уже есть тренер — один активный тренер в этом обновлении', { timeout: 5000 });
+        /* дедуп-окно диспетчера 400 мс (dispatchFromEl, per-element __gymFired):
+           повторный тап по ТОЙ ЖЕ кнопке «Стать подопечным» гасится, если пришёл
+           раньше 400 мс после первого (reject-путь trApplySend не делает render,
+           элемент тот же). На быстром раннере раунд 2 попадал в окно: модалка не
+           открывалась, клик по trApplySend ждал её до таймаута теста. Пауза больше
+           окна = легальный повторный тап пользователя (паттерн UX-T27) */
+        await page.waitForTimeout(450);
         await expect(page.locator('[data-act="trApplyStart"]')).toBeVisible({ timeout: 5000 });
         /* второй отказ: лимит подопечных у тренера */
         await page.locator('[data-act="trApplyStart"]').click();
+        await expect(page.locator('#trApplyComment')).toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="trApplySend"]').click();
         await expect(page.locator('.toast.show')).toHaveText('Набор закрыт — у тренера лимит подопечных', { timeout: 5000 });
         expect(call).toBe(2);
@@ -8107,6 +8120,42 @@ test.describe('[TRN-T4..T6] Связка и гранты: батч 2', function 
         await trCatchOpenUrls(page);
         await trProfileCard(page).locator('[data-act="trCommunity"]').click();
         await trExpectOpenUrl(page, 'https://t.me/gym_helper_community', 'сообщество');
+    });
+
+    /* [TRN-T5 фикс 8722c1d] «Код приглашения» из Профиля ведёт в «Мои подопечные»
+       (мёртвый флаг inviteOpen убран — поведение как у trStudents) */
+    test('«Код приглашения» из Профиля ведёт в «Мои подопечные» с секцией кода', async ({ page }) => {
+        await trMockSocial(page, {
+            me: { ok: true, card: VERIFIED_CARD, linksAsTrainer: [trTrainerLink()],
+                linksAsStudent: [], requests: [], myRequest: null, inviteCode: 'K7RM2X' }
+        });
+        await trOpenAppAs(page, { id: 701, first_name: 'Игорь' });
+        const card = await trProfileReady(page, 'Код приглашения');
+        await card.locator('[data-act="trInviteOpen"]').click();
+        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Тренер', { timeout: 5000 });
+        /* секция кода видна сразу: код из me отрендерен */
+        await expect(page.locator('.tr-code')).toHaveText('K7RM2X', { timeout: 5000 });
+        await expect(page.locator('[data-act="trInviteNew"]')).toBeVisible();
+    });
+    /* [TRN-T5 фикс 8722c1d] 404 nolink (связь разорвана в другом окне/устройстве) —
+       тихий возврат к списку с тостом, карточка не висит */
+    test('карточка подопечного: 404 nolink — возврат к списку, тост «уже разорвана»', async ({ page }) => {
+        await trMockSocial(page, {
+            me: { ok: true, card: VERIFIED_CARD, linksAsTrainer: [trTrainerLink()],
+                linksAsStudent: [], requests: [], myRequest: null, inviteCode: null },
+            student: function (route) {
+                route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ ok: false, reason: 'nolink' }) });
+            }
+        });
+        await trOpenAppAs(page, { id: 701, first_name: 'Игорь' });
+        const card = await trProfileReady(page, 'Мои подопечные');
+        await card.locator('[data-act="trStudents"]').click();
+        await page.locator('.tr-res', { hasText: 'Анна Ковалёва' }).click();
+        await expect(page.locator('.toast.show')).toHaveText('Связь с этим подопечным уже разорвана', { timeout: 5000 });
+        /* вернулись к списку: секция «Мои подопечные» и строка подопечного на месте, карточки нет */
+        await expect(page.locator('.card', { hasText: '👥 Мои подопечные' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('.tr-res', { hasText: 'Анна Ковалёва' })).toBeVisible();
+        await expect(page.locator('[data-act="trStudentBreak"]')).toHaveCount(0);
     });
 });
 
