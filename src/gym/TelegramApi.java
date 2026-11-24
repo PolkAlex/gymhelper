@@ -217,7 +217,6 @@ public class TelegramApi {
         cmds.add(cmd("rest", "Таймер отдыха: /rest 120"));
         cmds.add(cmd("app", "Открыть приложение"));
         cmds.add(cmd("profile", "Профиль: рост, вес, возраст"));
-        cmds.add(cmd("trainer", "Тренер: статус и раздел")); /* [TRN-T2] */
         cmds.add(cmd("help", "Справка по командам"));
         Map<String, Object> req = new LinkedHashMap<>();
         req.put("commands", cmds);

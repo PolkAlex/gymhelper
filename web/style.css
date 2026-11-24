@@ -1,4 +1,5 @@
-/* =====================================================   Amber Glass · дизайн-система [DSN-S2]
+/* ============================================================
+   Amber Glass · дизайн-система [DSN-S2]
    Ровно 2 темы: тёмная (базовая) + светлая.
    Источник: docs/mockups/concept-hybrid.html + redesign-concepts.md §10
    ============================================================ */
@@ -1795,7 +1796,8 @@ html.has-bg body::after {
     white-space: nowrap;
 }
 
-/* ============ [UX-I17] мультивидовый календарь: пикер вида + сеточный движок =====   источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 4; T1 —
+/* ============ [UX-I17] мультивидовый календарь: пикер вида + сеточный движок ============
+   источник — docs/mockups/ux-i17-week-view.html (ревизия 2) + спека ред. 4; T1 —
    состояние/пикер/Неделя (7 колонок), T2 — День (1 колонка) и 3 дня (3 колонки)
    на том же движке; T3 — Год (сетка мини-месяцев ниже); рев. 4 [UX-B14] —
    полоса дней = окно (1/3/7), winpill удалена, высота часа ×2 (88/112/96) */
@@ -2171,7 +2173,8 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
 .rb-sqbtn, .rb-pill, .rb-done .hidebtn, .setrow .btn, .tcard, .tdel, .seg .seg-btn,
 .cal-d, .drow, .cal-today { cursor: pointer; }
 
-/* =====================================================   [ONB-T3..T7] Онбординг: приветствие, туториал, Помощь, «Что нового»
+/* ============================================================
+   [ONB-T3..T7] Онбординг: приветствие, туториал, Помощь, «Что нового»
    Источник: docs/mockups/onb-onboarding.html ред. 5 (Amber Glass,
    токены те же — новых переменных не нужно)
    Слои: topbar 30 · restbar 38 · backbar 39 · nav 40 · носители
@@ -2772,43 +2775,6 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
 /* футер шита — приватность ссылки */
 .snote { margin: 12px 2px 0; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
 
-/* [TRN-T2/T3] соцслой «Тренер»: бейджи статуса карточки, аватар, результаты поиска */
-.trhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
-.tr-badge {
-    flex: none; font-size: 11.5px; font-weight: 700; padding: 3px 10px;
-    border-radius: 999px; border: 1px solid var(--nested-brd); color: var(--muted);
-}
-.tr-badge.ok { color: var(--accent); border-color: var(--accent); }
-.tr-badge.wait { color: var(--accent); border-color: var(--accent); }
-.tr-badge.err { color: var(--danger); border-color: var(--danger); }
-.tr-hid { display: none; }
-.tr-add { margin-top: 6px; }
-/* результаты поиска и детальная карточка (§6.2/§6.3) */
-.tr-res {
-    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
-    background: none; border: 0; color: inherit; padding: 10px 2px; font: inherit;
-}
-.tr-res + .tr-res { border-top: 1px solid var(--nested-brd); }
-.tr-res:active { background: var(--nested); border-radius: 12px; }
-.tr-ava {
-    flex: none; border-radius: 50%; object-fit: cover; overflow: hidden;
-    display: inline-flex; align-items: center; justify-content: center;
-    background: var(--nested); border: 1px solid var(--nested-brd);
-    font-weight: 700; font-size: 14px; color: var(--accent);
-}
-.tr-nm { display: block; font-weight: 700; font-size: 14.5px; }
-.tr-v { color: var(--accent); font-size: 12px; }
-.tr-sub { display: block; font-size: 12.5px; color: var(--muted); margin-top: 1px; }
-.tr-minis { display: flex; flex-wrap: wrap; gap: 5px; }
-.tr-mini {
-    font-size: 11px; padding: 2px 9px; border-radius: 999px;
-    border: 1px solid var(--nested-brd); color: var(--muted); white-space: nowrap;
-}
-.tr-mini.acc { color: var(--accent); border-color: var(--accent); }
-.tr-self {
-    display: inline-block; font-size: 11px; font-weight: 700; color: var(--accent);
-    border: 1px solid var(--accent); border-radius: 999px; padding: 3px 10px; margin-top: 10px;
-}
 /* ============ [ONB-S6] импорт Strong: экраны флоу (макет docs/mockups/onb-s6-import.html) ============ */
 /* карточка «📦 Данные» в Настройках (Э1): иконка-бейдж и подпись строки */
 .arow .aico.imp {
@@ -2897,12 +2863,3 @@ details.plain[open] summary .chev, details.warn[open] summary .chev { transform:
 .resicon.ok { background: rgba(61,220,151,.12); border: 1px solid rgba(61,220,151,.35); color: #3ddc97; }
 .resicon.bad { background: rgba(255,107,94,.10); border: 1px solid rgba(255,107,94,.30); color: var(--danger); }
 .resttl { text-align: center; font-size: 17px; font-weight: 800; margin: 0 0 2px; }
-
-/* [TRN-T4/T5] код приглашения, гранты, журнал согласий */
-.tr-codewrap { margin-top: 8px; }
-.tr-code {
-    font-size: 26px; font-weight: 800; letter-spacing: 4px; text-align: center;
-    background: var(--nested); border: 1px dashed var(--accent);
-    border-radius: 14px; padding: 10px 12px; margin: 6px 0; color: var(--accent);
-}
-.tr-invite { margin-top: 8px; }

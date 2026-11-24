@@ -44,14 +44,7 @@ public final class Stats {
         /* [UX-S16] постер v2: принятые POST /api/card и исход sendPhoto */
         "cardSend", "cardSendOk", "cardSendErr",
         /* [UX-S16] клиентская воронка «Картинки» через /api/track */
-        "cardClick", "cardOk", "cardErr",
-        /* [TRN-T2/T3] соцслой «Тренер» (спека [TRN-S1] §17): включение режима,
-           отправка карточки на проверку, подтверждение владельцем, поиски тренера */
-        "socialTrainerOn", "socialCardPending", "socialCardVerified", "socialSearch",
-        /* [TRN-T4/T5/T6] связка и гранты (§17): заявка, одобрение/отклонение,
-           применённый код, разрыв, изменение гранта, жалоба */
-        "socialApply", "socialApprove", "socialReject", "socialInviteUse",
-        "socialLinkBreak", "socialGrantChange", "socialComplaint"
+        "cardClick", "cardOk", "cardErr"
     };
     /* верхняя граница числа источников в bucket startSrc (защита от раздутого файла) */
     private static final int START_SRC_MAX = 200;

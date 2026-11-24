@@ -15,22 +15,13 @@ public final class Storage {
     /* сколько последних версий файла хранить в data/backups — из них восстанавливаются случайно удалённые тренировки */
     public static final int BACKUPS_TO_KEEP = 20;
     private static final Pattern BACKUP_FILE = Pattern.compile("^chat_(\\d+)\\.(\\d{13})\\.json$");
-    /* [TRN-T1] бэкапы соцслоя: social.<timestamp>.json в той же ротации */
-    private static final Pattern SOCIAL_BACKUP_FILE = Pattern.compile("^social\\.(\\d{13})\\.json$");
 
     private final Path dir;
     private final Path backupDir;
-    /* [TRN-T1] соцслой «Тренер» ([TRN-S1]): единый data/social.json, владелец данных —
-       SocialStore; один экземпляр на процесс, общий для бота и Mini App */
-    private final SocialStore social = new SocialStore(this);
 
     public Storage(Path dir) {
         this.dir = dir;
         this.backupDir = dir.resolve("backups");
-    }
-
-    public SocialStore social() {
-        return social;
     }
 
     public synchronized GymData load(long chatId) {
@@ -88,63 +79,6 @@ public final class Storage {
             }
         } catch (Exception e) {
             System.out.println("[warn] backup rotate: " + e.getMessage());
-        }
-    }
-
-    /* [TRN-T1] сырой текст social.json; null — файла нет (первый запуск) */
-    public synchronized String loadSocialJson() {
-        try {
-            Path f = dir.resolve("social.json");
-            if (Files.exists(f)) return Files.readString(f, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            System.out.println("[warn] loadSocial: " + e.getMessage());
-        }
-        return null;
-    }
-
-    /* [TRN-T1] запись social.json: бэкап ПЕРЕД перезаписью — то же правило, что у
-       чат-файлов (TODO.md «Восстановление тренировки», §4.1 спеки [TRN-S1]) */
-    public synchronized void saveSocialJson(String content) {
-        try {
-            Files.createDirectories(dir);
-            Path f = dir.resolve("social.json");
-            if (Files.exists(f)) backupSocial(f);
-            Files.writeString(f, content, StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            System.out.println("[warn] saveSocial: " + e.getMessage());
-        }
-    }
-
-    /* копия social.json ДО перезаписи: social.<timestamp>.json в data/backups,
-       ротация BACKUPS_TO_KEEP — как у чат-файлов */
-    private void backupSocial(Path f) {
-        try {
-            Files.createDirectories(backupDir);
-            String content = Files.readString(f, StandardCharsets.UTF_8);
-            if (content.isBlank()) return;
-            Path dst = backupDir.resolve("social." + System.currentTimeMillis() + ".json");
-            Files.writeString(dst, content, StandardCharsets.UTF_8);
-            rotateSocial();
-        } catch (Exception e) {
-            System.out.println("[warn] backupSocial: " + e.getMessage());
-        }
-    }
-
-    private void rotateSocial() {
-        try {
-            List<Path> mine = new ArrayList<>();
-            if (!Files.exists(backupDir)) return;
-            for (Path p : Files.newDirectoryStream(backupDir, "social.*.json")) {
-                if (SOCIAL_BACKUP_FILE.matcher(p.getFileName().toString()).matches()) mine.add(p);
-            }
-            if (mine.size() <= BACKUPS_TO_KEEP) return;
-            mine.sort(Path::compareTo);
-            int extra = mine.size() - BACKUPS_TO_KEEP;
-            for (int i = 0; i < extra; i++) {
-                Files.deleteIfExists(mine.get(i));
-            }
-        } catch (Exception e) {
-            System.out.println("[warn] backup rotateSocial: " + e.getMessage());
         }
     }
 
