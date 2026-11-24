@@ -17,8 +17,6 @@ public final class SocialRequest {
     public long student;    /* Telegram user id подопечного (от кого) */
     public String comment = "";
     public String createdAt = ""; /* ISO-дата-время */
-    /* [TRN-T4] имя заявителя — снимок из подписанного initData (для пуша тренеру §14.1) */
-    public String studentName = "";
 
     /* истекла ли заявка на момент nowMs (epoch); неразборчивая дата считается истекшей.
        createdAt — локальное серверное время (как LocalDateTime.now()) → зона системная */
@@ -38,7 +36,6 @@ public final class SocialRequest {
         m.put("student", student);
         m.put("comment", comment);
         m.put("createdAt", createdAt);
-        if (!studentName.isEmpty()) m.put("studentName", studentName);
         return m;
     }
 
@@ -48,7 +45,6 @@ public final class SocialRequest {
         r.student = Json.lng(m.get("student"));
         r.comment = Json.str(m, "comment") == null ? "" : Json.str(m, "comment");
         r.createdAt = Json.str(m, "createdAt") == null ? "" : Json.str(m, "createdAt");
-        r.studentName = Json.str(m, "studentName") == null ? "" : Json.str(m, "studentName");
         return r;
     }
 }

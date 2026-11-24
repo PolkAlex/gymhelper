@@ -406,9 +406,6 @@ public class BotLogicTest {
             /trainer (18+, статус, подопечный с грантами) === */
         runTrainerScenario();
 
-        /* === 18. Разбор заявки кнопками из пуша [TRN-T4]: soc:link_ok/no === */
-        runTrainerCallbackScenario();
-
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -743,71 +740,6 @@ public class BotLogicTest {
                 "trainer: гранты ВКЛ перечислены (прогресс по умолчанию + цели)");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: trainer " + e);
-        }
-    }
-
-    /* [TRN-T4] разбор заявки кнопками пуша: soc:link_ok (инварианты + связка
-       с грантами по умолчанию + пуш подопечному) и soc:link_no (отклонение);
-       заявка не найдена/чужой — без падения */
-    static void runTrainerCallbackScenario() {
-        try {
-            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymtrcb");
-            Storage storage = new Storage(tmp);
-            FakeApi api = new FakeApi();
-            BotLogic logic = new BotLogic(api, storage, null, null, 0, null, 0);
-            long trainer = 601;
-            seedAdult(storage, trainer);
-            seedAdult(storage, 602);
-            SocialData d = storage.social().get();
-            TrainerCard c = new TrainerCard();
-            c.displayName = "Игорь Соколов";
-            c.status = TrainerCard.STATUS_VERIFIED;
-            d.trainers.put(trainer, c);
-            SocialRequest r = new SocialRequest();
-            r.trainer = trainer;
-            r.student = 602;
-            r.comment = "Хочу к Вам";
-            r.createdAt = java.time.LocalDateTime.now().withNano(0).toString();
-            r.studentName = "Анна Ковалёва";
-            d.requests.add(r);
-            storage.social().save();
-
-            /* nonce-ветки: мусорный суффикс и «заявка не найдена» — без падений */
-            int before = api.texts.size();
-            logic.handle(cbUpdate(trainer, 5, "soc:link_xx:602"));
-            check(api.texts.size() == before, "soc: неизвестная soc-ветка — тихо");
-            logic.handle(cbUpdate(trainer, 6, "soc:link_ok:999"));
-            check(api.last().contains("не найдена"), "soc: несуществующая заявка — сообщение");
-
-            /* принять: связка (гранты дефолт: Прогресс ВКЛ) + пуш подопечному */
-            logic.handle(cbUpdate(trainer, 7, "soc:link_ok:602"));
-            SocialLink l = storage.social().get().links.isEmpty() ? null : storage.social().get().links.get(0);
-            check(l != null && l.trainer == trainer && l.student == 602
-                    && Boolean.TRUE.equals(l.grants.get(SocialStore.GRANT_PROGRESS))
-                    && "Анна Ковалёва".equals(l.studentName),
-                "soc: accept — связка с дефолтными грантами и именем из заявки");
-            check(api.any("✅ Заявка принята") && api.any("Игорь Соколов"),
-                "soc: пуш подопечному «принято» с именем тренера (§14.1)");
-            check(api.any("✅ Заявка принята — Анна Ковалёва в подопечных"),
-                "soc: сообщение тренера обновлено");
-            check(storage.social().get().requests.isEmpty(), "soc: заявка погашена");
-
-            /* повторный accept — заявка уже разобрана */
-            logic.handle(cbUpdate(trainer, 8, "soc:link_ok:602"));
-            check(api.last().contains("не найдена"), "soc: повторный accept — «не найдена»");
-
-            /* отклонить новой заявки: пуш отклонения подопечному */
-            SocialRequest r2 = new SocialRequest();
-            r2.trainer = trainer;
-            r2.student = 602;
-            r2.createdAt = java.time.LocalDateTime.now().withNano(0).toString();
-            storage.social().get().requests.add(r2);
-            logic.handle(cbUpdate(trainer, 9, "soc:link_no:602"));
-            check(storage.social().get().requests.isEmpty(), "soc: reject — заявка погашена");
-            check(api.last().contains("Заявка отклонена\n\nИгорь Соколов пока не может"),
-                "soc: пуш отклонения без причины (§14.1)");
-        } catch (Exception e) {
-            throw new AssertionError("UNIT FAIL: trainer-callback " + e);
         }
     }
 

@@ -27,8 +27,6 @@ public final class SocialStore {
     public static final String GRANT_KCAL = "kcal";         /* расход ккал от тренировок */
     public static final List<String> GRANT_KEYS =
         List.of(GRANT_PROGRESS, GRANT_GOALS, GRANT_BODY, GRANT_KCAL);
-    /* [TRN-T5] журнал согласий §13.2: сколько последних записей хранить НА пользователя */
-    public static final int GRANT_LOG_CAP = 20;
 
     private final Storage storage;
     private SocialData data;

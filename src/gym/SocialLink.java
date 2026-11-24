@@ -18,9 +18,6 @@ public final class SocialLink {
     /* ключ гранта → вкл/выкл; известные ключи — SocialStore.GRANT_KEYS (4, финал 23.11) */
     public final Map<String, Boolean> grants = new LinkedHashMap<>();
     public String source = SOURCE_APPLY;
-    /* [TRN-T4] имя подопечного (снимок из подписанного initData при связке) — для списка
-       «Мои подопечные» у тренера; у подопечного нет карточки в trainers, имя неоткуда взять */
-    public String studentName = "";
 
     /* гранты новой связки: «Прогресс» ВКЛ, остальные OFF — «ноль данных не согласилось,
        кроме сути связки» (решение владельца 12.11 №4, подтверждено 23.11) */
@@ -50,7 +47,6 @@ public final class SocialLink {
         }
         m.put("grants", g);
         m.put("source", source);
-        if (!studentName.isEmpty()) m.put("studentName", studentName);
         return m;
     }
 
@@ -69,7 +65,6 @@ public final class SocialLink {
         }
         String src = Json.str(m, "source");
         l.source = SOURCE_INVITE.equals(src) ? SOURCE_INVITE : SOURCE_APPLY;
-        l.studentName = Json.str(m, "studentName") == null ? "" : Json.str(m, "studentName");
         return l;
     }
 }

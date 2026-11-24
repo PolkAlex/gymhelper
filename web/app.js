@@ -1715,59 +1715,9 @@ const ACTIONS = {
         TR.slots[a]++;
     },
     trLeave: function () { trLeaveMode(); },
-    /* [TRN-T4] разбор заявки кнопками из пуша и модерация грантов */
-    trApplyStart: function (a) { trApplyStartModal(+a); },
-    trApplySend: function () { trApplySend(); },
-    trGrant: function (a) {
-        const l = (trMe().linksAsStudent || [])[0];
-        if (!l || TR.grantBusy) return;
-        trGrantToggle(a, !(l.grants || {})[a]);
-    },
-    trGrantAll: function (a) { trGrantsAll(a === '1'); },
-    trBreakAsk: function (a) { confirmModal('Разорвать связь? Тренер потеряет доступ к Вашим данным, гранты сбросятся.', 'trBreakDo', a); },
-    trBreakDo: function (a) { trBreak(+a); },
-    trStudentBreak: function (a) {
-        confirmModal('Убрать подопечного? Он потеряет Вас как тренера, данные станут недоступны.', 'trBreakDo', a);
-    },
-    trStudents: function () { TR.studentsOpen = true; TR.studentView = 0; ACTIONS.switchTab('coach'); },
-    trStudentsBack: function () { TR.studentsOpen = false; TR.studentView = 0; render(); },
-    trStudentOpen: function (a) {
-        TR.studentView = +a;
-        TR.studentDetail = null;
-        render();
-        trStudentLoad(+a);
-    },
-    trInviteOpen: function () {
-        /* [TRN-T5 фикс] код живёт в разделе «Мои подопечные» — кнопка ведёт туда
-           (прежний флаг TR.inviteOpen нигде не читался — мёртвый код, убран) */
-        TR.studentsOpen = true;
-        TR.studentView = 0;
-        ACTIONS.switchTab('coach');
-    },
-    trInviteNew: function () { trInviteAction('create'); },
-    trInviteRevoke: function () { trInviteAction('revoke'); },
-    trCodeOpen: function () { TR.codeOpen = true; render(); },
-    trCodeClose: function () { TR.codeOpen = false; render(); },
-    trCodeApply: function () { trCodeApply(); },
-    /* [TRN-T4, решение №5] контакт тренера после связки: t.me/<username>;
-       username нормализован сервером ([a-z0-9_]{5,32}) — клиентская отсечка не нужна */
-    trContact: function (a) {
-        const url = 'https://t.me/' + String(a || '');
-        if (tg && tg.openLink) tg.openLink(url);
-        else window.open(url, '_blank');
-    },
-    /* [TRN-T3] поиск: чипы/сброс/повтор/карточка; [TRN-T6] «Сообщество» — открытая TG-группа */
+    /* [TRN-T3] поиск: чипы/сброс/повтор/карточка; «Сообщество» — до [TRN-T6] */
     trFind: function () { ACTIONS.switchTab('coach'); },
-    trCommunity: function () {
-        /* ссылка — env GYM_TG_GROUP_URL или файл social-tg.txt (/api/init → tgGroupUrl);
-           не задана — честная заглушка вместо битой ссылки */
-        if (TR.tgGroup) {
-            if (tg && tg.openLink) tg.openLink(TR.tgGroup);
-            else window.open(TR.tgGroup, '_blank');
-            return;
-        }
-        toast('Сообщество скоро — ссылку добавим в обновлении');
-    },
+    trCommunity: function () { toast('Сообщество появится в следующем обновлении'); },
     trSpecChip: function (a) {
         const i = TR.fspecs.indexOf(a);
         if (i >= 0) TR.fspecs.splice(i, 1);
@@ -3965,7 +3915,7 @@ function e1rmCardHtml(byEx) {
    карточка (без контакта — решение №5; кнопка заявки — каркас до [TRN-T4]).
    Новые тексты — на «Вы» (решение 12.11 №1). */
 const TR = {
-    me: null,          /* ответ /api/social/me: card, linksAsTrainer/Student, requests, myRequest, inviteCode, grantLog */
+    me: null,          /* ответ /api/social/me: card, linksAsTrainer/Student, requests, myRequest, inviteCode */
     loaded: false,
     open: false,       /* форма карточки развёрнута (аккордеон в Профиле, §5.1) */
     specs: [],         /* черновик чипов формы */
@@ -3977,48 +3927,13 @@ const TR = {
     results: null,     /* результаты поиска */
     done: false,       /* поиск выполнялся хоть раз (выбор заглушки) */
     err: false,        /* последняя ошибка сети поиска */
-    ageErr: false,     /* поиск отклонён 18+ гейтом (возрастная плашка — микро ревью) */
-    view: 0,           /* userId открытой детальной карточки тренера */
-    tgGroup: '',       /* [TRN-T6] ссылка на открытую TG-группу (env GYM_TG_GROUP_URL / social-tg.txt) */
-    applySent: {},     /* [TRN-T4] заявки, отправленные в этой сессии (мгновенный UI до перезагрузки me) */
-    codeOpen: false,   /* «У меня есть код» раскрыт */
-    studentsOpen: false, /* таб «Тренер» в режиме «Мои подопечные» (§9.1) */
-    studentView: 0,    /* [TRN-T5] userId открытой карточки подопечного */
-    studentDetail: null, /* ответ /api/social/student (агрегаты по грантам) */
-    grantBusy: false   /* защита от двойного тогла гранта во время POST */
+    view: 0            /* userId открытой детальной карточки */
 };
 const TR_SPECS = [
     ['rehab', 'Реабилитация'], ['loss', 'Похудение'], ['mass', 'Набор массы'],
     ['comp', 'Соревнования'], ['power', 'Сила'], ['begin', 'Новички и база'],
     ['mobility', 'Растяжка и мобильность'], ['group', 'Групповые тренировки']
 ];
-/* [TRN-T5] гранты — финал владельца 23.11: ровно 4 (зеркало SocialStore.GRANT_KEYS) */
-const TR_GRANTS = ['progress', 'goals', 'bodyMetrics', 'kcal'];
-function trGrantLabel(k) {
-    if (k === 'progress') return 'Прогресс тренировок';
-    if (k === 'goals') return 'Цели';
-    if (k === 'bodyMetrics') return 'Вес и рост';
-    if (k === 'kcal') return 'Ккал';
-    return k;
-}
-/* подсказка §8.1: не абстрактные «данные», а что именно увидит тренер */
-function trGrantDesc(k) {
-    if (k === 'progress') return 'За 30 дней: количество тренировок, объём, последний рекорд';
-    if (k === 'goals') return 'Название, срок и процент прогресса';
-    if (k === 'bodyMetrics') return 'Текущие значения профиля';
-    if (k === 'kcal') return 'Расход от тренировок';
-    return '';
-}
-function trInitials(name) {
-    return String(name || '?').trim().split(/\s+/).slice(0, 2).map(function (w) { return w[0] || ''; }).join('').toUpperCase();
-}
-function trDateRu(iso) {
-    const s = String(iso || '');
-    return s.length >= 10 ? s.slice(8, 10) + '.' + s.slice(5, 7) + '.' + s.slice(0, 4) : s;
-}
-function trVolumeTxt(kg) {
-    return kg >= 1000 ? (kg / 1000).toFixed(1).replace('.', ',') + ' т' : Math.round(kg) + ' кг';
-}
 function trMe() { return TR.me || {}; }
 function trMyId() {
     const u = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
@@ -4047,11 +3962,6 @@ async function trLoad() {
         if (j.ok) {
             TR.me = j;
             TR.loaded = true;
-            /* [TRN-T4] связка исчезла (разрыв/отклонение) — выходим из режимов студентов */
-            if (!(TR.me.linksAsTrainer || []).length) {
-                if (TR.studentsOpen) TR.studentsOpen = false;
-                if (TR.studentView) { TR.studentView = 0; TR.studentDetail = null; }
-            }
             if (tab === 'profile' || tab === 'coach') render();
         }
     } catch (e) { /* оффлайн: догрузим при следующем действии */ }
@@ -4130,14 +4040,13 @@ function trProfileCardHtml() {
     const card = trMe().card;
     const hidden = card && card.status === 'hidden';
     const on = !!(card && !hidden);
-    const haveTrainer = (trMe().linksAsStudent || []).length > 0;
     let h = '<div class="card"><p class="t1">🧑‍🏫 Тренер</p>';
     if (!trAgeOk()) {
         /* 18+ (решение 12.11 №12): тогл виден, включение отклоняется с подсказкой */
         h += '<div class="setrow"><span class="lbl"><b>Я тренер</b>' +
             '<span>Раздел доступен с 18 лет. Укажите дату рождения выше — она не публикуется.</span></span>' +
             swToggleHtml(false, 'trToggleMinor', null, 'Я тренер') + '</div>';
-        return h + '<div class="hr"></div>' + trMyTrainerHtml() + trFindRow() + trCommunityRow() + trCodeRow() + '</div>';
+        return h + '<div class="hr"></div>' + trFindRow() + trCommunityRow() + '</div>';
     }
     if (!on) {
         if (TR.open) {
@@ -4157,7 +4066,7 @@ function trProfileCardHtml() {
                 swToggleHtml(false, 'trToggle', null, 'Я тренер') + '</div>';
             if (hidden) h += '<p class="meta">Режим был выключен — включите тогл и отправьте карточку на проверку заново.</p>';
         }
-        return h + '<div class="hr"></div>' + trMyTrainerHtml() + trFindRow() + trCommunityRow() + trCodeRow() + '</div>';
+        return h + '<div class="hr"></div>' + trFindRow() + trCommunityRow() + '</div>';
     }
     /* режим включён: статус + форма (аккордеон, §5.1) */
     const st = card.status;
@@ -4172,319 +4081,13 @@ function trProfileCardHtml() {
     if (st === 'rejected' && left > 0) h += '<p class="meta">Повторная отправка — через ' + left + ' ' + trDayWord(left) + '.</p>';
     if (TR.open) h += '<div class="hr"></div>' + trFormHtml(card);
     else h += '<div class="btnrow"><button class="btn sec wide" data-act="trOpen">✏️ Карточка тренера</button></div>';
-    h += '<div class="hr"></div>' + trMyTrainerHtml();
-    /* [TRN-T4] «Мои подопечные» (§9.1 базово) — список и код приглашения на вкладке «Тренер» */
-    const stCnt = (trMe().linksAsTrainer || []).length;
-    h += '<button class="arow" data-act="trStudents"><span class="aico">👥</span>Мои подопечные' +
-        (stCnt ? '<span class="newpill">' + stCnt + '</span>' : '') +
-        '<span class="chevr">' + ICONS.chevR + '</span></button>';
-    /* [TRN-T4] одноразовый код приглашения (§7.2) */
-    h += '<button class="arow" data-act="trInviteOpen"><span class="aico">🎟</span>Код приглашения' +
-        '<span class="chevr">' + ICONS.chevR + '</span></button>';
-    h += '<div class="hr"></div>' + trFindRow() + trCommunityRow() + trCodeRow();
+    h += '<div class="hr"></div>' + trFindRow() + trCommunityRow();
     h += '<div class="hr"></div><button class="arow" data-act="trLeave"><span class="aico">🔒</span>Выключить режим' +
         '<span class="chevr">' + ICONS.chevR + '</span></button>';
-    if (stCnt) {
-        h += '<p class="meta">Подопечные (' + stCnt + ') останутся связанными — разорвать связи можно после выключения.</p>';
+    if (trMe().linksAsTrainer && trMe().linksAsTrainer.length) {
+        h += '<p class="meta">Подопечные (' + trMe().linksAsTrainer.length + ') останутся связанными — разорвать связи можно после выключения.</p>';
     }
     return h + '</div>';
-}
-/* [TRN-T5] блок «Мой тренер» (§8.1): гранты-тоглы, журнал согласий, разрыв связи */
-function trMyTrainerHtml() {
-    const l = (trMe().linksAsStudent || [])[0];
-    if (!l) return '';
-    const grants = l.grants || {};
-    let h = '<div class="hr"></div><div class="trhead"><span class="lbl"><b>Мой тренер</b>' +
-        '<span>' + esc(l.peerName || 'Тренер') + (l.since ? ' · с ' + trDateRu(l.since) : '') + '</span></span></div>';
-    for (const k of TR_GRANTS) {
-        const on = grants[k] === true;
-        h += '<div class="setrow"><span class="lbl"><b>' + trGrantLabel(k) + '</b>' +
-            '<span>' + trGrantDesc(k) + '</span></span>' +
-            swToggleHtml(on, 'trGrant', k, trGrantLabel(k)) + '</div>';
-    }
-    h += '<div class="btnrow"><button class="btn sec" data-act="trGrantAll" data-a="1">Открыть всё</button>' +
-        '<button class="btn sec" data-act="trGrantAll" data-a="0">Закрыть всё</button></div>' +
-        '<p class="meta">Изменения применяются сразу — тренер видит актуальное состояние.</p>';
-    /* [TRN-T4, решение №5] контакт тренера — раскрыт только после связки; username
-       скрыт настройками Telegram — кнопка не рендерится (без заглушек) */
-    if (l.tgUsername) {
-        h += '<div class="btnrow"><button class="btn sec wide" data-act="trContact" data-a="' + escAttr(l.tgUsername) + '">✉️ Написать в Telegram</button></div>';
-    }
-    const log = trMe().grantLog || [];
-    if (log.length) {
-        h += '<details class="plain"><summary>Журнал согласий<span class="chev">▸</span></summary><div class="ddlist">';
-        for (const e of log.slice(0, 10)) {
-            const ch = e.changes ? Object.keys(e.changes)
-                .map(function (k) { return trGrantLabel(k) + ': ' + (e.changes[k] ? 'вкл' : 'выкл'); }).join(', ') : '';
-            h += '<div class="li"><span>' + esc(trDateRu(e.at) + ' — ' + ch) + '</span></div>';
-        }
-        h += '</div></details>';
-    }
-    h += '<div class="btnrow"><button class="btn sec wide" data-act="trBreakAsk" data-a="' + l.trainer + '">Разорвать связь</button></div>';
-    return h;
-}
-/* [TRN-T4] строка/форма «У меня есть код» — только если тренера ещё нет (§7.4) */
-function trCodeRow() {
-    if (haveTrainerNow()) return '';
-    if (!TR.codeOpen) {
-        return '<button class="arow" data-act="trCodeOpen"><span class="aico">🎟</span>У меня есть код' +
-            '<span class="chevr">' + ICONS.chevR + '</span></button>';
-    }
-    return '<div class="tr-codewrap"><div class="flabel">Код приглашения тренера</div>' +
-        '<div class="prow"><div class="pf"><input id="trCodeInput" maxlength="6" placeholder="6 символов" style="text-transform:uppercase;"></div>' +
-        '<button class="btn pfsave" data-act="trCodeApply">Применить</button></div>' +
-        '<p class="meta">Связка создаётся сразу — код это заранее данное тренером согласие.</p>' +
-        '<button class="barebtn" data-act="trCodeClose" style="margin-top:4px;">Скрыть</button></div>';
-}
-function haveTrainerNow() {
-    return (trMe().linksAsStudent || []).length > 0;
-}
-/* ============ [TRN-T4] связка: заявка, код, разрыв; [TRN-T5] гранты/подопечные ============ */
-
-/* заявка в подопечные — модалка §6.3 с комментарием ≤200 (сохраняется в SocialRequest) */
-function trApplyStartModal(trainerId) {
-    PENDING = { fn: 'trApplySend', id: trainerId };
-    openModal('<p class="mtitle">Заявка в подопечные</p>' +
-        '<textarea id="trApplyComment" maxlength="200" rows="3" placeholder="Расскажите о себе: цель, опыт, ограничения здоровья…"></textarea>' +
-        '<p class="meta">Тренер увидит комментарий и решит. Заявка висит 14 дней.</p>' +
-        '<div class="btnrow"><button class="btn prime wide" data-act="trApplySend">📤 Отправить заявку</button>' +
-        '<button class="btn sec wide" data-act="closeModal">Отмена</button></div>');
-}
-async function trApplySend() {
-    const el = document.getElementById('trApplyComment');
-    const comment = el ? el.value.trim() : '';
-    const trainerId = PENDING ? +PENDING.id : 0;
-    closeModal();
-    if (!trainerId) return;
-    try {
-        const r = await fetch('/api/social/apply', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, trainerId: trainerId, comment: comment }) });
-        let j = {};
-        try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (!j.ok) {
-            const rs = j.reason;
-            if (rs === 'hasteacher') toast('У Вас уже есть тренер — один активный тренер в этом обновлении', true);
-            else if (rs === 'cap') toast('Набор закрыт — у тренера лимит подопечных', true);
-            else if (rs === 'request') toast('Заявка уже отправлена', true);
-            else if (rs === 'link') toast('Вы уже связаны с этим тренером', true);
-            else if (rs === 'age') toast('Раздел «Тренер» доступен с 18 лет', true);
-            else toast('Не удалось отправить заявку', true);
-            return;
-        }
-        TR.applySent[trainerId] = true;
-        toast('Заявка отправлена — тренер получит уведомление');
-        trLoad();
-        render();
-    } catch (e) { toast('Нет связи с сервером', true); }
-}
-/* [TRN-T4] применить код приглашения (§7.2): связка сразу, без стадии заявки */
-async function trCodeApply() {
-    const el = document.getElementById('trCodeInput');
-    const code = el ? el.value.trim().toUpperCase() : '';
-    if (!code) { toast('Введите код', true); return; }
-    try {
-        const r = await fetch('/api/social/invite', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, action: 'use', code: code }) });
-        let j = {};
-        try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (!j.ok) {
-            const rs = j.reason;
-            if (rs === 'hidden') toast('Тренер выключил режим — код не работает', true);
-            else if (rs === 'hasteacher') toast('У Вас уже есть тренер', true);
-            else if (rs === 'cap') toast('Набор закрыт — у тренера лимит подопечных', true);
-            else toast('Код не найден или уже использован', true);
-            return;
-        }
-        TR.codeOpen = false;
-        toast('Готово — тренер добавлен');
-        await trLoad();
-        render();
-    } catch (e) { toast('Нет связи с сервером', true); }
-}
-/* [TRN-T4] разрыв связи §7.5 (обе стороны): гранты умирают со связкой;
-   пуши при разрыве спека §7.5 не предусматривает («мягко») */
-async function trBreak(peerId) {
-    try {
-        const r = await fetch('/api/social/link', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, action: 'break', userId: peerId }) });
-        let j = {};
-        try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (!j.ok) { toast('Не удалось разорвать связь', true); return; }
-        if (TR.studentView === peerId) { TR.studentView = 0; TR.studentDetail = null; }
-        toast('Связь разорвана');
-        await trLoad();
-        render();
-    } catch (e) { toast('Нет связи с сервером', true); }
-}
-/* [TRN-T4] код приглашения тренера: новый/отозвать (§7.2) */
-async function trInviteAction(action) {
-    try {
-        const r = await fetch('/api/social/invite', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, action: action }) });
-        let j = {};
-        try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (!j.ok) { toast('Не удалось: сервер ответил ' + r.status, true); return; }
-        if (TR.me) TR.me.inviteCode = action === 'create' ? j.code : null;
-        toast(action === 'create' ? 'Новый код готов — прежний погашен' : 'Код отозван');
-        render();
-    } catch (e) { toast('Нет связи с сервером', true); }
-}
-/* [TRN-T5] тогл гранта §8.1: немедленно, по журналу согласий на сервере (§13.2) */
-async function trGrantToggle(key, value) {
-    if (TR.grantBusy) return;
-    const l = (trMe().linksAsStudent || [])[0];
-    if (!l) return;
-    TR.grantBusy = true;
-    try {
-        const r = await fetch('/api/social/grants', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, trainerId: l.trainer, grants: { [key]: value } }) });
-        let j = {};
-        try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (!j.ok) { toast('Не удалось изменить доступ', true); return; }
-        if (TR.me && TR.me.linksAsStudent[0]) {
-            for (const k of Object.keys(j.grants || {})) TR.me.linksAsStudent[0].grants[k] = j.grants[k];
-        }
-        await trLoad(); /* журнал согласий и актуальные гранты с сервера */
-        render();
-    } catch (e) { toast('Нет связи с сервером', true); } finally { TR.grantBusy = false; }
-}
-/* «Открыть всё»/«Закрыть всё» (§8.2) — один POST всеми известными ключами:
-   сервер пишет в журнал согласий одну запись со всеми изменениями */
-async function trGrantsAll(value) {
-    if (TR.grantBusy) return;
-    const l = (trMe().linksAsStudent || [])[0];
-    if (!l) return;
-    const all = {};
-    for (const k of TR_GRANTS) all[k] = value;
-    TR.grantBusy = true;
-    try {
-        const r = await fetch('/api/social/grants', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, trainerId: l.trainer, grants: all }) });
-        let j = {};
-        try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (!j.ok) { toast('Не удалось изменить доступ', true); return; }
-        await trLoad();
-        render();
-    } catch (e) { toast('Нет связи с сервером', true); } finally { TR.grantBusy = false; }
-}
-/* [TRN-T5 фикс блокера] загрузка агрегатов карточки подопечного (§9.2):
-   POST /api/social/student → TR.studentDetail + render. 404 nolink (связь
-   разорвана в другом окне/устройстве) — тихий возврат к списку + тост. */
-async function trStudentLoad(studentId) {
-    try {
-        const r = await fetch('/api/social/student', { method: 'POST',
-            body: JSON.stringify({ initData: INIT, studentId: studentId }) });
-        let j = {};
-        try { j = await r.json(); } catch (e2) { /* noop */ }
-        if (TR.studentView !== studentId) return; /* пользователь уже ушёл с экрана */
-        if (!j.ok && j.reason === 'nolink') {
-            /* связь разорвана в другом окне/устройстве — тихий возврат к списку */
-            TR.studentView = 0;
-            TR.studentDetail = null;
-            toast('Связь с этим подопечным уже разорвана');
-            render();
-            return;
-        }
-        if (j.ok) {
-            TR.studentDetail = j;
-            render();
-        }
-        /* прочие ошибки (сеть/сервер недоступен) — остаёмся на карточке: шапка и
-           «Убрать подопечного» отрендерены из me, агрегаты дозагрузятся при
-           повторном открытии */
-    } catch (e) { toast('Нет связи с сервером', true); }
-}
-/* «Мои подопечные» (§9.1): список с мини-карточками + код приглашения */
-function trStudentsHtml() {
-    let h = '<div class="card"><div class="exhead"><p class="t1">👥 Мои подопечные</p>' +
-        '<button class="barebtn" data-act="trStudentsBack" title="К поиску" aria-label="К поиску">' + ICONS.back + '</button></div>';
-    const code = trMe().inviteCode;
-    h += '<div class="tr-codewrap"><div class="flabel">Код приглашения · одноразовый</div>' +
-        '<div class="tr-code">' + esc(code || '—') + '</div>' +
-        '<div class="btnrow"><button class="btn sec" data-act="trInviteNew">🎟 Новый код</button>' +
-        '<button class="btn sec" data-act="trInviteRevoke">Отозвать</button></div>' +
-        '<p class="meta">Подопечный вводит код: Профиль → Тренер → «У меня есть код» — связка сразу.</p><div class="hr"></div></div>';
-    const list = trMe().linksAsTrainer || [];
-    if (!list.length) {
-        return h + '<div class="empty">Подопечных пока нет.<br>Одобряйте заявки и делитесь кодом приглашения.</div></div>';
-    }
-    for (const l of list) {
-        const on = TR_GRANTS.filter(function (k) { return l.grants && l.grants[k] === true; }).map(trGrantLabel);
-        h += '<button class="tr-res" data-act="trStudentOpen" data-a="' + l.student + '">' +
-            '<span class="tr-ava" style="width:44px;height:44px;">' + esc(trInitials(l.studentName)) + '</span>' +
-            '<span style="flex:1;min-width:0;"><span class="tr-nm">' + esc(l.studentName || 'Подопечный') + '</span>' +
-            '<span class="tr-sub">в подопечных с ' + esc(trDateRu(l.since)) + '</span>' +
-            '<span class="tr-minis">' + (on.length
-                ? on.map(function (s) { return '<span class="tr-mini acc">' + esc(s) + '</span>'; }).join('')
-                : '<span class="tr-mini">Данные закрыты</span>') + '</span></span></button>';
-    }
-    return h + '</div>';
-}
-/* [TRN-T5] карточка подопечного (§9.2): read-only агрегаты по грантам (§8.3 —
-   журнала упражнений нет); сервер отдаёт только то, что разрешено */
-function trStudentDetailHtml() {
-    const d = TR.studentDetail;
-    const l = (trMe().linksAsTrainer || []).find(function (x) { return +x.student === TR.studentView; });
-    let h = '<div class="card"><div class="exhead">' +
-        '<span class="tr-ava" style="width:56px;height:56px;">' + esc(trInitials(d ? d.name : (l && l.studentName))) + '</span>' +
-        '<span class="t1" style="flex:1;min-width:0;">' + esc(d ? d.name : (l && l.studentName || 'Подопечный')) + '</span>' +
-        '<button class="barebtn" data-act="trStudentsBack" title="К списку" aria-label="К списку">' + ICONS.back + '</button></div>';
-    if (l && l.since) h += '<p class="meta">в подопечных с ' + esc(trDateRu(l.since)) + '</p>';
-    const g = d ? (d.grants || {}) : {};
-    const on = TR_GRANTS.filter(function (k) { return g[k] === true; }).map(trGrantLabel);
-    h += '<div class="tr-minis" style="margin-top:6px;">' + (on.length
-        ? on.map(function (s) { return '<span class="tr-mini acc">' + esc(s) + '</span>'; }).join('')
-        : '<span class="tr-mini">Данные закрыты</span>') + '</div>';
-    h += '<div class="hr"></div><div class="btnrow"><button class="btn sec wide" data-act="trStudentBreak" data-a="' + TR.studentView + '">Убрать подопечного</button></div></div>';
-    if (!d) return h + '<div class="card"><p class="empty">Загрузка…</p></div>';
-    /* 📈 Активность (§9.2): только агрегаты за 30 дней */
-    if (g.progress === true && d.progress) {
-        const p = d.progress;
-        h += '<div class="card"><p class="mtitle">📈 Активность · 30 дней</p>' +
-            '<p class="t1">' + (p.workouts30 || 0) + ' ' + trainWord(p.workouts30 || 0) + '</p>' +
-            '<p class="meta">Объём: ' + trVolumeTxt(p.volume30 || 0) + '</p>' +
-            (p.lastDate ? '<p class="meta">Последняя тренировка: ' + esc(trDateRu(p.lastDate)) + '</p>' : '') + '</div>';
-    } else {
-        h += '<div class="card"><p class="meta">🔒 Активность — подопечный не открыл этот раздел</p></div>';
-    }
-    /* 🎯 Цели (если грант включён) */
-    if (g.goals === true) {
-        const gl = d.goals || [];
-        if (!gl.length) h += '<div class="card"><p class="mtitle">🎯 Цели</p><p class="meta">Активных целей нет</p></div>';
-        else {
-            h += '<div class="card"><p class="mtitle">🎯 Цели</p>';
-            for (const c of gl) {
-                const nm = c.type === 1 ? (c.ex || 'Силовая цель')
-                    : c.type === 2 ? 'Частота тренировок'
-                    : c.type === 3 ? 'Объём' : 'Вес тела';
-                const cur = c.type === 2 ? c.done + ' ' + trainWord(c.done)
-                    : c.type === 4 ? fmtW(c.done) + ' кг'
-                    : trVolumeTxt(c.done || 0);
-                h += '<div class="rec-l">' + esc(nm) + '</div>' +
-                    '<div class="rec-bar"><i style="width:' + (c.pct || 0) + '%"></i></div>' +
-                    '<p class="meta">' + cur + ' из ' + esc(String(c.target)) +
-                    (c.end ? ' · до ' + esc(trDateRu(c.end)) : '') + '</p>';
-            }
-            h += '</div>';
-        }
-    } else {
-        h += '<div class="card"><p class="meta">🔒 Цели — подопечный не открыл этот раздел</p></div>';
-    }
-    /* ⚖️ Вес и рост */
-    if (g.bodyMetrics === true && d.body) {
-        h += '<div class="card"><p class="mtitle">⚖️ Вес и рост</p>' +
-            '<p class="t1">' + fmtW(d.body.weight) + ' кг · ' + d.body.height + ' см</p></div>';
-    } else {
-        h += '<div class="card"><p class="meta">🔒 Вес и рост — подопечный не открыл этот раздел</p></div>';
-    }
-    /* 🔥 Ккал */
-    if (g.kcal === true) {
-        h += '<div class="card"><p class="mtitle">🔥 Ккал · 30 дней</p>' +
-            '<p class="t1">≈ ' + (d.kcal30 || 0) + ' <small>ккал</small></p></div>';
-    } else {
-        h += '<div class="card"><p class="meta">🔒 Ккал — подопечный не открыл этот раздел</p></div>';
-    }
-    return h;
 }
 function trFindRow() {
     return '<button class="arow" data-act="trFind"><span class="aico">' + ICONS.search + '</span>Найти тренера' +
@@ -4578,10 +4181,6 @@ function refreshTrSpecChips() {
 
 /* ---------- [TRN-T3] поиск тренера (таб «Тренер», §6): только verified, §6.2 ---------- */
 function renderCoachTab() {
-    /* [TRN-T5] карточка подопечного у тренера (§9.2) — приоритет над поиском */
-    if (TR.studentView) return trStudentDetailHtml();
-    /* [TRN-T4] «Мои подопечные» + код приглашения (§9.1 базово) */
-    if (TR.studentsOpen) return trStudentsHtml();
     if (TR.view) {
         const c = (TR.results || []).find(x => +x.userId === TR.view);
         if (c) return trDetailHtml(c);
@@ -4598,9 +4197,6 @@ function renderCoachTab() {
     return h;
 }
 function trResultsHtml() {
-    /* [TRN-T5 микро ревью] 403 reason age — возрастная плашка вместо «Не удалось загрузить» */
-    if (TR.ageErr) return '<div class="empty">🧑‍🏫 Раздел «Тренер» доступен с 18 лет.<br>' +
-        'Укажите дату рождения в Профиле — она не публикуется.</div>';
     if (TR.err) return '<div class="empty">Не удалось загрузить. Проверьте связь и попробуйте ещё раз.' +
         '<br><button class="btn sec" data-act="trRetry" style="margin-top:10px;">Повторить</button></div>';
     if (!TR.done) return '<div class="empty">Загрузка…</div>';
@@ -4655,9 +4251,7 @@ async function trSearchDo() {
         const r = await fetch('/api/social/search', { method: 'POST',
             body: JSON.stringify({ initData: INIT, city: TR.q, specs: TR.fspecs }) });
         const j = await r.json();
-        TR.err = !j.ok && j.reason !== 'age';
-        /* [TRN-T5 микро ревью] 403 age — возрастная плашка, не «ошибка сети» */
-        TR.ageErr = !j.ok && j.reason === 'age';
+        TR.err = !j.ok;
         if (j.ok) TR.results = j.cards || [];
         TR.done = true;
     } catch (e) { TR.err = true; TR.done = true; }
@@ -4668,7 +4262,7 @@ function refreshTrList() {
     if (box) box.innerHTML = trResultsHtml();
 }
 /* детальная карточка тренера (§6.3): контакта нет — раскрывается только после связки
-   (решение №5); кнопка заявки — [TRN-T4]: модалка с комментарием ≤200 */
+   (решение №5); кнопка заявки — каркас до [TRN-T4] */
 function trDetailHtml(c) {
     let h = '<div class="card"><div class="exhead">' + trAvaHtml(c, 56) +
         '<span class="t1" style="flex:1;min-width:0;">' + esc(c.displayName) + ' <span class="tr-v">✔</span></span>' +
@@ -4684,25 +4278,8 @@ function trDetailHtml(c) {
         /* своя карточка в поиске — «Это Вы» (§6.4): кнопка заявки заменена на редактирование */
         h += '<div class="tr-self">Это Вы</div><div class="btnrow"><button class="btn sec wide" data-act="trEdit">✏️ Редактировать карточку</button></div>';
     } else {
-        /* [TRN-T4] заявка в подопечные (§7.1): состояния кнопки §6.3 */
-        const myTrainer = (trMe().linksAsStudent || []).find(l => +l.trainer === +c.userId);
-        const anyTrainer = (trMe().linksAsStudent || []).length > 0;
-        const pending = (trMe().myRequest && +trMe().myRequest.trainer === +c.userId) || TR.applySent[+c.userId];
-        if (myTrainer) {
-            h += '<div class="btnrow"><button class="btn sec wide" disabled>Уже Ваш тренер ✓</button></div>';
-            /* [TRN-T4, решение №5] контакт раскрыт после связки (tgUsername из search для связанного) */
-            if (c.tgUsername) {
-                h += '<div class="btnrow"><button class="btn sec wide" data-act="trContact" data-a="' + escAttr(c.tgUsername) + '">✉️ Написать в Telegram</button></div>';
-            }
-        } else if (pending) {
-            h += '<div class="btnrow"><button class="btn sec wide" disabled>Заявка отправлена ⏳</button></div>' +
-                '<p class="meta">Тренер получит уведомление. Заявка висит 14 дней.</p>';
-        } else if (anyTrainer) {
-            h += '<div class="btnrow"><button class="btn sec wide" disabled>🤝 Стать подопечным</button></div>' +
-                '<p class="meta">У Вас уже есть тренер — в этом обновлении он один.</p>';
-        } else {
-            h += '<div class="btnrow"><button class="btn prime wide" data-act="trApplyStart" data-a="' + c.userId + '">🤝 Стать подопечным</button></div>';
-        }
+        h += '<div class="btnrow"><button class="btn prime wide" disabled>🤝 Стать подопечным</button></div>' +
+            '<p class="meta">Заявки в подопечные появятся в следующем обновлении.</p>';
     }
     h += '</div>';
     if (c.bio) h += '<div class="card"><p class="mtitle">О себе</p><p class="exdesc">' + esc(c.bio) + '</p></div>';
@@ -5413,11 +4990,10 @@ function renderSettings() {
             '<span class="chevr">' + ICONS.chevR + '</span></span></button>';
     }
     h += '</div>';
-    /* [TRN-T6, решение владельца 12.11 №14] контент-карточка «Советы и программы»:
-       слово «Тренер» принадлежит соцслою (вкладка «Тренер», Профиль → «Тренер»);
-       кнопки-входа в соцслой из Настроек больше нет — точки входа не задваиваются */
-    h += '<div class="card"><p class="t1">📚 Советы и программы</p>' +
-        '<p class="meta">Персональные программы тренировок и разборы техники — раздел в разработке</p></div>';
+    /* 🧑‍🏫 Персональный тренер — перенос как есть; switchTab закрывает Настройки [UX-S4 §6] */
+    h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
+        '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
+        '<div class="btnrow"><button class="btn sec wide" data-act="switchTab" data-a="coach">Открыть раздел</button></div></div>';
     /* [ONB-T5/T7] «О приложении»: строка «Помощь и FAQ» с пилюлей «новое» (решение 13,
         до первого открытия Помощи — gymHelpSeen), строка «Что нового» (модалка вручную,
         работает и при выключенном автопоказе — решение 13.2), тогл «Сообщать об
@@ -7581,8 +7157,6 @@ async function init() {
             if (snSaved != null) G.shareName = snSaved === '1';
             /* [ONB-T6] username бота для deep-link «Написать разработчику» — из /api/init */
             if (typeof j.botUsername === 'string' && j.botUsername) BOT_NAME = j.botUsername;
-            /* [TRN-T6] ссылка на TG-группу сообщества (env GYM_TG_GROUP_URL / social-tg.txt) */
-            if (typeof j.tgGroupUrl === 'string') TR.tgGroup = j.tgGroupUrl;
             render();
             onbGate(); /* [ONB] приветствие/«Что нового» — после первого рендера приложения */
             trLoad(); /* [TRN-T2] соцданные (карточка/связки) — после первого рендера */

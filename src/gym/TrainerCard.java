@@ -57,12 +57,6 @@ public final class TrainerCard {
     public String verifiedAt = "";     /* момент подтверждения (/trainer_ok); пусто — не подтверждена */
     public String rejectedAt = "";     /* [TRN-T2] момент отказа (/trainer_no) — старт 30-дневного кулдауна */
     public String photoUrl = "";       /* [TRN-T3] аватар Telegram: photo_url из подписанного initData (server-owned) */
-    /* [TRN-T4, решение №5] Telegram-username тренера (без @, lowercase) — СНИМОК из
-       подписанного initData при каждом сохранении карточки, симметрично photoUrl:
-       пустой/скрытый username initData прежнее значение НЕ затирает. Служебное поле:
-       в публичную проекцию (search) НЕ попадает, отдаётся только связанному
-       подопечному — контакт раскрывается после связки (§13.1) */
-    public String tgUsername = "";
 
     /* полная проекция — для /api/social/me (свою карточку владелец видит целиком) */
     public java.util.Map<String, Object> toMap() {
@@ -83,7 +77,6 @@ public final class TrainerCard {
         if (!verifiedAt.isEmpty()) m.put("verifiedAt", verifiedAt);
         if (!rejectedAt.isEmpty()) m.put("rejectedAt", rejectedAt);
         if (!photoUrl.isEmpty()) m.put("photoUrl", photoUrl);
-        if (!tgUsername.isEmpty()) m.put("tgUsername", tgUsername);
         m.put("updatedAt", updatedAt);
         return m;
     }
@@ -130,7 +123,6 @@ public final class TrainerCard {
         c.verifiedAt = p.verifiedAt;
         c.rejectedAt = p.rejectedAt;
         c.photoUrl = p.photoUrl;
-        c.tgUsername = p.tgUsername;
         return c;
     }
 
@@ -156,7 +148,6 @@ public final class TrainerCard {
         c.verifiedAt = orEmpty(Json.str(m, "verifiedAt"));
         c.rejectedAt = orEmpty(Json.str(m, "rejectedAt"));
         c.photoUrl = orEmpty(Json.str(m, "photoUrl"));
-        c.tgUsername = orEmpty(Json.str(m, "tgUsername"));
         return c;
     }
 
