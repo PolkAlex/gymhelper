@@ -17,6 +17,42 @@ public final class SocialData {
     public final List<SocialRequest> requests = new ArrayList<>();
     public final List<SocialInvite> invites = new ArrayList<>();
     public final List<SocialReport> reports = new ArrayList<>();
+    /* [TRN-T5] журнал согласий §13.2: факты изменения грантов (кто/когда/что) — опциональное
+       поле (не пишется, когда пуст; старые файлы без ключа читаются, формат не ломается).
+       Кап — последние SocialStore.GRANT_LOG_CAP записей НА пользователя (trimGrantLog) */
+    public final List<GrantLogEntry> grantLog = new ArrayList<>();
+
+    /* запись журнала согласий §13.2: только РЕАЛЬНЫЕ изменения (no-op не пишет) */
+    public static final class GrantLogEntry {
+        public long by;                 /* Telegram user id подопечного (чей грант) */
+        public long trainer;            /* Telegram user id тренера (кому видимость) */
+        public String at = "";          /* ISO-дата-время */
+        /* включённое/выключенное: ключ гранта → новое значение (только изменившиеся) */
+        public final Map<String, Boolean> changes = new LinkedHashMap<>();
+
+        public Map<String, Object> toJson() {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("by", by);
+            m.put("trainer", trainer);
+            m.put("at", at);
+            m.put("changes", new LinkedHashMap<>(changes));
+            return m;
+        }
+
+        public static GrantLogEntry fromJson(Map<String, Object> m) {
+            GrantLogEntry e = new GrantLogEntry();
+            e.by = Json.lng(m.get("by"));
+            e.trainer = Json.lng(m.get("trainer"));
+            e.at = Json.str(m, "at") == null ? "" : Json.str(m, "at");
+            Map<String, Object> cm = Json.map(m.get("changes"));
+            if (cm != null) {
+                for (Map.Entry<String, Object> c : cm.entrySet()) {
+                    if (c.getValue() instanceof Boolean b) e.changes.put(c.getKey(), b);
+                }
+            }
+            return e;
+        }
+    }
 
     public static SocialData fromJson(Map<String, Object> m) {
         SocialData d = new SocialData();
@@ -48,6 +84,9 @@ public final class SocialData {
         for (Object o : list(m.get("reports"))) {
             if (o instanceof Map) d.reports.add(SocialReport.fromJson(Json.map(o)));
         }
+        for (Object o : list(m.get("grantLog"))) {
+            if (o instanceof Map) d.grantLog.add(GrantLogEntry.fromJson(Json.map(o)));
+        }
         return d;
     }
 
@@ -71,6 +110,11 @@ public final class SocialData {
         List<Object> ps = new ArrayList<>();
         for (SocialReport r : reports) ps.add(r.toJson());
         m.put("reports", ps);
+        if (!grantLog.isEmpty()) {
+            List<Object> gl = new ArrayList<>();
+            for (GrantLogEntry e : grantLog) gl.add(e.toJson());
+            m.put("grantLog", gl);
+        }
         return m;
     }
 
@@ -107,6 +151,12 @@ public final class SocialData {
         return n;
     }
 
+    /* имя тренера для текстов бота/пушей: из карточки; той нет — безличное */
+    public static String trainerNameOf(SocialData d, long trainerId) {
+        TrainerCard c = d.trainers.get(trainerId);
+        return c == null || c.displayName.isEmpty() ? "Тренер" : c.displayName;
+    }
+
     /* активный код приглашения тренера; null — кода нет */
     public SocialInvite inviteOf(long trainer) {
         for (SocialInvite i : invites) {
@@ -126,6 +176,33 @@ public final class SocialData {
     /* гашение истёкших заявок (§7.1: 14 дней — тихо, без уведомлений) — перед мутациями */
     public void purgeExpiredRequests(long nowMs) {
         requests.removeIf(r -> r.expired(nowMs));
+    }
+
+    /* [TRN-T5] журнал согласий §13.2: добавляет запись и подрезает по капу
+       (последние GRANT_LOG_CAP записей на пользователя) */
+    public void addGrantLog(GrantLogEntry e) {
+        grantLog.add(e);
+        trimGrantLog(e.by);
+    }
+
+    /* держим не более SocialStore.GRANT_LOG_CAP записей пользователя by — старейшие удаляются.
+       [TRN-T5 фикс ревью] удаление итератором: remove внутри for-each по тому же списку
+       давал ConcurrentModificationException на (CAP+1)-й записи — socialGrants падал,
+       грант применялся в памяти, но не персистился */
+    public void trimGrantLog(long by) {
+        int mine = 0;
+        for (GrantLogEntry e : grantLog) {
+            if (e.by == by) mine++;
+        }
+        int extra = mine - SocialStore.GRANT_LOG_CAP;
+        if (extra <= 0) return;
+        java.util.Iterator<GrantLogEntry> it = grantLog.iterator();
+        while (it.hasNext() && extra > 0) {
+            if (it.next().by == by) {
+                it.remove();
+                extra--;
+            }
+        }
     }
 
     private static List<Object> list(Object v) {

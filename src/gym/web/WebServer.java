@@ -3,9 +3,13 @@ package gym.web;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import gym.BotLogic;
+import gym.ExerciseEntry;
 import gym.GymData;
+import gym.Goal;
 import gym.Json;
 import gym.ProfileData;
+import gym.Records;
+import gym.SetEntry;
 import gym.SocialData;
 import gym.SocialInvite;
 import gym.SocialLink;
@@ -102,6 +106,12 @@ public final class WebServer {
     /* [TRN-T2] chat id владельца для уведомления о карточке «на проверке»
        (env GYM_OWNER_CHAT_ID — так же, как у BotLogic); 0 — уведомления off */
     private final long ownerChatId;
+    /* [TRN-T6] ссылка на открытую Telegram-группу сообщества: env GYM_TG_GROUP_URL
+       или файл social-tg.txt в корне (по образцу webapp.txt); пусто — клиент показывает
+       заглушку «скоро». Отдаётся клиенту в /api/init */
+    private final String tgGroupUrl;
+    /* [TRN-T5] троттлинг журнала age-gate: не чаще раза в минуту */
+    private static volatile long lastAgeWarnAt;
     private HttpServer server;
 
     public WebServer(String token, Storage storage, Path webDir, Stats stats) {
@@ -138,6 +148,19 @@ public final class WebServer {
         this.cardUrlBase = wu;
         this.api = api;
         this.ownerChatId = ownerChatId;
+        String tgu = System.getenv("GYM_TG_GROUP_URL");
+        if (tgu == null || tgu.isBlank()) {
+            /* файл-конфиг по образцу webapp.txt: одна строка — ссылка на группу */
+            try {
+                Path tgFile = Path.of("social-tg.txt");
+                if (Files.exists(tgFile)) {
+                    tgu = Files.readString(tgFile).trim();
+                }
+            } catch (Exception e) {
+                System.out.println("[warn] social-tg.txt: " + e.getMessage());
+            }
+        }
+        this.tgGroupUrl = (tgu != null && tgu.startsWith("https://")) ? tgu.trim() : "";
     }
 
     public void start(int port) throws IOException {
@@ -362,6 +385,7 @@ public final class WebServer {
         resp.put("ok", true);
         resp.put("userId", userId);
         resp.put("botUsername", botUsername);
+        if (!tgGroupUrl.isEmpty()) resp.put("tgGroupUrl", tgGroupUrl); /* [TRN-T6] сообщество */
         resp.put("data", data.toJson());
         sendJson(ex, 200, resp);
     }
@@ -1044,7 +1068,12 @@ public final class WebServer {
            любой эндпоинт (и чтение, и запись) */
         ProfileData prof = storage.load(userId).profile;
         if (prof == null || prof.ageOf() < 18) {
-            System.out.println("[warn] social age-gate: user " + userId + " " + path);
+            /* [TRN-T5 микро ревью] лог minors — не чаще раза в минуту (не спамим журнал) */
+            long nowWarn = System.currentTimeMillis();
+            if (nowWarn - lastAgeWarnAt > 60_000L) {
+                lastAgeWarnAt = nowWarn;
+                System.out.println("[warn] social age-gate: user " + userId + " " + path);
+            }
             sendJson(ex, 403, Map.of("ok", false, "reason", "age"));
             return;
         }
@@ -1058,6 +1087,7 @@ public final class WebServer {
             case "/api/social/invite" -> socialInvite(social, userId, body, ex);
             case "/api/social/grants" -> socialGrants(social, userId, body, ex);
             case "/api/social/report" -> socialReport(social, userId, body, ex);
+            case "/api/social/student" -> socialStudent(social, userId, body, ex);
             default -> sendJson(ex, 404, Map.of("ok", false));
         }
     }
@@ -1075,8 +1105,8 @@ public final class WebServer {
         List<Object> asTrainer = new ArrayList<>();
         List<Object> asStudent = new ArrayList<>();
         for (SocialLink l : d.links) {
-            if (l.trainer == userId) asTrainer.add(linkView(l, d.trainers.get(l.student)));
-            if (l.student == userId) asStudent.add(linkView(l, d.trainers.get(l.trainer)));
+            if (l.trainer == userId) asTrainer.add(linkView(l, d.trainers.get(l.student), null));
+            if (l.student == userId) asStudent.add(linkView(l, d.trainers.get(l.trainer), d.trainers.get(l.trainer)));
         }
         resp.put("linksAsTrainer", asTrainer);
         resp.put("linksAsStudent", asStudent);
@@ -1091,14 +1121,29 @@ public final class WebServer {
         resp.put("myRequest", outgoing);
         SocialInvite invite = d.inviteOf(userId);
         resp.put("inviteCode", invite == null ? null : invite.code);
+        /* [TRN-T5] журнал согласий §13.2 — только СВОИ записи, свежие сверху */
+        List<Object> gl = new ArrayList<>();
+        for (SocialData.GrantLogEntry e : d.grantLog) {
+            if (e.by == userId) gl.add(e.toJson());
+        }
+        Collections.reverse(gl);
+        resp.put("grantLog", gl);
         return resp;
     }
 
     /* связка для /api/social/me: данные как в файле + имя контрагента (после связки
-       контакт раскрыт — §13.1); карточки у контрагента нет — null */
-    private Map<String, Object> linkView(SocialLink l, TrainerCard peer) {
+       контакт раскрыт — §13.1). Имя тренера — из его карточки; имя подопечного —
+       снимок из initData при связке (studentName); карточки у контрагента нет — null */
+    /* связка для /api/social/me: данные как в файле + имя контрагента (после связки
+       контакт раскрыт — §13.1). Имя тренера — из его карточки; имя подопечного —
+       снимок из initData при связке (studentName); карточки у контрагента нет — null.
+       [TRN-T4, решение №5] username тренера — только СВОЕМУ подопечному (trainerCard). */
+    private Map<String, Object> linkView(SocialLink l, TrainerCard peer, TrainerCard trainerCard) {
         Map<String, Object> m = l.toJson();
         m.put("peerName", peer == null ? null : peer.displayName);
+        if (trainerCard != null && !trainerCard.tgUsername.isEmpty()) {
+            m.put("tgUsername", trainerCard.tgUsername);
+        }
         return m;
     }
 
@@ -1162,6 +1207,11 @@ public final class WebServer {
                пустой photo_url (Telegram не дал ссылку) прежний аватар не затирает */
             String photo = initUserPhoto((String) body.get("initData"));
             if (!photo.isEmpty()) card.photoUrl = photo;
+            /* [TRN-T4, решение №5] username тренера — снимок из initData (служебное поле,
+               контакт подопечному раскрывается только после связки); пустой/скрытый
+               username прежний не затирает */
+            String uname = initUserUsername((String) body.get("initData"));
+            if (!uname.isEmpty()) card.tgUsername = uname;
             card.updatedAt = nowIso();
             /* [TRN-T2] правка содержимого возвращает подтверждённую карточку на проверку (§5.3) */
             if (TrainerCard.STATUS_VERIFIED.equals(card.status)) card.status = TrainerCard.STATUS_PENDING;
@@ -1289,6 +1339,11 @@ public final class WebServer {
         for (Map.Entry<Long, TrainerCard> e : hits) {
             Map<String, Object> cm = e.getValue().publicMap();
             cm.put("userId", e.getKey());
+            /* [TRN-T4, решение №5] контакт — только запрашивающему, связанному с этим
+               тренером (после связки §13.1); остальным поиск контакта не отдаёт */
+            if (!e.getValue().tgUsername.isEmpty() && d.linkBetween(e.getKey(), userId) != null) {
+                cm.put("tgUsername", e.getValue().tgUsername);
+            }
             cards.add(cm);
         }
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -1304,23 +1359,32 @@ public final class WebServer {
         long trainerId = Json.lng(body.get("trainerId"));
         String comment = clamp(body, "comment", SocialRequest.MAX_COMMENT);
         if (trainerId <= 0 || trainerId == userId) {
-            sendJson(ex, 400, Map.of("ok", false));
+            sendJson(ex, 400, Map.of("ok", false, "reason", "self"));
             return;
         }
         SocialData d = social.get();
         long now = System.currentTimeMillis();
         TrainerCard card = d.trainers.get(trainerId);
         if (card == null || !TrainerCard.STATUS_VERIFIED.equals(card.status)) {
-            sendJson(ex, 404, Map.of("ok", false));
+            sendJson(ex, 404, Map.of("ok", false, "reason", "card"));
             return;
         }
         d.purgeExpiredRequests(now);
-        if (d.linkBetween(trainerId, userId) != null || d.activeRequest(trainerId, userId, now) != null) {
-            sendJson(ex, 409, Map.of("ok", false));
+        if (d.activeRequest(trainerId, userId, now) != null) {
+            sendJson(ex, 409, Map.of("ok", false, "reason", "request"));
+            return;
+        }
+        if (d.linkBetween(trainerId, userId) != null) {
+            sendJson(ex, 409, Map.of("ok", false, "reason", "link"));
+            return;
+        }
+        /* [TRN-T4] у подопечного один активный тренер (§7.4) — понятный отказ на UI */
+        if (d.hasTrainer(userId)) {
+            sendJson(ex, 409, Map.of("ok", false, "reason", "hasteacher"));
             return;
         }
         if (d.studentCount(trainerId) >= card.cap) {
-            sendJson(ex, 409, Map.of("ok", false));
+            sendJson(ex, 409, Map.of("ok", false, "reason", "cap"));
             return;
         }
         SocialRequest r = new SocialRequest();
@@ -1328,10 +1392,36 @@ public final class WebServer {
         r.student = userId;
         r.comment = comment;
         r.createdAt = nowIso();
+        /* [TRN-T4] имя заявителя — снимок из подписанного initData (для пуша тренеру) */
+        r.studentName = initUserName((String) body.get("initData")) == null
+            ? "Подопечный" : initUserName((String) body.get("initData"));
         d.requests.add(r);
         social.save();
+        stats.inc("socialApply"); /* §17 */
         System.out.println("[social] apply user " + userId + " -> trainer " + trainerId);
+        notifyTrainerApply(trainerId, r, ex);
         sendJson(ex, 200, Map.of("ok", true));
+    }
+
+    /* [TRN-T4] пуш тренеру о новой заявке (§14.1): кнопки разбора прямо в сообщении.
+       sendMessage шлёт в HTML-режиме — имя/комментарий экранируются (ревью батча 2) */
+    private void notifyTrainerApply(long trainerId, SocialRequest r, HttpExchange ex) {
+        String name = r.studentName == null || r.studentName.isEmpty() ? "Новый пользователь" : r.studentName;
+        StringBuilder b = new StringBuilder("📋 Новая заявка в подопечные\n\n")
+            .append(BotLogic.esc(name)).append(" хочет заниматься с Вами.\n\n");
+        if (!r.comment.isEmpty()) b.append("Комментарий: «").append(BotLogic.esc(r.comment)).append("»\n\n");
+        b.append("Принять или отклонить — кнопками ниже.");
+        List<List<Map<String, Object>>> kb = new ArrayList<>();
+        kb.add(List.of(
+            TelegramApi.button("✅ Принять", "soc:link_ok:" + r.student),
+            TelegramApi.button("✖️ Отклонить", "soc:link_no:" + r.student)));
+        kb.add(List.of(TelegramApi.urlButton("📱 Открыть приложение", appDeepLink())));
+        api.sendMessage(trainerId, b.toString(), kb);
+    }
+
+    /* deep-link приложения (Mini App) для кнопок ботовских уведомлений */
+    private String appDeepLink() {
+        return "https://t.me/" + botUsername + "?startapp=app";
     }
 
     /* POST /api/social/link {initData, action, userId} — механика связки (§7):
@@ -1352,6 +1442,7 @@ public final class WebServer {
             }
             d.links.remove(link);
             social.save();
+            stats.inc("socialLinkBreak"); /* §17 */
             System.out.println("[social] break user " + userId + " peer " + peer);
             sendJson(ex, 200, Map.of("ok", true));
             return;
@@ -1366,29 +1457,35 @@ public final class WebServer {
             if ("reject".equals(action)) {
                 d.requests.remove(r);
                 social.save();
+                stats.inc("socialReject"); /* §17 */
                 System.out.println("[social] reject user " + userId + " student " + peer);
+                /* [TRN-T4] мягкий пуш подопечному без причины (§7.1, §14.1); esc — HTML-режим */
+                String tName = SocialData.trainerNameOf(d, userId);
+                api.sendMessage(peer, "Заявка отклонена\n\n" + BotLogic.esc(tName)
+                    + " пока не может принять Вас в подопечные.\n"
+                    + "Посмотрите других тренеров: Профиль → Тренер → «Найти тренера».", null);
                 sendJson(ex, 200, Map.of("ok", true));
                 return;
             }
             if (d.linkBetween(userId, peer) != null) {
-                sendJson(ex, 409, Map.of("ok", false));
+                sendJson(ex, 409, Map.of("ok", false, "reason", "link"));
                 return;
             }
             /* [TRN-T2 фикс ревью] выключенный (hidden) тренер не принимает заявок (§5.4) */
             if (!trainerActive(d, userId)) {
-                sendJson(ex, 409, Map.of("ok", false));
+                sendJson(ex, 409, Map.of("ok", false, "reason", "hidden"));
                 return;
             }
             /* [TRN-T2 фикс ревью] у подопечного один активный тренер (§7.4 MVP):
                не только дубль этой пары, но и любая другая действующая связка */
             if (d.hasTrainer(peer)) {
-                sendJson(ex, 409, Map.of("ok", false));
+                sendJson(ex, 409, Map.of("ok", false, "reason", "hasteacher"));
                 return;
             }
             TrainerCard card = d.trainers.get(userId);
             int cap = card == null ? TrainerCard.DEFAULT_CAP : card.cap;
             if (d.studentCount(userId) >= cap) {
-                sendJson(ex, 409, Map.of("ok", false));
+                sendJson(ex, 409, Map.of("ok", false, "reason", "cap"));
                 return;
             }
             SocialLink link = new SocialLink();
@@ -1397,10 +1494,15 @@ public final class WebServer {
             link.since = LocalDate.now().toString();
             link.grants.putAll(SocialLink.defaultGrants());
             link.source = SocialLink.SOURCE_APPLY;
+            /* [TRN-T4] имя подопечного — из заявки (снимок initData при apply) */
+            link.studentName = r.studentName;
             d.requests.remove(r);
             d.links.add(link);
             social.save();
+            stats.inc("socialApprove"); /* §17 */
             System.out.println("[social] accept user " + userId + " student " + peer);
+            /* [TRN-T4] пуш подопечному «заявка принята» (§14.1, на «Вы») */
+            notifyStudentAccepted(peer, SocialData.trainerNameOf(d, userId), false);
             Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("ok", true);
             resp.put("link", link.toJson());
@@ -1408,6 +1510,19 @@ public final class WebServer {
             return;
         }
         sendJson(ex, 400, Map.of("ok", false));
+    }
+
+    /* [TRN-T4] пуш подопечному «связка установлена» (§14.1; по коду — §14.2, на «Вы») */
+    private void notifyStudentAccepted(long studentId, String trainerName, boolean byCode) {
+        StringBuilder b = new StringBuilder(byCode ? "✅ Вы в подопечных\n\n" : "✅ Заявка принята\n\n");
+        b.append(BotLogic.esc(trainerName)).append(byCode
+            ? " принял Вас в подопечные по коду приглашения.\n\n"
+            : " принял Вас в подопечные.\n\n");
+        b.append("Теперь решите, что он может видеть: Профиль → Тренер → «Что видит тренер».\n")
+            .append("По умолчанию тренер видит прогресс тренировок.");
+        List<List<Map<String, Object>>> kb = new ArrayList<>();
+        kb.add(List.of(TelegramApi.urlButton("📱 Открыть приложение", appDeepLink())));
+        api.sendMessage(studentId, b.toString(), kb);
     }
 
     /* [TRN-T2 фикс ревью] карточка тренера существует и режим не выключен: новые заявки
@@ -1479,10 +1594,18 @@ public final class WebServer {
             link.since = LocalDate.now().toString();
             link.grants.putAll(SocialLink.defaultGrants());
             link.source = SocialLink.SOURCE_INVITE;
+            /* [TRN-T4] имя подопечного — снимок из подписанного initData студента */
+            String sName = initUserName((String) body.get("initData"));
+            link.studentName = sName == null ? "Подопечный" : sName;
             d.invites.remove(inv); /* код одноразовый — гасится применением (§7.2) */
             d.links.add(link);
             social.save();
+            stats.inc("socialInviteUse"); /* §17 */
             System.out.println("[social] invite use user " + userId + " trainer " + inv.trainer);
+            /* [TRN-T4] уведомления обоим (§14.2, на «Вы»); esc — HTML-режим (ревью батча 2) */
+            api.sendMessage(inv.trainer, "✅ Новый подопечный по коду: "
+                + BotLogic.esc(link.studentName) + ".\nСписок подопечных — в приложении.", null);
+            notifyStudentAccepted(userId, SocialData.trainerNameOf(d, inv.trainer), true);
             Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("ok", true);
             resp.put("link", link.toJson());
@@ -1490,6 +1613,33 @@ public final class WebServer {
             return;
         }
         sendJson(ex, 400, Map.of("ok", false));
+    }
+
+    /* [TRN-T4, решение №5] Telegram-username тренера из ПОДПИСАННОГО initData
+       (user.username) — server-owned ПДн, клиентский payload не доверенный.
+       Нормализация: trim/lowercase/ведущий @ отрезается, [a-z0-9_]{5,32};
+       мусор или скрытый username → пусто (кнопка контакта не рендерится). */
+    static String initUserUsername(String initData) {
+        if (initData == null || initData.isEmpty()) return "";
+        try {
+            Map<String, String> params = new HashMap<>();
+            for (String pair : initData.split("&")) {
+                int i = pair.indexOf('=');
+                if (i <= 0) continue;
+                params.put(URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8),
+                    URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8));
+            }
+            String userJson = params.get("user");
+            if (userJson == null) return "";
+            Map<String, Object> user = Json.map(Json.parse(userJson));
+            String u = Json.str(user, "username");
+            if (u == null) return "";
+            u = u.strip().toLowerCase();
+            if (u.startsWith("@")) u = u.substring(1);
+            return u.matches("[a-z0-9_]{5,32}") ? u : "";
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /* 6 символов, алфавит без похожих (§7.2); коллизия в пределах активных кодов
@@ -1512,30 +1662,44 @@ public final class WebServer {
     /* POST /api/social/grants {initData, trainerId, grants:{key:bool}} — согласие
        подопечного (§8): меняет только его связку, применяется немедленно; уведомлений
        тренеру нет (спам-риск, §8.2). Незнакомые ключи клиента игнорируются, ранее
-       сохранённые (будущие гранты) не теряются. */
+       сохранённые (будущие гранты) не теряются. [TRN-T5] каждое РЕАЛЬНОЕ изменение
+       пишется в журнал согласий §13.2 (grantLog, кап 20 на пользователя). */
     private void socialGrants(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
         long trainerId = Json.lng(body.get("trainerId"));
         Map<String, Object> in = Json.map(body.get("grants"));
-        SocialLink link = trainerId > 0 ? social.get().linkBetween(trainerId, userId) : null;
+        SocialData d = social.get();
+        SocialLink link = trainerId > 0 ? d.linkBetween(trainerId, userId) : null;
         if (link == null || link.student != userId || in == null) {
             sendJson(ex, 404, Map.of("ok", false));
             return;
         }
+        Map<String, Boolean> changed = new LinkedHashMap<>();
         for (String k : SocialStore.GRANT_KEYS) {
             Object v = in.get(k);
-            if (v instanceof Boolean b) link.grants.put(k, b);
+            if (v instanceof Boolean b && !b.equals(link.grants.get(k))) changed.put(k, b);
         }
-        social.save();
-        System.out.println("[social] grants user " + userId + " trainer " + trainerId);
+        if (!changed.isEmpty()) { /* no-op — журнал и счётчик не трогаем */
+            for (Map.Entry<String, Boolean> c : changed.entrySet()) link.grants.put(c.getKey(), c.getValue());
+            SocialData.GrantLogEntry e = new SocialData.GrantLogEntry();
+            e.by = userId;
+            e.trainer = trainerId;
+            e.at = nowIso();
+            e.changes.putAll(changed);
+            d.addGrantLog(e);
+            social.save();
+            stats.inc("socialGrantChange"); /* §17 */
+        }
+        System.out.println("[social] grants user " + userId + " trainer " + trainerId
+            + " changed " + changed.size());
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("grants", link.toJson().get("grants"));
         sendJson(ex, 200, resp);
     }
 
-    /* POST /api/social/report {initData, about, text} — жалоба (§13.4): владелец получает
-       текст через существующий feedback-канал (deep-link — клиентская часть), здесь —
-       запись в social.json; разбор — админ-команды [TRN-T2]. */
+    /* POST /api/social/report {initData, about, text} — жалоба (§13.4): кнопка «Пожаловаться»
+       дублируется владельцу через feedback-канал (deep-link на клиенте), здесь — запись
+       в social.json + [TRN-T6] уведомление владельцу; разбор — админ-команды [TRN-T2]. */
     private void socialReport(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
         long about = Json.lng(body.get("about"));
         String text = clamp(body, "text", SocialReport.MAX_TEXT);
@@ -1551,8 +1715,120 @@ public final class WebServer {
         r.text = text;
         d.reports.add(r);
         social.save();
+        stats.inc("socialComplaint"); /* §17 */
         System.out.println("[social] report user " + userId + " about " + about);
+        /* [TRN-T6] уведомление владельцу (если настроен GYM_OWNER_CHAT_ID) */
+        if (ownerChatId > 0) {
+            api.sendMessage(ownerChatId, "⚠️ Жалоба в соцслое «Тренер»\n\n#"
+                + userId + " пожаловался на #" + about + "\n\n"
+                + BotLogic.esc(text) + "\n\nКарточки на проверке: /trainer_pending", null);
+        }
         sendJson(ex, 200, Map.of("ok", true));
+    }
+
+    /* POST /api/social/student {initData, studentId} — [TRN-T5] read-only карточка
+       подопечного для ЕГО тренера (§9.2): только агрегаты, разрешённые грантами
+       (§8.3: журнала упражнений нет и не будет). 404 {reason:"nolink"} — связки нет /
+       не его подопечный (единообразно с другими статусными ответами соц-API). */
+    private void socialStudent(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
+        long studentId = Json.lng(body.get("studentId"));
+        SocialData d = social.get();
+        SocialLink link = studentId > 0 ? d.linkBetween(userId, studentId) : null;
+        if (link == null || link.trainer != userId) {
+            sendJson(ex, 404, Map.of("ok", false, "reason", "nolink"));
+            return;
+        }
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("ok", true);
+        resp.put("studentId", studentId);
+        resp.put("name", link.studentName.isEmpty() ? "Подопечный" : link.studentName);
+        resp.put("since", link.since);
+        resp.put("grants", link.toJson().get("grants"));
+        /* [TRN-T4, №5] контакт запрашивающего тренера — его подопечному */
+        TrainerCard selfCard = d.trainers.get(userId);
+        if (selfCard != null && !selfCard.tgUsername.isEmpty()) {
+            resp.put("tgUsername", selfCard.tgUsername);
+        }
+        GymData g = storage.load(studentId);
+        LocalDateTime now = LocalDateTime.now();
+        String cutoff = now.minusDays(30).toLocalDate().toString();
+        if (Boolean.TRUE.equals(link.grants.get(SocialStore.GRANT_PROGRESS))) {
+            int cnt = 0;
+            double volume = 0;
+            String last = null;
+            for (Workout w : g.workouts) {
+                if (!w.finished || w.date == null || w.date.compareTo(cutoff) < 0) continue;
+                cnt++;
+                volume += BotLogic.workoutVolume(w);
+                if (last == null || w.date.compareTo(last) > 0) last = w.date;
+            }
+            Map<String, Object> p = new LinkedHashMap<>();
+            p.put("workouts30", cnt);
+            p.put("volume30", Math.round(volume));
+            p.put("lastDate", last);
+            resp.put("progress", p);
+        }
+        if (Boolean.TRUE.equals(link.grants.get(SocialStore.GRANT_BODY)) && g.profile != null) {
+            Map<String, Object> bm = new LinkedHashMap<>();
+            bm.put("weight", g.profile.weight);
+            bm.put("height", g.profile.height);
+            resp.put("body", bm);
+        }
+        if (Boolean.TRUE.equals(link.grants.get(SocialStore.GRANT_KCAL))) {
+            long kcal = 0;
+            for (Workout w : g.workouts) {
+                if (!w.finished || w.date == null || w.date.compareTo(cutoff) < 0) continue;
+                long k = BotLogic.calcKcal(g.profile, w, now);
+                if (k > 0) kcal += k;
+            }
+            resp.put("kcal30", kcal);
+        }
+        if (Boolean.TRUE.equals(link.grants.get(SocialStore.GRANT_GOALS))) {
+            List<Object> goals = new ArrayList<>();
+            for (Goal gl : g.goals) {
+                if (gl.status != 1) continue;
+                Map<String, Object> gm = new LinkedHashMap<>();
+                gm.put("type", gl.type);
+                gm.put("target", gl.target);
+                double done = goalProgress(g, gl);
+                gm.put("done", Math.round(done * 10) / 10.0);
+                if (gl.type == 1) gm.put("ex", gl.exercise == null ? "" : gl.exercise);
+                if (gl.start != null) gm.put("start", gl.start);
+                if (gl.end != null) gm.put("end", gl.end);
+                double pct = gl.target > 0 ? Math.min(100.0, Math.round(done / gl.target * 1000) / 10.0) : 0;
+                gm.put("pct", pct);
+                goals.add(gm);
+            }
+            resp.put("goals", goals);
+        }
+        sendJson(ex, 200, resp);
+    }
+
+    /* [TRN-T5] текущий результат активной цели для карточки подопечного (агрегат):
+       1 силовая — лучший e1RM упражнения по истории (Records.e1rm);
+       2 частота — тренировки в окне [start..end]; 3 объём — кг в окне;
+       4 вес тела — текущее значение профиля */
+    private double goalProgress(GymData g, Goal gl) {
+        String from = gl.start;
+        String to = gl.end;
+        if (gl.type == 4) return g.profile == null ? 0 : g.profile.weight;
+        double total = 0;
+        for (Workout w : g.workouts) {
+            if (!w.finished || w.date == null) continue;
+            if (from != null && w.date.compareTo(from) < 0) continue;
+            if (to != null && w.date.compareTo(to) > 0) continue;
+            if (gl.type == 2) { total += 1; continue; }
+            if (gl.type == 3) { total += BotLogic.workoutVolume(w); continue; }
+            /* type 1: лучший e1RM подхода этого упражнения за всю историю */
+            for (ExerciseEntry e : w.exercises) {
+                if (e.name == null || gl.exercise == null || !e.name.equalsIgnoreCase(gl.exercise)) continue;
+                for (SetEntry s : e.sets) {
+                    double v = Records.e1rm(s);
+                    if (v > total) total = v;
+                }
+            }
+        }
+        return total;
     }
 
     /* [TRN-T1] серверная обрезка строк по лимитам формы (§5.2) — как initUserName

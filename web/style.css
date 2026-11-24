@@ -2897,3 +2897,12 @@ details.plain[open] summary .chev, details.warn[open] summary .chev { transform:
 .resicon.ok { background: rgba(61,220,151,.12); border: 1px solid rgba(61,220,151,.35); color: #3ddc97; }
 .resicon.bad { background: rgba(255,107,94,.10); border: 1px solid rgba(255,107,94,.30); color: var(--danger); }
 .resttl { text-align: center; font-size: 17px; font-weight: 800; margin: 0 0 2px; }
+
+/* [TRN-T4/T5] код приглашения, гранты, журнал согласий */
+.tr-codewrap { margin-top: 8px; }
+.tr-code {
+    font-size: 26px; font-weight: 800; letter-spacing: 4px; text-align: center;
+    background: var(--nested); border: 1px dashed var(--accent);
+    border-radius: 14px; padding: 10px 12px; margin: 6px 0; color: var(--accent);
+}
+.tr-invite { margin-top: 8px; }

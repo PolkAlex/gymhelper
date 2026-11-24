@@ -587,7 +587,10 @@ public final class BotLogic {
             }
             case "ef:del" -> deleteEntry(chatId, messageId, dataModel, st);
             default -> {
-                if (data.startsWith("ex:i_")) {
+                if (data.startsWith("soc:")) {
+                    /* [TRN-T4] разбор заявки в подопечные прямо из пуша (§14.1) */
+                    handleSocialCallback(chatId, messageId, data);
+                } else if (data.startsWith("ex:i_")) {
                     pickExercise(chatId, messageId, dataModel, st, Exercises.CATALOG[Integer.parseInt(data.substring(5))]);
                 } else if (data.startsWith("w:l_")) {
                     int idx = Integer.parseInt(data.substring(4));
@@ -2565,6 +2568,98 @@ public final class BotLogic {
         return LocalDateTime.now().withNano(0).toString();
     }
 
+    /* ===== [TRN-T4] разбор заявки кнопками из пуша (§14.1): те же инварианты, что и
+       в /api/social/link у WebServer — заявка жива, тренер активен, у подопечного
+       нет другого тренера, лимит карточки. Итог: связка (гранты дефолтные:
+       «Прогресс» ВКЛ — финал 23.11) + пуш подопечному. Разбор доступен только
+       адресату заявки (chatId — тренер). ===== */
+
+    private void handleSocialCallback(long chatId, long messageId, String data) {
+        boolean accept = data.startsWith("soc:link_ok:");
+        boolean reject = data.startsWith("soc:link_no:");
+        if (!accept && !reject) return;
+        long studentId;
+        try {
+            studentId = Long.parseLong(data.substring(accept ? "soc:link_ok:".length() : "soc:link_no:".length()));
+        } catch (NumberFormatException e) {
+            api.editMessageText(chatId, messageId, "Некорректная ссылка заявки.", null);
+            return;
+        }
+        SocialData d = storage.social().get();
+        long now = System.currentTimeMillis();
+        SocialRequest r = d.activeRequest(chatId, studentId, now);
+        if (r == null) {
+            api.editMessageText(chatId, messageId,
+                "Заявка не найдена — истекла (14 дней) или уже разобрана.", null);
+            return;
+        }
+        if (reject) {
+            d.requests.remove(r);
+            storage.social().save();
+            if (stats != null) stats.inc("socialReject");
+            api.editMessageText(chatId, messageId, "Заявка отклонена.", null);
+            String tName = SocialData.trainerNameOf(d, chatId);
+            api.sendMessage(studentId, "Заявка отклонена\n\n" + esc(tName)
+                + " пока не может принять Вас в подопечные.\n"
+                + "Посмотрите других тренеров: Профиль → Тренер → «Найти тренера».", null);
+            return;
+        }
+        if (d.linkBetween(chatId, studentId) != null) {
+            api.editMessageText(chatId, messageId, "Связка с этим пользователем уже есть.", null);
+            return;
+        }
+        if (!trainerCardActive(d, chatId)) {
+            api.editMessageText(chatId, messageId,
+                "Режим тренера выключен — принять заявку нельзя. Включите режим в приложении.", null);
+            return;
+        }
+        if (d.hasTrainer(studentId)) {
+            api.editMessageText(chatId, messageId,
+                "У пользователя уже есть тренер — связка невозможна (один активный тренер).", null);
+            return;
+        }
+        TrainerCard card = d.trainers.get(chatId);
+        int cap = card == null ? TrainerCard.DEFAULT_CAP : card.cap;
+        if (d.studentCount(chatId) >= cap) {
+            api.editMessageText(chatId, messageId,
+                "Набор закрыт: достигнут лимит подопечных (" + cap + ") из карточки.", null);
+            return;
+        }
+        SocialLink link = new SocialLink();
+        link.trainer = chatId;
+        link.student = studentId;
+        link.since = LocalDate.now().toString();
+        link.grants.putAll(SocialLink.defaultGrants());
+        link.source = SocialLink.SOURCE_APPLY;
+        link.studentName = r.studentName;
+        d.requests.remove(r);
+        d.links.add(link);
+        storage.social().save();
+        if (stats != null) stats.inc("socialApprove");
+        api.editMessageText(chatId, messageId,
+            "✅ Заявка принята — " + esc(r.studentName) + " в подопечных."
+            + "\nЧто тренер видит, решает подопечный: Профиль → Тренер.", trainerOpenKb());
+        notifyStudentAcceptedBot(studentId, SocialData.trainerNameOf(d, chatId), false);
+    }
+
+    /* локальная проверка «карточка есть и не hidden» (§5.4) — зеркало WebServer.trainerActive */
+    private static boolean trainerCardActive(SocialData d, long trainerId) {
+        TrainerCard c = d.trainers.get(trainerId);
+        return c != null && !TrainerCard.STATUS_HIDDEN.equals(c.status);
+    }
+
+    /* [TRN-T4] пуш подопечному о принятой заявке (§14.1, на «Вы») — бот-сторона
+       (HTTP-сторона того же текста — WebServer.notifyStudentAccepted) */
+    private void notifyStudentAcceptedBot(long studentId, String trainerName, boolean byCode) {
+        StringBuilder b = new StringBuilder(byCode ? "✅ Вы в подопечных\n\n" : "✅ Заявка принята\n\n");
+        b.append(esc(trainerName)).append(byCode
+            ? " принял Вас в подопечные по коду приглашения.\n\n"
+            : " принял Вас в подопечные.\n\n");
+        b.append("Теперь решите, что он может видеть: Профиль → Тренер → «Что видит тренер».\n")
+            .append("По умолчанию тренер видит прогресс тренировок.");
+        api.sendMessage(studentId, b.toString(), trainerOpenKb());
+    }
+
     private void showKcal(long chatId, Long mid, GymData data, long id) {
         Workout w = data.findById(id);
         if (w == null) {
@@ -2818,7 +2913,9 @@ public final class BotLogic {
         return m + "м";
     }
 
-    static long calcKcal(ProfileData p, Workout w, LocalDateTime now) {
+    /* public — [TRN-T5] используется и серверной карточкой подопечного (WebServer),
+       не только ботом; формула MET-модели описана в справке */
+    public static long calcKcal(ProfileData p, Workout w, LocalDateTime now) {
         if (p == null || p.weight <= 0) return -1;
         Long mins = durationMin(w, now);
         if (mins == null) return -1;
@@ -2836,7 +2933,9 @@ public final class BotLogic {
         return p.sex.equalsIgnoreCase("ж") ? base - 161 : base + 5;
     }
 
-    static double workoutVolume(Workout w) {
+    /* public — [TRN-T5] серверная карточка подопечного (WebServer) считает агрегаты теми
+       же правилами, что и «🔥 Расчёт калорий» бота — одно место истины */
+    public static double workoutVolume(Workout w) {
         double v = 0;
         for (ExerciseEntry e : w.exercises) {
             for (SetEntry s : e.sets) {
@@ -3055,7 +3154,9 @@ public final class BotLogic {
         return t;
     }
 
-    static double maxWeight(String weightText) {
+    /* public — [TRN-T5] серверная карточка подопечного (WebServer): максимум веса
+       строки/диапазона («60», «75-175», «50, 80») теми же правилами, что в боте */
+    public static double maxWeight(String weightText) {
         double max = 0;
         Matcher m = NUM_PATTERN.matcher(weightText == null ? "" : weightText);
         while (m.find()) {
