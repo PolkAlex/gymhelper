@@ -2,20 +2,11 @@ package gym.web;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import gym.BotLogic;
 import gym.GymData;
 import gym.Json;
-import gym.ProfileData;
-import gym.SocialData;
-import gym.SocialInvite;
-import gym.SocialLink;
-import gym.SocialReport;
-import gym.SocialRequest;
-import gym.SocialStore;
 import gym.Stats;
 import gym.Storage;
 import gym.TelegramApi;
-import gym.TrainerCard;
 import gym.Workout;
 
 import javax.crypto.Mac;
@@ -35,7 +26,6 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -99,45 +89,34 @@ public final class WebServer {
     /* [UX-S16] TelegramApi для sendPhoto; инжект в пакетном конструкторе —
        контракт-тест подменяет заглушкой (реальной сети в тестах быть не должно) */
     private final TelegramApi api;
-    /* [TRN-T2] chat id владельца для уведомления о карточке «на проверке»
-       (env GYM_OWNER_CHAT_ID — так же, как у BotLogic); 0 — уведомления off */
-    private final long ownerChatId;
     private HttpServer server;
 
     public WebServer(String token, Storage storage, Path webDir, Stats stats) {
-        this(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"), new TelegramApi(token), 0);
+        this(token, storage, webDir, stats, System.getenv("GYM_BOT_USERNAME"), new TelegramApi(token));
     }
 
     /* [UX-B14] инжект username для контракт-теста (env JVM-процесса поменять нельзя);
         прод использует конструктор выше с env GYM_BOT_USERNAME */
     public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername) {
-        this(token, storage, webDir, stats, botUsername, new TelegramApi(token), 0);
+        this(token, storage, webDir, stats, botUsername, new TelegramApi(token));
     }
 
     /* [UX-S16] полный конструктор: username + TelegramApi (заглушка в контракт-тесте —
         sendPhoto не должен ходить в реальную сеть); прод использует конструкторы выше */
     public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername, TelegramApi api) {
-        this(token, storage, webDir, stats, botUsername, api, 0);
-    }
-
-    /* [TRN-T2] +ownerChatId: уведомление владельцу о карточке, отправленной на проверку;
-        botUsername null/пустой — env GYM_BOT_USERNAME (Main), дальше фолбэк как раньше */
-    public WebServer(String token, Storage storage, Path webDir, Stats stats, String botUsername, TelegramApi api, long ownerChatId) {
         this.token = token;
         this.storage = storage;
         this.stats = stats;
         this.webDir = webDir.toAbsolutePath().normalize();
         String at = System.getenv("GYM_ADMIN_TOKEN");
         this.adminToken = (at == null || at.isBlank()) ? token : at.trim();
-        String bu = (botUsername == null || botUsername.isBlank()) ? System.getenv("GYM_BOT_USERNAME") : botUsername;
-        this.botUsername = (bu == null || bu.isBlank()) ? "MyHelperGymBot" : bu.trim();
+        this.botUsername = (botUsername == null || botUsername.isBlank()) ? "MyHelperGymBot" : botUsername.trim();
         String wu = System.getenv("GYM_WEBAPP_URL");
         if (wu == null || !wu.trim().startsWith("https://")) wu = "https://app.gym-helper.com";
         wu = wu.trim();
         while (wu.endsWith("/")) wu = wu.substring(0, wu.length() - 1);
         this.cardUrlBase = wu;
         this.api = api;
-        this.ownerChatId = ownerChatId;
     }
 
     public void start(int port) throws IOException {
@@ -213,11 +192,6 @@ public final class WebServer {
                     return;
                 }
                 handleCard(ex);
-                return;
-            }
-            /* [TRN-T1] соцслой «Тренер»: каркас API (спека [TRN-S1] §4.2) */
-            if (path.startsWith("/api/social/")) {
-                handleSocial(ex, path);
                 return;
             }
             /* [UX-I16] публичная страница тренировки — БЕЗ initData (до авторизационного
@@ -1011,577 +985,6 @@ public final class WebServer {
         } catch (Exception e) {
             System.out.println("[warn] share index scan: " + e.getMessage());
         }
-    }
-
-    /* ============ [TRN-T1] соцслой «Тренер»: каркас API (спека [TRN-S1] §4.2) ============
-       Все эндпоинты POST с initData в теле — как /api/init|save|share (initData длинный,
-       в URL не передаём). Здесь только чтение/запись SocialStore: карточки, поиск,
-       заявки, связки, гранты, коды приглашений, жалобы. Верификация/админ-команды и
-       уведомления бота — [TRN-T2/T4], экраны Mini App — [TRN-T3/T5]. /api/social/health
-       не реализован: поле «Здоровье» отложено (решение владельца 23.11). */
-
-    private void handleSocial(HttpExchange ex, String path) throws IOException {
-        if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
-            sendJson(ex, 405, Map.of("ok", false));
-            return;
-        }
-        Map<String, Object> body = readJsonBody(ex);
-        if (body == null) {
-            sendJson(ex, 400, Map.of("ok", false));
-            return;
-        }
-        String initData = (String) body.get("initData");
-        long userId = validateInitData(initData == null ? "" : initData, token);
-        if (userId <= 0) {
-            System.out.println("[warn] social rejected: " + path
-                + " initDataLen=" + (initData == null ? -1 : initData.length()));
-            sendJson(ex, 401, Map.of("ok", false));
-            return;
-        }
-        /* [TRN-T2] 18+ для ВСЕГО соцслоя (решение владельца 12.11 №12 — «18+ для
-           соцфункций», не только режим тренера): возраст self-declared — birth-данные
-           или поле age (ProfileData.ageOf()); неизвестный возраст или < 18 — 403 на
-           любой эндпоинт (и чтение, и запись) */
-        ProfileData prof = storage.load(userId).profile;
-        if (prof == null || prof.ageOf() < 18) {
-            System.out.println("[warn] social age-gate: user " + userId + " " + path);
-            sendJson(ex, 403, Map.of("ok", false, "reason", "age"));
-            return;
-        }
-        SocialStore social = storage.social();
-        switch (path) {
-            case "/api/social/me" -> sendJson(ex, 200, socialMe(social, userId));
-            case "/api/social/card" -> socialCard(social, userId, body, ex);
-            case "/api/social/search" -> sendJson(ex, 200, socialSearch(social, userId, body));
-            case "/api/social/apply" -> socialApply(social, userId, body, ex);
-            case "/api/social/link" -> socialLinkAction(social, userId, body, ex);
-            case "/api/social/invite" -> socialInvite(social, userId, body, ex);
-            case "/api/social/grants" -> socialGrants(social, userId, body, ex);
-            case "/api/social/report" -> socialReport(social, userId, body, ex);
-            default -> sendJson(ex, 404, Map.of("ok", false));
-        }
-    }
-
-    /* «моя соцпанель» (§4.2 /api/social/me): своя карточка, связки в обе стороны
-       (с именем контрагента), входящие заявки (тренер), моя исходящая заявка, мой код.
-       Истёкшие заявки не показываются и гасятся при следующей записи (§7.1). */
-    private Map<String, Object> socialMe(SocialStore social, long userId) {
-        SocialData d = social.get();
-        long now = System.currentTimeMillis();
-        Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("ok", true);
-        TrainerCard card = d.trainers.get(userId);
-        resp.put("card", card == null ? null : card.toMap());
-        List<Object> asTrainer = new ArrayList<>();
-        List<Object> asStudent = new ArrayList<>();
-        for (SocialLink l : d.links) {
-            if (l.trainer == userId) asTrainer.add(linkView(l, d.trainers.get(l.student)));
-            if (l.student == userId) asStudent.add(linkView(l, d.trainers.get(l.trainer)));
-        }
-        resp.put("linksAsTrainer", asTrainer);
-        resp.put("linksAsStudent", asStudent);
-        List<Object> incoming = new ArrayList<>();
-        Map<String, Object> outgoing = null;
-        for (SocialRequest r : d.requests) {
-            if (r.expired(now)) continue;
-            if (r.trainer == userId) incoming.add(r.toJson());
-            if (r.student == userId && outgoing == null) outgoing = r.toJson();
-        }
-        resp.put("requests", incoming);
-        resp.put("myRequest", outgoing);
-        SocialInvite invite = d.inviteOf(userId);
-        resp.put("inviteCode", invite == null ? null : invite.code);
-        return resp;
-    }
-
-    /* связка для /api/social/me: данные как в файле + имя контрагента (после связки
-       контакт раскрыт — §13.1); карточки у контрагента нет — null */
-    private Map<String, Object> linkView(SocialLink l, TrainerCard peer) {
-        Map<String, Object> m = l.toJson();
-        m.put("peerName", peer == null ? null : peer.displayName);
-        return m;
-    }
-
-    /* POST /api/social/card {initData, card:{…}, submit?, enabled?} — карточка режима
-       «Я тренер» (§5.2). Переходы статусов [TRN-T2]: новая — draft; submit → pending
-       (после отказа — не раньше чем через 30 дней, rejectedAt — финал владельца 23.11);
-       правка содержимого подтверждённой возвращает в pending (§5.3); enabled=false —
-       выключение режима (§5.4: скрытие из поиска, связи сохраняются — при них вернётся
-       warning; полный разрыв связей — [TRN-T4]). 18+ гейт (решение 12.11 №12): возраст
-       из birth-данных GymData. Клиентские поля замещаются целиком с лимитами формы;
-       status/statusNote/verifiedAt/rejectedAt/updatedAt/photoUrl — server-owned. */
-    private void socialCard(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
-        Map<String, Object> in = Json.map(body.get("card"));
-        boolean submit = Boolean.TRUE.equals(body.get("submit"));
-        boolean disable = body.containsKey("enabled") && !Boolean.TRUE.equals(body.get("enabled"));
-        boolean enable = Boolean.TRUE.equals(body.get("enabled"));
-        /* submit/enabled без card разрешены: у клиента уже есть карточка — меняется только
-           статус; но хотя бы что-то одно прийти обязано. 18+ гейт — общий в handleSocial */
-        if (in == null && !submit && !disable && !enable) {
-            sendJson(ex, 400, Map.of("ok", false));
-            return;
-        }
-        SocialData d = social.get();
-        TrainerCard prev = d.trainers.get(userId);
-        if (prev == null && in == null) {
-            sendJson(ex, 400, Map.of("ok", false));
-            return;
-        }
-        /* [TRN-T2 фикс ревью] стартуем с ПОЛНОЙ копии prev: путь «только статус»
-           (submit/enabled без card) не теряет контент карточки; client-поля ниже
-           замещаются поверх копии, server-owned остаются как были */
-        TrainerCard card = TrainerCard.copyOf(prev);
-        if (in != null) {
-            String name = clamp(in, "displayName", TrainerCard.MAX_NAME);
-            if (name.isEmpty()) { /* имя — единственное обязательное поле формы (§5.2: 2–40) */
-                sendJson(ex, 400, Map.of("ok", false));
-                return;
-            }
-            card.displayName = name;
-            card.bio = clamp(in, "bio", TrainerCard.MAX_BIO);
-            card.city = clamp(in, "city", TrainerCard.MAX_CITY);
-            card.gyms = clamp(in, "gyms", TrainerCard.MAX_GYMS);
-            /* [TRN-T2 фикс ревью] card — копия prev: клиентские списки ЗАМЕЩАЮТ содержимое */
-            card.specs.clear();
-            card.specs.addAll(clampList(in, "specs", TrainerCard.MAX_SPECS, 16));
-            card.specs.removeIf(s -> !TrainerCard.SPEC_IDS.contains(s)); /* только набор §5.2 */
-            int y = (int) Json.lng(in.get("years"));
-            card.years = Math.max(0, Math.min(y, TrainerCard.MAX_YEARS));
-            card.achievements.clear();
-            card.achievements.addAll(clampList(in, "achievements", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
-            card.education.clear();
-            card.education.addAll(clampList(in, "education", TrainerCard.MAX_LIST_ITEMS, TrainerCard.MAX_ITEM_LEN));
-            card.schedule.clear();
-            card.schedule.addAll(clampList(in, "schedule", TrainerCard.MAX_SCHEDULE_ITEMS, TrainerCard.MAX_SCHEDULE_LEN));
-            int c = (int) Json.lng(in.get("cap"));
-            card.cap = TrainerCard.CAPS.contains(c) ? c : TrainerCard.DEFAULT_CAP;
-            Object av = in.get("useTgAvatar");
-            if (av instanceof Boolean b) card.useTgAvatar = b;
-            /* [TRN-T3] аватар Telegram — ТОЛЬКО из подписанного initData (user.photo_url);
-               клиентский payload не доверенный (по образцу initUserName, ревью №3);
-               пустой photo_url (Telegram не дал ссылку) прежний аватар не затирает */
-            String photo = initUserPhoto((String) body.get("initData"));
-            if (!photo.isEmpty()) card.photoUrl = photo;
-            card.updatedAt = nowIso();
-            /* [TRN-T2] правка содержимого возвращает подтверждённую карточку на проверку (§5.3) */
-            if (TrainerCard.STATUS_VERIFIED.equals(card.status)) card.status = TrainerCard.STATUS_PENDING;
-            if (prev == null) stats.inc("socialTrainerOn"); /* включение режима (§17) */
-        }
-        boolean alreadyPending = TrainerCard.STATUS_PENDING.equals(card.status);
-        if (submit && !alreadyPending) { /* «Отправить на проверку» (§5.2 → §14.5) */
-            if (TrainerCard.STATUS_REJECTED.equals(card.status)) {
-                long left = resubmitLeftDays(card.rejectedAt);
-                if (left > 0) { /* после отказа — через 30 дней (решение владельца 23.11) */
-                    sendJson(ex, 403, Map.of("ok", false, "reason", "cooldown", "retryInDays", left));
-                    return;
-                }
-            }
-            card.status = TrainerCard.STATUS_PENDING;
-            card.updatedAt = nowIso();
-            stats.inc("socialCardPending");
-            notifyOwnerPending(userId, card);
-        }
-        /* повторный submit при уже-pending — тихий успех: статус не меняется, владелец
-           повторно не уведомляется, счётчик не растёт (замечание ревью батча T1–T3) */
-        String warning = null;
-        if (disable) { /* выключение режима (§5.4): вне поиска, связи сохраняются */
-            card.status = TrainerCard.STATUS_HIDDEN;
-            card.updatedAt = nowIso();
-            int linked = d.studentCount(userId);
-            if (linked > 0) {
-                warning = "Режим выключен, карточка скрыта из поиска. Связи сохранены: "
-                    + linked + " " + BotLogic.plural(linked, "подопечный", "подопечных", "подопечных")
-                    + " — разорвать их можно в разделе «Мои подопечные»";
-            }
-        } else if (enable && TrainerCard.STATUS_HIDDEN.equals(card.status)) {
-            /* повторное включение — черновик; submit снова отправит на проверку */
-            card.status = TrainerCard.STATUS_DRAFT;
-            card.updatedAt = nowIso();
-        }
-        d.trainers.put(userId, card);
-        social.save();
-        System.out.println("[social] card user " + userId + " status " + card.status
-            + " specs " + card.specs.size() + " years " + card.years);
-        Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("ok", true);
-        resp.put("card", card.toMap());
-        if (warning != null) resp.put("warning", warning);
-        sendJson(ex, 200, resp);
-    }
-
-    /* [TRN-T2] сколько дней осталось до конца 30-дневного кулдауна повторной отправки
-       после отказа; 0 — кулдаун истёк, отказа не было или дата неразборчива.
-       rejectedAt — локальное серверное время (как LocalDateTime.now()) → зона системная */
-    private static long resubmitLeftDays(String rejectedAt) {
-        if (rejectedAt == null || rejectedAt.isEmpty()) return 0;
-        try {
-            long ms = LocalDateTime.parse(rejectedAt)
-                .plusDays(TrainerCard.RESUBMIT_COOLDOWN_DAYS)
-                .atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
-                - System.currentTimeMillis();
-            return ms <= 0 ? 0 : (ms + 86_399_999) / 86_400_000; /* вверх до целого дня */
-        } catch (Exception e) {
-            return 0;
-        }
-    }
-
-    /* [TRN-T2] уведомление владельцу о карточке «на проверке» (§5.2 → §14.5);
-       ownerChatId не задан (контракт-тесты, env пуст) — тихо. sendMessage шлёт в
-       HTML-режиме — имя/город экранируются (замечание ревью) */
-    private void notifyOwnerPending(long userId, TrainerCard card) {
-        if (ownerChatId <= 0) return;
-        api.sendMessage(ownerChatId, "🧑‍🏫 Карточка отправлена на проверку\n\n#"
-            + userId + " · " + BotLogic.esc(card.displayName)
-            + (card.city.isEmpty() ? "" : " · " + BotLogic.esc(card.city))
-            + "\n\nРазбор очереди: /trainer_pending", null);
-    }
-
-    /* [TRN-T3] аватар Telegram из ПОДПИСАННОГО initData (user.photo_url) — server-owned
-       ПДн, клиентский payload «photo» не доверенный; пусто — аватара нет.
-       Только https (инъекция javascript:/data: исключена на входе в базу). */
-    static String initUserPhoto(String initData) {
-        if (initData == null || initData.isEmpty()) return "";
-        try {
-            Map<String, String> params = new HashMap<>();
-            for (String pair : initData.split("&")) {
-                int i = pair.indexOf('=');
-                if (i <= 0) continue;
-                params.put(URLDecoder.decode(pair.substring(0, i), StandardCharsets.UTF_8),
-                    URLDecoder.decode(pair.substring(i + 1), StandardCharsets.UTF_8));
-            }
-            String userJson = params.get("user");
-            if (userJson == null) return "";
-            Map<String, Object> user = Json.map(Json.parse(userJson));
-            String photo = Json.str(user, "photo_url");
-            if (photo == null) return "";
-            photo = photo.strip();
-            return photo.startsWith("https://") ? photo : "";
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    /* POST /api/social/search {initData, city?, specs?:[id]} — публичный каталог:
-       только verified-карточки (§6.2); анонимного каталога нет (initData обязателен).
-       city — вхождение без регистра в city и gyms; specs — совпадение по любой (OR).
-       Сортировка: свежие подтверждения сверху (§6.2); пока verifiedAt не проставляется
-       ([TRN-T2]) — по updatedAt; строки ISO сравниваются лексикографически. */
-    private Map<String, Object> socialSearch(SocialStore social, long userId, Map<String, Object> body) {
-        String city = clamp(body, "city", 80).toLowerCase();
-        List<String> specs = clampList(body, "specs", TrainerCard.MAX_SPECS, 16);
-        SocialData d = social.get();
-        stats.inc("socialSearch"); /* [TRN-T3] поиски тренера (§17) */
-        List<Map.Entry<Long, TrainerCard>> hits = new ArrayList<>();
-        for (Map.Entry<Long, TrainerCard> e : d.trainers.entrySet()) {
-            TrainerCard card = e.getValue();
-            if (!TrainerCard.STATUS_VERIFIED.equals(card.status)) continue;
-            if (!city.isEmpty() && !card.city.toLowerCase().contains(city)
-                && !card.gyms.toLowerCase().contains(city)) continue;
-            if (!specs.isEmpty() && card.specs.stream().noneMatch(specs::contains)) continue;
-            hits.add(e);
-        }
-        hits.sort((a, b) -> {
-            String ka = a.getValue().verifiedAt.isEmpty() ? a.getValue().updatedAt : a.getValue().verifiedAt;
-            String kb = b.getValue().verifiedAt.isEmpty() ? b.getValue().updatedAt : b.getValue().verifiedAt;
-            return kb.compareTo(ka);
-        });
-        List<Object> cards = new ArrayList<>();
-        for (Map.Entry<Long, TrainerCard> e : hits) {
-            Map<String, Object> cm = e.getValue().publicMap();
-            cm.put("userId", e.getKey());
-            cards.add(cm);
-        }
-        Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("ok", true);
-        resp.put("cards", cards);
-        return resp;
-    }
-
-    /* POST /api/social/apply {initData, trainerId, comment?} — заявка в подопечные (§7.1):
-       только на verified-карточку, не к себе, без существующей связки и дубля активной
-       заявки; лимит подопечных тренера («Набор закрыт», §6.4). Истёкшие заявки гаснут. */
-    private void socialApply(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
-        long trainerId = Json.lng(body.get("trainerId"));
-        String comment = clamp(body, "comment", SocialRequest.MAX_COMMENT);
-        if (trainerId <= 0 || trainerId == userId) {
-            sendJson(ex, 400, Map.of("ok", false));
-            return;
-        }
-        SocialData d = social.get();
-        long now = System.currentTimeMillis();
-        TrainerCard card = d.trainers.get(trainerId);
-        if (card == null || !TrainerCard.STATUS_VERIFIED.equals(card.status)) {
-            sendJson(ex, 404, Map.of("ok", false));
-            return;
-        }
-        d.purgeExpiredRequests(now);
-        if (d.linkBetween(trainerId, userId) != null || d.activeRequest(trainerId, userId, now) != null) {
-            sendJson(ex, 409, Map.of("ok", false));
-            return;
-        }
-        if (d.studentCount(trainerId) >= card.cap) {
-            sendJson(ex, 409, Map.of("ok", false));
-            return;
-        }
-        SocialRequest r = new SocialRequest();
-        r.trainer = trainerId;
-        r.student = userId;
-        r.comment = comment;
-        r.createdAt = nowIso();
-        d.requests.add(r);
-        social.save();
-        System.out.println("[social] apply user " + userId + " -> trainer " + trainerId);
-        sendJson(ex, 200, Map.of("ok", true));
-    }
-
-    /* POST /api/social/link {initData, action, userId} — механика связки (§7):
-       accept — тренер принимает заявку (связка создаётся, гранты дефолтные:
-       «Прогресс» ВКЛ — финал владельца 23.11), reject — отклоняет, break — любая
-       из сторон разрывает связь (гранты умирают вместе со связкой, §7.5/§8.2).
-       Уведомления бота — [TRN-T4]. */
-    private void socialLinkAction(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
-        String action = Json.str(body, "action");
-        long peer = Json.lng(body.get("userId"));
-        SocialData d = social.get();
-        long now = System.currentTimeMillis();
-        if ("break".equals(action)) {
-            SocialLink link = peer > 0 ? d.linkBetween(userId, peer) : null;
-            if (link == null) {
-                sendJson(ex, 404, Map.of("ok", false));
-                return;
-            }
-            d.links.remove(link);
-            social.save();
-            System.out.println("[social] break user " + userId + " peer " + peer);
-            sendJson(ex, 200, Map.of("ok", true));
-            return;
-        }
-        if ("reject".equals(action) || "accept".equals(action)) {
-            /* заявки разбирает только тренер (я — адресат заявки) */
-            SocialRequest r = peer > 0 ? d.activeRequest(userId, peer, now) : null;
-            if (r == null) {
-                sendJson(ex, 404, Map.of("ok", false));
-                return;
-            }
-            if ("reject".equals(action)) {
-                d.requests.remove(r);
-                social.save();
-                System.out.println("[social] reject user " + userId + " student " + peer);
-                sendJson(ex, 200, Map.of("ok", true));
-                return;
-            }
-            if (d.linkBetween(userId, peer) != null) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            /* [TRN-T2 фикс ревью] выключенный (hidden) тренер не принимает заявок (§5.4) */
-            if (!trainerActive(d, userId)) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            /* [TRN-T2 фикс ревью] у подопечного один активный тренер (§7.4 MVP):
-               не только дубль этой пары, но и любая другая действующая связка */
-            if (d.hasTrainer(peer)) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            TrainerCard card = d.trainers.get(userId);
-            int cap = card == null ? TrainerCard.DEFAULT_CAP : card.cap;
-            if (d.studentCount(userId) >= cap) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            SocialLink link = new SocialLink();
-            link.trainer = userId;
-            link.student = peer;
-            link.since = LocalDate.now().toString();
-            link.grants.putAll(SocialLink.defaultGrants());
-            link.source = SocialLink.SOURCE_APPLY;
-            d.requests.remove(r);
-            d.links.add(link);
-            social.save();
-            System.out.println("[social] accept user " + userId + " student " + peer);
-            Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("ok", true);
-            resp.put("link", link.toJson());
-            sendJson(ex, 200, resp);
-            return;
-        }
-        sendJson(ex, 400, Map.of("ok", false));
-    }
-
-    /* [TRN-T2 фикс ревью] карточка тренера существует и режим не выключен: новые заявки
-       и раздача кодов невозможны при hidden (§5.4) — иначе выключенный режим обходится
-       напрямую через API в обход поиска */
-    private static boolean trainerActive(SocialData d, long trainerId) {
-        TrainerCard c = d.trainers.get(trainerId);
-        return c != null && !TrainerCard.STATUS_HIDDEN.equals(c.status);
-    }
-
-    /* POST /api/social/invite {initData, action, code?} — код приглашения (§7.2):
-       create — новый одноразовый код (прежний гасится), revoke — отозвать,
-       use — подопечный применяет код: связка сразу, без стадии заявки. */
-    private void socialInvite(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
-        String action = Json.str(body, "action");
-        SocialData d = social.get();
-        if ("create".equals(action)) {
-            /* [TRN-T2 фикс ревью] код раздаёт только активный (не hidden) тренер (§5.4) */
-            if (!trainerActive(d, userId)) {
-                sendJson(ex, 403, Map.of("ok", false));
-                return;
-            }
-            d.invites.removeIf(i -> i.trainer == userId);
-            SocialInvite inv = new SocialInvite();
-            inv.trainer = userId;
-            inv.code = newInviteCode(d);
-            d.invites.add(inv);
-            social.save();
-            System.out.println("[social] invite create user " + userId);
-            sendJson(ex, 200, Map.of("ok", true, "code", inv.code));
-            return;
-        }
-        if ("revoke".equals(action)) {
-            d.invites.removeIf(i -> i.trainer == userId);
-            social.save();
-            sendJson(ex, 200, Map.of("ok", true));
-            return;
-        }
-        if ("use".equals(action)) {
-            String code = Json.str(body, "code");
-            SocialInvite inv = code == null ? null : d.inviteByCode(code.strip());
-            if (inv == null || inv.trainer == userId) {
-                sendJson(ex, 404, Map.of("ok", false));
-                return;
-            }
-            /* [TRN-T2 фикс ревью] код выключенного (hidden) тренера не работает (§5.4) */
-            if (!trainerActive(d, inv.trainer)) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            /* [TRN-T2 фикс ревью] у подопечного один активный тренер (§7.4 MVP) */
-            if (d.hasTrainer(userId)) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            if (d.linkBetween(inv.trainer, userId) != null) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            TrainerCard card = d.trainers.get(inv.trainer);
-            int cap = card == null ? TrainerCard.DEFAULT_CAP : card.cap;
-            if (d.studentCount(inv.trainer) >= cap) {
-                sendJson(ex, 409, Map.of("ok", false));
-                return;
-            }
-            SocialLink link = new SocialLink();
-            link.trainer = inv.trainer;
-            link.student = userId;
-            link.since = LocalDate.now().toString();
-            link.grants.putAll(SocialLink.defaultGrants());
-            link.source = SocialLink.SOURCE_INVITE;
-            d.invites.remove(inv); /* код одноразовый — гасится применением (§7.2) */
-            d.links.add(link);
-            social.save();
-            System.out.println("[social] invite use user " + userId + " trainer " + inv.trainer);
-            Map<String, Object> resp = new LinkedHashMap<>();
-            resp.put("ok", true);
-            resp.put("link", link.toJson());
-            sendJson(ex, 200, resp);
-            return;
-        }
-        sendJson(ex, 400, Map.of("ok", false));
-    }
-
-    /* 6 символов, алфавит без похожих (§7.2); коллизия в пределах активных кодов
-       исключена перегенерацией (как newShareId) */
-    private static final String INVITE_ALPHABET = "ABCDEFGHJKLMNPRTUVWXY23456789";
-
-    private String newInviteCode(SocialData d) {
-        Set<String> active = new HashSet<>();
-        for (SocialInvite i : d.invites) active.add(i.code);
-        StringBuilder b = new StringBuilder(SocialInvite.CODE_LEN);
-        do {
-            b.setLength(0);
-            for (int i = 0; i < SocialInvite.CODE_LEN; i++) {
-                b.append(INVITE_ALPHABET.charAt(shareRandom.nextInt(INVITE_ALPHABET.length())));
-            }
-        } while (active.contains(b.toString()));
-        return b.toString();
-    }
-
-    /* POST /api/social/grants {initData, trainerId, grants:{key:bool}} — согласие
-       подопечного (§8): меняет только его связку, применяется немедленно; уведомлений
-       тренеру нет (спам-риск, §8.2). Незнакомые ключи клиента игнорируются, ранее
-       сохранённые (будущие гранты) не теряются. */
-    private void socialGrants(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
-        long trainerId = Json.lng(body.get("trainerId"));
-        Map<String, Object> in = Json.map(body.get("grants"));
-        SocialLink link = trainerId > 0 ? social.get().linkBetween(trainerId, userId) : null;
-        if (link == null || link.student != userId || in == null) {
-            sendJson(ex, 404, Map.of("ok", false));
-            return;
-        }
-        for (String k : SocialStore.GRANT_KEYS) {
-            Object v = in.get(k);
-            if (v instanceof Boolean b) link.grants.put(k, b);
-        }
-        social.save();
-        System.out.println("[social] grants user " + userId + " trainer " + trainerId);
-        Map<String, Object> resp = new LinkedHashMap<>();
-        resp.put("ok", true);
-        resp.put("grants", link.toJson().get("grants"));
-        sendJson(ex, 200, resp);
-    }
-
-    /* POST /api/social/report {initData, about, text} — жалоба (§13.4): владелец получает
-       текст через существующий feedback-канал (deep-link — клиентская часть), здесь —
-       запись в social.json; разбор — админ-команды [TRN-T2]. */
-    private void socialReport(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
-        long about = Json.lng(body.get("about"));
-        String text = clamp(body, "text", SocialReport.MAX_TEXT);
-        if (about <= 0 || about == userId || text.isEmpty()) {
-            sendJson(ex, 400, Map.of("ok", false));
-            return;
-        }
-        SocialData d = social.get();
-        SocialReport r = new SocialReport();
-        r.by = userId;
-        r.about = about;
-        r.at = nowIso();
-        r.text = text;
-        d.reports.add(r);
-        social.save();
-        System.out.println("[social] report user " + userId + " about " + about);
-        sendJson(ex, 200, Map.of("ok", true));
-    }
-
-    /* [TRN-T1] серверная обрезка строк по лимитам формы (§5.2) — как initUserName
-       (ревью №2): null/пусто → "", длиннее лимита — хвост отрезан */
-    private static String clamp(Map<String, Object> m, String key, int max) {
-        String v = Json.str(m, key);
-        if (v == null) return "";
-        String t = v.strip();
-        return t.length() <= max ? t : t.substring(0, max);
-    }
-
-    /* список строк формы: не-строки пропускаются, лимит количества и длины элемента */
-    private static List<String> clampList(Map<String, Object> m, String key, int maxItems, int maxLen) {
-        List<String> out = new ArrayList<>();
-        List<Object> in = Json.list(m.get(key));
-        if (in == null) return out;
-        for (Object o : in) {
-            if (out.size() >= maxItems) break;
-            if (!(o instanceof String s)) continue;
-            String t = s.strip();
-            if (t.isEmpty()) continue;
-            out.add(t.length() <= maxLen ? t : t.substring(0, maxLen));
-        }
-        return out;
-    }
-
-    /* ISO-дата-время без наносекунд (формат createdAt/updatedAt в social.json) */
-    private static String nowIso() {
-        return LocalDateTime.now().withNano(0).toString();
     }
 
     private void serveStatic(HttpExchange ex, String path) throws IOException {

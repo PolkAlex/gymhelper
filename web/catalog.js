@@ -46,7 +46,6 @@ const ICONS = {
     pullbar: _s('<path d="M4 5h16"/><path d="M4 5v2.5"/><path d="M20 5v2.5"/><path d="M10 5v3a2 2 0 004 0V5"/>'),
     custom: _s('<circle cx="12" cy="12" r="8.5"/><path d="M12 8.5v7M8.5 12h7"/>'),
     /* интерфейс */
-    search: _s('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'), /* [TRN-T3] поиск тренера */
     pencil: _s('<path d="M4 20l1-4L16.5 4.5a2 2 0 012.8 0l.2.2a2 2 0 010 2.8L8 19l-4 1z"/><path d="M14.5 6.5l3 3"/>'),
     trash: _s('<path d="M4.5 7h15"/><path d="M9.5 7V5.5A1.5 1.5 0 0111 4h2a1.5 1.5 0 011.5 1.5V7"/><path d="M6.5 7l.8 11.6A2 2 0 009.3 20.5h5.4a2 2 0 002-1.9L17.5 7"/><path d="M10 11v4.5M14 11v4.5"/>'),
     cup: _s('<path d="M7 4.5h10V10a5 5 0 01-10 0V4.5z"/><path d="M17 6h1.7a2.2 2.2 0 010 4.4H17"/><path d="M7 6H5.3a2.2 2.2 0 000 4.4H7"/><path d="M12 15v2.5"/><path d="M8.5 20.5a3.5 3.5 0 017 0"/>'),

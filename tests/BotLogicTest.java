@@ -34,11 +34,7 @@ import java.util.Map;
    webAppUrl != null перед меню уходит разовое сообщение с reply_keyboard_remove
    ({remove_keyboard: true}, текст про кнопку ☰ «🏋️ Дневник»); на /menu снимающего
    сообщения нет; deep-link «/start feedback» обрабатывается раньше и тоже не снимает;
-   при webAppUrl == null (регрессия всех прежних сценариев) снимающего вызова нет.
-   [TRN-T2] Раздел «Тренер»: админ-верификация карточек (/trainer_pending — только владелец,
-   чек-лист финала 23.11; /trainer_ok — verified+пуш; /trainer_no — rejected+причина+
-   rejectedAt), строгий парсинг (§2.7), hidden-карточку не подтверждаем; /trainer —
-   18+ гейт, статус карточки, подопечный видит связь и гранты ВКЛ. */
+   при webAppUrl == null (регрессия всех прежних сценариев) снимающего вызова нет. */
 public class BotLogicTest {
     static void check(boolean b, String m) {
         if (!b) throw new AssertionError("UNIT FAIL: " + m);
@@ -402,10 +398,6 @@ public class BotLogicTest {
             /menu и /start feedback без снятия, webAppUrl == null — регрессия === */
         runKeyboardRemoveScenario();
 
-        /* === 17. Раздел «Тренер» [TRN-T2]: админ-верификация (/trainer_pending|ok|no),
-            /trainer (18+, статус, подопечный с грантами) === */
-        runTrainerScenario();
-
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -599,147 +591,6 @@ public class BotLogicTest {
                 "лимит 20/20: ввод имени не создаёт 21-й шаблон");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: лимит-сценарий " + e);
-        }
-    }
-
-    /* ===== [TRN-T2] раздел «Тренер»: админ-верификация карточек + личный статус ===== */
-
-    /* взрослый профиль 18+ (birth = «сегодня минус 20 лет» — возраст детерминирован
-       в любой день; месяц рождения = текущий месяц) */
-    static void seedAdult(Storage storage, long chat) {
-        try {
-            GymData d = new GymData();
-            d.nextId = 1;
-            d.profile = new ProfileData();
-            d.profile.sex = "м";
-            d.profile.height = 180;
-            d.profile.weight = 80;
-            java.time.LocalDate b = java.time.LocalDate.now().minusYears(20);
-            d.profile.birthYear = b.getYear();
-            d.profile.birthMonth = b.getMonthValue();
-            storage.save(chat, d);
-        } catch (Exception e) {
-            throw new AssertionError("UNIT FAIL: seedAdult " + e);
-        }
-    }
-
-    /* /trainer_pending (только владелец, чек-лист финала 23.11), /trainer_ok|no
-       (статусы verified/rejected, причина, rejectedAt, пуши тренеру), строгий парсинг,
-       /trainer: 18- отказ, выключенный режим, подопечный с грантами */
-    static void runTrainerScenario() {
-        try {
-            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymtrainer");
-            Storage storage = new Storage(tmp);
-            FakeApi api = new FakeApi();
-            BotLogic logic = new BotLogic(api, storage, null, "https://t.me/ContractBot?startapp=app", 9001, null, 0);
-            long admin = 9001;
-
-            seedAdult(storage, 501);
-            seedAdult(storage, 502);
-            seedAdult(storage, 503);
-            SocialData d = storage.social().get();
-            TrainerCard c = new TrainerCard();
-            c.displayName = "Игорь Соколов";
-            c.city = "Минск";
-            c.gyms = "«Атлет»";
-            c.specs.add("rehab");
-            c.years = 6;
-            c.education.add("РГУФК, 2015");
-            c.status = TrainerCard.STATUS_PENDING;
-            c.updatedAt = "2026-11-23T10:00:00";
-            d.trainers.put(501L, c);
-            SocialLink l = new SocialLink();
-            l.trainer = 501;
-            l.student = 502;
-            l.since = "2026-11-20";
-            l.grants.putAll(SocialLink.defaultGrants());
-            l.grants.put(SocialStore.GRANT_GOALS, true);
-            d.links.add(l);
-            storage.social().save();
-
-            /* очередь: только владелец */
-            int before = api.texts.size();
-            logic.handle(msgUpdate(9002, "/trainer_pending"));
-            check(api.texts.size() == before, "trainer: /trainer_pending от не-владельца — тихо");
-            logic.handle(msgUpdate(admin, "/trainer_pending"));
-            check(api.last().contains("Игорь Соколов") && api.last().contains("#501"),
-                "trainer: /trainer_pending показывает карточку с id и именем");
-            check(api.last().contains("✅ город/зал") && api.last().contains("✅ специализация")
-                    && api.last().contains("✅ стаж/образование") && api.last().contains("жалоб: 0"),
-                "trainer: чек-лист верификации по финалу владельца 23.11");
-
-            /* строгий парсинг (§2.7) */
-            check(BotLogic.parseTrainerAdmin("/trainer_okx 5") == null, "trainer: /trainer_okx не матчится");
-            check(BotLogic.parseTrainerAdmin("/trainer_pendingx") == null, "trainer: /trainer_pendingx не матчится");
-            check(BotLogic.parseTrainerAdmin("/trainer_nox 5") == null, "trainer: /trainer_nox не матчится");
-            check(BotLogic.parseTrainerAdmin("/trainerx") == null, "trainer: /trainerx не матчится");
-            check(BotLogic.parseTrainerAdmin("привет") == null, "trainer: не команда — null");
-            check(BotLogic.parseTrainerAdmin(null) == null, "trainer: null — null");
-            String[] pn = BotLogic.parseTrainerAdmin("/trainer_no 501 нет подтверждения стажа");
-            check(pn != null && "no".equals(pn[0]) && "501".equals(pn[1]) && "нет подтверждения стажа".equals(pn[2]),
-                "trainer: /trainer_no разбирает id и причину (регистр причины сохранён)");
-            String[] pok = BotLogic.parseTrainerAdmin("/trainer_ok 501");
-            check(pok != null && "ok".equals(pok[0]) && "501".equals(pok[1]),
-                "trainer: /trainer_ok разбирает id");
-
-            /* подтверждение: статус verified + пуш тренеру + отчёт владельцу */
-            logic.handle(msgUpdate(admin, "/trainer_ok 501"));
-            check(TrainerCard.STATUS_VERIFIED.equals(storage.social().get().trainers.get(501L).status),
-                "trainer: /trainer_ok ставит verified");
-            check(!storage.social().get().trainers.get(501L).verifiedAt.isEmpty(),
-                "trainer: verifiedAt записан (сортировка поиска §6.2)");
-            check(api.any("🎉 Карточка тренера подтверждена") && api.any("✅ Карточка #501"),
-                "trainer: пуш тренеру и отчёт владельцу");
-
-            /* скрытая карточка не подтверждается — иначе выключенный режим включился бы */
-            storage.social().get().trainers.get(501L).status = TrainerCard.STATUS_HIDDEN;
-            logic.handle(msgUpdate(admin, "/trainer_ok 501"));
-            check(!TrainerCard.STATUS_VERIFIED.equals(storage.social().get().trainers.get(501L).status),
-                "trainer: hidden карточку подтвердить нельзя");
-            storage.social().get().trainers.get(501L).status = TrainerCard.STATUS_PENDING;
-
-            /* отказ с причиной: rejected + statusNote + rejectedAt + пуш с причиной и 30-дневкой */
-            logic.handle(msgUpdate(admin, "/trainer_no 501 нет подтверждения стажа"));
-            TrainerCard rn = storage.social().get().trainers.get(501L);
-            check(TrainerCard.STATUS_REJECTED.equals(rn.status) && "нет подтверждения стажа".equals(rn.statusNote)
-                    && !rn.rejectedAt.isEmpty(),
-                "trainer: /trainer_no — rejected, причина и rejectedAt записаны");
-            check(api.any("✖️ Карточка отклонена") && api.any("нет подтверждения стажа") && api.any("30 дней"),
-                "trainer: пуш об отказе с причиной и 30-дневкой");
-
-            /* форматы */
-            logic.handle(msgUpdate(admin, "/trainer_ok"));
-            check(api.last().contains("id"), "trainer: /trainer_ok без id — подсказка");
-            logic.handle(msgUpdate(admin, "/trainer_no 501"));
-            check(api.last().contains("Формат"), "trainer: /trainer_no без причины — подсказка формата");
-            logic.handle(msgUpdate(admin, "/trainer_ok абс"));
-            check(api.last().contains("id пользователя"), "trainer: мусорный id — подсказка");
-
-            /* /trainer: 18- → отказ; взрослый без карточки → выключен; подопечный → связь+гранты */
-            GymData minor = new GymData();
-            minor.nextId = 1;
-            minor.profile = new ProfileData();
-            minor.profile.sex = "ж";
-            minor.profile.height = 160;
-            minor.profile.weight = 50;
-            java.time.LocalDate bm = java.time.LocalDate.now().minusYears(15);
-            minor.profile.birthYear = bm.getYear();
-            minor.profile.birthMonth = bm.getMonthValue() == 1 ? 12 : bm.getMonthValue() - 1;
-            /* месяц на 1 меньше текущего → возраст ровно 15 (день рождения ещё не наступил) */
-            storage.save(702, minor);
-            logic.handle(msgUpdate(702, "/trainer"));
-            check(api.any("доступен с 18 лет"), "trainer: 15 лет — отказ с указанием профиля");
-
-            logic.handle(msgUpdate(503, "/trainer"));
-            check(api.any("Режим тренера выключен"), "trainer: взрослый без карточки — режим выключен");
-
-            logic.handle(msgUpdate(502, "/trainer"));
-            check(api.any("Вы подопечный: Игорь Соколов") && api.any("с 2026-11-20"),
-                "trainer: подопечный видит тренера и дату связки");
-            check(api.any("прогресс") && api.any("цели") && !api.any("данные закрыты"),
-                "trainer: гранты ВКЛ перечислены (прогресс по умолчанию + цели)");
-        } catch (Exception e) {
-            throw new AssertionError("UNIT FAIL: trainer " + e);
         }
     }
 
