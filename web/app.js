@@ -1726,7 +1726,8 @@ function render() {
             '</div></div>';
         h += '<div style="height:70px"></div>';
     }
-    /* [UX-T13] «К упражнениям» переехала в шапку экрана техники компактной иконкой — backbar внизу больше не нужен */
+    /* [UX-T13] backbar «К упражнениям» внизу не нужен: возврат — «←» в topbar
+       (techBack, единый паттерн «Назад»); backbar карточки тренировки сохранён */
     /* [ONB] оверлеи онбординга — поверх всего (приветствие z-60, туториал z-46..48, «Что нового» z-52) */
     if (obOpen) h += obWelcomeHtml();
     if (tutOpen) h += tutOverlayHtml();
@@ -1803,24 +1804,24 @@ function topbarHtml() {
     /* [ONB-T5] экран Помощи: «←» слева — возврат в Настройки (точка входа — только они, решение 7) */
     if (helpOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeHelp" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
-            '<span class="tb-title">GymHelper · Помощь</span></div>';
+            '<span class="tb-title">Помощь</span></div>';
     }
     /* [UX-T27] экран Настроек: «←» слева (возврат на вкладку-источник), справа пусто [UX-S4 §3];
        приоритет выше подэкранов Целей/мастера — «←» Настроек возвращает на подэкран */
     if (settingsOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeSettings" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
-            '<span class="tb-title">GymHelper · Настройки</span></div>';
+            '<span class="tb-title">Настройки</span></div>';
     }
     /* [GOA-S1] мастер создания цели: «←» — предыдущий шаг, на шаге 1 — выход (§9) */
     if (gwOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="gwBack" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
             '<span class="tb-title">Новая цель</span></div>';
     }
-    /* [GOA-S1] экран «Цели»: «←» — возврат на вкладку-источник (§8.1: «← | GymHelper · Цели»,
+    /* [GOA-S1] экран «Цели»: «←» — возврат на вкладку-источник (§8.1: «← | Цели»,
        без шестерёнки — Настройки поверх подэкрана по общему приоритету) */
     if (goalsOpen) {
         return '<div class="topbar"><button class="tb-user" data-act="closeGoals" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
-            '<span class="tb-title">GymHelper · Цели</span></div>';
+            '<span class="tb-title">Цели</span></div>';
     }
     /* [UX-S6] экран календаря: «←» слева (возврат на вкладку-источник), шестерёнка
        справа [ред. 5 — владелец: «не вижу Настройки. Добавляй»] [§3.4]; кнопки 📅
@@ -1829,11 +1830,16 @@ function topbarHtml() {
        и ⚙ не меняются — e2e-локаторы целы */
     if (calOpen && !(tab === 'history' && viewWid)) {
         return '<div class="topbar"><button class="tb-user" data-act="closeCal" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' +
-            '<span class="tb-title">GymHelper · Календарь</span>' +
+            '<span class="tb-title">Календарь</span>' +
             '<button class="tb-user" data-act="openCalPicker" title="Вид календаря" aria-label="Вид календаря">' + ICO_TUNE + '</button>' +
             '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button></div>';
     }
-    /* [UX-T23] стрелка «←» (tb-back/goBack) убрана: топбар — «GymHelper · <вкладка>» + настройки */
+    /* [UX-T23] стрелка «←» (tb-back/goBack) убрана: топбар — «<вкладка>» + настройки;
+       единообразие «Назад» (решение владельца): подэкраны-карточки без своей шапки
+       получают «←» слева по эталону tb-user (как Настройки/Цели/Помощь выше) */
+    const backBtn = (tab === 'tech' && TECH.open) ?
+        '<button class="tb-user" data-act="techBack" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' :
+        (viewWid ? '<button class="tb-user" data-act="closeHistory" title="Назад" aria-label="Назад">' + ICONS.back + '</button>' : '');
     /* [UX-S6] кнопка календаря — на ВСЕХ вкладках без открытой карточки (ред. 5 —
        «как и настройки»; Настройки/календарь отсечены выше); календарь СЛЕВА,
        шестерёнка справа — пара [ 📅 ][ ⚙ ] всегда в одном месте [§3.2] */
@@ -1843,7 +1849,8 @@ function topbarHtml() {
        на шаге 3 topbar поднят (tut-lift), чтобы затемнение накрыло нижнюю панель */
     const tutPairSpot = (tutOpen && tutStep === 2) ? '<span class="spot wrap pair" aria-hidden="true"></span>' : '';
     return '<div class="topbar' + (tutOpen && tutStep === 2 ? ' tut-lift' : '') + '">' +
-        '<span class="tb-title">GymHelper · ' + (names[tab] || 'История') + '</span>' +
+        backBtn +
+        '<span class="tb-title">' + (names[tab] || 'История') + '</span>' +
         '<span class="tbpair">' + calBtn +
         '<button class="tb-user" data-act="openSettings" title="Настройки" aria-label="Настройки">' + ICONS.gear + '</button>' +
         tutPairSpot + '</span></div>';
@@ -3370,10 +3377,10 @@ function renderTechTab() {
     if (TECH.open) {
         const c = CATALOG.find(x => x.id === TECH.open);
         if (!c) { TECH.open = null; } else {
-            /* [UX-T13] «К упражнениям» — компактная иконка вверху экрана; ⭐ — в/из «Любимых» (как в каталоге) */
+            /* [UX-T13] «К упражнениям» переехала в topbar («←» слева, акт techBack,
+               единый паттерн «Назад») — в .exhead остались иконка/фото, название, MET и ⭐ */
             let h = '<div class="card"><div class="exhead">' + exVisual(c) + '<span class="t1">' + esc(c.n) + '</span><span class="metbadge">MET ' + c.met + '</span>' +
-                starHtml(c.n) +
-                '<button class="barebtn" data-act="techBack" title="К упражнениям" aria-label="К упражнениям">' + ICONS.back + '</button></div>';
+                starHtml(c.n) + '</div>';
             h += '<p class="meta">' + exTagHashes(c) + '</p>';
             /* [EXR-T2] фото (2 ракурса) и RU-описание из базы free-exercise-db */
             if (c.img) {
@@ -3394,7 +3401,8 @@ function renderTechTab() {
         }
     }
     /* [UX-T20] кнопка «Назад» переехала из заголовка карточки в topbar;
-       [UX-T23] topbar-стрелка убрана — возврат к списку только через «К упражнениям» */
+       [UX-T23] topbar-стрелка (goBack) убрана — возврат к списку через «←»
+       в topbar (techBack, эталон tb-user) */
     let h = '<div class="card"><div class="exhead"><p class="t1">📖 Техника упражнений</p></div>' +
         '<div class="searchbox"><input id="techQ" type="text" placeholder="Поиск упражнения..." value="' + esc(TECH.q) + '"></div>' +
         techChipsHtml() + '</div>';
