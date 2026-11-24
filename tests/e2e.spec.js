@@ -5795,6 +5795,7 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         await openApp(page);
         await page.locator('.pcard').first().click();
         await page.locator('[data-act="shareSheet"]').click();
+        await expect(page.locator('.modal.open .shrow', { hasText: 'Картинка' })).toBeVisible({ timeout: 5000 });
         await page.context().setOffline(true);
         await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
         /* set padenie: tost kartochnogo potoka (poster), ne ssylochnogo (ssylkoj) */
@@ -5804,7 +5805,14 @@ test.describe('[UX-I16] шейринг по ссылке', function () {
         await page.context().setOffline(false);
         /* knopka razblokirovana: retaj legalen, povtorniy tap pri seti - uspeh */
         await expect(page.locator('[data-act="shareSheet"]')).toBeEnabled();
+        /* [TST-B1] повторный клик той же кнопки: дедуп dispatchFromEl (web/app.js)
+           молча гасит клики по одной кнопке в окне 400 мс. На холодном headless-раннере
+           вся offline-последовательность укладывалась в это окно — второй клик глотался,
+           шит не открывался, тест вис до таймаута. Тост живёт 2,2 с: его исчезновение —
+           детерминированный зазор > 400 мс. */
+        await expect(page.locator('.toast.show')).toBeHidden({ timeout: 5000 });
         await page.locator('[data-act="shareSheet"]').click();
+        await expect(page.locator('.modal.open .shrow', { hasText: 'Картинка' })).toBeVisible({ timeout: 5000 });
         await page.locator('.modal.open .shrow', { hasText: 'Картинка' }).click();
         await expect(page.locator('.toast.show')).toContainText('Постер', { timeout: 5000 });
         /* offline-tosty /api/track ne doezhayut; povtornyy uspeshnyy potok - doezhaet */
