@@ -1743,13 +1743,12 @@ const ACTIONS = {
     trCodeOpen: function () { TR.codeOpen = true; render(); },
     trCodeClose: function () { TR.codeOpen = false; render(); },
     trCodeApply: function () { trCodeApply(); },
-    /* [TRN-T4, решение №5] контакт тренера после связки: t.me/<username> */
+    /* [TRN-T4, решение №5] контакт тренера после связки: t.me/<username>;
+       username нормализован сервером ([a-z0-9_]{5,32}) — клиентская отсечка не нужна */
     trContact: function (a) {
-        const url = 'https://t.me/' + String(a || '').replace(/[^a-z0-9_]/g, '');
-        if (!url.endsWith('_') && url.length > 'https://t.me/'.length) {
-            if (tg && tg.openLink) tg.openLink(url);
-            else window.open(url, '_blank');
-        }
+        const url = 'https://t.me/' + String(a || '');
+        if (tg && tg.openLink) tg.openLink(url);
+        else window.open(url, '_blank');
     },
     /* [TRN-T3] поиск: чипы/сброс/повтор/карточка; [TRN-T6] «Сообщество» — открытая TG-группа */
     trFind: function () { ACTIONS.switchTab('coach'); },

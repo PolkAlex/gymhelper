@@ -185,18 +185,21 @@ public final class SocialData {
         trimGrantLog(e.by);
     }
 
-    /* держим не более SocialStore.GRANT_LOG_CAP записей пользователя by — старейшие удаляются */
+    /* держим не более SocialStore.GRANT_LOG_CAP записей пользователя by — старейшие удаляются.
+       [TRN-T5 фикс ревью] удаление итератором: remove внутри for-each по тому же списку
+       давал ConcurrentModificationException на (CAP+1)-й записи — socialGrants падал,
+       грант применялся в памяти, но не персистился */
     public void trimGrantLog(long by) {
         int mine = 0;
         for (GrantLogEntry e : grantLog) {
             if (e.by == by) mine++;
         }
-        if (mine <= SocialStore.GRANT_LOG_CAP) return;
         int extra = mine - SocialStore.GRANT_LOG_CAP;
-        for (GrantLogEntry e : grantLog) {
-            if (extra <= 0) break;
-            if (e.by == by) {
-                grantLog.remove(e);
+        if (extra <= 0) return;
+        java.util.Iterator<GrantLogEntry> it = grantLog.iterator();
+        while (it.hasNext() && extra > 0) {
+            if (it.next().by == by) {
+                it.remove();
                 extra--;
             }
         }

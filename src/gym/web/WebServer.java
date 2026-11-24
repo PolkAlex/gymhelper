@@ -1087,7 +1087,7 @@ public final class WebServer {
             case "/api/social/invite" -> socialInvite(social, userId, body, ex);
             case "/api/social/grants" -> socialGrants(social, userId, body, ex);
             case "/api/social/report" -> socialReport(social, userId, body, ex);
-            case "/api/social/student" -> sendJson(ex, 200, socialStudent(social, userId, body));
+            case "/api/social/student" -> socialStudent(social, userId, body, ex);
             default -> sendJson(ex, 404, Map.of("ok", false));
         }
     }
@@ -1403,11 +1403,12 @@ public final class WebServer {
         sendJson(ex, 200, Map.of("ok", true));
     }
 
-    /* [TRN-T4] пуш тренеру о новой заявке (§14.1): кнопки разбора прямо в сообщении */
+    /* [TRN-T4] пуш тренеру о новой заявке (§14.1): кнопки разбора прямо в сообщении.
+       sendMessage шлёт в HTML-режиме — имя/комментарий экранируются (ревью батча 2) */
     private void notifyTrainerApply(long trainerId, SocialRequest r, HttpExchange ex) {
         String name = r.studentName == null || r.studentName.isEmpty() ? "Новый пользователь" : r.studentName;
         StringBuilder b = new StringBuilder("📋 Новая заявка в подопечные\n\n")
-            .append(name).append(" хочет заниматься с Вами.\n\n");
+            .append(BotLogic.esc(name)).append(" хочет заниматься с Вами.\n\n");
         if (!r.comment.isEmpty()) b.append("Комментарий: «").append(BotLogic.esc(r.comment)).append("»\n\n");
         b.append("Принять или отклонить — кнопками ниже.");
         List<List<Map<String, Object>>> kb = new ArrayList<>();
@@ -1458,9 +1459,9 @@ public final class WebServer {
                 social.save();
                 stats.inc("socialReject"); /* §17 */
                 System.out.println("[social] reject user " + userId + " student " + peer);
-                /* [TRN-T4] мягкий пуш подопечному без причины (§7.1, §14.1) */
+                /* [TRN-T4] мягкий пуш подопечному без причины (§7.1, §14.1); esc — HTML-режим */
                 String tName = SocialData.trainerNameOf(d, userId);
-                api.sendMessage(peer, "Заявка отклонена\n\n" + tName
+                api.sendMessage(peer, "Заявка отклонена\n\n" + BotLogic.esc(tName)
                     + " пока не может принять Вас в подопечные.\n"
                     + "Посмотрите других тренеров: Профиль → Тренер → «Найти тренера».", null);
                 sendJson(ex, 200, Map.of("ok", true));
@@ -1601,9 +1602,9 @@ public final class WebServer {
             social.save();
             stats.inc("socialInviteUse"); /* §17 */
             System.out.println("[social] invite use user " + userId + " trainer " + inv.trainer);
-            /* [TRN-T4] уведомления обоим (§14.2, на «Вы») */
+            /* [TRN-T4] уведомления обоим (§14.2, на «Вы»); esc — HTML-режим (ревью батча 2) */
             api.sendMessage(inv.trainer, "✅ Новый подопечный по коду: "
-                + link.studentName + ".\nСписок подопечных — в приложении.", null);
+                + BotLogic.esc(link.studentName) + ".\nСписок подопечных — в приложении.", null);
             notifyStudentAccepted(userId, SocialData.trainerNameOf(d, inv.trainer), true);
             Map<String, Object> resp = new LinkedHashMap<>();
             resp.put("ok", true);
@@ -1727,17 +1728,17 @@ public final class WebServer {
 
     /* POST /api/social/student {initData, studentId} — [TRN-T5] read-only карточка
        подопечного для ЕГО тренера (§9.2): только агрегаты, разрешённые грантами
-       (§8.3: журнала упражнений нет и не будет). 404 — связки нет / не его подопечный. */
-    private Map<String, Object> socialStudent(SocialStore social, long userId, Map<String, Object> body) {
+       (§8.3: журнала упражнений нет и не будет). 404 {reason:"nolink"} — связки нет /
+       не его подопечный (единообразно с другими статусными ответами соц-API). */
+    private void socialStudent(SocialStore social, long userId, Map<String, Object> body, HttpExchange ex) throws IOException {
         long studentId = Json.lng(body.get("studentId"));
         SocialData d = social.get();
         SocialLink link = studentId > 0 ? d.linkBetween(userId, studentId) : null;
-        Map<String, Object> resp = new LinkedHashMap<>();
         if (link == null || link.trainer != userId) {
-            resp.put("ok", false);
-            resp.put("reason", "nolink");
-            return resp;
+            sendJson(ex, 404, Map.of("ok", false, "reason", "nolink"));
+            return;
         }
+        Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("ok", true);
         resp.put("studentId", studentId);
         resp.put("name", link.studentName.isEmpty() ? "Подопечный" : link.studentName);
@@ -1800,7 +1801,7 @@ public final class WebServer {
             }
             resp.put("goals", goals);
         }
-        return resp;
+        sendJson(ex, 200, resp);
     }
 
     /* [TRN-T5] текущий результат активной цели для карточки подопечного (агрегат):

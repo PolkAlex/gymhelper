@@ -2599,11 +2599,16 @@ public class GymContractTest {
                 postJson(portB2, "/api/social/me", "{\"initData\":\"" + id4 + "\"}").body()));
             check(((java.util.List<Object>) meB2.get("grantLog")).size() == 1,
                 "b2: /api/social/me отдаёт свои записи журнала");
-            /* кап: 21 переключение goals туда-сюда (итого 22 реальных изменения) → последние 20 */
+            /* кап: 21 переключение goals туда-сюда (итого 22 реальных изменения) → последние 20;
+               [TRN-T5 фикс ревью] statusCode КАЖДОЙ итерации контролируем — на (CAP+1)-й
+               записи trim раньше падал по ConcurrentModificationException */
+            java.net.http.HttpResponse<String> rcap = null;
             for (int i = 0; i < 21; i++) {
                 boolean v = i % 2 == 0;
-                postJson(portB2, "/api/social/grants",
+                rcap = postJson(portB2, "/api/social/grants",
                     "{\"initData\":\"" + id4 + "\",\"trainerId\":601,\"grants\":{\"goals\":" + v + "}}");
+                check(rcap.statusCode() == 200, "b2: кап-цикл, итерация " + (i + 1) + " — 200, а не "
+                    + rcap.statusCode() + " (CME trimGrantLog)");
             }
             int cnt604 = 0;
             for (SocialData.GrantLogEntry ge : stB2.social().get().grantLog) {
@@ -2611,6 +2616,11 @@ public class GymContractTest {
             }
             check(cnt604 == SocialStore.GRANT_LOG_CAP,
                 "b2: кап журнала — последние " + SocialStore.GRANT_LOG_CAP + " записей на пользователя, а не " + cnt604);
+            /* socialGrantChange учитывает каждую запись: 1 (первый POST) + 20 реальных
+               из 21 итерации (первая итерация — no-op, goals уже true) = 21 */
+            long sgc = Json.lng(Json.map(Json.parse(get(portB2, "/stats?token=contract-test-token").body())).get("socialGrantChange"));
+            check(sgc == 21,
+                "b2: socialGrantChange=21 после кап-цикла (записи не терялись), а не " + sgc);
 
             /* [TRN-T5] карточка подопечного: агрегаты строго по грантам (§8.3) */
             GymData seedStudent = new GymData();
@@ -2690,6 +2700,13 @@ public class GymContractTest {
             check(linksB2b != null && !linksB2b.isEmpty()
                     && "igor_trainer".equals(Json.map(linksB2b.get(0)).get("tgUsername")),
                 "b2: /api/social/me — контакт тренера в связке своего подопечного");
+            /* [TRN-T4, №5] tgUsername — СНИМОК: пустой username initData прежний не затирает */
+            String idT4no = tgInitData("contract-test-token", 601, "Игорь Соколов");
+            check(postJson(portB2, "/api/social/card",
+                "{\"initData\":\"" + idT4no + "\",\"card\":{\"displayName\":\"Игорь Соколов\"}}").statusCode() == 200,
+                "b2: повторный card save без username — 200");
+            check("igor_trainer".equals(stB2.social().get().trainers.get(601L).tgUsername),
+                "b2: пустой username initData не стирает сохранённый (снимок, симметрично photoUrl)");
             /* legacy: старый social.json без tgUsername читается, ключ не пишется */
             java.nio.file.Path tmpLeg = java.nio.file.Files.createTempDirectory("gymsocialtg");
             java.nio.file.Files.writeString(tmpLeg.resolve("social.json"),
@@ -2708,6 +2725,20 @@ public class GymContractTest {
                 "b2: карточка с мусорным username — 200");
             check(stB2.social().get().trainers.get(606L).tgUsername.isEmpty(),
                 "b2: username не по [a-z0-9_]{5,32} → пусто (кнопка не отрендерится)");
+            /* [TRN-T4 замечание ревью] esc имени заявителя в пушe тренеру: HTML-имя
+               приходит «&lt;b&gt;…», сырой HTML не проходит (parse_mode HTML) */
+            /* card save выше вернул карточку в pending (§5.3) — верифицируем для заявки */
+            stB2.social().get().trainers.get(601L).status = TrainerCard.STATUS_VERIFIED;
+            stB2.social().get().trainers.get(601L).cap = 10;
+            stB2.save(607, adultProfile(31));
+            String id7 = tgInitData("contract-test-token", 607, "<b>Заявитель</b>");
+            check(postJson(portB2, "/api/social/apply",
+                "{\"initData\":\"" + id7 + "\",\"trainerId\":601,\"comment\":\"x\"}").statusCode() == 200,
+                "b2: заявка с HTML-именем — 200");
+            check(spyB2.sent.get(spyB2.sent.size() - 1).startsWith("601:")
+                    && spyB2.sent.get(spyB2.sent.size() - 1).contains("&lt;b&gt;Заявитель&lt;/b&gt;")
+                    && !spyB2.sent.get(spyB2.sent.size() - 1).contains("<b>Заявитель"),
+                "b2: имя заявителя экранировано в пушe тренеру (esc)");
         } catch (Exception b2Err) {
             throw new AssertionError("CONTRACT FAIL: b2 " + b2Err);
         }
