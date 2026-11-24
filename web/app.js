@@ -1737,7 +1737,13 @@ const ACTIONS = {
         render();
         trStudentLoad(+a);
     },
-    trInviteOpen: function () { TR.inviteOpen = true; render(); },
+    trInviteOpen: function () {
+        /* [TRN-T5 фикс] код живёт в разделе «Мои подопечные» — кнопка ведёт туда
+           (прежний флаг TR.inviteOpen нигде не читался — мёртвый код, убран) */
+        TR.studentsOpen = true;
+        TR.studentView = 0;
+        ACTIONS.switchTab('coach');
+    },
     trInviteNew: function () { trInviteAction('create'); },
     trInviteRevoke: function () { trInviteAction('revoke'); },
     trCodeOpen: function () { TR.codeOpen = true; render(); },
@@ -3976,7 +3982,6 @@ const TR = {
     tgGroup: '',       /* [TRN-T6] ссылка на открытую TG-группу (env GYM_TG_GROUP_URL / social-tg.txt) */
     applySent: {},     /* [TRN-T4] заявки, отправленные в этой сессии (мгновенный UI до перезагрузки me) */
     codeOpen: false,   /* «У меня есть код» раскрыт */
-    inviteOpen: false, /* «Код приглашения» тренера раскрыт */
     studentsOpen: false, /* таб «Тренер» в режиме «Мои подопечные» (§9.1) */
     studentView: 0,    /* [TRN-T5] userId открытой карточки подопечного */
     studentDetail: null, /* ответ /api/social/student (агрегаты по грантам) */
@@ -4361,6 +4366,33 @@ async function trGrantsAll(value) {
         await trLoad();
         render();
     } catch (e) { toast('Нет связи с сервером', true); } finally { TR.grantBusy = false; }
+}
+/* [TRN-T5 фикс блокера] загрузка агрегатов карточки подопечного (§9.2):
+   POST /api/social/student → TR.studentDetail + render. 404 nolink (связь
+   разорвана в другом окне/устройстве) — тихий возврат к списку + тост. */
+async function trStudentLoad(studentId) {
+    try {
+        const r = await fetch('/api/social/student', { method: 'POST',
+            body: JSON.stringify({ initData: INIT, studentId: studentId }) });
+        let j = {};
+        try { j = await r.json(); } catch (e2) { /* noop */ }
+        if (TR.studentView !== studentId) return; /* пользователь уже ушёл с экрана */
+        if (!j.ok && j.reason === 'nolink') {
+            /* связь разорвана в другом окне/устройстве — тихий возврат к списку */
+            TR.studentView = 0;
+            TR.studentDetail = null;
+            toast('Связь с этим подопечным уже разорвана');
+            render();
+            return;
+        }
+        if (j.ok) {
+            TR.studentDetail = j;
+            render();
+        }
+        /* прочие ошибки (сеть/сервер недоступен) — остаёмся на карточке: шапка и
+           «Убрать подопечного» отрендерены из me, агрегаты дозагрузятся при
+           повторном открытии */
+    } catch (e) { toast('Нет связи с сервером', true); }
 }
 /* «Мои подопечные» (§9.1): список с мини-карточками + код приглашения */
 function trStudentsHtml() {
