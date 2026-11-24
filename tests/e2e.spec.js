@@ -409,7 +409,7 @@ test.describe('GymHelper e2e', function () {
         await expect(card.locator('[data-act="openFavs"]')).toBeVisible({ timeout: 5000 });
         await card.locator('[data-act="openFavs"]').click();
         /* вкладка «Техника», чип «★ Любимые» активен, в списке — только любимое */
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
         await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
         await expect(page.locator('#techList .excard', { hasText: EX })).toHaveCount(1);
         await expect(page.locator('#techList .excard', { hasText: 'Подтягивания' })).toHaveCount(0);
@@ -435,22 +435,22 @@ test.describe('GymHelper e2e', function () {
         await openApp(page);
         for (const label of ['Статистика', 'Техника']) {
             await page.locator('.nav button', { hasText: label }).click();
-            await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
+            await expect(page.locator('.tb-title')).toContainText(label, { timeout: 5000 });
         }
         /* [UX-T27] шестерёнка открывает Настройки */
         await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
         /* [UX-S4] тогл темы: ровно один role=switch «Тёмная тема» */
         await expect(page.locator('[role="switch"][aria-label="Тёмная тема"]')).toHaveCount(1);
         /* раздел «Тренер» доступен из настроек: switchTab закрывает Настройки [UX-S4 §12.9] */
         await page.locator('#app button', { hasText: 'Открыть раздел' }).click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Тренер', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Тренер', { timeout: 5000 });
     });
 
     test('[ONB-T2] Настройки: пункт «Политика конфиденциальности», /privacy.html отдаётся со статусом 200', async ({ page }) => {
         await openApp(page);
         await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
         /* резервный блок [UX-S4] расскомментирован: кнопка политики видима в Настройках */
         await expect(page.locator('#app button', { hasText: 'Политика конфиденциальности' })).toBeVisible({ timeout: 5000 });
         /* статичная страница политики отдаётся тестовым сервером */
@@ -916,7 +916,7 @@ test.describe('GymHelper e2e', function () {
            переключаем вкладку нижним меню, не выходя через «Назад» */
         failSave = false;
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Статистика', { timeout: 5000 });
         /* фоновый автосейв switchTab доезжает до сервера */
         await expect.poll(async function () {
             const st = await (await request.get('/api/state')).json();
@@ -2818,7 +2818,7 @@ test.describe('UX-T18: иконки времени, backbar-удаление, з
         if (geom.h < 28) throw new Error('тап-зона звезды слишком мала: ' + geom.h.toFixed(1) + 'px');
         await star.click();
         /* тап по звезде НЕ открыл упражнение: остались список и заголовок «Техника» */
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
         await expect(page.locator('#techList')).toBeVisible();
         const star2 = page.locator('#techList .excard', { hasText: EX }).first().locator('.star');
         await expect(star2).toHaveClass(/fav/, { timeout: 5000 });
@@ -3109,7 +3109,7 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
     test('чипы «Техники» [EXR-T4]: режимы ★ Любимые · Своё · Все · Коллекции + ряд фильтров; «Все» активен по умолчанию', async ({ page }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
         /* порядок режимов [EXR-T4] (вместо прежних «Вид · Блок · Мышцы») */
         const texts = await page.locator('.card .secrow').first().locator('.chip').allTextContents();
         const expected = ['★ Любимые', 'Своё', 'Все', 'Коллекции'];
@@ -3146,12 +3146,12 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
         if (restored !== total) throw new Error('после возврата список не восстановился: ' + restored + ' из ' + total);
     });
 
-    test('[UX-T23] topbar без стрелки «←» на всех вкладках: заголовок «GymHelper · <вкладка>» и шестерёнка настроек [UX-T27]', async ({ page }) => {
+    test('[UX-T23] topbar без стрелки «←» на чистых вкладках: заголовок «<вкладка>» и шестерёнка настроек [UX-T27]', async ({ page }) => {
         await openApp(page);
         /* кнопки «Назад» (tb-back/goBack) нет ни на одной вкладке; вкладка profile снова «Профиль» */
         for (const label of ['История', 'Статистика', 'Техника', 'Профиль']) {
             await page.locator('.nav button', { hasText: label }).click();
-            await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
+            await expect(page.locator('.tb-title')).toContainText(label, { timeout: 5000 });
             await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
             await expect(page.locator('.topbar .tb-back')).toHaveCount(0);
         }
@@ -3173,10 +3173,10 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
         await expect(page.locator('.topbar [aria-label="Настройки"]')).toHaveCount(1);
         await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
     });
 
-    test('[UX-T23] возвраты без topbar-стрелки: «К упражнениям» в карточке техники и «⭐ Любимые» из Профиля работают', async ({ page, request }) => {
+    test('[UX-T23] возвраты: «←» в topbar карточки техники и карточки тренировки, «⭐ Любимые» из Профиля работают', async ({ page, request }) => {
         const today = isoDate(new Date());
         await request.post('/api/save', { data: { initData: '', rev: 1, data: {
             nextId: 2, del: [],
@@ -3188,21 +3188,28 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
         const starRow = page.locator('#techList .excard', { hasText: EX }).first().locator('.star');
         await starRow.click();
         await expect(starRow).toHaveClass(/fav/, { timeout: 5000 });
-        /* открытое упражнение: возврат — только внутренняя «К упражнениям» (techBack не тронут) */
+        /* открытое упражнение: возврат — «←» в topbar (techBack, эталон tb-user);
+           голой стрелки «К упражнениям» в .exhead больше нет */
         await page.locator('#techList .excard', { hasText: EX }).first().click();
-        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0, { timeout: 5000 });
-        await page.locator('[data-act="techBack"]').click();
+        await expect(page.locator('.topbar [aria-label="Назад"]')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.topbar [aria-label="Назад"]')).toHaveAttribute('data-act', 'techBack');
+        await expect(page.locator('.exhead .barebtn')).toHaveCount(0);
+        await page.locator('.topbar [data-act="techBack"]').click();
         await expect(page.locator('#techList')).toBeVisible({ timeout: 5000 });
-        /* открытая карточка тренировки: topbar без «Назад», своя навигация карточки не тронута */
+        /* открытая карточка тренировки: «←» в topbar (closeHistory) + нижний backbar
+           сохранён (решение владельца «и внизу и вверху»); выход по верхней стрелке */
         await page.locator('.nav button', { hasText: 'История' }).click();
         await page.locator('.pcard').first().click();
         await expect(page.locator('.wcicons').first()).toBeVisible({ timeout: 5000 });
-        await expect(page.locator('.topbar [data-act="goBack"]')).toHaveCount(0);
-        await page.locator('.backbar [data-act="closeHistory"]').click();
+        await expect(page.locator('.topbar [aria-label="Назад"]')).toHaveCount(1);
+        await expect(page.locator('.topbar [aria-label="Назад"]')).toHaveAttribute('data-act', 'closeHistory');
+        await expect(page.locator('.backbar [data-act="closeHistory"]')).toHaveCount(1);
+        await page.locator('.topbar [aria-label="Назад"]').click();
+        await expect(page.locator('.topbar [aria-label="Назад"]')).toHaveCount(0, { timeout: 5000 });
         /* «⭐ Любимые» из Профиля: переход на «Технику» с фильтром работает без lastTab-логики */
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
         await page.locator('[data-act="openFavs"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
         await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
         await expect(page.locator('#techList .excard', { hasText: EX })).toHaveCount(1);
     });
@@ -3331,6 +3338,57 @@ test.describe('UX-T19/T23 + EXR-T4: чипы «Техники», топбар, �
         /* кнопка не full-width: не шире половины карточки */
         if (m.btn.w > m.vw / 2) throw new Error('кнопка «Сохранить» слишком широкая на 320px: ' + JSON.stringify(m));
     });
+
+    /* топбар с «←» (←, заголовок, пара [ 📅 ][ ⚙ ]) не ломается на 320px:
+       карточка техники и карточка тренировки — без переполнения, стрелка кликабельна */
+    test('320px: topbar карточки техники и карточки тренировки (← + заголовок + ⚙) без переполнения, стрелка кликабельна', async ({ page, request }) => {
+        const today = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 2, del: [],
+            workouts: [doneWorkout(1, today, EX, '100', 3)]
+        } } });
+        await page.setViewportSize({ width: 320, height: 640 });
+        await openApp(page);
+        /* карточка упражнения техники: «←» и ⚙ в вьюпорте, друг друга не перекрывают */
+        await page.locator('.nav button', { hasText: 'Техника' }).click();
+        await page.locator('#techList .excard', { hasText: EX }).first().click();
+        await expect(page.locator('.topbar [aria-label="Назад"]')).toHaveCount(1, { timeout: 5000 });
+        let m = await page.evaluate(function () {
+            const back = document.querySelector('.topbar [aria-label="Назад"]').getBoundingClientRect();
+            const gear = document.querySelector('.topbar [aria-label="Настройки"]').getBoundingClientRect();
+            return {
+                vw: document.documentElement.clientWidth,
+                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                back: { left: Math.round(back.left), right: Math.round(back.right) },
+                gear: { left: Math.round(gear.left), right: Math.round(gear.right) }
+            };
+        });
+        if (m.overflow) throw new Error('переполнение topbar карточки техники на 320px: ' + JSON.stringify(m));
+        if (m.back.left < 0 || m.gear.right > m.vw) throw new Error('кнопки topbar за краями 320px: ' + JSON.stringify(m));
+        if (m.back.right > m.gear.left) throw new Error('«←» перекрывает ⚙ на 320px: ' + JSON.stringify(m));
+        /* тап без force: стрелка реально кликабельна */
+        await page.locator('.topbar [aria-label="Назад"]').click();
+        await expect(page.locator('#techList')).toBeVisible({ timeout: 5000 });
+        /* карточка тренировки: та же геометрия (← + ⚙, 📅 скрыт), нижний backbar на месте */
+        await page.locator('.nav button', { hasText: 'История' }).click();
+        await page.locator('.pcard').first().click();
+        await expect(page.locator('.topbar [aria-label="Назад"]')).toHaveCount(1, { timeout: 5000 });
+        await expect(page.locator('.backbar [data-act="closeHistory"]')).toHaveCount(1);
+        m = await page.evaluate(function () {
+            const back = document.querySelector('.topbar [aria-label="Назад"]').getBoundingClientRect();
+            const gear = document.querySelector('.topbar [aria-label="Настройки"]').getBoundingClientRect();
+            return {
+                vw: document.documentElement.clientWidth,
+                overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+                back: { left: Math.round(back.left), right: Math.round(back.right) },
+                gear: { left: Math.round(gear.left), right: Math.round(gear.right) }
+            };
+        });
+        if (m.overflow) throw new Error('переполнение topbar карточки тренировки на 320px: ' + JSON.stringify(m));
+        if (m.back.left < 0 || m.gear.right > m.vw) throw new Error('кнопки topbar за краями 320px: ' + JSON.stringify(m));
+        await page.locator('.topbar [aria-label="Назад"]').click();
+        await expect(page.locator('.pcard').first()).toBeVisible({ timeout: 5000 });
+    });
 });
 
 
@@ -3349,14 +3407,14 @@ test.describe('UX-T27: экран «Настройки»', function () {
         for (const label of ['История', 'Статистика', 'Техника', 'Профиль']) {
             await page.locator('.nav button', { hasText: label }).click();
             await page.locator('[aria-label="Настройки"]').click();
-            await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+            await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
             await expect(page.locator('.card', { hasText: '🎨 Оформление' })).toBeVisible({ timeout: 5000 });
             await expect(page.locator('.card', { hasText: '⏱ Таймер отдыха' })).toBeVisible();
             await expect(page.locator('.card', { hasText: '🧑‍🏫 Персональный тренер' })).toBeVisible();
             /* [ONB-T2] политика реализована: пункт есть в Настройках на любой вкладке */
             await expect(page.locator('#app button', { hasText: 'Политика конфиденциальности' })).toBeVisible({ timeout: 5000 });
             await page.locator('.topbar [aria-label="Назад"]').click();
-            await expect(page.locator('.tb-title')).toContainText('GymHelper · ' + label, { timeout: 5000 });
+            await expect(page.locator('.tb-title')).toContainText(label, { timeout: 5000 });
         }
     });
 
@@ -3417,7 +3475,7 @@ test.describe('UX-T27: экран «Настройки»', function () {
         await expect(page.locator('#pfBirthMonth')).toBeVisible();
         /* «⭐ Любимые упражнения» → «Открыть в технике» жива */
         await page.locator('[data-act="openFavs"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
         await expect(page.locator('.card .secrow .chip', { hasText: '★ Любимые' })).toHaveClass(/on/, { timeout: 5000 });
         /* сохранение перс. данных не сломано [UX-T29]: дата вместо поля «Возраст» */
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
@@ -3453,7 +3511,7 @@ test.describe('UX-T27: экран «Настройки»', function () {
         /* шестерёнка доступна и в карточке тренировки */
         await expect(page.locator('[aria-label="Настройки"]')).toBeVisible();
         await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
         /* backbar карточки на экране Настроек не рендерится */
         await expect(page.locator('.backbar')).toHaveCount(0);
         await page.locator('.topbar [aria-label="Назад"]').click();
@@ -3479,13 +3537,13 @@ test.describe('UX-T27: экран «Настройки»', function () {
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         /* шестерёнка поверх карточки: Настройки открылись, backbar скрыт */
         await page.locator('[aria-label="Настройки"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
         await expect(page.locator('.backbar')).toHaveCount(0);
         /* сеть восстановилась: тап по табу нижней навигации закрывает Настройки
            и запускает dirty-автосейв карточки [UX-S4 §8.4] */
         failSave = false;
         await page.locator('.nav button', { hasText: 'Статистика' }).click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Статистика', { timeout: 5000 });
         await expect.poll(async function () {
             const st = await (await request.get('/api/state')).json();
             const act = (st.workouts || []).filter(function (w) { return !w.finished; })[0];
@@ -3828,30 +3886,30 @@ test.describe('UX-S6 календарь', function () {
         /* кнопка есть на КАЖДОЙ из пяти вкладок [S6-update4 — «как и настройки»] */
         for (const t of ['Статистика', 'Техника', 'Профиль']) {
             await page.locator('.nav button', { hasText: t }).click();
-            await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · ' + t);
+            await expect(page.locator('.topbar .tb-title')).toHaveText(t);
             await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
         }
         /* «Тренер» — через Настройки («Открыть раздел») */
         await page.locator('.topbar [data-act="openSettings"]').click();
         await page.locator('[data-act="switchTab"][data-a="coach"]').click();
-        await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · Тренер');
+        await expect(page.locator('.topbar .tb-title')).toHaveText('Тренер');
         await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(1);
         /* тап с Профиля: заголовок, «Назад», шестерёнка в topbar, календарь отрисован [S6-update5]
            [UX-I17] дефолтный вид — «Неделя» (§12.2): маркер открытого календаря — полоса дней */
         await page.locator('.nav button', { hasText: 'Профиль' }).click();
         await calBtn.click();
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Календарь');
+        await expect(page.locator('.tb-title')).toHaveText('Календарь');
         await expect(page.locator('.topbar [data-act="closeCal"]')).toHaveCount(1);
         await expect(page.locator('.topbar [data-act="openSettings"]')).toHaveCount(1);
         await expect(page.locator('.wk-days')).toBeVisible();
         /* «Назад» — возврат на вкладку-источник (calFromTab) [§3.4] */
         await page.locator('.topbar [data-act="closeCal"]').click();
-        await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · Профиль');
+        await expect(page.locator('.topbar .tb-title')).toHaveText('Профиль');
         /* с Истории — как в 1.28 */
         await page.locator('.nav button', { hasText: 'История' }).click();
         await openCalendar(page);
         await page.locator('.topbar [data-act="closeCal"]').click();
-        await expect(page.locator('.topbar .tb-title')).toHaveText('GymHelper · История');
+        await expect(page.locator('.topbar .tb-title')).toHaveText('История');
     });
 
     test('§14.2 кнопка скрыта: при открытой карточке и на Настройках; на календаре 📅 нет, но шестерёнка ЕСТЬ', async ({ page, request }) => {
@@ -3863,7 +3921,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(0);
         await page.locator('.bb-back').click();
         await page.locator('.topbar [data-act="openSettings"]').click();
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        await expect(page.locator('.tb-title')).toHaveText('Настройки');
         /* на Настройках шестерёнки нет — своя шапка [§3.2, §14.2] */
         await expect(page.locator('.topbar [data-act="openSettings"]')).toHaveCount(0);
         await expect(page.locator('.topbar [data-act="openCal"]')).toHaveCount(0);
@@ -3875,7 +3933,7 @@ test.describe('UX-S6 календарь', function () {
         await expect(gear).toHaveCount(1);
         await expect(gear).toHaveAttribute('aria-label', 'Настройки');
         await gear.click();
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        await expect(page.locator('.tb-title')).toHaveText('Настройки');
         await expect(page.locator('.cal-grid')).toHaveCount(0);
     });
 
@@ -3889,17 +3947,17 @@ test.describe('UX-S6 календарь', function () {
         await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[prevYm.m] + ' ' + prevYm.y);
         /* ⚙ на экране календаря → Настройки [S6-update5, §3.4] */
         await page.locator('.topbar [data-act="openSettings"]').click();
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        await expect(page.locator('.tb-title')).toHaveText('Настройки');
         /* «← Назад» с Настроек — возврат В КАЛЕНДАРЬ (calOpen сохраняется), месяц тот же [§3.4] */
         await page.locator('.topbar [data-act="closeSettings"]').click();
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Календарь');
+        await expect(page.locator('.tb-title')).toHaveText('Календарь');
         await expect(page.locator('.cal-grid')).toBeVisible();
         await expect(page.locator('.cal-title')).toHaveText(CAL_MONTHS[prevYm.m] + ' ' + prevYm.y);
         /* снова ⚙, затем тап нижнего таба: switchTab закрывает и Настройки, и календарь [§3.4] */
         await page.locator('.topbar [data-act="openSettings"]').click();
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · Настройки');
+        await expect(page.locator('.tb-title')).toHaveText('Настройки');
         await page.locator('.nav button', { hasText: 'История' }).click();
-        await expect(page.locator('.tb-title')).toHaveText('GymHelper · История');
+        await expect(page.locator('.tb-title')).toHaveText('История');
         await expect(page.locator('.cal-grid')).toHaveCount(0);
         /* повторное открытие с таба-источника — месяц восстановился из gymCalMonth [§7.3] */
         await openCalendar(page);
@@ -4862,7 +4920,7 @@ test.describe('EXR-T2: фото упражнений (free-exercise-db) в Те�
     test('у упражнения с img рендерится фото (список + деталь, 2 ракурса, описание), у упражнения без img — прежняя иконка', async ({ page, request }) => {
         await openApp(page);
         await page.locator('.nav button', { hasText: 'Техника' }).click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Техника', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Техника', { timeout: 5000 });
 
         /* «Жим штанги лёжа» привязан к базе: фото вместо иконки в карточке списка */
         const row = page.locator('#techList .excard', { hasText: EX }).first();
@@ -5196,12 +5254,12 @@ test.describe('[ONB-T4] туториал', function () {
         await page.locator('[data-act="tutNext"]').click();
         await expect(page.locator('#tutTip .step')).toHaveText('Шаг 3 из 4 · Календарь и настройки', { timeout: 5000 });
         await expect(page.locator('.tbpair .spot.wrap.pair')).toHaveCount(1);
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · История');
+        await expect(page.locator('.tb-title')).toContainText('История');
         expect(await coveredByShield(page, '[aria-label="Настройки"]')).toBe('shield');
         /* «Дальше» → шаг 4: подложка — вкладка Статистика, подсветка на табе */
         await page.locator('[data-act="tutNext"]').click();
         await expect(page.locator('#tutTip .step')).toHaveText('Шаг 4 из 4 · Прогресс', { timeout: 5000 });
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Статистика');
+        await expect(page.locator('.tb-title')).toContainText('Статистика');
         await expect(page.locator('.nav .nbtn .spot.wrap.tab')).toHaveCount(1);
         /* «Дальше» на последнем шаге завершает молча */
         await page.locator('[data-act="tutNext"]').click();
@@ -5297,7 +5355,7 @@ test.describe('[ONB-T5] Помощь (FAQ)', function () {
         await expect(row).toBeVisible();
         await expect(row.locator('.newpill')).toHaveText('новое');
         await row.click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Помощь', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Помощь', { timeout: 5000 });
         await expect(page.locator('.faq-it')).toHaveCount(7);
         /* вопроса про тему нет (решение владельца) */
         await expect(page.locator('.faq-q', { hasText: 'тему' })).toHaveCount(0);
@@ -5316,9 +5374,9 @@ test.describe('[ONB-T5] Помощь (FAQ)', function () {
         /* повторный вход в Помощь: пилюля «новое» исчезла; «←» — назад в Настройки */
         await page.locator('[aria-label="Настройки"]').click();
         await page.locator('#app button', { hasText: 'Помощь и FAQ' }).click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Помощь', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Помощь', { timeout: 5000 });
         await page.locator('[aria-label="Назад"]').click();
-        await expect(page.locator('.tb-title')).toContainText('GymHelper · Настройки', { timeout: 5000 });
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
         /* [ONB-S6] пилюля импорта на карточке «Данные» не считается — здесь проверяем
            только погасшую пилюлю Помощи (карточка импорта появилась позже этого теста) */
         await expect(page.locator('.card:not(.impdata) .newpill')).toHaveCount(0);
@@ -6995,7 +7053,22 @@ test.describe('[UX-T49] scroll restoration', function () {
         await jsClick(page.locator('.pcard:not(.glow)'));
         await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
         await expectScrollNear(page, 0, 1); /* вход в карточку — всегда верх */
-        await page.locator('[data-act="closeHistory"]').click();
+        await page.locator('.backbar [data-act="closeHistory"]').click(); /* [UX-T49] выход из карточки — нижний backbar; верхняя «←» топбара — отдельный акт [единообразие] */
+        await expect(page.locator('.pcard:not(.glow)').first()).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 700, 3); /* возврат — точная позиция ухода */
+    });
+
+    /* [единообразие] тот же сценарий с выходом через ВЕРХНЮЮ «←» топбара: на карточке
+       тренировки это та же data-act="closeHistory" — скролл-ресторация обязана работать
+       так же, как у нижнего backbar */
+    test('история: выход из карточки верхней «←» топбара — позиция списка восстановлена', async ({ page, request }) => {
+        await seedLongHistory(request);
+        await openApp(page);
+        await pageScrollTo(page, 700);
+        await jsClick(page.locator('.pcard:not(.glow)'));
+        await expect(page.locator('.backbar')).toBeVisible({ timeout: 5000 });
+        await expectScrollNear(page, 0, 1); /* вход в карточку — всегда верх */
+        await page.locator('.topbar [aria-label="Назад"]').click(); /* [UX-T49] верхняя стрелка топбара — тот же closeHistory */
         await expect(page.locator('.pcard:not(.glow)').first()).toBeVisible({ timeout: 5000 });
         await expectScrollNear(page, 700, 3); /* возврат — точная позиция ухода */
     });
