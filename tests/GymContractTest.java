@@ -2599,7 +2599,7 @@ public class GymContractTest {
                 postJson(portB2, "/api/social/me", "{\"initData\":\"" + id4 + "\"}").body()));
             check(((java.util.List<Object>) meB2.get("grantLog")).size() == 1,
                 "b2: /api/social/me отдаёт свои записи журнала");
-            /* кап: 21 переключение goals туда-сюда (итого 22 реальных изменения) → последние 20;
+            /* кап: 21 переключение goals туда-сюда — 21 запись журнала (1 первый POST + 20 из 21 итерации, 1-я no-op); после 21-й trim — последние 20;
                [TRN-T5 фикс ревью] statusCode КАЖДОЙ итерации контролируем — на (CAP+1)-й
                записи trim раньше падал по ConcurrentModificationException */
             java.net.http.HttpResponse<String> rcap = null;
@@ -2675,13 +2675,15 @@ public class GymContractTest {
             check(glSt.size() == 1 && Json.lng(Json.map(glSt.get(0)).get("target")) == 100
                     && Json.lng(Json.map(glSt.get(0)).get("pct")) > 0,
                 "b2: силовая цель с прогрессом pct>0 (лучший e1RM / цель)");
-            /* без связки → 404-семантика ok:false reason nolink; username не утекает */
+            /* без связки → HTTP 404 {ok:false, reason:"nolink"}; username не утекает */
             java.net.http.HttpResponse<String> rstBadRaw = postJson(portB2, "/api/social/student",
                 "{\"initData\":\"" + idS + "\",\"studentId\":604}");
+            check(rstBadRaw.statusCode() == 404, "b2: чужой студент — HTTP 404, а не "
+                + rstBadRaw.statusCode());
             Map<String, Object> rstBad = Json.map(Json.parse(rstBadRaw.body()));
             check(Boolean.FALSE.equals(rstBad.get("ok")) && "nolink".equals(rstBad.get("reason"))
                     && !rstBadRaw.body().contains("igor_trainer"),
-                "b2: чужой студент не отдаётся — 404 nolink, username не утекает");
+                "b2: тело 404 — ok:false/reason:nolink, username не утекает");
 
             /* [TRN-T6] жалоба: уведомление владельцу + socialComplaint */
             int sentBefore = spyB2.sent.size();
