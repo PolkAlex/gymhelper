@@ -8377,6 +8377,11 @@ test.describe('[UX-S19] возврат', function () {
         /* шаг cadence (§9): заголовок, чипы 1–7, «Пока не знаю» */
         await expect(page.locator('.obwrap .wtitle')).toContainText('Сколько дней в неделю', { timeout: 5000 });
         await expect(page.locator('.obwrap .cadchips .chip')).toHaveCount(7);
+        /* ревью PR #417: склонение aria-label — 1 день, 2–4 дня, 5+ дней */
+        await expect(page.locator('.obwrap .cadchips .chip[aria-label="1 день в неделю"]')).toHaveCount(1);
+        await expect(page.locator('.obwrap .cadchips .chip[aria-label="2 дня в неделю"]')).toHaveCount(1);
+        await expect(page.locator('.obwrap .cadchips .chip[aria-label="5 дней в неделю"]')).toHaveCount(1);
+        await expect(page.locator('.obwrap .cadchips .chip[aria-label="2 дней в неделю"]')).toHaveCount(0);
         const cadSaved = page.waitForResponse(function (r) {
             return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
         });

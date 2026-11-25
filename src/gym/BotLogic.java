@@ -3021,16 +3021,19 @@ public final class BotLogic {
             case "cb": {
                 /* текст по ФАКТУ молчания, не по этапу (§5.3): молчун с 90 днями получает
                    ОДНО сообщение — сразу «последнее»; нулевая история на первой ступени —
-                   отдельный текст (§4.2). Каденс-1 день-21: текст «последнее» при ещё не
-                   закрытой лестнице (28) — осознанный компромисс правила «по факту» */
+                   отдельный текст (§4.2). Границы текстов — пороги ЛЕСТНИЦЫ (cadence=1 →
+                   14/21/28): «последнее» приходит ровно один раз, на закрывающей ступени,
+                   а не дважды (ревью PR #417: раньше день 21 cadence=1 давал «последнее»
+                   при ещё открытой ступени 28) */
                 int silence = notifySilenceDays(data, today, mtimeAgeMs);
-                if (!notifyHasHistory(data) && notifyCbLevel(silence, data.cadence) == 1) {
+                int level = notifyCbLevel(silence, data.cadence);
+                if (!notifyHasHistory(data) && level == 1) {
                     return "Первая тренировка — самая важная. 15 минут сегодня лучше идеального плана завтра 💪";
                 }
-                if (silence >= 21) {
+                if (level >= 3) {
                     return "Прошло три недели. Это последнее напоминание — не хочу быть спамером. Дневник никуда не уйдёт 🙏";
                 }
-                if (silence >= 14) {
+                if (level == 2) {
                     return "Две недели без зала — бывает. Начать снова — самое трудное, дальше само пойдёт 💪";
                 }
                 return "👋 Неделя без тренировок. Может, сегодня тот самый день? Один подход — уже победа.";
@@ -3045,7 +3048,8 @@ public final class BotLogic {
 
     /* inline-клавиатура сообщения типа (§4.1–4.4); null — без клавиатуры. «Продолжить/
        Начать» — существующие callback-флоу (wk:resume/menu:start); 🔕 — отписка в один
-       тап; cb-«последнее» (молчание ≥21) — без отписки: сообщений больше не будет.
+       тап; cb-«последнее» (закрывающая ступень лестницы: ≥21, cadence=1 — ≥28) — без
+       отписки: сообщений больше не будет.
        Кнопка приложения: web_app (фолбэк url), нет ни той ни другой — ряда нет (§4.4) */
     List<List<Map<String, Object>>> notifyKb(String type, GymData data, LocalDate today, long mtimeAgeMs) {
         switch (type) {
@@ -3056,7 +3060,9 @@ public final class BotLogic {
                 int silence = notifySilenceDays(data, today, mtimeAgeMs);
                 List<List<Map<String, Object>>> kb = new ArrayList<>();
                 kb.add(List.of(TelegramApi.button("💪 Начать тренировку", "menu:start")));
-                if (silence < 21) kb.add(List.of(TelegramApi.button("🔕 Не напоминать", "ntf:offcb")));
+                /* граница — та же ступень лестницы, что у текста «последнее» (cadence=1:
+                   день 21 ещё не последнее, отписка обязательна — §2.4 под каждым сообщением) */
+                if (notifyCbLevel(silence, data.cadence) < 3) kb.add(List.of(TelegramApi.button("🔕 Не напоминать", "ntf:offcb")));
                 return kb;
             }
             case "dg": {

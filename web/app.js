@@ -6560,7 +6560,8 @@ function cadenceAskHtml() {
         '<div class="wtag">Помогает подстроить напоминания.<br>Ответ ни к чему не обязывает.</div>' +
         '<div class="cadchips">';
     for (let n = 1; n <= 7; n++) {
-        h += '<button class="chip' + (G && G.cadence === n ? ' on' : '') + '" data-act="cadencePick" data-a="' + n + '" aria-label="' + n + ' ' + (n === 1 ? 'день' : 'дней') + ' в неделю">' + n + '</button>';
+        /* склонение: 1 день, 2–4 дня, 5+ дней (ревью PR #417: «2 дней» — неверная форма) */
+        h += '<button class="chip' + (G && G.cadence === n ? ' on' : '') + '" data-act="cadencePick" data-a="' + n + '" aria-label="' + n + ' ' + (n === 1 ? 'день' : n <= 4 ? 'дня' : 'дней') + ' в неделю">' + n + '</button>';
     }
     h += '</div></div><div class="ob-bottom">' +
         '<button class="wskip" data-act="cadenceSkip">Пока не знаю</button>' +

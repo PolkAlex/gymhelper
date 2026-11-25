@@ -1539,6 +1539,27 @@ public class BotLogicTest {
                     "Первая тренировка — самая важная. 15 минут сегодня лучше идеального плана завтра 💪"),
                 "notify: cb день 7 нулевой истории — «первая тренировка» (§4.2)");
 
+            /* --- ревью PR #417: границы текстов едут вместе с порогами лестницы (cadence=1
+                → 14/21/28) — «последнее» приходит ровно один раз, на закрывающей ступени;
+                раньше день 21 давал «последнее» при ещё открытой ступени 28 (двойное обещание) --- */
+            GymData cbC21 = new GymData();
+            cbC21.cadence = 1;
+            Workout cbwC21 = w("2026-10-19T10:00:00", "2026-10-19T11:00:00", true);
+            cbwC21.date = "2026-10-19";
+            cbC21.workouts.add(cbwC21);
+            String cad21 = BotLogic.notifyText("cb", cbC21, today, 21 * BotLogic.DAY_MS);
+            check(cad21 != null && !cad21.contains("последнее") && cad21.equals(
+                    "Две недели без зала — бывает. Начать снова — самое трудное, дальше само пойдёт 💪"),
+                "notify: cadence=1 день 21 — ещё НЕ «последнее» (уровень 2, порог 28)");
+            GymData cbC28 = new GymData();
+            cbC28.cadence = 1;
+            Workout cbwC28 = w("2026-10-12T10:00:00", "2026-10-12T11:00:00", true);
+            cbwC28.date = "2026-10-12";
+            cbC28.workouts.add(cbwC28);
+            check(BotLogic.notifyText("cb", cbC28, today, 28 * BotLogic.DAY_MS).equals(
+                    "Прошло три недели. Это последнее напоминание — не хочу быть спамером. Дневник никуда не уйдёт 🙏"),
+                "notify: cadence=1 день 28 — «последнее» (закрывающая ступень)");
+
             /* --- коридор 60–100 символов для наджей + стоп-слова стыда (§14) --- */
             String[] nudges = {
                 BotLogic.notifyText("unf", unfData("2026-11-08"), today, m3d),
@@ -1598,6 +1619,15 @@ public class BotLogicTest {
             List<List<Map<String, Object>>> kCb90 = logic.notifyKb("cb", new GymData(), today, 90 * BotLogic.DAY_MS);
             check(kCb90.size() == 1 && "menu:start".equals(Json.str(kCb90.get(0).get(0), "callback_data")),
                 "notify: kb «последнее» (≥21) — без отписки (§4.2)");
+            /* ревью PR #417: граница отписки — закрывающая ступень лестницы, не константа 21:
+               cadence=1 день 21 — НЕ последнее, отписка на месте (§2.4 под каждым сообщением) */
+            List<List<Map<String, Object>>> kCbC21 = logic.notifyKb("cb", cbC21, today, 21 * BotLogic.DAY_MS);
+            check(kCbC21.size() == 2 && "menu:start".equals(Json.str(kCbC21.get(0).get(0), "callback_data"))
+                    && "ntf:offcb".equals(Json.str(kCbC21.get(1).get(0), "callback_data")),
+                "notify: kb cadence=1 день 21 — Начать + отписка (сообщение ещё будет)");
+            List<List<Map<String, Object>>> kCbC28 = logic.notifyKb("cb", cbC28, today, 28 * BotLogic.DAY_MS);
+            check(kCbC28.size() == 1 && "menu:start".equals(Json.str(kCbC28.get(0).get(0), "callback_data")),
+                "notify: kb cadence=1 день 28 — «последнее» без отписки");
             List<List<Map<String, Object>>> kGoal = logic.notifyKb("goal", gd, today, m3d);
             check(kGoal.size() == 1 && "ntf:offgoal".equals(Json.str(kGoal.get(0).get(0), "callback_data")),
                 "notify: kb goal без webAppUrl/appLink — только отписка (ряда приложения нет, §4.4)");
