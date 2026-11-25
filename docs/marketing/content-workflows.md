@@ -56,7 +56,11 @@
 ## Ограничения и известные особенности
 
 1. `video-analyzer` для YouTube/Instagram/TikTok требует yt-dlp — он установлен во
-   временную папку (`%TEMP%\opencode\mcptools\pyvenv`, PATH прописан в конфиге сервера).
+   временную папку (`%TEMP%\opencode\mcptools\pyvenv`); в `opencode.json` эта папка
+   добавлена **в начало унаследованного PATH** (подстановка `{env:PATH}` — проверено
+   живым вызовом). Версия сервера зафиксирована: `mcp-video-analyzer@0.12.0`.
+   Если node или yt-dlp переедут в другое место — править только путь pyvenv в
+   `opencode.json` (узнать: `where yt-dlp`, `where node`).
    Instagram обычно требует cookies (экспорт в файл, env `YTDLP_COOKIES`) — делается
    руками владельца, когда понадобится разбор Reels.
 2. Транскрипты YouTube упираются в rate-limit (HTTP 429) при частых запросах —
@@ -78,14 +82,17 @@
 python -m venv "$env:TEMP\opencode\mcptools\pyvenv"
 & "$env:TEMP\opencode\mcptools\pyvenv\Scripts\python.exe" -m pip install yt-dlp
 
+# yt-transcript (локальная обёртка): код берём из РЕПО tools/ytlib/, не рукописаем
+New-Item -ItemType Directory -Force -Path "$env:TEMP\opencode\mcptools\ytlib" | Out-Null
+Copy-Item "tools\ytlib\yt-transcript-mcp.mjs" "$env:TEMP\opencode\mcptools\ytlib\" -Force
+Set-Location "$env:TEMP\opencode\mcptools\ytlib"
+npm init -y; npm install youtube-transcript
+
 # free-seo-mcp
 git clone --depth 1 https://github.com/JohnWayneeee/free-seo-mcp.git "$env:TEMP\opencode\mcptools\free-seo-mcp"
 python -m venv "$env:TEMP\opencode\mcptools\free-seo-venv"
 & "$env:TEMP\opencode\mcptools\free-seo-venv\Scripts\python.exe" -m pip install "$env:TEMP\opencode\mcptools\free-seo-mcp"
-
-# yt-transcript (локальная обёртка на библиотеке youtube-transcript)
-cd "$env:TEMP\opencode\mcptools\ytlib"
-npm init -y; npm install youtube-transcript
 ```
 
-Пути в `opencode.json` (mcp.servers) уже указывают на эти папки.
+Пути в `opencode.json` (mcp.servers) уже указывают на эти папки; yt-dlp подключается
+через `{env:PATH}`-препенд к унаследованному PATH.

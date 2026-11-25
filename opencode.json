@@ -37,9 +37,9 @@
       },
       "video-analyzer": {
         "type": "local",
-        "command": ["npx", "-y", "mcp-video-analyzer@latest"],
+        "command": ["npx", "-y", "mcp-video-analyzer@0.12.0"],
         "environment": {
-          "PATH": "C:\\Users\\Lenovo\\AppData\\Local\\Temp\\opencode\\mcptools\\pyvenv\\Scripts;C:\\Program Files\\nodejs;C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\wbem"
+          "PATH": "C:\\Users\\Lenovo\\AppData\\Local\\Temp\\opencode\\mcptools\\pyvenv\\Scripts;{env:PATH}"
         }
       },
       "free-seo": {
