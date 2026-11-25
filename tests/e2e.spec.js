@@ -8130,6 +8130,9 @@ test.describe('[FIT-T1 пост-мерж] регресс-добор и карт�
    Mini App из бота); в обычном браузере init отклоняется промисом (LaunchParamsRetrieveError),
    который приложение глотает — на работу Mini App аналитика не влияет.
    Состояние интеграции — тестовый крюк __gym.tmaState(): 'off' | 'ok' | 'error'.
+   Без конфиг-файла сервер (прод и tests/server-test.js) отдаёт заглушку с пустым
+   конфигом (200, не 404 — console-error ронял §14.15 на чистую консоль); токен пуст →
+   guard в app.js держит SDK в no-op.
    Внешние хосты SDK — витрина tganalytics.xyz и антифрод-фингерпринт *.innerworks.me —
    в e2e мокается ВЕСЬ внешний трафик: тесты не ходят в интернет, счётчик ловит любой
    исходящий вызов (позитив: он есть; негатив: ноль). */
@@ -8173,18 +8176,70 @@ test.describe('[PRO-T1] analytics SDK', function () {
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
     });
 
-    test('конфига нет (404): no-op — ни одного внешнего вызова, приложение работает', async ({ page }) => {
+    test('конфига нет: серверная заглушка (200, пустой токен) — no-op, ни одного внешнего вызова', async ({ page }) => {
         const net = { n: 0 };
         await mockAnalyticsNet(page, net);
-        /* имитация свежего клона / прода без analytics-config.js: скрипт недоступен (404) */
-        await page.route('**/analytics-config.js*', function (route) { return route.abort(); });
+        /* имитация прод/CI без конфиг-файла: сервер отдаёт 200-заглушку (зеркало
+           WebServer/server-test.js), а не 404 — console-error ронял §14.15.
+           Токен пуст → guard в tmaAnalyticsInit держит SDK в no-op */
+        await page.route('**/analytics-config.js*', function (route) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/javascript; charset=utf-8',
+                body: '// [PRO-T1] заглушка: конфиг аналитики не установлен — SDK в no-op (см. analytics-config.example.js)\n' +
+                    'window.tmaAnalyticsConfig = window.tmaAnalyticsConfig || { token: \'\', appName: \'\' };'
+            });
+        });
         await openApp(page);
         expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('off');
-        /* окно тишины: без конфига SDK не инициализируется и не ходит в сеть */
+        /* окно тишины: без токена SDK не инициализируется и не ходит в сеть */
         await page.waitForTimeout(1500);
         expect(net.n).toBe(0);
         /* приложение полностью работоспособно без аналитики */
         await page.locator('.nav .nfab').click();
         await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+    });
+
+    /* путь к конфиг-файлу; для детерминизма кейсов файл контролируется самим тестом
+       (workers:1 — гонок с параллельными тестами нет; восстановление в finally) */
+    function cfgPath() { return require('path').join(__dirname, '..', 'web', 'analytics-config.js'); }
+
+    test('сервер-заглушка: конфиг-файла нет на диске → 200-заглушка, консоль чистая (repro §14.15), SDK в no-op', async ({ page, request }) => {
+        const fs = require('fs');
+        const cfg = cfgPath();
+        const saved = fs.existsSync(cfg) ? fs.readFileSync(cfg) : null;
+        if (saved !== null) fs.unlinkSync(cfg);
+        try {
+            /* кейс «без файла»: точное имя с ?v= — 200 и тело заглушки */
+            const resp = await request.get('/analytics-config.js?v=1');
+            expect(resp.status()).toBe(200);
+            const body = await resp.text();
+            expect(body).toContain('[PRO-T1] заглушка');
+            expect(body).toContain("token: ''");
+            /* полный repro тестера: загрузка Mini App без конфиг-файла — консоль без ошибок */
+            const consoleErrors = [];
+            page.on('console', function (m) { if (m.type() === 'error') consoleErrors.push(m.text()); });
+            await openApp(page);
+            expect(consoleErrors).toEqual([]);
+            expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('off');
+        } finally {
+            if (saved !== null) fs.writeFileSync(cfg, saved);
+        }
+    });
+
+    test('сервер: конфиг-файл на диске → отдаётся файл, а не заглушка', async ({ request }) => {
+        const fs = require('fs');
+        const cfg = cfgPath();
+        const saved = fs.existsSync(cfg) ? fs.readFileSync(cfg) : null;
+        fs.writeFileSync(cfg, '// e2e-marker-real-config\nwindow.tmaAnalyticsConfig = window.tmaAnalyticsConfig || { token: "e2e-probe", appName: "e2e-probe" };\n');
+        try {
+            const resp = await request.get('/analytics-config.js');
+            expect(resp.status()).toBe(200);
+            const body = await resp.text();
+            expect(body).toContain('e2e-marker-real-config');
+            expect(body).not.toContain('заглушка');
+        } finally {
+            if (saved !== null) fs.writeFileSync(cfg, saved); else fs.unlinkSync(cfg);
+        }
     });
 });
