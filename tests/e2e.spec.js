@@ -8122,3 +8122,124 @@ test.describe('[FIT-T1 пост-мерж] регресс-добор и карт�
         if (finW.note !== NOTE_P2) throw new Error('заметка потеряна: ' + JSON.stringify(finW.note));
     });
 });
+
+/* ============ [PRO-T1] Telegram Mini Apps Analytics SDK (#399) ============ */
+/* Интеграция: web/vendor/tma-analytics.js (вендоренный @telegram-apps/analytics 1.6.4) +
+   некоммиченный web/analytics-config.js (token/appName, в .gitignore). SDK шлёт данные
+   только при параметрах запуска Telegram (tgWebAppData в hash — как при реальном открытии
+   Mini App из бота); в обычном браузере init отклоняется промисом (LaunchParamsRetrieveError),
+   который приложение глотает — на работу Mini App аналитика не влияет.
+   Состояние интеграции — тестовый крюк __gym.tmaState(): 'off' | 'ok' | 'error'.
+   Без конфиг-файла сервер (прод и tests/server-test.js) отдаёт заглушку с пустым
+   конфигом (200, не 404 — console-error ронял §14.15 на чистую консоль); токен пуст →
+   guard в app.js держит SDK в no-op.
+   Внешние хосты SDK — витрина tganalytics.xyz и антифрод-фингерпринт *.innerworks.me —
+   в e2e мокается ВЕСЬ внешний трафик: тесты не ходят в интернет, счётчик ловит любой
+   исходящий вызов (позитив: он есть; негатив: ноль). */
+test.describe('[PRO-T1] analytics SDK', function () {
+
+    /* конфиг аналитики как на проде: route-мок вместо некоммиченного analytics-config.js.
+       '*' в конце — URL приходит с cache-busting query (?v=1, как в index.html) */
+    async function mockConfig(page, token) {
+        await page.route('**/analytics-config.js*', function (route) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/javascript; charset=utf-8',
+                body: 'window.tmaAnalyticsConfig = window.tmaAnalyticsConfig || ' +
+                    '{ token: ' + JSON.stringify(token) + ', appName: "gymhelper-e2e" };'
+            });
+        });
+    }
+    /* все внешние (не тестовый сервер) запросы — мок + счётчик исходящих вызовов аналитики */
+    async function mockAnalyticsNet(page, counter) {
+        await page.route(function (url) {
+            return url.hostname !== '127.0.0.1' && url.hostname !== 'localhost';
+        }, function (route) {
+            counter.n++;
+            return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' });
+        });
+    }
+
+    test('конфиг задан: SDK инициализируется (сетевой вызов замокан) и не ломает загрузку', async ({ page }) => {
+        const net = { n: 0 };
+        await mockAnalyticsNet(page, net);
+        await mockConfig(page, 'e2e-token');
+        /* открываем как из Telegram: hash с tgWebAppData (валидность подписи SDK не проверяет) */
+        await page.goto('/#tgWebAppData=user%3D%257B%2522id%2522%253A42%257D%26auth_date%3D1764000000%26hash%3Ddeadbeef');
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        /* init() вызван синхронно при старте приложения */
+        expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('ok');
+        /* SDK реально вышел в сеть (витрина/антифрод) — вызовы попали в мок, не в интернет */
+        await expect.poll(function () { return net.n; }, { timeout: 10000 }).toBeGreaterThan(0);
+        /* приложение живо после инициализации аналитики: пикер открывается */
+        await page.locator('.nav .nfab').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('конфига нет: серверная заглушка (200, пустой токен) — no-op, ни одного внешнего вызова', async ({ page }) => {
+        const net = { n: 0 };
+        await mockAnalyticsNet(page, net);
+        /* имитация прод/CI без конфиг-файла: сервер отдаёт 200-заглушку (зеркало
+           WebServer/server-test.js), а не 404 — console-error ронял §14.15.
+           Токен пуст → guard в tmaAnalyticsInit держит SDK в no-op */
+        await page.route('**/analytics-config.js*', function (route) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/javascript; charset=utf-8',
+                body: '// [PRO-T1] заглушка: конфиг аналитики не установлен — SDK в no-op (см. analytics-config.example.js)\n' +
+                    'window.tmaAnalyticsConfig = window.tmaAnalyticsConfig || { token: \'\', appName: \'\' };'
+            });
+        });
+        await openApp(page);
+        expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('off');
+        /* окно тишины: без токена SDK не инициализируется и не ходит в сеть */
+        await page.waitForTimeout(1500);
+        expect(net.n).toBe(0);
+        /* приложение полностью работоспособно без аналитики */
+        await page.locator('.nav .nfab').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+    });
+
+    /* путь к конфиг-файлу; для детерминизма кейсов файл контролируется самим тестом
+       (workers:1 — гонок с параллельными тестами нет; восстановление в finally) */
+    function cfgPath() { return require('path').join(__dirname, '..', 'web', 'analytics-config.js'); }
+
+    test('сервер-заглушка: конфиг-файла нет на диске → 200-заглушка, консоль чистая (repro §14.15), SDK в no-op', async ({ page, request }) => {
+        const fs = require('fs');
+        const cfg = cfgPath();
+        const saved = fs.existsSync(cfg) ? fs.readFileSync(cfg) : null;
+        if (saved !== null) fs.unlinkSync(cfg);
+        try {
+            /* кейс «без файла»: точное имя с ?v= — 200 и тело заглушки */
+            const resp = await request.get('/analytics-config.js?v=1');
+            expect(resp.status()).toBe(200);
+            const body = await resp.text();
+            expect(body).toContain('[PRO-T1] заглушка');
+            expect(body).toContain("token: ''");
+            /* полный repro тестера: загрузка Mini App без конфиг-файла — консоль без ошибок */
+            const consoleErrors = [];
+            page.on('console', function (m) { if (m.type() === 'error') consoleErrors.push(m.text()); });
+            await openApp(page);
+            expect(consoleErrors).toEqual([]);
+            expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('off');
+        } finally {
+            if (saved !== null) fs.writeFileSync(cfg, saved);
+        }
+    });
+
+    test('сервер: конфиг-файл на диске → отдаётся файл, а не заглушка', async ({ request }) => {
+        const fs = require('fs');
+        const cfg = cfgPath();
+        const saved = fs.existsSync(cfg) ? fs.readFileSync(cfg) : null;
+        fs.writeFileSync(cfg, '// e2e-marker-real-config\nwindow.tmaAnalyticsConfig = window.tmaAnalyticsConfig || { token: "e2e-probe", appName: "e2e-probe" };\n');
+        try {
+            const resp = await request.get('/analytics-config.js');
+            expect(resp.status()).toBe(200);
+            const body = await resp.text();
+            expect(body).toContain('e2e-marker-real-config');
+            expect(body).not.toContain('заглушка');
+        } finally {
+            if (saved !== null) fs.writeFileSync(cfg, saved); else fs.unlinkSync(cfg);
+        }
+    });
+});

@@ -279,6 +279,19 @@ function handle(req, res) {
     /* [EXR-T8] path traversal гвард — как в проде [WebServer]: декодированный путь не содержит
        «..» и канонически остаётся внутри web/; раньше /img/%2e%2e/app.js отдавал соседний файл */
     const file = path.normalize(path.join(root, rel));
+    /* [PRO-T1] серверная заглушка конфига аналитики — зеркало prod-WebServer: файл
+       некоммиченный (секрет), на CI/свежем клоне его нет; 404 давал console-error
+       в браузере и ронял e2e на чистую консоль (§14.15). Точное имя (query отброшен
+       выше, ?v= неважно); файл появился на диске — отдаётся он (ниже) */
+    if (rel === 'analytics-config.js' && !fs.existsSync(file)) {
+        res.writeHead(200, {
+            'Content-Type': 'application/javascript; charset=utf-8',
+            'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+        res.end('// [PRO-T1] заглушка: конфиг аналитики не установлен — SDK в no-op (см. analytics-config.example.js)\n'
+            + 'window.tmaAnalyticsConfig = window.tmaAnalyticsConfig || { token: \'\', appName: \'\' };\n');
+        return;
+    }
     if (rel.split(/[\\/]/).indexOf('..') >= 0
         || path.relative(root, file).startsWith('..')
         || !fs.existsSync(file) || !fs.statSync(file).isFile()) {

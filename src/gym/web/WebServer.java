@@ -1016,6 +1016,22 @@ public final class WebServer {
             /* webDir недоступен — считаем цель снаружи */
         }
         if (traversal || !inside || !Files.isRegularFile(file)) {
+            /* [PRO-T1] конфиг аналитики — НЕКОММИЧЕННЫЙ файл (секрет, как token.txt):
+               на CI, свежих клонах и проде до маунта конфига его нет, и 404 писал
+               console-error в браузере у всех пользователей (фича объявлена «тихим
+               no-op») и ронял e2e на чистую консоль (§14.15). Отдаём заглушку с пустым
+               конфигом — SDK остаётся в no-op. Строго по имени файла (query отброшен
+               при парсинге пути, ?v= неважно); traversal и остальные пути — прежний 404.
+               Кэш как у остальной версионной статики: заглушка константна, реальный
+               конфиг доезжает бампом ?v= (analytics-config.example.js). */
+            if (!traversal && path.equals("/analytics-config.js")) {
+                byte[] stub = ("// [PRO-T1] заглушка: конфиг аналитики не установлен — SDK в no-op"
+                        + " (см. analytics-config.example.js)\n"
+                        + "window.tmaAnalyticsConfig = window.tmaAnalyticsConfig || { token: '', appName: '' };\n")
+                    .getBytes(StandardCharsets.UTF_8);
+                send(ex, 200, stub, "application/javascript; charset=utf-8", "public, max-age=31536000, immutable");
+                return;
+            }
             send(ex, 404, "Not found".getBytes(StandardCharsets.UTF_8), "text/plain; charset=utf-8");
             return;
         }
