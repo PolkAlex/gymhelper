@@ -14,11 +14,43 @@
       }
     }
   },
-  "mcp_servers": {
-    "playwright": {
-      "type": "local",
-      "command": ["npx", "-y", "@playwright/mcp@0.0.85", "--headless"],
-      "enable": ["lead", "design", "coder", "reviewer", "tester"]
+  "mcp": {
+    "timeout": {
+      "startup": 120000,
+      "catalog": 60000
+    },
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "-y", "@playwright/mcp@0.0.85", "--headless"]
+      },
+      "pollinations": {
+        "type": "local",
+        "command": ["npx", "-y", "@pinkpixel/mcpollinations"]
+      },
+      "yt-transcript": {
+        "type": "local",
+        "command": [
+          "node",
+          "C:\\Users\\Lenovo\\AppData\\Local\\Temp\\opencode\\mcptools\\ytlib\\yt-transcript-mcp.mjs"
+        ]
+      },
+      "video-analyzer": {
+        "type": "local",
+        "command": ["npx", "-y", "mcp-video-analyzer@latest"],
+        "environment": {
+          "PATH": "C:\\Users\\Lenovo\\AppData\\Local\\Temp\\opencode\\mcptools\\pyvenv\\Scripts;C:\\Program Files\\nodejs;C:\\Windows\\System32;C:\\Windows;C:\\Windows\\System32\\wbem"
+        }
+      },
+      "free-seo": {
+        "type": "local",
+        "command": [
+          "C:\\Users\\Lenovo\\AppData\\Local\\Temp\\opencode\\mcptools\\free-seo-venv\\Scripts\\free-seo-mcp.exe"
+        ],
+        "environment": {
+          "FREE_SEO_DATA_DIR": "C:\\Users\\Lenovo\\AppData\\Local\\Temp\\opencode\\mcptools\\free-seo-data"
+        }
+      }
     }
   }
 }
