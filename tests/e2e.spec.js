@@ -252,7 +252,9 @@ test.describe('GymHelper e2e', function () {
         await page.locator('.backbar [data-act="finishWorkout"]').click();
         /* [FIT-T1] решение владельца 23.11 (1-А, меняет [UX-T13]): после завершения
            остаёмся в открытой карточке — блок карты мышц виден сразу */
-        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        /* [UX-T54] пустой дневник: тост «первая тренировка» сильнее обычного финиша (§10);
+           обычный «✅ Тренировка завершена» покрыт сценарием live-PR с сид-историей */
+        await expect(page.locator('.toast.show')).toHaveText('🏅 Первая тренировка в дневнике!', { timeout: 5000 });
         await expect(page.locator('.mapcard')).toBeVisible({ timeout: 5000 });
         /* backbar переключился на завершённый набор 🗑/↻/← */
         await expect(page.locator('.backbar', { hasText: 'Повторить' })).toBeVisible({ timeout: 5000 });
@@ -5175,6 +5177,15 @@ async function cleanOnb(page) {
         } catch (e) { /* noop */ }
     });
 }
+/* [UX-T55] шаг «дней в неделю» живёт между каруселью и туториалом (§9): сценарии
+   онбординга/туториала пропускают его «Пока не знаю» (без записи cadence) */
+async function skipCadenceStep(page) {
+    const skip = page.locator('.obwrap .wskip[data-act="cadenceSkip"]');
+    if (await skip.isVisible().catch(function () { return false; })) {
+        await skip.click();
+        await expect(page.locator('.obwrap')).toHaveCount(0, { timeout: 5000 });
+    }
+}
 /* элемент под щитом туториала? (elementFromPoint в центре элемента) */
 function coveredByShield(page, selector) {
     return page.evaluate(function (sel) {
@@ -5215,8 +5226,9 @@ test.describe('[ONB-T3] приветствие', function () {
             return Array.prototype.indexOf.call(document.querySelectorAll('.dots i'), document.querySelector('.dots i.on'));
         });
         if (onIdx !== 2) throw new Error('активная точка слайда 3: ' + onIdx);
-        /* «Начать» → автопоказ туториала; «Пропустить» туториала → приложение */
+        /* «Начать» → шаг cadence (пропускаем) → автопоказ туториала; «Пропустить» туториала → приложение */
         await page.locator('[data-act="obNext"]').click();
+        await skipCadenceStep(page);
         await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="tutSkip"]').click();
         await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 5000 });
@@ -5233,7 +5245,9 @@ test.describe('[ONB-T3] приветствие', function () {
         await page.goto('/');
         await expect(page.locator('.obwrap')).toBeVisible({ timeout: 10000 });
         await page.locator('.wskip').click();
-        /* после приветствия — туториал; пропускаем и его */
+        /* [UX-T55] после пропуска карусели — шаг cadence (obFinish §9); пропускаем,
+           затем туториал; пропускаем и его */
+        await skipCadenceStep(page);
         await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="tutSkip"]').click();
         await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 5000 });
@@ -5248,6 +5262,7 @@ test.describe('[ONB-T4] туториал', function () {
         await cleanOnb(page);
         await page.goto('/');
         await page.locator('.wskip').click();
+        await skipCadenceStep(page);
         await expect(page.locator('#tutTip .step')).toHaveText('Шаг 1 из 4 · Новая тренировка', { timeout: 5000 });
         /* подсветка вложена в FAB */
         await expect(page.locator('.nav .nfab .spot.wrap.round')).toHaveCount(1);
@@ -5283,6 +5298,7 @@ test.describe('[ONB-T4] туториал', function () {
         await cleanOnb(page);
         await page.goto('/');
         await page.locator('.wskip').click();
+        await skipCadenceStep(page);
         await page.locator('[data-act="tutNext"]').click();
         await expect(page.locator('#tutTip .step')).toHaveText('Шаг 2 из 4 · Подходы', { timeout: 5000 });
         /* подложка — реальная карточка активной тренировки; подсветка ВЛОЖЕНА в пилюлю .ex-addset */
@@ -5312,10 +5328,11 @@ test.describe('[ANA-T5] онбординг-события (/api/track)', functio
         await expect(page.locator('.obwrap')).toBeVisible({ timeout: 10000 });
         /* started уходит сразу при открытии приветствия */
         await expect.poll(async () => (await trackedEvents(request)).join(',')).toContain('onboardingStarted');
-        /* приветствие до конца: «Далее» ×2 → «Начать» → туториал автопоказом */
+        /* приветствие до конца: «Далее» ×2 → «Начать» → шаг cadence (§9, пропускаем) → туториал */
         await page.locator('[data-act="obNext"]').click();
         await page.locator('[data-act="obNext"]').click();
         await page.locator('[data-act="obNext"]').click();
+        await skipCadenceStep(page);
         await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
         /* туториал до конца: шаг 1 → (шаг 2 пропущен, нет активной) → шаг 3 → шаг 4 → финал */
         await page.locator('[data-act="tutNext"]').click();
@@ -5338,6 +5355,7 @@ test.describe('[ANA-T5] онбординг-события (/api/track)', functio
         await page.goto('/');
         await expect(page.locator('.obwrap')).toBeVisible({ timeout: 10000 });
         await page.locator('.wskip').click();
+        await skipCadenceStep(page);
         await expect(page.locator('#tutTip')).toBeVisible({ timeout: 5000 });
         await page.locator('[data-act="tutSkip"]').click();
         await expect(page.locator('#tutTip')).toHaveCount(0);
@@ -6066,7 +6084,9 @@ test.describe('UX-T40: разминка по дефолту', function () {
         await page.locator('[data-act="saveEntry"]').click();
         await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
         await page.locator('.backbar [data-act="finishWorkout"]').click();
-        await expect(page.locator('.toast.show')).toHaveText('✅ Тренировка завершена', { timeout: 5000 });
+        /* [UX-T54] первая завершённая в пустом дневнике — тост медали сильнее обычного
+           финиша (§10); сам финиш подтверждается ниже состоянием сервера */
+        await expect(page.locator('.toast.show')).toHaveText('🏅 Первая тренировка в дневнике!', { timeout: 5000 });
         const stOld = await (await request.get('/api/state')).json();
         const oldW = (stOld.workouts || []).filter(function (w) { return w.finished; })[0];
         const oldNames = (oldW && oldW.exercises || []).map(function (e) { return e.name; });
@@ -8282,6 +8302,8 @@ test.describe('[UX-S19] возврат', function () {
         /* чипы: окно «Днём» (дефолт), cadence 3 из сид-данных */
         await expect(page.locator('.card .chips .chip', { hasText: 'Днём' })).toHaveClass(/on/);
         await expect(page.locator('.card .chips .chip', { hasText: 'Пока не знаю' })).not.toHaveClass(/on/);
+        /* мета-строка якоря времени (§5.1/§17.3: зона в текстах — «UTC+3», без города) */
+        await expect(page.locator('.card', { hasText: '🔔 Уведомления' })).toContainText('По UTC+3');
         /* тап по тумблу — мгновенный save (§11.1): выключили возврат */
         const offSaved = page.waitForResponse(function (r) {
             return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
@@ -8299,6 +8321,14 @@ test.describe('[UX-S19] возврат', function () {
         expect((await whenSaved).status()).toBe(200);
         const st2 = await (await request.get('/api/state')).json();
         if (st2.notifyWhen !== 3) throw new Error('notifyWhen не сохранился: ' + JSON.stringify(st2.notifyWhen));
+        /* окно «утро» — все три чипа окна переключаемы (§11.1: утро/день/вечер) */
+        const when2Saved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await page.locator('.card .chips .chip', { hasText: 'Утром' }).click();
+        expect((await when2Saved).status()).toBe(200);
+        const st2b = await (await request.get('/api/state')).json();
+        if (st2b.notifyWhen !== 1) throw new Error('notifyWhen «Утром» не сохранился: ' + JSON.stringify(st2b.notifyWhen));
         /* cadence: «Пока не знаю» сбрасывает явным null (merge по ключу §12.3) */
         const cadSaved = page.waitForResponse(function (r) {
             return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
@@ -8354,6 +8384,9 @@ test.describe('[UX-S19] возврат', function () {
         expect((await cadSaved).status()).toBe(200);
         const st = await (await request.get('/api/state')).json();
         if (st.cadence !== 4) throw new Error('cadence не сохранился: ' + JSON.stringify(st.cadence));
+        /* §14: клиент получает cadence через /api/init (мок отдаёт store в data) */
+        const init = await (await request.post('/api/init', { data: {} })).json();
+        if (!init || !init.data || init.data.cadence !== 4) throw new Error('cadence не виден в /api/init: ' + JSON.stringify(init && init.data && init.data.cadence));
         /* после шага — туториал (новый юзер, §9) */
         await expect(page.locator('.tip [data-act="tutNext"]')).toBeVisible({ timeout: 5000 });
         /* шаг больше не показывается (gymCadenceAsk=1) — туториал пропускаем и перезагружаем */
