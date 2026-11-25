@@ -8135,9 +8135,10 @@ test.describe('[FIT-T1 пост-мерж] регресс-добор и карт�
    исходящий вызов (позитив: он есть; негатив: ноль). */
 test.describe('[PRO-T1] analytics SDK', function () {
 
-    /* конфиг аналитики как на проде: route-мок вместо некоммиченного analytics-config.js */
+    /* конфиг аналитики как на проде: route-мок вместо некоммиченного analytics-config.js.
+       '*' в конце — URL приходит с cache-busting query (?v=1, как в index.html) */
     async function mockConfig(page, token) {
-        await page.route('**/analytics-config.js', function (route) {
+        await page.route('**/analytics-config.js*', function (route) {
             return route.fulfill({
                 status: 200,
                 contentType: 'application/javascript; charset=utf-8',
@@ -8176,7 +8177,7 @@ test.describe('[PRO-T1] analytics SDK', function () {
         const net = { n: 0 };
         await mockAnalyticsNet(page, net);
         /* имитация свежего клона / прода без analytics-config.js: скрипт недоступен (404) */
-        await page.route('**/analytics-config.js', function (route) { return route.abort(); });
+        await page.route('**/analytics-config.js*', function (route) { return route.abort(); });
         await openApp(page);
         expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('off');
         /* окно тишины: без конфига SDK не инициализируется и не ходит в сеть */
