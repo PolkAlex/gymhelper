@@ -256,6 +256,15 @@ function handle(req, res) {
                    как есть (включая null «Разминки»), отсутствие ключей значение не трогает */
                 if ('warmupFirst' in d) store.warmupFirst = d.warmupFirst;
                 if ('warmupEx' in d) store.warmupEx = d.warmupEx;
+                /* [UX-S19] настройки возврата — merge как в проде (WebServer §12.3):
+                   non-null принимается, null не затирает (старый кэш JS); cadence —
+                   явный ключ применяется как есть, включая null («Пока не знаю») */
+                if (typeof d.notifyMaster === 'boolean') store.notifyMaster = d.notifyMaster;
+                if (typeof d.notifyUnfinished === 'boolean') store.notifyUnfinished = d.notifyUnfinished;
+                if (typeof d.notifyComeback === 'boolean') store.notifyComeback = d.notifyComeback;
+                if (typeof d.notifyDigest === 'boolean') store.notifyDigest = d.notifyDigest;
+                if (typeof d.notifyWhen === 'number') store.notifyWhen = d.notifyWhen;
+                if ('cadence' in d) store.cadence = d.cadence == null ? null : d.cadence;
                 if (typeof d.nextId === 'number') store.nextId = d.nextId;
                 if (Array.isArray(d.del)) store.del = d.del;
                 /* ⚠️ отличается от прода: прод делает selective-merge birth-полей ([UX-T29]);

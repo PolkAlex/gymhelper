@@ -18,6 +18,9 @@ test.beforeEach(async function ({ context }) {
             localStorage.setItem('gymOnbDone', '1');
             localStorage.setItem('gymWnOff', '1');
             localStorage.setItem('gymHelpSeen', '1');
+            /* [UX-T55] шаг cadence существующим — один раз: в тестах «уже спрошен»
+               (сценарии самого шага снимают флаг вторым initScript) */
+            localStorage.setItem('gymCadenceAsk', '1');
         } catch (e) { /* noop */ }
     });
 });
@@ -8241,5 +8244,164 @@ test.describe('[PRO-T1] analytics SDK', function () {
         } finally {
             if (saved !== null) fs.writeFileSync(cfg, saved); else fs.unlinkSync(cfg);
         }
+    });
+});
+
+/* ============ [UX-S19] механика возврата: карточка настроек, шаг онбординга, тост ============ */
+test.describe('[UX-S19] возврат', function () {
+
+    /* [UX-T52] карточка «🔔 Уведомления» в Настройках: тоглы/чипы, мгновенный save
+       на сервер (напоминания живут в данных юзера, §11.1), мастер затемняет строки */
+    test('[UX-T52] карточка уведомлений: тоглы и чипы пишутся на сервер, мастер затемняет', async ({ page, request }) => {
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            nextId: 1, del: [], workouts: [],
+            notifyComeback: true, cadence: 3
+        } } });
+        await openApp(page);
+        await page.locator('[aria-label="Настройки"]').click();
+        await expect(page.locator('.tb-title')).toContainText('Настройки', { timeout: 5000 });
+        /* карточка между «Таймер отдыха» и «Персональный тренер» (§11.1) */
+        const cards = page.locator('#app .card');
+        const notifyIdx = await cards.filter({ hasText: '🔔 Уведомления' }).first().evaluate(function (el) {
+            return Array.prototype.indexOf.call(el.parentNode.children, el);
+        });
+        const timerIdx = await cards.filter({ hasText: '⏱ Таймер отдыха' }).first().evaluate(function (el) {
+            return Array.prototype.indexOf.call(el.parentNode.children, el);
+        });
+        const coachIdx = await cards.filter({ hasText: 'Персональный тренер' }).first().evaluate(function (el) {
+            return Array.prototype.indexOf.call(el.parentNode.children, el);
+        });
+        expect(timerIdx).toBeLessThan(notifyIdx);
+        expect(notifyIdx).toBeLessThan(coachIdx);
+        /* дефолты null = вкл (§12.1); пришедшие с сервера значения отражены */
+        await expect(page.locator('[role="switch"][aria-label="Напоминания"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(page.locator('[role="switch"][aria-label="Незавершённая тренировка"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(page.locator('[role="switch"][aria-label="Возврат в зал"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(page.locator('[role="switch"][aria-label="Чек-ин по целям"]')).toHaveAttribute('aria-checked', 'true');
+        await expect(page.locator('[role="switch"][aria-label="Итоги недели"]')).toHaveAttribute('aria-checked', 'true');
+        /* чипы: окно «Днём» (дефолт), cadence 3 из сид-данных */
+        await expect(page.locator('.card .chips .chip', { hasText: 'Днём' })).toHaveClass(/on/);
+        await expect(page.locator('.card .chips .chip', { hasText: 'Пока не знаю' })).not.toHaveClass(/on/);
+        /* тап по тумблу — мгновенный save (§11.1): выключили возврат */
+        const offSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await page.locator('[role="switch"][aria-label="Возврат в зал"]').click();
+        expect((await offSaved).status()).toBe(200);
+        const st1 = await (await request.get('/api/state')).json();
+        if (st1.notifyComeback !== false) throw new Error('notifyComeback не выключился: ' + JSON.stringify(st1.notifyComeback));
+        await expect(page.locator('[role="switch"][aria-label="Возврат в зал"]')).toHaveAttribute('aria-checked', 'false', { timeout: 5000 });
+        /* окно «когда» — чип «Вечером» */
+        const whenSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await page.locator('.card .chips .chip', { hasText: 'Вечером' }).click();
+        expect((await whenSaved).status()).toBe(200);
+        const st2 = await (await request.get('/api/state')).json();
+        if (st2.notifyWhen !== 3) throw new Error('notifyWhen не сохранился: ' + JSON.stringify(st2.notifyWhen));
+        /* cadence: «Пока не знаю» сбрасывает явным null (merge по ключу §12.3) */
+        const cadSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await page.locator('.card .chips .chip', { hasText: 'Пока не знаю' }).click();
+        expect((await cadSaved).status()).toBe(200);
+        const st3 = await (await request.get('/api/state')).json();
+        if (st3.cadence !== null) throw new Error('cadence не сбросился: ' + JSON.stringify(st3.cadence));
+        /* мастер off: строки типов и чипы «Когда» затемнены, «Дней в неделю» живой */
+        await page.locator('[role="switch"][aria-label="Напоминания"]').click();
+        await expect(page.locator('#app .switch.dis')).toHaveCount(4, { timeout: 5000 });
+        await expect(page.locator('#app .card .chips .chip.dis')).toHaveCount(3);
+        await expect(page.locator('.card .chips .chip', { hasText: 'Пока не знаю' })).not.toHaveClass(/dis/);
+        await expect(page.locator('.card', { hasText: '🔔 Уведомления' })).toContainText('Все напоминания выключены');
+        /* состояние строк сохранено (возврат остался выкл), мастер на сервере */
+        await expect(page.locator('[role="switch"][aria-label="Возврат в зал"]')).toHaveAttribute('aria-checked', 'false');
+        const st4 = await (await request.get('/api/state')).json();
+        if (st4.notifyMaster !== false) throw new Error('notifyMaster не выключился: ' + JSON.stringify(st4.notifyMaster));
+        if (st4.notifyComeback !== false) throw new Error('мастер не трогает строки типов: ' + JSON.stringify(st4.notifyComeback));
+        /* мастер снова вкл — строки оживают, значения на месте */
+        await page.locator('[role="switch"][aria-label="Напоминания"]').click();
+        await expect(page.locator('#app .switch.dis')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('[role="switch"][aria-label="Возврат в зал"]')).toHaveAttribute('aria-checked', 'false');
+    });
+
+    /* [UX-T55] шаг онбординга из карусели (новый юзер): «Начать» → шаг → чип →
+       cadence на сервере → туториал (§9: между каруселью и туториалом) */
+    test('[UX-T55] новый юзер: карусель → шаг «дней в неделю» → чип сохраняет cadence → туториал', async ({ page, request }) => {
+        await page.addInitScript(function () {
+            try {
+                /* снимаем флаги только на первой загрузке таба: sessionStorage переживает
+                   reload, initScript гоняется на каждой навигации */
+                if (!sessionStorage.getItem('gymCadOnce')) {
+                    sessionStorage.setItem('gymCadOnce', '1');
+                    localStorage.removeItem('gymOnbDone');
+                    localStorage.removeItem('gymCadenceAsk');
+                }
+            } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        /* карусель: 2×«Далее» + «Начать» */
+        await expect(page.locator('.obwrap .wtitle')).toContainText('GymHelper', { timeout: 5000 });
+        await page.locator('[data-act="obNext"]').click();
+        await page.locator('[data-act="obNext"]').click();
+        await page.locator('[data-act="obNext"]').click();
+        /* шаг cadence (§9): заголовок, чипы 1–7, «Пока не знаю» */
+        await expect(page.locator('.obwrap .wtitle')).toContainText('Сколько дней в неделю', { timeout: 5000 });
+        await expect(page.locator('.obwrap .cadchips .chip')).toHaveCount(7);
+        const cadSaved = page.waitForResponse(function (r) {
+            return r.url().indexOf('/api/save') >= 0 && r.request().method() === 'POST';
+        });
+        await page.locator('.obwrap .cadchips .chip', { hasText: '4' }).click();
+        expect((await cadSaved).status()).toBe(200);
+        const st = await (await request.get('/api/state')).json();
+        if (st.cadence !== 4) throw new Error('cadence не сохранился: ' + JSON.stringify(st.cadence));
+        /* после шага — туториал (новый юзер, §9) */
+        await expect(page.locator('.tip [data-act="tutNext"]')).toBeVisible({ timeout: 5000 });
+        /* шаг больше не показывается (gymCadenceAsk=1) — туториал пропускаем и перезагружаем */
+        await page.locator('.tip [data-act="tutSkip"]').click();
+        await page.reload();
+        await openApp(page);
+        await expect(page.locator('.obwrap')).toHaveCount(0);
+    });
+
+    /* [UX-T55] существующий юзер: шаг один раз при первом входе после релиза, «Пока
+       не знаю» — без записи (фолбэк: базовые пороги, дайджест без плана, §9) */
+    test('[UX-T55] существующий юзер: шаг без записи, повторный вход — шага нет', async ({ page, request }) => {
+        await page.addInitScript(function () {
+            try {
+                if (!sessionStorage.getItem('gymCadOnce')) {
+                    sessionStorage.setItem('gymCadOnce', '1');
+                    localStorage.removeItem('gymCadenceAsk');
+                }
+            } catch (e) { /* noop */ }
+        });
+        await openApp(page);
+        /* без карусели — сразу шаг (gymOnbDone уже стоит) */
+        await expect(page.locator('.obwrap .wtitle')).toContainText('Сколько дней в неделю', { timeout: 5000 });
+        await expect(page.locator('.obwrap .cadchips .chip')).toHaveCount(7);
+        await page.locator('.obwrap .wskip', { hasText: 'Пока не знаю' }).click();
+        /* без записи и без туториала — сразу приложение */
+        await expect(page.locator('.obwrap')).toHaveCount(0, { timeout: 5000 });
+        await expect(page.locator('.tip')).toHaveCount(0);
+        const st = await (await request.get('/api/state')).json();
+        if (st.cadence !== undefined) throw new Error('«Пока не знаю» не должно писать cadence: ' + JSON.stringify(st.cadence));
+        /* повторный вход — шага нет (флаг показа) */
+        await page.reload();
+        await openApp(page);
+        await expect(page.locator('.obwrap')).toHaveCount(0);
+    });
+
+    /* [UX-T54] тост «первая тренировка» при завершении первой (§10): приоритет ниже
+       цели, выше обычного «Тренировка завершена» */
+    test('[UX-T54] тост «🏅 Первая тренировка в дневнике!» при первом завершении', async ({ page }) => {
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('60');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        await expect(page.locator('.toast.show')).toHaveText('🏅 Первая тренировка в дневнике!', { timeout: 8000 });
     });
 });

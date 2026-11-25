@@ -1506,6 +1506,12 @@ summary .wip, .setrow .wip { font-size: 11.5px; font-weight: 400; color: var(--m
 .switch.on .sw-ico { color: rgba(20,18,10,.45); opacity: 1; } /* призрак на янтарном */
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 12px; }
 
+/* [UX-S19 T52] мастер-тогл выключен: строки типов и чипы «Когда» затемнены и
+   некликабельны, состояние сохраняется до включения мастера (§11.1) */
+.setrow.dim .lbl { color: var(--muted); font-weight: 500; }
+.switch.dis { opacity: .45; pointer-events: none; }
+.chip.dis { opacity: .45; pointer-events: none; }
+
 /* ============ [UX-T42] свайп-навигация: индикатор жеста у края ============ */
 /* тонкая вертикальная полоска, проявляется при потягивании от края
    (влево-от-левого-края = назад, вправо-от-правого = вперёд); сама навигация —
@@ -2277,6 +2283,10 @@ body.resting .todayfab.raised { bottom: calc(212px + env(safe-area-inset-bottom)
     width: 100%;
     -webkit-tap-highlight-color: transparent;
 }
+/* [UX-T55] чипы шага «Сколько дней в неделю» (§9): крупные квадратные, тап = ответ */
+.cadchips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 22px; }
+.cadchips .chip { padding: 12px 0; width: 56px; font-size: 16px; font-weight: 700; }
+.cadchips .chip.on { box-shadow: 0 8px 24px var(--glow); }
 /* 320px-регресс [§6] */
 @media (max-width: 379px) {
     .wlogo { width: 64px; height: 64px; border-radius: 20px; }
