@@ -15,6 +15,12 @@
 <div id="navSwipeHint" aria-hidden="true"></div>
 <input id="bgFile" type="file" accept="image/*" style="display:none">
 <input id="impFile" type="file" accept=".csv,text/csv" style="display:none">
+<!-- [PRO-T1] Telegram Mini Apps Analytics SDK: вендоренный @telegram-apps/analytics (без CDN).
+     Порядок важен: SDK → конфиг → app.js (tmaAnalyticsInit читает window.tmaAnalyticsConfig).
+     analytics-config.js может отсутствовать (свежий клон/прод без конфига) — 404 не критичен,
+     app.js тогда тихо не инициализирует аналитику. -->
+<script src="vendor/tma-analytics.js"></script>
+<script src="analytics-config.js"></script>
 <script src="catalog.js?v=27"></script>
 <script src="importstrong.js?v=1"></script>
 <script src="bodymap.js?v=1"></script>

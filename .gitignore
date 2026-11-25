@@ -10,6 +10,8 @@ token.txt
 webapp.txt
 pat.txt
 .env
+# [PRO-T1] конфиг аналитики Telegram (token/appName) — секрет, не коммитится (шаблон: web/analytics-config.example.js)
+web/analytics-config.js
 data/
 out/
 testout/

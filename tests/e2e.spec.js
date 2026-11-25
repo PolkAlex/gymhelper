@@ -8122,3 +8122,68 @@ test.describe('[FIT-T1 пост-мерж] регресс-добор и карт�
         if (finW.note !== NOTE_P2) throw new Error('заметка потеряна: ' + JSON.stringify(finW.note));
     });
 });
+
+/* ============ [PRO-T1] Telegram Mini Apps Analytics SDK (#399) ============ */
+/* Интеграция: web/vendor/tma-analytics.js (вендоренный @telegram-apps/analytics 1.6.4) +
+   некоммиченный web/analytics-config.js (token/appName, в .gitignore). SDK шлёт данные
+   только при параметрах запуска Telegram (tgWebAppData в hash — как при реальном открытии
+   Mini App из бота); в обычном браузере init отклоняется промисом (LaunchParamsRetrieveError),
+   который приложение глотает — на работу Mini App аналитика не влияет.
+   Состояние интеграции — тестовый крюк __gym.tmaState(): 'off' | 'ok' | 'error'.
+   Внешние хосты SDK — витрина tganalytics.xyz и антифрод-фингерпринт *.innerworks.me —
+   в e2e мокается ВЕСЬ внешний трафик: тесты не ходят в интернет, счётчик ловит любой
+   исходящий вызов (позитив: он есть; негатив: ноль). */
+test.describe('[PRO-T1] analytics SDK', function () {
+
+    /* конфиг аналитики как на проде: route-мок вместо некоммиченного analytics-config.js */
+    async function mockConfig(page, token) {
+        await page.route('**/analytics-config.js', function (route) {
+            return route.fulfill({
+                status: 200,
+                contentType: 'application/javascript; charset=utf-8',
+                body: 'window.tmaAnalyticsConfig = window.tmaAnalyticsConfig || ' +
+                    '{ token: ' + JSON.stringify(token) + ', appName: "gymhelper-e2e" };'
+            });
+        });
+    }
+    /* все внешние (не тестовый сервер) запросы — мок + счётчик исходящих вызовов аналитики */
+    async function mockAnalyticsNet(page, counter) {
+        await page.route(function (url) {
+            return url.hostname !== '127.0.0.1' && url.hostname !== 'localhost';
+        }, function (route) {
+            counter.n++;
+            return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' });
+        });
+    }
+
+    test('конфиг задан: SDK инициализируется (сетевой вызов замокан) и не ломает загрузку', async ({ page }) => {
+        const net = { n: 0 };
+        await mockAnalyticsNet(page, net);
+        await mockConfig(page, 'e2e-token');
+        /* открываем как из Telegram: hash с tgWebAppData (валидность подписи SDK не проверяет) */
+        await page.goto('/#tgWebAppData=user%3D%257B%2522id%2522%253A42%257D%26auth_date%3D1764000000%26hash%3Ddeadbeef');
+        await expect(page.locator('#app .hero, #app .pcard').first()).toBeVisible({ timeout: 10000 });
+        /* init() вызван синхронно при старте приложения */
+        expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('ok');
+        /* SDK реально вышел в сеть (витрина/антифрод) — вызовы попали в мок, не в интернет */
+        await expect.poll(function () { return net.n; }, { timeout: 10000 }).toBeGreaterThan(0);
+        /* приложение живо после инициализации аналитики: пикер открывается */
+        await page.locator('.nav .nfab').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+    });
+
+    test('конфига нет (404): no-op — ни одного внешнего вызова, приложение работает', async ({ page }) => {
+        const net = { n: 0 };
+        await mockAnalyticsNet(page, net);
+        /* имитация свежего клона / прода без analytics-config.js: скрипт недоступен (404) */
+        await page.route('**/analytics-config.js', function (route) { return route.abort(); });
+        await openApp(page);
+        expect(await page.evaluate(function () { return window.__gym.tmaState(); })).toBe('off');
+        /* окно тишины: без конфига SDK не инициализируется и не ходит в сеть */
+        await page.waitForTimeout(1500);
+        expect(net.n).toBe(0);
+        /* приложение полностью работоспособно без аналитики */
+        await page.locator('.nav .nfab').click();
+        await expect(page.locator('.modal.open')).toBeVisible({ timeout: 5000 });
+    });
+});

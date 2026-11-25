@@ -6630,8 +6630,33 @@ function wnModalHtml() {
     return h;
 }
 
+/* ---------- [PRO-T1] Telegram Mini Apps Analytics SDK (#399) ---------- */
+/* [PRO-T1] состояние интеграции для e2e/диагностики (смотрится через __gymExpose.tmaState):
+   'off' — конфига нет или SDK не загрузился (тихий no-op), 'ok' — init() вызван,
+   'error' — init() упал синхронно (ошибка поймана, приложению не мешает) */
+let tmaState = 'off';
+function tmaAnalyticsInit() {
+    try {
+        const cfg = window.tmaAnalyticsConfig;
+        /* без конфига/токена — тихий no-op: свежий клон (файла нет → 404 скрипта),
+           локальный запуск и прод без подложенного analytics-config.js работают как раньше.
+           Конфиг живёт в некоммиченном web/analytics-config.js — шаблон: analytics-config.example.js */
+        if (!cfg || !cfg.token || !cfg.appName) return;
+        const sdk = window.telegramAnalytics; /* глобал из web/vendor/tma-analytics.js */
+        if (!sdk || typeof sdk.init !== 'function') return;
+        const p = sdk.init({ token: cfg.token, appName: cfg.appName });
+        tmaState = 'ok';
+        /* init() асинхронный (фингерпринт/отправка в tganalytics.xyz): сетевые ошибки гасим —
+           аналитика не должна влиять на запуск приложения */
+        if (p && typeof p.catch === 'function') p.catch(function () { /* noop */ });
+    } catch (e) {
+        tmaState = 'error';
+    }
+}
+
 /* ---------- init ---------- */
 async function init() {
+    tmaAnalyticsInit(); /* [PRO-T1] до первого рендера — требование SDK Telegram Analytics */
     loadTheme();
     loadBg();
     initBgPicker();
@@ -6744,6 +6769,8 @@ if (typeof globalThis !== 'undefined' && globalThis.__gymExpose) {
         /* [ONB-T7] e2e: ссылка на RELNOTES (const-массив мутируем push/splice) и wnAuto —
            тесты подкладывают фейковый релиз без правки прод-кода */
         RELNOTES: RELNOTES,
-        wnAuto: wnAuto
+        wnAuto: wnAuto,
+        /* [PRO-T1] e2e: состояние интеграции analytics SDK ('off'|'ok'|'error') */
+        tmaState: function () { return tmaState; }
     });
 }
