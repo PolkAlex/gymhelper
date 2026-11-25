@@ -718,6 +718,141 @@ public class GymContractTest {
             throw new AssertionError("CONTRACT FAIL: warmup merge " + warmErr);
         }
 
+        /* [UX-S19] механика возврата: GymData-поля §12.1 — legacy без ключей читается
+            (null/пустой список, файл остаётся байт-в-байт прежним), полный набор
+            читается и переживает round-trip, мусор в каждом поле игнорируется,
+            notifyLog >7 записей триммируется при чтении (§12.2) */
+        check(d2.cadence == null && d2.notifyMaster == null && d2.notifyUnfinished == null
+                && d2.notifyComeback == null && d2.notifyDigest == null && d2.notifyWhen == null
+                && d2.notifyStage == null && d2.notifyLastWid == null && d2.firstDone == null,
+            "notify: legacy без ключей читается (null = дефолты)");
+        check(d2.notifyLog.isEmpty(), "notify: legacy без notifyLog читается (пустой список)");
+        check(!noCexOut.contains("cadence") && !noCexOut.contains("notify") && !noCexOut.contains("firstDone"),
+            "notify: toJson без настроек/книги не пишет ключи (legacy байт-в-байт)");
+        String s19Json = "{\"nextId\":1,"
+            + "\"cadence\":3,"
+            + "\"notifyMaster\":true,"
+            + "\"notifyUnfinished\":false,"
+            + "\"notifyComeback\":false,"
+            + "\"notifyWhen\":2,"
+            + "\"notifyStage\":1,"
+            + "\"notifyLastWid\":17,"
+            + "\"firstDone\":true,"
+            + "\"notifyLog\":[{\"d\":\"2026-11-23\",\"t\":\"dg\"},{\"d\":\"2026-11-25\",\"t\":\"cb\"}],"
+            + "\"workouts\":[]}";
+        GymData d19 = GymData.fromJson((Map<String, Object>) Json.parse(s19Json));
+        check(d19.cadence != null && d19.cadence == 3, "notify: cadence читается");
+        check(Boolean.TRUE.equals(d19.notifyMaster) && Boolean.FALSE.equals(d19.notifyUnfinished)
+                && Boolean.FALSE.equals(d19.notifyComeback),
+            "notify: тогглы читаются (notifyMaster=true переживает round-trip §12.1)");
+        check(d19.notifyWhen != null && d19.notifyWhen == 2 && d19.notifyStage != null && d19.notifyStage == 1
+                && d19.notifyLastWid != null && d19.notifyLastWid == 17 && Boolean.TRUE.equals(d19.firstDone),
+            "notify: notifyWhen/notifyStage/notifyLastWid/firstDone читаются");
+        check(d19.notifyLog.size() == 2 && "2026-11-23".equals(d19.notifyLog.get(0).d)
+                && "dg".equals(d19.notifyLog.get(0).t) && "cb".equals(d19.notifyLog.get(1).t),
+            "notify: notifyLog читается (порядок сохранён)");
+        String s19Out = Json.write(d19.toJson());
+        check(s19Out.contains("\"cadence\":3") && s19Out.contains("\"notifyMaster\":true")
+                && s19Out.contains("\"notifyUnfinished\":false") && s19Out.contains("\"notifyComeback\":false")
+                && s19Out.contains("\"notifyWhen\":2") && s19Out.contains("\"notifyStage\":1")
+                && s19Out.contains("\"notifyLastWid\":17") && s19Out.contains("\"firstDone\":true"),
+            "notify: toJson пишет заданные значения");
+        check(s19Out.contains("\"notifyLog\":[{\"d\":\"2026-11-23\",\"t\":\"dg\"},{\"d\":\"2026-11-25\",\"t\":\"cb\"}]"),
+            "notify: toJson пишет notifyLog в формате {d,t}");
+        GymData d19r = GymData.fromJson((Map<String, Object>) Json.parse(s19Out));
+        check(d19r.cadence == 3 && Boolean.TRUE.equals(d19r.notifyMaster)
+                && Boolean.FALSE.equals(d19r.notifyUnfinished) && d19r.notifyWhen == 2
+                && d19r.notifyStage == 1 && d19r.notifyLastWid == 17 && Boolean.TRUE.equals(d19r.firstDone)
+                && d19r.notifyLog.size() == 2 && "cb".equals(d19r.notifyLog.get(1).t),
+            "notify: полный набор переживает round-trip без потерь");
+        /* мусор в каждом поле: не-Boolean/не-Number/вне диапазона → дефолт, чтение не валится */
+        GymData d19b = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"cadence\":\"три\",\"notifyMaster\":\"да\",\"notifyUnfinished\":1,"
+            + "\"notifyComeback\":null,\"notifyDigest\":[],\"notifyWhen\":9,\"notifyStage\":7,"
+            + "\"notifyLastWid\":-5,\"firstDone\":\"true\","
+            + "\"notifyLog\":\"мусор\",\"workouts\":[]}"));
+        check(d19b.cadence == null && d19b.notifyMaster == null && d19b.notifyUnfinished == null
+                && d19b.notifyComeback == null && d19b.notifyDigest == null && d19b.notifyWhen == null
+                && d19b.notifyStage == null && d19b.notifyLastWid == null && d19b.firstDone == null,
+            "notify: мусор в каждом поле игнорируется без падения");
+        check(d19b.notifyLog.isEmpty(), "notify: notifyLog-не-массив → пустой список");
+        /* notifyLog: битые элементы пропускаются, неизвестный t игнорируется, >7 — трим до последних */
+        StringBuilder many = new StringBuilder();
+        for (int i = 1; i <= 9; i++) {
+            many.append("{\"d\":\"2026-11-0").append(i).append("\",\"t\":\"unf\"},");
+        }
+        GymData d19l = GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":1,\"notifyLog\":[" + many
+            + "{\"d\":\"2026-11-10\",\"t\":\"wrong\"},"
+            + "{\"d\":\"\",\"t\":\"cb\"},"
+            + "\"мусор\","
+            + "{\"t\":\"cb\"},"
+            + "{\"d\":\"2026-11-11\"}"
+            + "],\"workouts\":[]}"));
+        check(d19l.notifyLog.size() == 7, "notifyLog: >7 записей триммируется до 7, а не " + d19l.notifyLog.size());
+        check("2026-11-03".equals(d19l.notifyLog.get(0).d) && "2026-11-09".equals(d19l.notifyLog.get(6).d),
+            "notifyLog: трим оставляет ПОСЛЕДНИЕ 7, битые/мусорные элементы пропущены");
+
+        /* [UX-S19 §12.3] merge-настроек возврата при /api/save (реальный WebServer):
+            non-null принимается, null в payload серверное не затирает (старый кэш JS),
+            cadence — явный ключ применяется включая null («Пока не знаю» сбрасывает),
+            книга учёта из payload НЕ принимается никогда (стэил-вкладка не вернёт дубль);
+            §13: прирост finished из Mini App → reacted по notifyLog (запись ≤24 ч) и
+            сброс лестницы notifyStage (§5.3) */
+        try {
+            java.nio.file.Path tmpN = java.nio.file.Files.createTempDirectory("gymnotifymerge");
+            Storage stN = new Storage(tmpN);
+            Stats statsN = new Stats(tmpN.resolve("stats.json"));
+            WebServer wsN = new WebServer("contract-test-token", stN, tmpN, statsN);
+            java.net.ServerSocket probeN = new java.net.ServerSocket(0);
+            int portN = probeN.getLocalPort();
+            probeN.close();
+            wsN.start(portN);
+            String idN = tgInitData("contract-test-token", 424250);
+            /* книга на сервере: stage=2, сегодняшняя отметка unf — reacted сработает */
+            GymData seed = new GymData();
+            seed.notifyStage = 2;
+            seed.notifyLog.add(new gym.NotifyMark(gym.BotLogic.notifyToday().toString(), "unf"));
+            stN.save(424250, seed);
+            java.net.http.HttpResponse<String> rn1 = postSave(portN, idN, 0,
+                "{\"rev\":0,\"nextId\":1,\"cadence\":5,\"notifyMaster\":true,\"notifyUnfinished\":false,"
+                    + "\"notifyComeback\":true,\"notifyDigest\":false,\"notifyWhen\":3,"
+                    + "\"notifyStage\":0,\"notifyLog\":[],\"firstDone\":false,\"workouts\":[]}");
+            check(rn1.statusCode() == 200, "notify merge: save с настройками — 200, а не " + rn1.statusCode());
+            GymData savedN = stN.load(424250);
+            check(savedN.cadence != null && savedN.cadence == 5
+                    && Boolean.TRUE.equals(savedN.notifyMaster) && Boolean.FALSE.equals(savedN.notifyUnfinished)
+                    && Boolean.TRUE.equals(savedN.notifyComeback) && Boolean.FALSE.equals(savedN.notifyDigest)
+                    && savedN.notifyWhen != null && savedN.notifyWhen == 3,
+                "notify merge: клиентские настройки приняты");
+            check(savedN.notifyStage != null && savedN.notifyStage == 2 && savedN.notifyLog.size() == 1,
+                "notify merge: книга из payload не принимается (stage/лог остались серверными)");
+            /* старый кэш JS: без ключей — настройки не теряются; явный null не затирает */
+            java.net.http.HttpResponse<String> rn2 = postSave(portN, idN, 1,
+                "{\"rev\":1,\"nextId\":1,\"notifyMaster\":null,\"workouts\":[]}");
+            check(rn2.statusCode() == 200, "notify merge: save без ключей — 200");
+            GymData keepN = stN.load(424250);
+            check(Boolean.TRUE.equals(keepN.notifyMaster) && keepN.notifyWhen == 3 && keepN.cadence == 5,
+                "notify merge: null/отсутствие ключа серверное не затирает");
+            /* cadence: явный null (тап «Пока не знаю») — применяется */
+            java.net.http.HttpResponse<String> rn3 = postSave(portN, idN, 2,
+                "{\"rev\":2,\"nextId\":1,\"cadence\":null,\"workouts\":[]}");
+            check(rn3.statusCode() == 200, "notify merge: cadence=null — 200");
+            check(stN.load(424250).cadence == null,
+                "notify merge: явный cadence=null сбрасывает (Пока не знаю)");
+            /* прирост finished из Mini App → reacted + сброс лестницы */
+            java.net.http.HttpResponse<String> rn4 = postSave(portN, idN, 3,
+                "{\"rev\":3,\"nextId\":2,\"workouts\":[{\"id\":1,\"date\":\"2026-11-25\",\"finished\":true,\"exercises\":[]}]}");
+            check(rn4.statusCode() == 200, "notify merge: save с завершённой — 200");
+            GymData finN = stN.load(424250);
+            check(finN.notifyStage != null && finN.notifyStage == 0,
+                "notify merge: новая завершённая обнуляет notifyStage (§5.3)");
+            check(Json.lng(statsN.snapshot().get("notifyReactedUnf")) == 1,
+                "notify merge: reacted по книге — завершение в сутки после unf (§13)");
+        } catch (Exception nErr) {
+            throw new AssertionError("CONTRACT FAIL: notify merge " + nErr);
+        }
+
         /* [EXR-T13] merge-защита «Своих»/«Любимых» при /api/save: клиент с ключами customEx/favs
             замещает списки целиком (создание/удаление из Любимых доезжают); старый кэш JS без
             ключей данные не теряет; пустые списки замещают старые. Реальный WebServer.

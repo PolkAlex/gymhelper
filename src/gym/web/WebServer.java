@@ -2,6 +2,7 @@ package gym.web;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import gym.BotLogic;
 import gym.GymData;
 import gym.Json;
 import gym.Stats;
@@ -438,6 +439,18 @@ public final class WebServer {
             current.goals.addAll(data.goals);
         }
         if (data.goalRemind != null) current.goalRemind = data.goalRemind;
+        /* [UX-S19 §12.3] настройки возврата — по образцу restSec/goalRemind: null в payload
+            (не настраивал / старый кэш JS без ключей) серверное значение не затирает;
+            cadence — по образцу warmupFirst: явный ключ применяется как есть, включая null
+            («Пока не знаю» сбрасывает выбранные дни, §11.1); книга учёта
+            (notifyLog/notifyStage/notifyLastWid/firstDone) из payload НЕ принимается
+            никогда — её пишет только серверный тик, стэил-вкладка не вернёт дубль */
+        if (data.notifyMaster != null) current.notifyMaster = data.notifyMaster;
+        if (data.notifyUnfinished != null) current.notifyUnfinished = data.notifyUnfinished;
+        if (data.notifyComeback != null) current.notifyComeback = data.notifyComeback;
+        if (data.notifyDigest != null) current.notifyDigest = data.notifyDigest;
+        if (data.notifyWhen != null) current.notifyWhen = data.notifyWhen;
+        if (dataJson.containsKey("cadence")) current.cadence = data.cadence;
         /* [UX-T40] разминка по дефолту: ключа нет → серверное значение не трогаем (старый
            кэш JS — не затираем, по образцу templates/goals «замещаем если клиент прислал
            ключ»); явный ключ применяется как есть, включая null — «возврат к системной
@@ -465,6 +478,18 @@ public final class WebServer {
         /* nextId монотонно растёт: max(серверный, клиентский, max(id)+1) — иначе коллизии id затирают данные */
         data.nextId = Math.max(current.nextId, incomingNextId);
         data.rev = current.rev + 1;
+        /* [UX-S19 §13/§5.3] прирост завершённых из Mini App: юзер завершил тренировку в
+            течение суток после наджа — инкремент reacted по книге notifyLog (даты — якорь
+            UTC+3, как пишет тик); новая завершённая обнуляет лестницу реактивации.
+            До storage.save — reset должен уехать в файл этим же сохранением */
+        int finishedMerged = 0;
+        for (Workout w : current.workouts) {
+            if (w.finished) finishedMerged++;
+        }
+        if (finishedMerged > finishedBefore) {
+            BotLogic.notifyReacted(current, stats, BotLogic.notifyToday());
+            if (current.notifyStage != null && current.notifyStage > 0) current.notifyStage = 0;
+        }
         storage.save(userId, data);
         System.out.println("[save] user " + userId + " rev " + data.rev + " workouts " + data.workouts.size() + " nextId " + data.nextId);
         /* [ANA-T1] счётчики успешного save: сам save + прирост новых/завершённых тренировок
