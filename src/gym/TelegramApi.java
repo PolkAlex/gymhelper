@@ -36,6 +36,17 @@ public class TelegramApi {
         return b;
     }
 
+    /* [UX-S19] web_app-кнопка (§4.4/§8): открывает Mini App не покидая чата (паттерн
+       setChatMenuButton); фолбэк при пустом webAppUrl — urlButton(appLink) у вызывающего */
+    public static Map<String, Object> webAppButton(String text, String url) {
+        Map<String, Object> webApp = new LinkedHashMap<>();
+        webApp.put("url", url);
+        Map<String, Object> b = new LinkedHashMap<>();
+        b.put("text", text);
+        b.put("web_app", webApp);
+        return b;
+    }
+
     public String getBotUsername() {
         try {
             Map<String, Object> m = Json.map(post("getMe", "{}"));
@@ -149,6 +160,16 @@ public class TelegramApi {
         return postSilent("editMessageText", req);
     }
 
+    /* [UX-S19] снятие кнопок сообщения редактированием разметки (§4.6): текст остаётся
+        как есть — исходное сообщение с наджем остаётся в чате, кнопки отписки снимаются */
+    public boolean removeKeyboard(long chatId, long messageId) {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("chat_id", chatId);
+        req.put("message_id", messageId);
+        req.put("reply_markup", markup(new ArrayList<>()));
+        return postSilent("editMessageReplyMarkup", req);
+    }
+
     /* тихий пуш (disable_notification): баннер без звука — финал таймера отдыха [UX-T5] */
     public void sendMessageSilent(long chatId, String text) {
         Map<String, Object> req = new LinkedHashMap<>();
@@ -162,10 +183,37 @@ public class TelegramApi {
     /* [UX-T16] рассылка владельцем: null при успехе, иначе описание ошибки Telegram —
        ошибка одного чата не должна прерывать рассылку, поэтому исключения не бросаются */
     public String sendMessageResult(long chatId, String text) {
+        return sendMessageResult(chatId, text, null);
+    }
+
+    /* [UX-S19] вариант с inline-клавиатурой: сообщения возврата несут кнопки
+       («▶️ Продолжить», «🔕 Не напоминать», §4.1–4.2); контракт тот же — null = ok,
+       иначе описание ошибки Telegram (ошибка не прерывает обход тика) */
+    public String sendMessageResult(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
         Map<String, Object> req = new LinkedHashMap<>();
         req.put("chat_id", chatId);
         req.put("text", text);
         req.put("parse_mode", "HTML");
+        if (keyboard != null) req.put("reply_markup", markup(keyboard));
+        try {
+            Map<String, Object> m = Json.map(post("sendMessage", Json.write(req)));
+            if (!Boolean.TRUE.equals(m.get("ok"))) return Json.str(m, "description");
+            return null;
+        } catch (Exception e) {
+            return e.getMessage();
+        }
+    }
+
+    /* [UX-S19] тихий пуш с клавиатурой (disable_notification): чек-ин целей и итоги
+       недели — баннер без звука, ожидаемое расписание (§4.3/§4.4); null = ok,
+       иначе описание ошибки — тик по ошибке не пишет книгу и не съедает лимит дня */
+    public String sendMessageSilentKb(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
+        Map<String, Object> req = new LinkedHashMap<>();
+        req.put("chat_id", chatId);
+        req.put("text", text);
+        req.put("parse_mode", "HTML");
+        req.put("disable_notification", true);
+        if (keyboard != null) req.put("reply_markup", markup(keyboard));
         try {
             Map<String, Object> m = Json.map(post("sendMessage", Json.write(req)));
             if (!Boolean.TRUE.equals(m.get("ok"))) return Json.str(m, "description");
@@ -215,6 +263,8 @@ public class TelegramApi {
         cmds.add(cmd("export", "Выгрузка дневника в CSV"));
         cmds.add(cmd("templates", "Шаблоны тренировок"));
         cmds.add(cmd("rest", "Таймер отдыха: /rest 120"));
+        cmds.add(cmd("notify", "Настройки напоминаний"));
+        cmds.add(cmd("digest", "Сводка прошлой недели"));
         cmds.add(cmd("app", "Открыть приложение"));
         cmds.add(cmd("profile", "Профиль: рост, вес, возраст"));
         cmds.add(cmd("help", "Справка по командам"));

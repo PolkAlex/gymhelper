@@ -75,6 +75,8 @@ let __restExpiredFired = false; /* сигнал «истёк» — один ра
 let obOpen = false;   /* приветствие-карусель поверх приложения */
 let obSlide = 0;      /* текущий слайд 0..2 */
 let obTracked = false; /* [ANA-T5] идёт настоящий онбординг (не «Повторить подсказки» из Помощи): события шлём только в нём */
+let cadenceOpen = false;  /* [UX-T55] шаг «Сколько дней в неделю» между каруселью и туториалом (§9) */
+let cadenceFromOnb = false; /* шаг пришёл из онбординга — после ответа туториал; false — существующий юзер, сразу приложение */
 let tutOpen = false;  /* туториал: спотлайты поверх реальных экранов */
 let tutStep = 0;      /* шаг 0..3: FAB → .ex-addset (пилюля «Добавить подход») → пара [ 📅 ][ ⚙ ] → таб «Статистика» */
 let helpOpen = false; /* подэкран «Помощь» (паттерн Настроек: поверх вкладки) */
@@ -97,8 +99,8 @@ const OLD_THEME_DARK = ['forest', 'khaki', 'pine', 'graphite', 'midnight', 'stoc
 
 /* ============ [ONB] контент онбординга (тексты — макет ред. 5 + спека §3, тон на «Вы») ============ */
 /* версия сборки: подвал Помощи («GymHelper 1.34 · 12.11.2026») */
-const APP_VERSION = '1.43';
-const APP_BUILD = '23.11.2026';
+const APP_VERSION = '1.44';
+const APP_BUILD = '26.11.2026';
 const SUPPORT_EMAIL = 'support.gymhelper@gmail.com';
 /* слайды приветствия (макет, экраны 1–3, решение 1 — вариант B «Карусель») */
 const OB_SLIDES = [
@@ -192,6 +194,14 @@ const RELNOTES = [
             { t: '📝 Заметка к тренировке', d: 'Текстовое поле в карточке — активной и завершённой. Набранный текст сохраняется сам: дописывайте по ходу тренировки или после неё.' },
             { t: '💪 Карта мышц', d: 'После завершения тренировки видно, какие группы работали и сколько подходов пришлось на каждую — фигуры тела мужское/женское.' },
             { t: '📦 Импорт из Strong', d: 'Переезд с приложением за минуту: Настройки → «📦 Переезд из Strong» → выберите CSV-выгрузку — тренировки приедут с датами, весами и подходами. Файл разбирается прямо в телефоне.' }
+        ]
+    },
+    {
+        ver: '1.44',
+        items: [
+            { t: '🤖 Уведомления', d: 'Бот напоминает сам: о незавершённой тренировке, чек-ин по целям — в воскресенье, итоги недели — в понедельник. Всё отключается в Настройках или кнопкой 🔕 прямо в сообщении.' },
+            { t: '🏅 Первая тренировка', d: 'Медаль за старт: приложение поздравит, когда в дневнике появится первая завершённая тренировка.' },
+            { t: '👋 Вопрос в онбординге', d: '«Сколько дней в неделю тренируешься?» — ответ подстраивает напоминания под ваш ритм. Изменить можно в Настройках → Уведомления.' }
         ]
     }
 ];
@@ -1519,6 +1529,46 @@ const ACTIONS = {
         save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); });
         render();
     },
+    /* ============ [UX-S19 T52] 🔔 Уведомления (§11.1) ============ */
+    /* тап по тумблу: выключение пишет false явно, повторный тап возвращает true
+        (null и true = вкл, семантика goalRemind §12.1 — как в боте ntf:*); чек-ин
+        целей — СУЩЕСТВУЮЩЕЕ поле goalRemind; каждое изменение сразу save() —
+        напоминания живут на сервере, бот увидит их на следующем тике */
+    ntfToggle: function (field) {
+        if (field !== 'notifyMaster' && field !== 'notifyUnfinished' && field !== 'notifyComeback'
+            && field !== 'notifyDigest' && field !== 'goalRemind') return;
+        G[field] = G[field] === false;
+        save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); });
+        render();
+    },
+    /* окно «когда напоминать» (§5.1): утро 10–13 / день 13–17 / вечер 17–21; «Днём»
+        пишется явной двойкой (null остаётся только «не настраивал» — серверный merge
+        не затирает, §12.3); мастер выкл — чипы затемнены, тап тихо игнорируется */
+    ntfWhen: function (a) {
+        if (G.notifyMaster === false) return;
+        G.notifyWhen = +a === 1 || +a === 3 ? +a : 2;
+        save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); });
+        render();
+    },
+    /* cadence 1–7 (§9): нужно серверу — пороги реактивации (§5.3) и строка дайджеста
+        (§4.4); «Пока не знаю» = null (фолбэк: базовые пороги, дайджест без плана) */
+    cadenceSet: function (a) {
+        const n = parseInt(a, 10);
+        G.cadence = n >= 1 && n <= 7 ? n : null;
+        save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); });
+        render();
+    },
+    /* ============ [UX-T55] шаг онбординга (§9) ============ */
+    /* тап по чипу = ответ и переход (один тап, без «Дальше» — настройка безобидна) */
+    cadencePick: function (a) {
+        const n = parseInt(a, 10);
+        if (!(n >= 1 && n <= 7)) { cadenceAskFinish(); return; }
+        G.cadence = n;
+        save().then(function (r) { if (r === 'ok') toast('✓ Сохранено'); });
+        cadenceAskFinish();
+    },
+    /* «Пока не знаю» — пропуск без записи (cadence остаётся null) */
+    cadenceSkip: function () { cadenceAskFinish(); },
     closeModal: function () { closeModal(); },
     /* [EXR-T4 fix] фоновый тап перехватывается в dispatchFromEl до ACTIONS —
        там же перерисовка после закрытия шита фильтров Техники */
@@ -1730,6 +1780,7 @@ function render() {
        (techBack, единый паттерн «Назад»); backbar карточки тренировки сохранён */
     /* [ONB] оверлеи онбординга — поверх всего (приветствие z-60, туториал z-46..48, «Что нового» z-52) */
     if (obOpen) h += obWelcomeHtml();
+    if (cadenceOpen) h += cadenceAskHtml(); /* [UX-T55] шаг cadence — тот же модальный слой (§9) */
     if (tutOpen) h += tutOverlayHtml();
     if (wnOpen) h += wnModalHtml();
     /* [UX-T36] снимок скролла недели — ДО перестройки DOM, restore вернёт свежую позицию */
@@ -4445,11 +4496,13 @@ function goalNew() {
 /* ---------- [UX-T27] экран «Настройки» (Story [UX-S4], спека §6) ---------- */
 /* тогл-компонент .switch [UX-S4 §4]: role=switch/aria-checked; у темы ручка несёт иконку
    активной темы, на свободном конце — «призрак» пассивной; звук — без иконки */
-function swToggleHtml(on, act, arg, label, knobIco, ghostIco, ghostSide) {
+function swToggleHtml(on, act, arg, label, knobIco, ghostIco, ghostSide, dis) {
     let inner = '<span class="sw-track">';
     if (ghostIco) inner += '<span class="sw-ico ' + ghostSide + '">' + ghostIco + '</span>';
     inner += '<span class="sw-knob">' + (knobIco || '') + '</span></span>';
-    return '<button class="switch' + (on ? ' on' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') +
+    /* [UX-S19 T52] dis — мастер-тогл выключен: строки затемнены и некликабельны,
+        состояние сохраняется до включения мастера (§11.1) */
+    return '<button class="switch' + (on ? ' on' : '') + (dis ? ' dis' : '') + '" role="switch" aria-checked="' + (on ? 'true' : 'false') +
         '" aria-label="' + escAttr(label) + '" data-act="' + act + '"' + (arg != null ? ' data-a="' + escAttr(arg) + '"' : '') + '>' + inner + '</button>';
 }
 /* нижний лист «Упражнение разминки» [UX-T40 §2.3] — стиль пикера вида календаря
@@ -4537,6 +4590,39 @@ function renderSettings() {
             '<span class="chevr">' + ICONS.chevR + '</span></span></button>';
     }
     h += '</div>';
+    /* [UX-S19 T52] 🔔 Уведомления (§11.1): настройки живут в данных юзера на сервере —
+        тап по тумблу/чипу = мгновенный save(); мастер off затемняет строки типов и чипы
+        «Когда» (состояние сохраняется), «Дней в неделю» остаётся активным — это не
+        напоминание, а входные данные механики (cadence: пороги §5.3, строка дайджеста) */
+    const nMaster = G.notifyMaster !== false;
+    const nWhen = G.notifyWhen == null ? 2 : G.notifyWhen;
+    const nRow = function (label, field) {
+        const on = G[field] !== false;
+        return '<div class="setrow' + (nMaster ? '' : ' dim') + '"><span class="lbl">' + label + '</span>' +
+            swToggleHtml(on, 'ntfToggle', field, label, null, null, null, !nMaster) + '</div>';
+    };
+    h += '<div class="card"><p class="t1">🔔 Уведомления</p>' +
+        '<p class="meta">' + (nMaster ? 'Бот подстрахует, если отвлечёшься. Ночью — тишина.' : 'Все напоминания выключены. Ночью и так тихо 😴') + '</p>' +
+        '<div class="setrow"><span class="lbl">Напоминания</span>' +
+        swToggleHtml(nMaster, 'ntfToggle', 'notifyMaster', 'Напоминания') + '</div>' +
+        nRow('Незавершённая тренировка', 'notifyUnfinished') +
+        nRow('Возврат в зал', 'notifyComeback') +
+        nRow('Чек-ин по целям', 'goalRemind') +
+        '<p class="meta">воскресенье вечером, если есть цели</p>' +
+        nRow('Итоги недели', 'notifyDigest') +
+        '<div class="hr"></div>' +
+        '<div class="flabel">Когда напоминать</div>' +
+        '<div class="chips">' + [['Утром', 1], ['Днём', 2], ['Вечером', 3]].map(function (it) {
+            return '<button class="chip' + (nWhen === it[1] ? ' on' : '') + (nMaster ? '' : ' dis') +
+                '" data-act="ntfWhen" data-a="' + it[1] + '">' + it[0] + '</button>';
+        }).join('') + '</div>' +
+        '<div class="flabel">Дней в неделю</div>' +
+        '<div class="chips">' + [1, 2, 3, 4, 5, 6, 7].map(function (n) {
+            return '<button class="chip' + (G.cadence === n ? ' on' : '') + '" data-act="cadenceSet" data-a="' + n + '">' + n + '</button>';
+        }).join('') +
+        '<button class="chip' + (G.cadence == null ? ' on' : '') + '" data-act="cadenceSet" data-a="">Пока не знаю</button>' +
+        '</div>' +
+        '<p class="meta">По UTC+3. Всё выключить — первым тумблером.</p></div>';
     /* 🧑‍🏫 Персональный тренер — перенос как есть; switchTab закрывает Настройки [UX-S4 §6] */
     h += '<div class="card"><p class="t1">🧑‍🏫 Персональный тренер</p>' +
         '<p class="meta">Программы тренировок и разборы техники — раздел в разработке</p>' +
@@ -5000,6 +5086,10 @@ function finishWorkout(id) {
     }
     w.exercises = (w.exercises || []).filter(e => e.sets.length);
     if (!w.exercises.length) { toast('Сначала добавь хотя бы одно упражнение 💪', true); return; }
+    /* [UX-S19 §10] до сохранения завершённых было 0 — это первая тренировка (книга
+        firstDone из /api/init гасит edge «первую удалил, завершил новую»: второго
+        «первого раза» нет); тик пришлёт чат-сообщение ≤1 ч, тут — только тост */
+    const firstEver = (G.workouts || []).filter(x => x.finished).length === 0 && G.firstDone !== true;
     w.finished = true;
     if (!w.ended) w.ended = nowLocalISO();
     /* [GOA-S1] частотные цели проверяются в точке завершения тренировки (§14 R1):
@@ -5020,7 +5110,9 @@ function finishWorkout(id) {
        «Тренировка завершена» (аналог приоритета §11) */
     scrollDropAll(); /* [UX-I22] история/рекорды пересчитаны — старые позиции невалидны */
     save().then(function (r) {
-        if (r === 'ok') toast(goalHit ? '🏆 Цель достигнута! ' + goalNameFull(goalHit) : '✅ Тренировка завершена');
+        if (r === 'ok') toast(goalHit ? '🏆 Цель достигнута! ' + goalNameFull(goalHit)
+            : firstEver ? '🏅 Первая тренировка в дневнике!'
+            : '✅ Тренировка завершена');
         render();
     });
 }
@@ -6406,6 +6498,12 @@ function onbGate() {
         obAlignTrack();
         return;
     }
+    /* [UX-T55] существующим юзерам шаг cadence показывается один раз при первом входе
+        после релиза (§9 — самый дешёвый способ заполнить cadence у текущей базы) */
+    if (lsGet('gymCadenceAsk') !== '1') {
+        cadenceAskStart(false);
+        return;
+    }
     wnAuto(); /* [ONB-T7] значимый релиз, который пользователь ещё не видел */
     if (wnOpen) render();
 }
@@ -6445,7 +6543,39 @@ function obAlignTrack() {
 function obFinish() {
     lsSet('gymOnbDone', '1'); /* любой выход — навсегда [§8] */
     obOpen = false;
-    tutStart(); /* [ONB-T4] автопоказ туториала после приветствия (решение 3) */
+    cadenceAskStart(true); /* [UX-T55] шаг между каруселью и туториалом (§9) */
+}
+
+/* ---------- [UX-T55] шаг онбординга «Сколько дней в неделю тренируешься?» (§9) ----------
+   Ответ — GymData.cadence (нужен СЕРВЕРУ: пороги реактивации §5.3, строка дайджеста §4.4),
+   поэтому обычный save(), а не localStorage; «спрошен ли» — флаг показа gymCadenceAsk
+   (fail-open: localStorage недоступен — ворота онбординга уже пропустили шаг молча) */
+function cadenceAskStart(fromOnboarding) {
+    cadenceFromOnb = fromOnboarding;
+    cadenceOpen = true;
+    render();
+}
+function cadenceAskFinish() {
+    lsSet('gymCadenceAsk', '1');
+    cadenceOpen = false;
+    if (cadenceFromOnb) tutStart(); /* [ONB-T4] туториал после шага (новые юзеры) */
+    else render(); /* существующий юзер — сразу в приложение */
+}
+function cadenceAskHtml() {
+    let h = '<div class="obwrap"><div class="ob"><div class="ob-center">' +
+        '<div class="wlogo">' + ICONS.calendar + '</div>' +
+        '<div class="wtitle">Сколько дней в неделю<br>тренируешься?</div>' +
+        '<div class="wtag">Помогает подстроить напоминания.<br>Ответ ни к чему не обязывает.</div>' +
+        '<div class="cadchips">';
+    for (let n = 1; n <= 7; n++) {
+        /* склонение: 1 день, 2–4 дня, 5+ дней (ревью PR #417: «2 дней» — неверная форма) */
+        h += '<button class="chip' + (G && G.cadence === n ? ' on' : '') + '" data-act="cadencePick" data-a="' + n + '" aria-label="' + n + ' ' + (n === 1 ? 'день' : n <= 4 ? 'дня' : 'дней') + ' в неделю">' + n + '</button>';
+    }
+    h += '</div></div><div class="ob-bottom">' +
+        '<button class="wskip" data-act="cadenceSkip">Пока не знаю</button>' +
+        '<p class="meta">Изменить можно потом: Настройки → 🔔 Уведомления</p>' +
+        '</div></div></div>';
+    return h;
 }
 
 /* ---------- [ONB-T4] туториал: спотлайты поверх реальных экранов ---------- */

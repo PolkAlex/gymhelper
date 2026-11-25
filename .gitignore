@@ -21,6 +21,8 @@ node_modules/
 .gradle/
 build/
 gradle.properties
+test-results/
+contract.log
 
 ### Eclipse ###
 .apt_generated

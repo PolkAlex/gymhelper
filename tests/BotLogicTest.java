@@ -1,6 +1,8 @@
 package gym;
 
 import java.time.LocalDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -398,6 +400,25 @@ public class BotLogicTest {
             /menu и /start feedback без снятия, webAppUrl == null — регрессия === */
         runKeyboardRemoveScenario();
 
+        /* === 19. Механика возврата [UX-S19 T51]: решение тика decideNotify — все
+            триггеры/пороги/окна/лимиты, лестница реактивации, книга учёта === */
+        runNotifyScenario();
+
+        /* === 20. [UX-S19 T53] тексты §4.1–4.3, клавиатуры, /notify, отписки,
+            строка «первая тренировка» в финише, reacted-инкремент === */
+        runNotifyBotScenario();
+
+        /* === 21. [UX-T54] дайджест §4.4 (состав, секции, финалы, дельта,
+            рекорды) + «первая тренировка» тиком + /digest === */
+        runDigestScenario();
+
+        /* === 22. [UX-S19] цикл тика notifyTick (добор по ревью PR #417, §6): ошибка
+            Telegram — файл не пишется, лимит дня не съеден (§6.3); гонка fresh-copy —
+            правка юзера из Mini App не затирается, книга доезжает (§6.5); без
+            отправки файл не пишется (§2.7); notify-тик на своём daemon-потоке
+            отдельно от rest-timer (§6.1/§6.4) === */
+        runNotifyTickScenario();
+
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -423,6 +444,10 @@ public class BotLogicTest {
         /* [ONB-T8] ненулевое значение — sendMessageResult «падает» с этой ошибкой
            (тест отказа доставки: режим остаётся, счётчик не растёт) */
         String failResult;
+        /* [UX-S19] хук «конкурентного» сохранения из Mini App в момент HTTP-отправки
+           (гонка §6.5): тик грузит данные ДО отправки — перехватчик пишет файл юзера
+           между load тика и его save (окно lost update); null = обычное поведение */
+        Runnable sendInterceptor;
         /* [UX-T33] вызовы sendMessageWithKeyboard: унаследованная реализация ходит в сеть
            (postSilent), поэтому переопределяем — фиксируем chat_id/текст/reply_markup */
         final List<Long> kbChats = new ArrayList<>();
@@ -456,6 +481,7 @@ public class BotLogicTest {
         @Override
         public boolean editMessageText(long chatId, long messageId, String text, List<List<Map<String, Object>>> keyboard) {
             texts.add(text);
+            editKbs.add(keyboard);
             return true;
         }
 
@@ -464,10 +490,40 @@ public class BotLogicTest {
             texts.add(text);
         }
 
+        /* [UX-S19] клавиатуры перерисованных экранов (/notify) — подписи кнопок §4.7 */
+        final List<List<List<Map<String, Object>>>> editKbs = new ArrayList<>();
+
         @Override
         public long sendMessageGetId(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
             texts.add(text);
             return 100; /* сообщение-отсчёт «отправилось» — сессия таймера создаётся */
+        }
+
+        /* [UX-S19] сетевые методы возврата: унаследованные ходят в post/postSilent —
+            переопределяем, фиксируем вызовы (клавиатуры нужны проверкам сообщений тика) */
+        final List<List<List<Map<String, Object>>>> kbSent = new ArrayList<>();
+
+        @Override
+        public String sendMessageResult(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
+            if (sendInterceptor != null) sendInterceptor.run(); /* [UX-S19] гонка §6.5 */
+            sentChats.add(chatId);
+            texts.add(text);
+            kbSent.add(keyboard);
+            return failResult;
+        }
+
+        @Override
+        public String sendMessageSilentKb(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
+            sentChats.add(chatId);
+            texts.add(text);
+            kbSent.add(keyboard);
+            return failResult;
+        }
+
+        @Override
+        public boolean removeKeyboard(long chatId, long messageId) {
+            texts.add("[removed-kb:" + messageId + "]");
+            return true;
         }
 
         @Override
@@ -1216,6 +1272,729 @@ public class BotLogicTest {
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: снятие клавиатуры " + e);
         }
+    }
+
+    /* [UX-S19 T51] механика возврата: чистая функция decideNotify — все триггеры,
+       пороги, окна, суточный лимит; лестница реактивации 7/14/21 (+7 при cadence=1);
+       молчание от завершённых/mtime; книга учёта (lastWid/stage/firstDone/лог ≤7).
+       якорь дат: сегодня = 2026-11-09 (Пн, W46), окно 12:00 = «день» (дефолт). */
+    static void runNotifyScenario() {
+        LocalDate today = LocalDate.of(2026, 11, 9);
+        LocalTime day = LocalTime.of(14, 0); /* внутри окна «день» 13–17 (дефолт) */
+        long m24 = 25 * 3600000L;      /* mtime старше 24 ч (гард unf) */
+        long m3d = 4 * BotLogic.DAY_MS; /* mtime старше 3 дней (гард cb) */
+        try {
+            /* --- окна отправки + тихие часы (§5.1): null = «день» --- */
+            check(!BotLogic.notifyInWindow(null, LocalTime.of(12, 0)) && !BotLogic.notifyInWindow(null, LocalTime.of(12, 59)),
+                "notify: до 13:00 окно «день» (дефолт) закрыто");
+            check(BotLogic.notifyInWindow(null, LocalTime.of(13, 0)) && BotLogic.notifyInWindow(null, LocalTime.of(16, 59))
+                    && !BotLogic.notifyInWindow(null, LocalTime.of(17, 0)),
+                "notify: окно «день» 13:00–16:59");
+            check(BotLogic.notifyInWindow(1, LocalTime.of(10, 0)) && BotLogic.notifyInWindow(1, LocalTime.of(12, 59))
+                    && !BotLogic.notifyInWindow(1, LocalTime.of(13, 0)),
+                "notify: окно «утро» 10:00–12:59");
+            check(BotLogic.notifyInWindow(3, LocalTime.of(17, 0)) && BotLogic.notifyInWindow(3, LocalTime.of(20, 59))
+                    && !BotLogic.notifyInWindow(3, LocalTime.of(21, 0)),
+                "notify: окно «вечер» 17:00–20:59");
+            check(!BotLogic.notifyInWindow(null, LocalTime.of(9, 59)) && !BotLogic.notifyInWindow(1, LocalTime.of(21, 0))
+                    && !BotLogic.notifyInWindow(3, LocalTime.of(2, 0)),
+                "notify: тихие часы 21:00–10:00 — отправок нет ни в каком окне");
+
+            /* --- лестница реактивации (§5.3): 7/14/21, cadence=1 → 14/21/28 --- */
+            check(BotLogic.notifyCbLevel(6, null) == 0 && BotLogic.notifyCbLevel(7, null) == 1
+                    && BotLogic.notifyCbLevel(13, null) == 1 && BotLogic.notifyCbLevel(14, null) == 2
+                    && BotLogic.notifyCbLevel(20, null) == 2 && BotLogic.notifyCbLevel(21, null) == 3
+                    && BotLogic.notifyCbLevel(90, null) == 3,
+                "notify: уровни 0/1/2/3 по порогам 7/14/21");
+            check(BotLogic.notifyCbLevel(13, 1) == 0 && BotLogic.notifyCbLevel(14, 1) == 1
+                    && BotLogic.notifyCbLevel(21, 1) == 2 && BotLogic.notifyCbLevel(28, 1) == 3,
+                "notify: cadence=1 сдвигает пороги на +7 (14/21/28, решение 6 §17)");
+            check(BotLogic.notifyCbLevel(14, 3) == 2 && BotLogic.notifyCbLevel(14, null) == 2,
+                "notify: cadence ≥2/null — базовые пороги");
+
+            /* --- молчание: от последней завершённой; незавершённая не считается --- */
+            GymData sil = new GymData();
+            Workout fin1 = w("2026-11-01T10:00:00", "2026-11-01T11:00:00", true);
+            fin1.date = "2026-11-02";
+            Workout hang = w("2026-11-07T10:00:00", null, false);
+            sil.workouts.add(fin1);
+            sil.workouts.add(hang);
+            check(BotLogic.notifySilenceDays(sil, today, m24) == 7,
+                "notify: молчание 7 дней от последней завершённой, висящая не считается");
+            GymData noFin = new GymData();
+            check(BotLogic.notifySilenceDays(noFin, today, 8 * BotLogic.DAY_MS) == 8,
+                "notify: нет завершённых — молчание от mtime файла");
+
+            /* --- суточный лимит (§2.1) --- */
+            GymData sent = new GymData();
+            sent.notifyLog.add(new NotifyMark("2026-11-09", "unf"));
+            check(BotLogic.notifySentToday(sent, today) && !BotLogic.notifySentToday(new GymData(), today),
+                "notify: отметка сегодня блокирует повтор, вчера — нет");
+            GymData sentY = new GymData();
+            sentY.notifyLog.add(new NotifyMark("2026-11-08", "cb"));
+            check(!BotLogic.notifySentToday(sentY, today), "notify: запись вчера не блокирует сегодня");
+
+            /* --- [first] событие вне очереди: окон/мастера/лимита не смотрит (§3) --- */
+            GymData f = new GymData();
+            Workout fw = w("2026-11-05T10:00:00", "2026-11-05T11:00:00", true);
+            fw.date = "2026-11-06";
+            f.workouts.add(fw);
+            check("first".equals(BotLogic.decideNotify(f, today, LocalTime.of(3, 0), 1, m3d)),
+                "notify: first — единственная завершённая ≤7 дней, ночное время и мастер не важны");
+            f.notifyMaster = false;
+            f.notifyLog.add(new NotifyMark("2026-11-09", "unf"));
+            check("first".equals(BotLogic.decideNotify(f, today, day, 1, m3d)),
+                "notify: first не глушится мастер-тоглом и суточным лимитом (событие §2.6)");
+            GymData fOld = new GymData();
+            Workout old = w("2026-10-01T10:00:00", "2026-10-01T11:00:00", true);
+            old.date = "2026-10-01";
+            fOld.workouts.add(old);
+            /* cb выключаем: легаси-молчун — законная цель реактивации (winback §17-8);
+               здесь проверяем именно first: старая дата → поздравления нет */
+            fOld.notifyComeback = false;
+            check(BotLogic.decideNotify(fOld, today, day, 1, m3d) == null,
+                "notify: легаси (первая завершена давно) — first не срабатывает (§10)");
+            GymData fDone = new GymData();
+            Workout fw2 = w("2026-11-05T10:00:00", "2026-11-05T11:00:00", true);
+            fw2.date = "2026-11-06";
+            fDone.workouts.add(fw2);
+            fDone.firstDone = true;
+            fDone.notifyDigest = false; /* понедельник с завершённой на прошлой неделе — это dg, изолируем first */
+            check(BotLogic.decideNotify(fDone, today, day, 1, m3d) == null,
+                "notify: firstDone=true — второго «первого раза» нет (§10)");
+
+            /* --- мастер-тогл / лимит / окно гасят 4 проактивных типа --- */
+            GymData m = new GymData();
+            m.notifyMaster = false;
+            m.workouts.add(hang2());
+            check(BotLogic.decideNotify(m, today, day, 1, m24) == null,
+                "notify: мастер выкл — все 4 проактивных типа молчат");
+            GymData lim = new GymData();
+            lim.workouts.add(hang2());
+            lim.notifyLog.add(new NotifyMark("2026-11-09", "dg"));
+            check(BotLogic.decideNotify(lim, today, day, 1, m24) == null,
+                "notify: отправляли сегодня — тишина до завтра (1/день §2.1)");
+            GymData night = new GymData();
+            night.workouts.add(hang2());
+            check(BotLogic.decideNotify(night, today, LocalTime.of(23, 30), 1, m24) == null,
+                "notify: тихие часы — ни одной отправки");
+
+            /* --- [unf] незавершённая (§5.2): дата ≤ вчера + mtime ≥24 ч + не писали --- */
+            check("unf".equals(BotLogic.decideNotify(unfData("2026-11-08"), today, day, 1, m24)),
+                "notify: незавершённая от вчера с mtime 25 ч → unf");
+            check(BotLogic.decideNotify(unfData("2026-11-08"), today, day, 1, 2 * 3600000L) == null,
+                "notify: юзер трогал данные <24 ч — unf не приходит (§5.2)");
+            check(BotLogic.decideNotify(unfData("2026-11-09"), today, day, 1, m24) == null,
+                "notify: сегодняшняя незавершённая не триггерит (висит < суток)");
+            GymData wW = unfData("2026-11-08");
+            wW.notifyLastWid = 5L;
+            check(BotLogic.decideNotify(wW, today, day, 1, m24) == null,
+                "notify: про эту тренировку уже писали (lastWid) — одного сообщения на тренировку");
+            GymData wOff = unfData("2026-11-08");
+            wOff.notifyUnfinished = false;
+            check(BotLogic.decideNotify(wOff, today, day, 1, m24) == null,
+                "notify: notifyUnfinished=false — про незавершённую не пишем");
+
+            /* --- [goal] воскресенье + активные цели (§7) --- */
+            check("goal".equals(BotLogic.decideNotify(goalData(), today, day, 7, m3d)),
+                "notify: воскресенье + активная цель → чек-ин");
+            check(BotLogic.decideNotify(goalData(), today, day, 1, m3d) == null,
+                "notify: не воскресенье — чек-ина нет");
+            GymData gOff = goalData();
+            gOff.goalRemind = false;
+            check(BotLogic.decideNotify(gOff, today, day, 7, m3d) == null,
+                "notify: goalRemind=false — чек-ин выключен");
+            GymData gEmpty = goalData();
+            gEmpty.goals.get(0).status = 2;
+            check(BotLogic.decideNotify(gEmpty, today, day, 7, m3d) == null,
+                "notify: нет активных целей — сообщение не отправляется (GOA §6.1)");
+
+            /* --- [dg] понедельник + ≥1 завершённой за прошлую ISO-неделю (§8) --- */
+            check("dg".equals(BotLogic.decideNotify(dgData(), today, day, 1, m3d)),
+                "notify: понедельник + завершённая на прошлой неделе → дайджест");
+            check(BotLogic.decideNotify(dgData(), today, day, 3, m3d) == null,
+                "notify: дайджест только в понедельник");
+            /* E1 (0 завершённых за ПРОШЛУЮ неделю — молчим) изолируем от триггеров unf/cb:
+               тренировка завершена две недели назад (вне окна недели), юзер активен (mtime <3 д) */
+            GymData dg0 = dgData();
+            dg0.workouts.get(0).date = "2026-10-29";
+            check(BotLogic.decideNotify(dg0, today, day, 1, m24) == null,
+                "notify: 0 завершённых за неделю — молчим (E1 ANA-S2)");
+            GymData dgOff = dgData();
+            dgOff.notifyDigest = false;
+            check(BotLogic.decideNotify(dgOff, today, day, 1, m3d) == null,
+                "notify: notifyDigest=false — итоги выключены");
+
+            /* --- [cb] реактивация: stage/молчание/активность (§5.3) --- */
+            GymData cb = new GymData(); /* нулевая история: молчание от mtime */
+            check("cb".equals(BotLogic.decideNotify(cb, today, day, 3, 8 * BotLogic.DAY_MS)),
+                "notify: нулевая история, mtime 8 дней → реактивация уровня 1");
+            check(BotLogic.decideNotify(cb, today, day, 3, 2 * BotLogic.DAY_MS) == null,
+                "notify: юзер активен (<3 дней) — реактивация не нужна");
+            GymData cb2 = new GymData();
+            cb2.notifyStage = 1;
+            check(BotLogic.decideNotify(cb2, today, day, 3, 8 * BotLogic.DAY_MS) == null,
+                "notify: stage=1, молчание 8 (уровень 1) — повтора нет");
+            GymData cb90 = new GymData(); /* молчун с релиза: одно «последнее» сразу */
+            check("cb".equals(BotLogic.decideNotify(cb90, today, day, 3, 90 * BotLogic.DAY_MS)),
+                "notify: молчание 90 дней при stage=0 → сразу уровень 3 (одно сообщение)");
+            GymData cbOff = new GymData();
+            cbOff.notifyComeback = false;
+            check(BotLogic.decideNotify(cbOff, today, day, 3, 90 * BotLogic.DAY_MS) == null,
+                "notify: notifyComeback=false — без реактивации");
+            GymData cbCad = new GymData();
+            cbCad.cadence = 1;
+            check(BotLogic.decideNotify(cbCad, today, day, 3, 8 * BotLogic.DAY_MS) == null,
+                "notify: cadence=1 — 8 дней молчания его норма, уровня 1 нет (порог 14)");
+
+            /* --- приоритет внутри дня (§3): unf важнее cb --- */
+            GymData both = new GymData();
+            both.workouts.add(hang2());
+            check("unf".equals(BotLogic.decideNotify(both, today, day, 3, 90 * BotLogic.DAY_MS)),
+                "notify: готовы unf и cb — отправится unf (приоритет §3)");
+
+            /* --- книга учёта notifyMark (§12.1): lastWid / stage / firstDone / трим --- */
+            GymData book = unfData("2026-11-08");
+            BotLogic.notifyMark(book, "unf", today, m24);
+            check(book.notifyLastWid != null && book.notifyLastWid == 5L,
+                "notify: после unf lastWid = id тренировки");
+            GymData bookCb = new GymData();
+            BotLogic.notifyMark(bookCb, "cb", today, 8 * BotLogic.DAY_MS);
+            check(bookCb.notifyStage != null && bookCb.notifyStage == 1,
+                "notify: после cb stage = отправленный уровень");
+            GymData bookF = new GymData();
+            BotLogic.notifyMark(bookF, "first", today, m24);
+            check(Boolean.TRUE.equals(bookF.firstDone), "notify: после first firstDone=true");
+            for (int i = 0; i < 9; i++) bookF.notifyLog.add(new NotifyMark("2026-11-0" + (i % 9 + 1), "cb"));
+            check(bookF.notifyLog.size() == 10, "notify: подготовка трима (1 + 9 записей)");
+            BotLogic.notifyMark(bookF, "cb", today, m24);
+            check(bookF.notifyLog.size() == 7 && today.toString().equals(bookF.notifyLog.get(6).d)
+                    && "cb".equals(bookF.notifyLog.get(6).t),
+                "notify: лог триммируется до 7, последняя запись — сегодняшняя");
+
+            /* --- реакция на напоминание (§13): завершение в течение суток после наджа --- */
+            java.nio.file.Path tmpN = java.nio.file.Files.createTempDirectory("gymnotify");
+            Stats stN = new Stats(tmpN.resolve("stats.json"));
+            GymData react = new GymData();
+            react.notifyLog.add(new NotifyMark("2026-11-09", "unf"));
+            react.notifyLog.add(new NotifyMark("2026-11-07", "cb"));
+            BotLogic.notifyReacted(react, stN, today);
+            check(Json.lng(stN.snapshot().get("notifyReactedUnf")) == 1
+                    && Json.lng(stN.snapshot().get("notifyReactedRc")) == 0,
+                "notify: среагировал на unf (запись сегодня) — cb от 3 дней назад не считается");
+            GymData react2 = new GymData();
+            react2.notifyLog.add(new NotifyMark("2026-11-08", "dg"));
+            BotLogic.notifyReacted(react2, stN, today);
+            check(Json.lng(stN.snapshot().get("notifyReactedDigest")) == 1,
+                "notify: вчерашняя отметка тоже считается реакцией (≤24 ч, дата-гранулярность)");
+
+            /* --- ключ ISO-недели для лога (§6.6) --- */
+            check("2026-W46".equals(BotLogic.notifyWeekKey(today)), "notify: 09.11.2026 — понедельник W46");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: notify-сценарий " + e);
+        }
+    }
+
+    /* активная незавершённая тренировка id=5 от указанной даты (для unf) */
+    static Workout hang2() {
+        Workout wk = w("2026-11-08T10:00:00", null, false);
+        wk.id = 5;
+        wk.date = "2026-11-08";
+        ex(wk, "Жим", new SetEntry("60", 3, "10"));
+        return wk;
+    }
+
+    /* [UX-S19 T53] бот-часть механики: тексты/клавиатуры/экран/отписки/финиш. Тексты —
+       дословно из §4 (владелец утвердил 25.11): даты-длины в коридоре 60–100, стоп-слова
+       стыда отсутствуют; чек-ин собирается из целей (e1RM 80×6=96 — ровно как в примере
+       спеки); отписка пишет поле, снимает кнопки, отвечает §4.6; /notify — тоглы §4.7 */
+    static void runNotifyBotScenario() {
+        LocalDate today = LocalDate.of(2026, 11, 9);
+        long m3d = 4 * BotLogic.DAY_MS;
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymnotifybot");
+            Storage storage = new Storage(tmp);
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0);
+            long chat = 9042;
+
+            /* --- текст unf (§4.1): дата в формате истории «24-11» --- */
+            String unfText = BotLogic.notifyText("unf", unfData("2026-11-08"), today, m3d);
+            check(unfText != null && unfText.equals(
+                    "🏋️ Тренировка от 08-11 осталась незавершённой. Жизнь бывает насыщенной — допишешь сегодня?"),
+                "notify: текст unf дословно §4.1 (дата dd-MM)");
+
+            /* --- тексты cb (§4.2): по факту молчания, нулевая история; молчание — от
+                последней ЗАВЕРШЁННОЙ, поэтому дата тренировки задаёт «сколько молчит» --- */
+            GymData cb8 = new GymData();
+            Workout cbw = w("2026-11-01T10:00:00", "2026-11-01T11:00:00", true);
+            cbw.date = "2026-11-01";
+            cb8.workouts.add(cbw);
+            check(BotLogic.notifyText("cb", cb8, today, 8 * BotLogic.DAY_MS).equals(
+                    "👋 Неделя без тренировок. Может, сегодня тот самый день? Один подход — уже победа."),
+                "notify: cb день 7 — «неделя» (§4.2)");
+            GymData cb15 = new GymData();
+            Workout cbw15 = w("2026-10-25T10:00:00", "2026-10-25T11:00:00", true);
+            cbw15.date = "2026-10-25";
+            cb15.workouts.add(cbw15);
+            check(BotLogic.notifyText("cb", cb15, today, 15 * BotLogic.DAY_MS).equals(
+                    "Две недели без зала — бывает. Начать снова — самое трудное, дальше само пойдёт 💪"),
+                "notify: cb день 14 — «две недели»");
+            GymData cb22 = new GymData();
+            Workout cbw22 = w("2026-10-18T10:00:00", "2026-10-18T11:00:00", true);
+            cbw22.date = "2026-10-18";
+            cb22.workouts.add(cbw22);
+            check(BotLogic.notifyText("cb", cb22, today, 22 * BotLogic.DAY_MS).equals(
+                    "Прошло три недели. Это последнее напоминание — не хочу быть спамером. Дневник никуда не уйдёт 🙏"),
+                "notify: cb день 21 — «последнее»");
+            check(BotLogic.notifyText("cb", new GymData(), today, 8 * BotLogic.DAY_MS).equals(
+                    "Первая тренировка — самая важная. 15 минут сегодня лучше идеального плана завтра 💪"),
+                "notify: cb день 7 нулевой истории — «первая тренировка» (§4.2)");
+
+            /* --- ревью PR #417: границы текстов едут вместе с порогами лестницы (cadence=1
+                → 14/21/28) — «последнее» приходит ровно один раз, на закрывающей ступени;
+                раньше день 21 давал «последнее» при ещё открытой ступени 28 (двойное обещание) --- */
+            GymData cbC21 = new GymData();
+            cbC21.cadence = 1;
+            Workout cbwC21 = w("2026-10-19T10:00:00", "2026-10-19T11:00:00", true);
+            cbwC21.date = "2026-10-19";
+            cbC21.workouts.add(cbwC21);
+            String cad21 = BotLogic.notifyText("cb", cbC21, today, 21 * BotLogic.DAY_MS);
+            check(cad21 != null && !cad21.contains("последнее") && cad21.equals(
+                    "Две недели без зала — бывает. Начать снова — самое трудное, дальше само пойдёт 💪"),
+                "notify: cadence=1 день 21 — ещё НЕ «последнее» (уровень 2, порог 28)");
+            GymData cbC28 = new GymData();
+            cbC28.cadence = 1;
+            Workout cbwC28 = w("2026-10-12T10:00:00", "2026-10-12T11:00:00", true);
+            cbwC28.date = "2026-10-12";
+            cbC28.workouts.add(cbwC28);
+            check(BotLogic.notifyText("cb", cbC28, today, 28 * BotLogic.DAY_MS).equals(
+                    "Прошло три недели. Это последнее напоминание — не хочу быть спамером. Дневник никуда не уйдёт 🙏"),
+                "notify: cadence=1 день 28 — «последнее» (закрывающая ступень)");
+
+            /* --- коридор 60–100 символов для наджей + стоп-слова стыда (§14) --- */
+            String[] nudges = {
+                BotLogic.notifyText("unf", unfData("2026-11-08"), today, m3d),
+                BotLogic.notifyText("cb", cb8, today, 8 * BotLogic.DAY_MS),
+                BotLogic.notifyText("cb", cb15, today, 15 * BotLogic.DAY_MS),
+                BotLogic.notifyText("cb", cb22, today, 22 * BotLogic.DAY_MS),
+                BotLogic.notifyText("cb", new GymData(), today, 8 * BotLogic.DAY_MS)
+            };
+            for (String t : nudges) {
+                check(t.length() >= 60 && t.length() <= 100,
+                    "notify: надж в коридоре 60–100, длина " + (t == null ? -1 : t.length()));
+                String low = t.toLowerCase();
+                check(!low.contains("пропал") && !low.contains("забросил") && !low.contains("сорвёш") && !low.contains("провал"),
+                    "notify: без слов вины/страха (§2.5)");
+            }
+
+            /* --- чек-ин по целям (§4.3): e1RM 80 кг × 6 = 96 — цифры примера спеки --- */
+            GymData gd = new GymData();
+            Workout gw = w("2026-11-05T10:00:00", "2026-11-05T11:00:00", true);
+            gw.date = "2026-11-05";
+            ex(gw, "Жим", new SetEntry("80", 3, "6"));
+            gd.workouts.add(gw);
+            Goal g1 = new Goal();
+            g1.id = 1; g1.type = 1; g1.exercise = "Жим"; g1.target = 100; g1.status = 1;
+            g1.end = "2026-12-31";
+            gd.goals.add(g1);
+            Goal g2 = new Goal();
+            g2.id = 2; g2.type = 2; g2.target = 12; g2.status = 1;
+            g2.start = "2026-11-01"; g2.end = "2026-11-30";
+            gd.goals.add(g2);
+            String goalText = BotLogic.notifyGoalText(gd, today);
+            check(goalText.startsWith("🎯 Чек-ин по целям"), "notify: чек-ин — заголовок");
+            check(goalText.contains("1. Жим — e1RM 100 кг"), "notify: силовая — заголовок цели");
+            check(goalText.contains("96 из 100 кг (96%). Осталось 4 кг, до 31.12 — 7 недель."),
+                "notify: силовая — прогресс и срок (e1RM 80×6=96)");
+            check(goalText.contains("2. 12 тренировок до 30.11"),
+                "notify: частота — заголовок со сроком (без недель, §4.3)");
+            check(goalText.contains("1 из 12 (8%). Нужно ещё 11, до 30.11 — 3 недели."),
+                "notify: частота — прогресс (1 завершённая в окне)");
+            check(goalText.endsWith("Маленький шаг на этой неделе — и ты ближе 💪"),
+                "notify: финальная строка — «ты» (решение 1 §17)");
+            check(BotLogic.notifyGoalText(new GymData(), today) == null,
+                "notify: нет активных целей — чек-ина нет (GOA §6.1)");
+
+            /* --- клавиатуры (§4.1–4.3): существующие флоу + отписка; «последнее» без 🔕 --- */
+            List<List<Map<String, Object>>> kUnf = logic.notifyKb("unf", unfData("2026-11-08"), today, m3d);
+            check(kUnf.size() == 2 && "wk:resume".equals(Json.str(kUnf.get(0).get(0), "callback_data"))
+                    && "ntf:offunf".equals(Json.str(kUnf.get(1).get(0), "callback_data")),
+                "notify: kb unf — Продолжить + отписка (wk:resume/ntf:offunf)");
+            check(kUnf.get(0).get(0).get("text").equals("▶️ Продолжить тренировку")
+                    && kUnf.get(1).get(0).get("text").equals("🔕 Не напоминать"),
+                "notify: kb unf — подписи кнопок дословно §4.1");
+            List<List<Map<String, Object>>> kCb8 = logic.notifyKb("cb", new GymData(), today, 8 * BotLogic.DAY_MS);
+            check(kCb8.size() == 2 && "menu:start".equals(Json.str(kCb8.get(0).get(0), "callback_data"))
+                    && "ntf:offcb".equals(Json.str(kCb8.get(1).get(0), "callback_data")),
+                "notify: kb cb день 7/14 — Начать + отписка");
+            List<List<Map<String, Object>>> kCb90 = logic.notifyKb("cb", new GymData(), today, 90 * BotLogic.DAY_MS);
+            check(kCb90.size() == 1 && "menu:start".equals(Json.str(kCb90.get(0).get(0), "callback_data")),
+                "notify: kb «последнее» (≥21) — без отписки (§4.2)");
+            /* ревью PR #417: граница отписки — закрывающая ступень лестницы, не константа 21:
+               cadence=1 день 21 — НЕ последнее, отписка на месте (§2.4 под каждым сообщением) */
+            List<List<Map<String, Object>>> kCbC21 = logic.notifyKb("cb", cbC21, today, 21 * BotLogic.DAY_MS);
+            check(kCbC21.size() == 2 && "menu:start".equals(Json.str(kCbC21.get(0).get(0), "callback_data"))
+                    && "ntf:offcb".equals(Json.str(kCbC21.get(1).get(0), "callback_data")),
+                "notify: kb cadence=1 день 21 — Начать + отписка (сообщение ещё будет)");
+            List<List<Map<String, Object>>> kCbC28 = logic.notifyKb("cb", cbC28, today, 28 * BotLogic.DAY_MS);
+            check(kCbC28.size() == 1 && "menu:start".equals(Json.str(kCbC28.get(0).get(0), "callback_data")),
+                "notify: kb cadence=1 день 28 — «последнее» без отписки");
+            List<List<Map<String, Object>>> kGoal = logic.notifyKb("goal", gd, today, m3d);
+            check(kGoal.size() == 1 && "ntf:offgoal".equals(Json.str(kGoal.get(0).get(0), "callback_data")),
+                "notify: kb goal без webAppUrl/appLink — только отписка (ряда приложения нет, §4.4)");
+            Map<?, ?> wab = (Map<?, ?>) TelegramApi.webAppButton("📱 Открыть приложение", "https://app.example").get("web_app");
+            check(wab != null && "https://app.example".equals(wab.get("url")),
+                "notify: webAppButton — web_app-клавиша с url (§8)");
+
+            /* --- /notify экран (§4.7): команда, тоглы, цикл времени, мастер --- */
+            storage.save(chat, gd);
+            logic.handle(msgUpdate(chat, "/notify"));
+            check(api.last().startsWith("🔔 <b>Напоминания</b>")
+                    && api.last().contains("• Незавершённая тренировка — вкл")
+                    && api.last().contains("• Чек-ин по целям (вс) — вкл")
+                    && api.last().contains("Когда напоминать: <b>днём</b> (UTC+3)"),
+                "notify: /notify — экран §4.7 (дефолты вкл, днём)");
+            logic.handle(cbUpdate(chat, 55, "ntf:unf"));
+            check(storage.load(chat).notifyUnfinished == Boolean.FALSE
+                    && api.last().contains("• Незавершённая тренировка — выкл"),
+                "notify: тап ntf:unf — поле выключено, экран перерисовался");
+            logic.handle(cbUpdate(chat, 55, "ntf:unf"));
+            check(storage.load(chat).notifyUnfinished == Boolean.TRUE,
+                "notify: повторный тап — возврат (null/true = вкл, §12.1)");
+            logic.handle(cbUpdate(chat, 55, "ntf:when"));
+            check(storage.load(chat).notifyWhen != null && storage.load(chat).notifyWhen == 3
+                    && api.last().contains("Когда напоминать: <b>вечером</b> (UTC+3)"),
+                "notify: ntf:when — цикл днём→вечером (§4.7)");
+            logic.handle(cbUpdate(chat, 55, "ntf:master"));
+            List<List<Map<String, Object>>> lastKb = api.editKbs.get(api.editKbs.size() - 1);
+            check(storage.load(chat).notifyMaster == Boolean.FALSE
+                    && "🔔 Включить всё".equals(lastKb.get(0).get(0).get("text")),
+                "notify: мастер выкл — строка 1 становится «Включить всё»");
+            logic.handle(cbUpdate(chat, 55, "ntf:master"));
+            check(storage.load(chat).notifyMaster == Boolean.TRUE,
+                "notify: мастер вернул — true пишется явно (§12.1)");
+
+            /* --- отписка в один тап (§4.6): поле, снятие кнопок, ответ --- */
+            GymData offData = storage.load(chat);
+            offData.notifyStage = 2;
+            offData.notifyLog.add(new NotifyMark(BotLogic.notifyToday().toString(), "unf"));
+            storage.save(chat, offData);
+            logic.handle(cbUpdate(chat, 55, "ntf:offcb"));
+            GymData afterOff = storage.load(chat);
+            check(afterOff.notifyComeback == Boolean.FALSE && afterOff.notifyStage != null && afterOff.notifyStage == 2,
+                "notify: отписка cb — поле false, книга не тронута");
+            check(api.any("[removed-kb:55]") && api.any("Хорошо, про это больше не пишу 👌")
+                    && api.any("Вернуть: /notify или в приложении — ⚙️ Настройки → Уведомления."),
+                "notify: отписка — кнопки сняты, ответ §4.6");
+            logic.handle(cbUpdate(chat, 56, "digest:off"));
+            check(storage.load(chat).notifyDigest == Boolean.FALSE
+                    && api.any("Хорошо, итоги недели больше не приходят 👌")
+                    && api.any("Вернуть: /digest — покажу последнюю сводку и включу отправку."),
+                "notify: digest:off — текст ANA-S2 (§4.6)");
+            logic.handle(cbUpdate(chat, 57, "ntf:offgoal"));
+            check(storage.load(chat).goalRemind == Boolean.FALSE,
+                "notify: offgoal — пишет СУЩЕСТВУЮЩЕЕ поле goalRemind (§7)");
+
+            /* --- финиш: строка «первая», книга, reacted, сброс лестницы (§10/§13/§5.3) --- */
+            java.nio.file.Path tmp2 = java.nio.file.Files.createTempDirectory("gymnotifyfin");
+            Storage storage2 = new Storage(tmp2);
+            Stats st2 = new Stats(tmp2.resolve("stats.json"));
+            FakeApi api2 = new FakeApi();
+            BotLogic logic2 = new BotLogic(api2, storage2, null, null, 0, st2);
+            long chat2 = 9043;
+            GymData fin = new GymData();
+            Workout act = w(null, null, false);
+            act.id = 9;
+            ex(act, "Жим", new SetEntry("60", 3, "10"));
+            fin.workouts.add(act);
+            fin.notifyStage = 2;
+            fin.notifyLog.add(new NotifyMark(BotLogic.notifyToday().toString(), "unf"));
+            storage2.save(chat2, fin);
+            logic2.handle(cbUpdate(chat2, 66, "wk:finish"));
+            GymData finAfter = storage2.load(chat2);
+            check(api2.last().contains("🏅 Первая тренировка в дневнике — с неё всё начинается. Дальше легче 💪"),
+                "notify: финиш первой — строка §4.5 в сообщении завершения");
+            check(finAfter.firstDone == Boolean.TRUE && finAfter.workouts.get(0).finished,
+                "notify: финиш первой — firstDone в книге, тренировка завершена");
+            check(finAfter.notifyStage != null && finAfter.notifyStage == 0,
+                "notify: новая завершённая обнуляет лестницу (§5.3)");
+            check(Json.lng(st2.snapshot().get("notifyReactedUnf")) == 1,
+                "notify: reacted — завершение в сутки после наджа unf (§13)");
+            /* вторая тренировка не «первая»: firstDone=true — строки нет */
+            GymData fin2 = storage2.load(chat2);
+            Workout act2 = w(null, null, false);
+            act2.id = 10;
+            ex(act2, "Присед", new SetEntry("80", 3, "8"));
+            fin2.workouts.add(act2);
+            storage2.save(chat2, fin2);
+            logic2.handle(cbUpdate(chat2, 66, "wk:finish"));
+            check(api2.last().startsWith("🎉 Тренировка завершена!") && !api2.last().contains("🏅 Первая"),
+                "notify: вторая тренировка — без строки «первая»");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: notify-bot-сценарий " + e);
+        }
+    }
+
+    /* [UX-T54] дайджест недели: 2026-11-16 (Пн) — прошедшая неделя 9–15 ноября ровно
+       как в примере §4.4: 4 тренировки по 55 мин, тоннаж 6,3 т (+0,8 к прошлой),
+       рекорд Жим лёжа 83 кг (▲ +2), профиль → ккал; финал по числу тренировок;
+       «первая» тиком (§4.5); /digest-экран с тоглом */
+    static void runDigestScenario() {
+        LocalDate today = LocalDate.of(2026, 11, 16); /* Пн: неделя 9–15 ноября */
+        try {
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymdigest");
+            Storage storage = new Storage(tmp);
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0);
+            long chat = 9044;
+
+            GymData d = new GymData();
+            d.cadence = 3;
+            d.profile = new ProfileData();
+            d.profile.sex = "м";
+            d.profile.height = 190;
+            d.profile.weight = 95;
+            /* базовая неделя (2–8 ноября): Жим 54×10×10 = 5400 + Жим лёжа 78×1 (e1RM ≈ 80,6) */
+            Workout prev = w("2026-11-03T10:00:00", "2026-11-03T10:55:00", true);
+            prev.date = "2026-11-03";
+            ex(prev, "Жим", new SetEntry("54", 10, "10"));
+            ex(prev, "Жим лёжа", new SetEntry("78", 1, "1"));
+            d.workouts.add(prev);
+            /* неделя: 4 тренировки по 55 мин, Жим 62×5×5 = 1550 → 6,2 т + Жим лёжа 80×1 */
+            String[] dates = {"2026-11-09", "2026-11-10", "2026-11-12", "2026-11-14"};
+            for (int i = 0; i < dates.length; i++) {
+                Workout wk = w(dates[i] + "T10:00:00", dates[i] + "T10:55:00", true);
+                wk.date = dates[i];
+                ex(wk, "Жим", new SetEntry("62", 5, "5"));
+                if (i == 3) ex(wk, "Жим лёжа", new SetEntry("80", 1, "1"));
+                d.workouts.add(wk);
+            }
+            String t = BotLogic.digestText(d, today);
+            check(t.startsWith("📊 <b>Итоги недели</b> · 9–15 ноября"), "digest: заголовок с датами недели");
+            check(t.contains("🏋️ Тренировки: <b>4</b> · в зале 3 ч 40 мин · план 3/нед"),
+                "digest: тренировки/время/план (cadence=3, §4.4)");
+            check(t.contains("⚖️ Тоннаж: <b>6,3 т</b> · ▲ +0,8 т к прошлой"),
+                "digest: тоннаж с дельтой к прошлой неделе");
+            check(t.contains("🔥 Ккал: <b>≈ 1 280</b>"), "digest: ккал с профилем (группировка разрядов)");
+            check(t.contains("🏆 <b>Рекорды недели:</b>") && t.contains("• Жим лёжа — 1ПМ ≈ <b>83 кг</b> (▲ +2)"),
+                "digest: рекорд недели e1RM с дельтой");
+            check(!t.contains("(▲ +0)"), "digest: прирост, не переживший округления, — не рекорд");
+            check(t.contains("Хорошая неделя. Так держать 💪"), "digest: финал 3–4 тренировки (решение 4 §17)");
+            check(!t.contains("• Жим —"), "digest: упражнение с весом не дублируется строкой объёма");
+
+            /* секции опускаются: без профиля нет ккал, без весов нет тоннажа */
+            GymData dNoProf = new GymData();
+            for (Workout wk : d.workouts) dNoProf.workouts.add(wk);
+            dNoProf.cadence = null;
+            String t2 = BotLogic.digestText(dNoProf, today);
+            check(!t2.contains("Ккал") && !t2.contains("план"), "digest: без профиля/cadence — строк нет");
+            GymData dNoW = new GymData();
+            for (int i = 0; i < 2; i++) {
+                Workout wk = w(dates[i] + "T10:00:00", dates[i] + "T10:30:00", true);
+                wk.date = dates[i];
+                ex(wk, "Отжимания", new SetEntry("", 4, "20"));
+                dNoW.workouts.add(wk);
+            }
+            String t3 = BotLogic.digestText(dNoW, today);
+            check(!t3.contains("Тоннаж") && t3.contains("Неделя в работу — каждая тренировка на счету 💪"),
+                "digest: без весов — без тоннажа; финал 1–2 тренировки");
+            check(BotLogic.digestText(new GymData(), today) == null,
+                "digest: 0 завершённых за неделю — null (E1: молчим)");
+
+            /* объёмный рекорд без веса: 60 → 70 повторений за тренировку */
+            GymData dVol = new GymData();
+            Workout v1 = w("2026-11-03T10:00:00", "2026-11-03T10:20:00", true);
+            v1.date = "2026-11-03";
+            ex(v1, "Отжимания", new SetEntry("", 3, "20"));
+            dVol.workouts.add(v1);
+            Workout v2 = w("2026-11-10T10:00:00", "2026-11-10T10:20:00", true);
+            v2.date = "2026-11-10";
+            ex(v2, "Отжимания", new SetEntry("", 7, "10"));
+            dVol.workouts.add(v2);
+            String t4 = BotLogic.digestText(dVol, today);
+            check(t4.contains("• Отжимания — <b>70</b> повторений (▲ +10)"),
+                "digest: рекорд объёма для упражнения без веса (§8)");
+
+            /* первая тренировка тиком (§4.5): текст, без клавиатуры */
+            GymData f = new GymData();
+            Workout fw = w("2026-11-15T10:00:00", "2026-11-15T11:00:00", true);
+            fw.date = "2026-11-15";
+            f.workouts.add(fw);
+            check(BotLogic.notifyText("first", f, today, 0).equals(
+                    "🎉 <b>Первая тренировка в дневнике!</b>\n\nС неё всё начинается. Дальше — легче: история, рекорды и прогресс копятся сами 💪"),
+                "digest: текст «первая тренировка» тика дословно §4.5");
+            List<List<Map<String, Object>>> kFirst = logic.notifyKb("first", f, today, 0);
+            check(kFirst == null, "digest: «первая» — без клавиатуры (§4.5)");
+
+            /* /digest-экран: краткая строка + тогл (ANA-S2 §2в); точная строка —
+               статически с фиксированной датой, команда — состояние (дата реальная) */
+            check(BotLogic.digestScreenText(d, today).startsWith(
+                    "За прошлую неделю (9–15 ноября): 4 тренировки, тоннаж 6,3 т, ккал ≈ 1 280.")
+                && BotLogic.digestScreenText(d, today).contains("Сводки недели: 🔔 включены."),
+                "digest: экран — краткая строка и состояние (§2в ANA-S2)");
+            storage.save(chat, d);
+            logic.handle(msgUpdate(chat, "/digest"));
+            check(api.last().startsWith("За прошлую неделю (") && api.last().contains("Сводки недели: 🔔 включены."),
+                "digest: /digest — команда отвечает экраном");
+            logic.handle(cbUpdate(chat, 55, "digest:onoff"));
+            check(storage.load(chat).notifyDigest == Boolean.FALSE
+                    && api.last().contains("Сводки недели: 🔕 выключены."),
+                "digest: тогл экрана выключает и перерисовывает");
+            logic.handle(cbUpdate(chat, 55, "digest:onoff"));
+            check(storage.load(chat).notifyDigest == Boolean.TRUE, "digest: возврат отправки — true явно");
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: digest-сценарий " + e);
+        }
+    }
+
+    /* [UX-S19] цикл часового тика (§6, добор по ревью PR #417): decideNotify/notifyMark/
+       notifyText покрыты как чистые функции — здесь сам цикл load → решить →
+       отправить → книга → fresh-copy save. Триггер — «first» (событие §10: окна,
+       тихие часы и мастер-тогл не проверяются) — сценарий детерминирован в любое
+       время суток и день недели. Приватный notifyTick вызывается рефлексией —
+       продукт после ревью не трогаем (прецедент — wrapRecTitle в GymContractTest). */
+    static void runNotifyTickScenario() {
+        LocalDate today = BotLogic.notifyToday();
+        try {
+            java.lang.reflect.Method tick = BotLogic.class.getDeclaredMethod("notifyTick");
+            tick.setAccessible(true);
+
+            /* --- §6.3: ошибка Telegram (403/parse) — файл юзера НЕ пишется, лимит дня
+                НЕ съеден (книга пуста), счётчик не растёт: повтор со следующего тика --- */
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymnotifytick");
+            Storage storage = new Storage(tmp);
+            Stats st = new Stats(tmp.resolve("stats.json"));
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0, st);
+            long chat = 9045;
+            GymData fin = new GymData();
+            Workout first = w("2026-11-09T10:00:00", "2026-11-09T11:00:00", true);
+            first.date = today.toString();
+            first.id = 11;
+            ex(first, "Жим", new SetEntry("60", 3, "10"));
+            fin.workouts.add(first);
+            storage.save(chat, fin);
+            api.failResult = "Forbidden: bot was blocked by the user";
+            long mtimeBefore = storage.dataFileMtime(chat);
+            tick.invoke(logic);
+            check(api.any("Первая тренировка в дневнике!"),
+                "notifyTick: попытка отправки была (текст §4.5 ушёл в Api)");
+            check(storage.dataFileMtime(chat) == mtimeBefore,
+                "notifyTick: ошибка Telegram — файл юзера не пишется (§6.3)");
+            GymData after = storage.load(chat);
+            check(after.firstDone == null && after.notifyLog.isEmpty(),
+                "notifyTick: ошибка Telegram — лимит дня не съеден, книга пуста (§6.3)");
+            check("first".equals(BotLogic.decideNotify(after, today, BotLogic.notifyNow(),
+                    today.getDayOfWeek().getValue(), 0)),
+                "notifyTick: после ошибки повтор разрешён — следующий тик снова шлёт (§6.3)");
+            check(Json.lng(st.snapshot().get("notifySentFirst")) == 0,
+                "notifyTick: ошибка Telegram — счётчик notifySentFirst не растёт (§6.3)");
+
+            /* --- §6.5: гонка с записью из Mini App — юзер сохранил тренировку между
+                load и save тика (HTTP-отправка, сотни мс): слепой save затёр бы правку
+                (lost update); тик обязан перечитать файл и применить к свежей копии
+                ТОЛЬКО книжечные поля (notifyLog/notifyStage/notifyLastWid/firstDone) --- */
+            java.nio.file.Path tmp2 = java.nio.file.Files.createTempDirectory("gymnotifyrace");
+            final Storage storage2 = new Storage(tmp2);
+            long chat2 = 9046;
+            GymData fin2 = new GymData();
+            Workout first2 = w("2026-11-09T10:00:00", "2026-11-09T11:00:00", true);
+            first2.date = today.toString();
+            first2.id = 11;
+            ex(first2, "Жим", new SetEntry("60", 3, "10"));
+            fin2.workouts.add(first2);
+            storage2.save(chat2, fin2);
+            /* «конкурентное» сохранение из Mini App внутри HTTP-отправки (перехватчик
+               FakeApi): юзер стартует новую тренировку между load и save тика (§6.5) */
+            FakeApi raceApi = new FakeApi();
+            raceApi.sendInterceptor = () -> {
+                GymData user = storage2.load(chat2);
+                Workout started = w(null, null, false);
+                started.id = 7;
+                started.date = today.toString();
+                ex(started, "Присед", new SetEntry("80", 3, "8"));
+                user.workouts.add(started);
+                user.restSec = 42; /* настройка юзера — не книга, обязана выжить */
+                storage2.save(chat2, user);
+            };
+            Stats st2 = new Stats(tmp2.resolve("stats.json"));
+            BotLogic raceLogic = new BotLogic(raceApi, storage2, null, null, 0, st2);
+            tick.invoke(raceLogic);
+            GymData raced = storage2.load(chat2);
+            check(raced.workouts.size() == 2 && raced.workouts.get(1).id == 7
+                    && !raced.workouts.get(1).finished
+                    && "Присед".equals(raced.workouts.get(1).exercises.get(0).name),
+                "notifyTick: конкурентная тренировка юзера не затёрта (fresh copy §6.5)");
+            check(raced.restSec != null && raced.restSec == 42,
+                "notifyTick: настройка юзера (restSec) пережила тик (§6.5)");
+            check(Boolean.TRUE.equals(raced.firstDone) && raced.notifyLog.size() == 1
+                    && today.toString().equals(raced.notifyLog.get(0).d)
+                    && "first".equals(raced.notifyLog.get(0).t),
+                "notifyTick: книга (firstDone + отметка first) доехала поверх свежей копии (§6.5)");
+            check(Json.lng(st2.snapshot().get("notifySentFirst")) == 1,
+                "notifyTick: счётчик notifySentFirst вырос при успешной отправке (§13)");
+
+            /* --- §2.7/§6.2: отправлять нечего — файл не пишется, сообщения не уходят --- */
+            long m2 = storage2.dataFileMtime(chat2);
+            int sent = raceApi.texts.size();
+            tick.invoke(raceLogic);
+            check(raceApi.texts.size() == sent && storage2.dataFileMtime(chat2) == m2,
+                "notifyTick: без отправки файл не пишется и сообщения не уходят (§2.7)");
+
+            /* --- §6.1/§6.4: notify-тик на СВОЁМ daemon-потоке «notify-ticker», отдельно
+                от rest-timer — часовой обход с HTTP-отправками не подвешивает тик
+                таймера отдыха (ядро решения «свой поток обязателен» §6.1) --- */
+            java.lang.reflect.Field fNotify = BotLogic.class.getDeclaredField("notifyScheduler");
+            java.lang.reflect.Field fRest = BotLogic.class.getDeclaredField("restScheduler");
+            fNotify.setAccessible(true);
+            fRest.setAccessible(true);
+            java.util.concurrent.ScheduledExecutorService ns =
+                (java.util.concurrent.ScheduledExecutorService) fNotify.get(raceLogic);
+            java.util.concurrent.ScheduledExecutorService rs =
+                (java.util.concurrent.ScheduledExecutorService) fRest.get(raceLogic);
+            check(ns != null && ns != rs, "notify: планировщик notify отдельный от rest (§6.1)");
+            final String[] names = new String[2];
+            ns.submit(() -> { names[0] = Thread.currentThread().getName() + ":" + Thread.currentThread().isDaemon(); });
+            rs.submit(() -> { names[1] = Thread.currentThread().getName() + ":" + Thread.currentThread().isDaemon(); });
+            java.util.concurrent.TimeUnit.SECONDS.sleep(1);
+            check("notify-ticker:true".equals(names[0]) && "rest-timer:true".equals(names[1]),
+                "notify: тики на daemon-потоках notify-ticker/rest-timer (§6.1/§6.4)");
+            /* занятый notify-поток (сетевой тайма-аут Telegram) не блокирует rest-тик */
+            java.util.concurrent.CountDownLatch block = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.CountDownLatch restDone = new java.util.concurrent.CountDownLatch(1);
+            ns.submit(() -> { try { block.await(); } catch (InterruptedException e) { } });
+            rs.submit(restDone::countDown);
+            check(restDone.await(2, java.util.concurrent.TimeUnit.SECONDS),
+                "notify: занятый notify-поток не блокирует rest-тик (§6.4)");
+            block.countDown();
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: notify-tick-сценарий " + e);
+        }
+    }
+
+    static GymData unfData(String date) {
+        GymData d = new GymData();
+        Workout wk = hang2();
+        wk.date = date;
+        d.workouts.add(wk);
+        return d;
+    }
+
+    /* воскресный юзер с активной силовой целью (для goal) */
+    @SuppressWarnings("unchecked")
+    static GymData goalData() {
+        return GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":2,\"goals\":[{\"id\":1,\"type\":1,\"ex\":\"Жим\",\"target\":100,\"status\":1,\"doneDate\":\"\",\"doneValue\":0}],\"workouts\":[]}"));
+    }
+
+    /* понедельник: одна завершённая на прошлой ISO-недели (02–08.11), id 3 (для dg);
+       firstDone=true — единственная завершённая «та самая первая», без этого dg-кейс
+       перехватывает событие [first] (приоритет §3) */
+    @SuppressWarnings("unchecked")
+    static GymData dgData() {
+        return GymData.fromJson((Map<String, Object>) Json.parse(
+            "{\"nextId\":4,\"firstDone\":true,\"workouts\":[{\"id\":3,\"date\":\"2026-11-05\",\"finished\":true,\"exercises\":[]}]}"));
     }
 
     /* данные с массивом templates (запятая между шаблонами в вызове) */
