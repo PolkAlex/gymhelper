@@ -412,6 +412,13 @@ public class BotLogicTest {
             рекорды) + «первая тренировка» тиком + /digest === */
         runDigestScenario();
 
+        /* === 22. [UX-S19] цикл тика notifyTick (добор по ревью PR #417, §6): ошибка
+            Telegram — файл не пишется, лимит дня не съеден (§6.3); гонка fresh-copy —
+            правка юзера из Mini App не затирается, книга доезжает (§6.5); без
+            отправки файл не пишется (§2.7); notify-тик на своём daemon-потоке
+            отдельно от rest-timer (§6.1/§6.4) === */
+        runNotifyTickScenario();
+
         System.out.println("UNIT OK");
         System.exit(0);
     }
@@ -437,6 +444,10 @@ public class BotLogicTest {
         /* [ONB-T8] ненулевое значение — sendMessageResult «падает» с этой ошибкой
            (тест отказа доставки: режим остаётся, счётчик не растёт) */
         String failResult;
+        /* [UX-S19] хук «конкурентного» сохранения из Mini App в момент HTTP-отправки
+           (гонка §6.5): тик грузит данные ДО отправки — перехватчик пишет файл юзера
+           между load тика и его save (окно lost update); null = обычное поведение */
+        Runnable sendInterceptor;
         /* [UX-T33] вызовы sendMessageWithKeyboard: унаследованная реализация ходит в сеть
            (postSilent), поэтому переопределяем — фиксируем chat_id/текст/reply_markup */
         final List<Long> kbChats = new ArrayList<>();
@@ -494,6 +505,7 @@ public class BotLogicTest {
 
         @Override
         public String sendMessageResult(long chatId, String text, List<List<Map<String, Object>>> keyboard) {
+            if (sendInterceptor != null) sendInterceptor.run(); /* [UX-S19] гонка §6.5 */
             sentChats.add(chatId);
             texts.add(text);
             kbSent.add(keyboard);
@@ -1833,6 +1845,131 @@ public class BotLogicTest {
             check(storage.load(chat).notifyDigest == Boolean.TRUE, "digest: возврат отправки — true явно");
         } catch (Exception e) {
             throw new AssertionError("UNIT FAIL: digest-сценарий " + e);
+        }
+    }
+
+    /* [UX-S19] цикл часового тика (§6, добор по ревью PR #417): decideNotify/notifyMark/
+       notifyText покрыты как чистые функции — здесь сам цикл load → решить →
+       отправить → книга → fresh-copy save. Триггер — «first» (событие §10: окна,
+       тихие часы и мастер-тогл не проверяются) — сценарий детерминирован в любое
+       время суток и день недели. Приватный notifyTick вызывается рефлексией —
+       продукт после ревью не трогаем (прецедент — wrapRecTitle в GymContractTest). */
+    static void runNotifyTickScenario() {
+        LocalDate today = BotLogic.notifyToday();
+        try {
+            java.lang.reflect.Method tick = BotLogic.class.getDeclaredMethod("notifyTick");
+            tick.setAccessible(true);
+
+            /* --- §6.3: ошибка Telegram (403/parse) — файл юзера НЕ пишется, лимит дня
+                НЕ съеден (книга пуста), счётчик не растёт: повтор со следующего тика --- */
+            java.nio.file.Path tmp = java.nio.file.Files.createTempDirectory("gymnotifytick");
+            Storage storage = new Storage(tmp);
+            Stats st = new Stats(tmp.resolve("stats.json"));
+            FakeApi api = new FakeApi();
+            BotLogic logic = new BotLogic(api, storage, null, null, 0, st);
+            long chat = 9045;
+            GymData fin = new GymData();
+            Workout first = w("2026-11-09T10:00:00", "2026-11-09T11:00:00", true);
+            first.date = today.toString();
+            first.id = 11;
+            ex(first, "Жим", new SetEntry("60", 3, "10"));
+            fin.workouts.add(first);
+            storage.save(chat, fin);
+            api.failResult = "Forbidden: bot was blocked by the user";
+            long mtimeBefore = storage.dataFileMtime(chat);
+            tick.invoke(logic);
+            check(api.any("Первая тренировка в дневнике!"),
+                "notifyTick: попытка отправки была (текст §4.5 ушёл в Api)");
+            check(storage.dataFileMtime(chat) == mtimeBefore,
+                "notifyTick: ошибка Telegram — файл юзера не пишется (§6.3)");
+            GymData after = storage.load(chat);
+            check(after.firstDone == null && after.notifyLog.isEmpty(),
+                "notifyTick: ошибка Telegram — лимит дня не съеден, книга пуста (§6.3)");
+            check("first".equals(BotLogic.decideNotify(after, today, BotLogic.notifyNow(),
+                    today.getDayOfWeek().getValue(), 0)),
+                "notifyTick: после ошибки повтор разрешён — следующий тик снова шлёт (§6.3)");
+            check(Json.lng(st.snapshot().get("notifySentFirst")) == 0,
+                "notifyTick: ошибка Telegram — счётчик notifySentFirst не растёт (§6.3)");
+
+            /* --- §6.5: гонка с записью из Mini App — юзер сохранил тренировку между
+                load и save тика (HTTP-отправка, сотни мс): слепой save затёр бы правку
+                (lost update); тик обязан перечитать файл и применить к свежей копии
+                ТОЛЬКО книжечные поля (notifyLog/notifyStage/notifyLastWid/firstDone) --- */
+            java.nio.file.Path tmp2 = java.nio.file.Files.createTempDirectory("gymnotifyrace");
+            final Storage storage2 = new Storage(tmp2);
+            long chat2 = 9046;
+            GymData fin2 = new GymData();
+            Workout first2 = w("2026-11-09T10:00:00", "2026-11-09T11:00:00", true);
+            first2.date = today.toString();
+            first2.id = 11;
+            ex(first2, "Жим", new SetEntry("60", 3, "10"));
+            fin2.workouts.add(first2);
+            storage2.save(chat2, fin2);
+            /* «конкурентное» сохранение из Mini App внутри HTTP-отправки (перехватчик
+               FakeApi): юзер стартует новую тренировку между load и save тика (§6.5) */
+            FakeApi raceApi = new FakeApi();
+            raceApi.sendInterceptor = () -> {
+                GymData user = storage2.load(chat2);
+                Workout started = w(null, null, false);
+                started.id = 7;
+                started.date = today.toString();
+                ex(started, "Присед", new SetEntry("80", 3, "8"));
+                user.workouts.add(started);
+                user.restSec = 42; /* настройка юзера — не книга, обязана выжить */
+                storage2.save(chat2, user);
+            };
+            Stats st2 = new Stats(tmp2.resolve("stats.json"));
+            BotLogic raceLogic = new BotLogic(raceApi, storage2, null, null, 0, st2);
+            tick.invoke(raceLogic);
+            GymData raced = storage2.load(chat2);
+            check(raced.workouts.size() == 2 && raced.workouts.get(1).id == 7
+                    && !raced.workouts.get(1).finished
+                    && "Присед".equals(raced.workouts.get(1).exercises.get(0).name),
+                "notifyTick: конкурентная тренировка юзера не затёрта (fresh copy §6.5)");
+            check(raced.restSec != null && raced.restSec == 42,
+                "notifyTick: настройка юзера (restSec) пережила тик (§6.5)");
+            check(Boolean.TRUE.equals(raced.firstDone) && raced.notifyLog.size() == 1
+                    && today.toString().equals(raced.notifyLog.get(0).d)
+                    && "first".equals(raced.notifyLog.get(0).t),
+                "notifyTick: книга (firstDone + отметка first) доехала поверх свежей копии (§6.5)");
+            check(Json.lng(st2.snapshot().get("notifySentFirst")) == 1,
+                "notifyTick: счётчик notifySentFirst вырос при успешной отправке (§13)");
+
+            /* --- §2.7/§6.2: отправлять нечего — файл не пишется, сообщения не уходят --- */
+            long m2 = storage2.dataFileMtime(chat2);
+            int sent = raceApi.texts.size();
+            tick.invoke(raceLogic);
+            check(raceApi.texts.size() == sent && storage2.dataFileMtime(chat2) == m2,
+                "notifyTick: без отправки файл не пишется и сообщения не уходят (§2.7)");
+
+            /* --- §6.1/§6.4: notify-тик на СВОЁМ daemon-потоке «notify-ticker», отдельно
+                от rest-timer — часовой обход с HTTP-отправками не подвешивает тик
+                таймера отдыха (ядро решения «свой поток обязателен» §6.1) --- */
+            java.lang.reflect.Field fNotify = BotLogic.class.getDeclaredField("notifyScheduler");
+            java.lang.reflect.Field fRest = BotLogic.class.getDeclaredField("restScheduler");
+            fNotify.setAccessible(true);
+            fRest.setAccessible(true);
+            java.util.concurrent.ScheduledExecutorService ns =
+                (java.util.concurrent.ScheduledExecutorService) fNotify.get(raceLogic);
+            java.util.concurrent.ScheduledExecutorService rs =
+                (java.util.concurrent.ScheduledExecutorService) fRest.get(raceLogic);
+            check(ns != null && ns != rs, "notify: планировщик notify отдельный от rest (§6.1)");
+            final String[] names = new String[2];
+            ns.submit(() -> { names[0] = Thread.currentThread().getName() + ":" + Thread.currentThread().isDaemon(); });
+            rs.submit(() -> { names[1] = Thread.currentThread().getName() + ":" + Thread.currentThread().isDaemon(); });
+            java.util.concurrent.TimeUnit.SECONDS.sleep(1);
+            check("notify-ticker:true".equals(names[0]) && "rest-timer:true".equals(names[1]),
+                "notify: тики на daemon-потоках notify-ticker/rest-timer (§6.1/§6.4)");
+            /* занятый notify-поток (сетевой тайма-аут Telegram) не блокирует rest-тик */
+            java.util.concurrent.CountDownLatch block = new java.util.concurrent.CountDownLatch(1);
+            java.util.concurrent.CountDownLatch restDone = new java.util.concurrent.CountDownLatch(1);
+            ns.submit(() -> { try { block.await(); } catch (InterruptedException e) { } });
+            rs.submit(restDone::countDown);
+            check(restDone.await(2, java.util.concurrent.TimeUnit.SECONDS),
+                "notify: занятый notify-поток не блокирует rest-тик (§6.4)");
+            block.countDown();
+        } catch (Exception e) {
+            throw new AssertionError("UNIT FAIL: notify-tick-сценарий " + e);
         }
     }
 

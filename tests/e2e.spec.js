@@ -8442,4 +8442,32 @@ test.describe('[UX-S19] возврат', function () {
         await page.locator('.backbar [data-act="finishWorkout"]').click();
         await expect(page.locator('.toast.show')).toHaveText('🏅 Первая тренировка в дневнике!', { timeout: 8000 });
     });
+
+    /* [UX-T54/§10] приоритет тостов при завершении: цель > первая > обычный финиш
+       (§4.5): частотная цель закрывается ровно в finishWorkout — при пустом дневнике
+       и активной цели «1 тренировка» показывается тост цели, медаль «первой» скрыта */
+    test('[UX-T54] тост финиша: цель важнее «первой тренировки»', async ({ page, request }) => {
+        const day = isoDate(new Date());
+        await request.post('/api/save', { data: { initData: '', rev: 1, data: {
+            rev: 1, nextId: 2, del: [], workouts: [],
+            goals: [{ id: 1, type: 2, target: 1, start: day, end: '2030-01-07', status: 1, doneDate: '', doneValue: 0 }]
+        } } });
+        await openApp(page);
+        await startAndPick(page, EX);
+        await page.locator('#mWeight').fill('60');
+        await page.locator('#mSets').fill('3');
+        await page.locator('#mReps').fill('10');
+        await page.locator('[data-act="saveEntry"]').click();
+        await expect(page.locator('.modal.open')).not.toBeVisible({ timeout: 5000 });
+        await openActiveDetail(page);
+        await page.locator('.backbar [data-act="finishWorkout"]').click();
+        /* цель закрылась на завершении (1 из 1) — её тост, НЕ медаль первой */
+        await expect(page.locator('.toast.show')).toHaveText(/Цель достигнута! 1 тренировка/, { timeout: 8000 });
+        const tt = await page.locator('.toast.show').textContent();
+        if (tt.includes('Первая тренировка')) throw new Error('тост «первой» не должен перекрывать тост цели: ' + tt);
+        /* цель в архиве (status 2), тренировка завершена на сервере */
+        const st = await (await request.get('/api/state')).json();
+        if (!st.goals || !st.goals[0] || st.goals[0].status !== 2) throw new Error('цель не закрыта: ' + JSON.stringify(st.goals && st.goals[0]));
+        if (!(st.workouts || []).some(function (w) { return w.finished; })) throw new Error('тренировка не завершена на сервере');
+    });
 });
