@@ -2,16 +2,21 @@ package gym;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.WeekFields;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -45,6 +50,14 @@ public final class BotLogic {
     private static final LocalTime SUMMARY_TIME = LocalTime.of(9, 0);
     private static final long SUMMARY_RETRY_MS = 30 * 60 * 1000L;
     private static final String PRIVACY_URL = "https://gym-helper.com/privacy.html";
+    /* [UX-S19] якорь часов планировщика возврата: System.currentTimeMillis() +
+       GYM_NOTIFY_TZ_MIN (минуты; дефолт 180 = UTC+3) — независимо от TZ сервера/контейнера,
+       без DST (§5.1). Пользовательские строки с зоной называются «UTC+3» — при смене
+       якоря тексты обновить синхронно (решение 3 §17). Период тика: 3600 с в проде,
+       GYM_NOTIFY_EVERY_SEC ускоряет отладку на тестовом боте (§14); минимум 60 с */
+    static final int NOTIFY_TZ_MIN = envInt("GYM_NOTIFY_TZ_MIN", 180);
+    static final int NOTIFY_PERIOD_SEC = Math.max(60, envInt("GYM_NOTIFY_EVERY_SEC", 3600));
+    static final long DAY_MS = 86400000L;
 
     private final TelegramApi api;
     private final Storage storage;
@@ -67,6 +80,10 @@ public final class BotLogic {
        память процесса — после рестарта пауза просто не учитывается, попытка одна */
     private volatile long lastSummaryAttempt;
     private final ScheduledExecutorService restScheduler;
+    /* [UX-S19] СВОЙ daemon-планировщик возврата: часовой обход всех data/*.json с
+       HTTP-отправками на общем restScheduler подвешивал бы тик таймера отдыха
+       на секунды (§6.1) */
+    private final ScheduledExecutorService notifyScheduler;
 
     public BotLogic(TelegramApi api, Storage storage, String webAppUrl, String appLink, long adminChatId) {
         this(api, storage, webAppUrl, appLink, adminChatId, null);
@@ -97,6 +114,14 @@ public final class BotLogic {
         if (ownerChatId > 0 && stats != null) {
             this.restScheduler.scheduleAtFixedRate(this::summaryTickSafe, 20, 60, TimeUnit.SECONDS);
         }
+        /* [UX-S19] тик возврата раз в час на отдельном daemon-планировщике (§6.1);
+            старт через 70 с — пропустить стартовый шум, разойтись со сводкой */
+        this.notifyScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "notify-ticker");
+            t.setDaemon(true);
+            return t;
+        });
+        this.notifyScheduler.scheduleAtFixedRate(this::notifyTickSafe, 70, NOTIFY_PERIOD_SEC, TimeUnit.SECONDS);
     }
 
     /* Сессия таймера одного чата — только в памяти (§2.9): после рестарта бота сообщение
@@ -371,6 +396,17 @@ public final class BotLogic {
             showRest(chatId, null, data, text);
             return;
         }
+        /* [UX-S19] экран напоминаний (§4.7): строго, как /rest — /notifyx не матчится */
+        if (low.equals("/notify") || low.startsWith("/notify ")) {
+            showNotifyScreen(chatId, null, data);
+            return;
+        }
+        /* [UX-T54] /digest (ANA-S2 §2в): ручной просмотр прошлой недели + возврат
+           отправки сводок; строго, как /rest — /digestx не матчится */
+        if (low.equals("/digest") || low.startsWith("/digest ")) {
+            showDigestScreen(chatId, null, data);
+            return;
+        }
         /* строго, как /rest: /templatesX не матчится (§2.7) */
         if (low.equals("/templates") || low.startsWith("/templates ")) {
             showTemplates(chatId, null, data, st);
@@ -501,6 +537,47 @@ public final class BotLogic {
                 }
             }
             case "rest:stop" -> restStop(chatId);
+            /* ===== [UX-S19] механика возврата: отписки в один тап (§4.6) и тоглы /notify (§4.7) ===== */
+            case "ntf:offunf" -> notifyOff(chatId, messageId, dataModel, "unf");
+            case "ntf:offcb" -> notifyOff(chatId, messageId, dataModel, "cb");
+            case "ntf:offgoal" -> notifyOff(chatId, messageId, dataModel, "goal");
+            case "digest:off" -> notifyOff(chatId, messageId, dataModel, "dg");
+            case "digest:onoff" -> {
+                dataModel.notifyDigest = dataModel.notifyDigest == Boolean.FALSE ? Boolean.TRUE : Boolean.FALSE;
+                storage.save(chatId, dataModel);
+                showDigestScreen(chatId, messageId, dataModel);
+            }
+            case "ntf:master" -> {
+                dataModel.notifyMaster = dataModel.notifyMaster == Boolean.FALSE ? Boolean.TRUE : Boolean.FALSE;
+                storage.save(chatId, dataModel);
+                showNotifyScreen(chatId, messageId, dataModel);
+            }
+            case "ntf:unf" -> {
+                dataModel.notifyUnfinished = dataModel.notifyUnfinished == Boolean.FALSE ? Boolean.TRUE : Boolean.FALSE;
+                storage.save(chatId, dataModel);
+                showNotifyScreen(chatId, messageId, dataModel);
+            }
+            case "ntf:cb" -> {
+                dataModel.notifyComeback = dataModel.notifyComeback == Boolean.FALSE ? Boolean.TRUE : Boolean.FALSE;
+                storage.save(chatId, dataModel);
+                showNotifyScreen(chatId, messageId, dataModel);
+            }
+            case "ntf:goal" -> {
+                dataModel.goalRemind = dataModel.goalRemind == Boolean.FALSE ? Boolean.TRUE : Boolean.FALSE;
+                storage.save(chatId, dataModel);
+                showNotifyScreen(chatId, messageId, dataModel);
+            }
+            case "ntf:dg" -> {
+                dataModel.notifyDigest = dataModel.notifyDigest == Boolean.FALSE ? Boolean.TRUE : Boolean.FALSE;
+                storage.save(chatId, dataModel);
+                showNotifyScreen(chatId, messageId, dataModel);
+            }
+            case "ntf:when" -> {
+                int w = dataModel.notifyWhen == null ? 2 : dataModel.notifyWhen;
+                dataModel.notifyWhen = w % 3 + 1; /* цикл утро→день→вечер (§4.7) */
+                storage.save(chatId, dataModel);
+                showNotifyScreen(chatId, messageId, dataModel);
+            }
             case "tpl:canc" -> showMenu(chatId, messageId, dataModel, st);
             case "tpl:back" -> showTemplates(chatId, messageId, dataModel, st);
             case "wk:cancelno" -> showWorkout(chatId, messageId, dataModel, st);
@@ -1480,10 +1557,24 @@ public final class BotLogic {
         }
         w.finished = true;
         w.endedAt = LocalDateTime.now().toString();
+        /* [UX-S19] день-1 ачивка (§10): завершилась первая тренировка в дневнике — строка
+           поздравления в финишном сообщении + firstDone в книгу (тихий тик не пришлёт
+           дубль). Edge: первая удалена и завершена новая — firstDone=true, второго
+           «первого раза» нет */
+        boolean firstEver = data.firstDone == null && countFinished(data) == 1;
+        if (firstEver) data.firstDone = Boolean.TRUE;
+        /* [UX-S19] реакция (§13): завершение в течение суток после наджа (книга — по
+           якорю UTC+3, как пишет тик); новая завершённая обнуляет лестницу реактивации
+           (§5.3) — null не пишем без нужды (файл без книги остаётся байт-в-байт) */
+        notifyReacted(data, stats, notifyToday());
+        if (data.notifyStage != null && data.notifyStage > 0) data.notifyStage = 0;
         storage.save(chatId, data);
         st.mode = UserState.Mode.MENU;
         st.currentExercise = null;
-        send(chatId, mid, "🎉 Тренировка завершена!\n\n" + screenText(w), finishedKb(w.id));
+        String head = firstEver
+            ? "🎉 Тренировка завершена!\n\n🏅 Первая тренировка в дневнике — с неё всё начинается. Дальше легче 💪\n\n"
+            : "🎉 Тренировка завершена!\n\n";
+        send(chatId, mid, head + screenText(w), finishedKb(w.id));
     }
 
     /* клавиатура после завершения: первым рядом — сохранить как шаблон [UX-T6 §4.3] */
@@ -2021,6 +2112,8 @@ public final class BotLogic {
         b.append("/stats — статистика\n");
         b.append("/templates — шаблоны тренировок\n");
         b.append("/rest — таймер отдыха: /rest 180\n");
+        b.append("/notify — напоминания: что и когда присылать\n");
+        b.append("/digest — сводка прошлой недели\n");
         b.append("/export — выгрузить дневник CSV-файлом\n");
         b.append("/profile — профиль: пол, возраст, рост, вес\n");
         b.append("/delete_my_data — удалить все свои данные\n");
@@ -2029,6 +2122,135 @@ public final class BotLogic {
         }
         b.append("\nВсё то же самое доступно кнопками меню 💪");
         send(chatId, mid, b.toString(), mainKb());
+    }
+
+    /* ===== [UX-S19] экран напоминаний /notify и отписки (§4.6–4.7) ===== */
+
+    /* экран /notify (§4.7): состояние — фактические значения полей GymData; каждый тап —
+       переключение и перерисовка editMessageText (паттерн «⏱ Отдых: 90 сек») */
+    private void showNotifyScreen(long chatId, Long mid, GymData data) {
+        UserState st = states.computeIfAbsent(chatId, k -> new UserState());
+        st.mode = UserState.Mode.MENU;
+        st.currentExercise = null;
+        send(chatId, mid, notifyScreenText(data), notifyScreenKb(data));
+    }
+
+    /* текст экрана (§4.7): мастер выкл виден только строкой-приглашением «Включить всё» —
+       строки 2–6 показывают сохранённые состояния (они переживают выключение мастера) */
+    static String notifyScreenText(GymData data) {
+        StringBuilder b = new StringBuilder("🔔 <b>Напоминания</b>\n\nПодстрахую, если отвлечёшься:\n");
+        b.append("• Незавершённая тренировка — ").append(onOff(data.notifyUnfinished)).append('\n');
+        b.append("• Возврат в зал — ").append(onOff(data.notifyComeback)).append('\n');
+        b.append("• Чек-ин по целям (вс) — ").append(onOff(data.goalRemind)).append('\n');
+        b.append("• Итоги недели (пн) — ").append(onOff(data.notifyDigest)).append('\n');
+        b.append("\nКогда напоминать: <b>").append(whenWord(data.notifyWhen)).append("</b> (UTC+3)");
+        return b.toString();
+    }
+
+    /* «вкл»/«выкл» по формату null-вкл (§12.1) */
+    static String onOff(Boolean v) {
+        return v == Boolean.FALSE ? "выкл" : "вкл";
+    }
+
+    /* слово окна (§4.7): null = «днём» (дефолт) */
+    static String whenWord(Integer when) {
+        return switch (when == null ? 2 : when) {
+            case 1 -> "утром";
+            case 3 -> "вечером";
+            default -> "днём";
+        };
+    }
+
+    private List<List<Map<String, Object>>> notifyScreenKb(GymData data) {
+        List<List<Map<String, Object>>> kb = new ArrayList<>();
+        kb.add(List.of(TelegramApi.button(
+            data.notifyMaster == Boolean.FALSE ? "🔔 Включить всё" : "🔕 Выключить всё", "ntf:master")));
+        kb.add(List.of(TelegramApi.button("🏋️ Незавершённая: " + onOff(data.notifyUnfinished), "ntf:unf")));
+        kb.add(List.of(TelegramApi.button("↩️ Возврат в зал: " + onOff(data.notifyComeback), "ntf:cb")));
+        kb.add(List.of(TelegramApi.button("🎯 Чекин целей: " + onOff(data.goalRemind), "ntf:goal")));
+        kb.add(List.of(TelegramApi.button("📊 Итоги недели: " + onOff(data.notifyDigest), "ntf:dg")));
+        kb.add(List.of(TelegramApi.button("⏰ Когда: " + whenWord(data.notifyWhen), "ntf:when")));
+        kb.add(List.of(TelegramApi.button("🏠 Меню", "home")));
+        return kb;
+    }
+
+    /* отписка в один тап (§4.6): поле → false, кнопки исходного сообщения снимаются
+       редактированием (editMessageReplyMarkup), ответ — новым сообщением; для dg —
+       текст и возврат через /digest (ANA-S2 §2в); счётчик §13 */
+    private void notifyOff(long chatId, long messageId, GymData data, String type) {
+        switch (type) {
+            case "unf" -> data.notifyUnfinished = Boolean.FALSE;
+            case "cb" -> data.notifyComeback = Boolean.FALSE;
+            case "goal" -> data.goalRemind = Boolean.FALSE;
+            case "dg" -> data.notifyDigest = Boolean.FALSE;
+            default -> { }
+        }
+        storage.save(chatId, data);
+        api.removeKeyboard(chatId, messageId);
+        if (stats != null) {
+            if ("dg".equals(type)) stats.inc("digestOff");
+            else stats.inc("notifyOff");
+        }
+        if ("dg".equals(type)) {
+            api.sendMessage(chatId, "Хорошо, итоги недели больше не приходят 👌\n"
+                + "Вернуть: /digest — покажу последнюю сводку и включу отправку.", null);
+            return;
+        }
+        api.sendMessage(chatId, "Хорошо, про это больше не пишу 👌\n"
+            + "Вернуть: /notify или в приложении — ⚙️ Настройки → Уведомления.", null);
+    }
+
+    /* [UX-T54] /digest-экран (ANA-S2 §2в): краткая строка прошлой недели + состояние
+       отправки сводок и тогл; юзер в чате впервые — ответ как у /stats */
+    private void showDigestScreen(long chatId, Long mid, GymData data) {
+        UserState st = states.computeIfAbsent(chatId, k -> new UserState());
+        st.mode = UserState.Mode.MENU;
+        st.currentExercise = null;
+        boolean any = false;
+        for (Workout w : data.workouts) {
+            if (w.finished) { any = true; break; }
+        }
+        if (!any) {
+            send(chatId, mid, "Нет данных для статистики. Заверши первую тренировку! 💪", mainKb());
+            return;
+        }
+        send(chatId, mid, digestScreenText(data, notifyToday()), digestScreenKb(data));
+    }
+
+    /* «За прошлую неделю (9–15 ноября): 3 тренировки, тоннаж 5,1 т, ккал ≈ 1 800.» */
+    static String digestScreenText(GymData data, LocalDate today) {
+        LocalDate[] b = digestWeekBounds(today);
+        List<String> parts = new ArrayList<>();
+        int n = countFinishedInWeek(data, b[0], b[1]);
+        parts.add(n + " " + plural(n, "тренировка", "тренировки", "тренировок"));
+        double tonnage = digestTonnage(data, b[0], b[1]);
+        if (tonnage > 0) parts.add("тоннаж " + fmtTonnage(tonnage));
+        long kcal = 0;
+        if (data.profile != null && data.profile.weight > 0) {
+            LocalDateTime now = LocalDateTime.now();
+            for (Workout w : data.workouts) {
+                if (!w.finished) continue;
+                LocalDate d = parseDate(w.date);
+                if (d == null || d.isBefore(b[0]) || d.isAfter(b[1])) continue;
+                long k = calcKcal(data.profile, w, now);
+                if (k > 0) kcal += k;
+            }
+        }
+        if (kcal > 0) parts.add("ккал ≈ " + fmtGrouped(kcal));
+        StringBuilder sb = new StringBuilder("За прошлую неделю (").append(digestWeekTitle(b[0], b[1]))
+            .append("): ").append(String.join(", ", parts)).append(".\n");
+        sb.append("Сводки недели: ").append(data.notifyDigest == Boolean.FALSE ? "🔕 выключены." : "🔔 включены.");
+        return sb.toString();
+    }
+
+    private List<List<Map<String, Object>>> digestScreenKb(GymData data) {
+        List<List<Map<String, Object>>> kb = new ArrayList<>();
+        kb.add(List.of(TelegramApi.button(
+            data.notifyDigest == Boolean.FALSE ? "🔔 Включить сводки" : "🔕 Выключить сводки", "digest:onoff")));
+        if (webAppUrl != null) kb.add(List.of(TelegramApi.webAppButton("📱 Открыть приложение", webAppUrl)));
+        else if (appLink != null) kb.add(List.of(TelegramApi.urlButton("📱 Открыть приложение", appLink)));
+        kb.add(List.of(TelegramApi.button("🏠 Меню", "home")));
+        return kb;
     }
 
     /* ===== рассылка владельцем [UX-T16] ===== */
@@ -2212,11 +2434,682 @@ public final class BotLogic {
             .append(delta("templatesCreated", snap, prev))
             .append(" · <b>").append(Json.lng(snap.get("templatesUsed"))).append("</b> использовано")
             .append(delta("templatesUsed", snap, prev)).append('\n')
+            /* [UX-S19] возврат: отправлено/среагировало — итоги всех типов (§13) */
+            .append("🔔 Напоминания: <b>").append(notifySentTotal(snap)).append("</b> отправлено · <b>")
+            .append(notifyReactedTotal(snap)).append("</b> среагировало").append('\n')
             .append("💬 Обратная связь: <b>").append(Json.lng(snap.get("feedbackSent"))).append("</b>")
             .append(delta("feedbackSent", snap, prev)).append('\n')
             .append("🌐 Просмотры лендинга: <b>").append(Json.lng(snap.get("landingViews"))).append("</b>")
             .append(delta("landingViews", snap, prev));
         return b.toString();
+    }
+
+    /* ===== механика возврата [UX-S19] (docs/spec-ux-s19-returning.md) ===== */
+
+    /* env-число с дефолтом: пусто/мусор → дефолт (образец Main.readInt) */
+    static int envInt(String name, int def) {
+        try {
+            String v = System.getenv(name);
+            if (v != null && !v.isBlank()) return Integer.parseInt(v.trim());
+        } catch (NumberFormatException ignored) {
+        }
+        return def;
+    }
+
+    /* часы планировщика (§5.1): epoch + якорь GYM_NOTIFY_TZ_MIN, зона UTC без DST */
+    static LocalTime notifyNow() {
+        return LocalTime.ofInstant(Instant.ofEpochMilli(System.currentTimeMillis() + NOTIFY_TZ_MIN * 60000L), ZoneOffset.UTC);
+    }
+
+    /* [UX-S19] якорь часов планировщика (§5.1): epoch + GYM_NOTIFY_TZ_MIN (дефолт 180 =
+       UTC+3), зона UTC без DST. Публичный — пакет gym.web зовёт из handleSave (reacted) */
+    public static LocalDate notifyToday() {
+        return Instant.ofEpochMilli(System.currentTimeMillis() + NOTIFY_TZ_MIN * 60000L).atZone(ZoneOffset.UTC).toLocalDate();
+    }
+
+    /* окно юзера + тихие часы (§2.3/§5.1): утро 10–13, день 13–17 (дефолт null),
+       вечер 17–21; вне 10–21 отправок нет вообще (даже тихих — баннер ночью будит) */
+    static boolean notifyInWindow(Integer when, LocalTime now) {
+        int h = now.getHour();
+        if (h < 10 || h >= 21) return false;
+        int w = when == null ? 2 : when;
+        return switch (w) {
+            case 1 -> h < 13;
+            case 3 -> h >= 17;
+            default -> h >= 13 && h < 17;
+        };
+    }
+
+    /* суточный лимит (§2.1): последняя запись notifyLog сегодня → тишина */
+    static boolean notifySentToday(GymData data, LocalDate today) {
+        String t = today.toString();
+        for (NotifyMark m : data.notifyLog) {
+            if (t.equals(m.d)) return true;
+        }
+        return false;
+    }
+
+    /* молчание (§5.3): дней с последней ЗАВЕРШЁННОЙ тренировки (незавершённая не
+       считается ни тренировкой, ни активностью); завершённых нет — дней с mtime
+       файла данных (юзер пришёл, посмотрел, ушёл) */
+    static int notifySilenceDays(GymData data, LocalDate today, long mtimeAgeMs) {
+        LocalDate last = null;
+        for (Workout w : data.workouts) {
+            if (!w.finished) continue;
+            LocalDate d = parseDate(w.date);
+            if (d != null && (last == null || d.isAfter(last))) last = d;
+        }
+        if (last != null) return (int) Math.max(0, ChronoUnit.DAYS.between(last, today));
+        return (int) Math.min(mtimeAgeMs / DAY_MS, 9999);
+    }
+
+    /* уровень лестницы реактивации (§5.3): 7/14/21; cadence=1 — сдвиг +7 (14/21/28,
+       решение 6 §17: «неделя без тренировок» прилетит человеку, для которого это норма) */
+    static int notifyCbLevel(int silenceDays, Integer cadence) {
+        int shift = cadence != null && cadence == 1 ? 7 : 0;
+        if (silenceDays >= 21 + shift) return 3;
+        if (silenceDays >= 14 + shift) return 2;
+        if (silenceDays >= 7 + shift) return 1;
+        return 0;
+    }
+
+    /* завершённые с датой в [from..to] — окно прошедшей ISO-недели для дайджеста (§5.4);
+       незавершённые не считаются (E9 ANA-S2, консистентно с /stats) */
+    static int countFinishedInWeek(GymData data, LocalDate from, LocalDate to) {
+        int n = 0;
+        for (Workout w : data.workouts) {
+            if (!w.finished) continue;
+            LocalDate d = parseDate(w.date);
+            if (d == null || d.isBefore(from) || d.isAfter(to)) continue;
+            n++;
+        }
+        return n;
+    }
+
+    /* дата самой ранней завершённой — триггер «первая тренировка» (§10); null —
+       завершённых нет или все даты мусорные */
+    static LocalDate firstFinishedDate(GymData data) {
+        LocalDate out = null;
+        for (Workout w : data.workouts) {
+            if (!w.finished) continue;
+            LocalDate d = parseDate(w.date);
+            if (d != null && (out == null || d.isBefore(out))) out = d;
+        }
+        return out;
+    }
+
+    /* [UX-S19] решение тика (§5.4): тип уведомления или null. Чистая функция — все
+       пороги/окна/лимиты тестируются юнитами без сети (§14). Приоритет внутри дня (§3):
+       first (событие — вне очереди и окон) → unf → goal → dg → cb; «отправляли сегодня»
+       блокирует 4 проактивных типа, но не first (раз в жизнь). dow — день недели по
+       якорю времени (1=Пн..7=Вс); mtimeAgeMs — возраст файла данных юзера. */
+    static String decideNotify(GymData data, LocalDate today, LocalTime now, int dow, long mtimeAgeMs) {
+        if (data == null) return null;
+        /* [first] первая завершённая в дневнике (countFinished==1), дата ≤7 дней назад,
+           поздравления не было (firstDone=null). Мастер-тогл НЕ глушит (§2.6 — событийное,
+           как «🏆 Рекорд!»), окна/тихие часы НЕ проверяются (юзер был активен только что);
+           легаси-юзеры (дата старая) не получают ничего — условие ложно, файл не пишется */
+        if (data.firstDone == null && countFinished(data) == 1) {
+            LocalDate fd = firstFinishedDate(data);
+            if (fd != null && !fd.isAfter(today) && !fd.isBefore(today.minusDays(7))) return "first";
+        }
+        /* 4 проактивных типа: мастер-тогл → суточный лимит → окно юзера (§2) */
+        if (data.notifyMaster == Boolean.FALSE) return null;
+        if (notifySentToday(data, today)) return null;
+        if (!notifyInWindow(data.notifyWhen, now)) return null;
+        /* [unf] активная висит ≥ суток (date ≤ вчера), юзер не трогал данные ≥24 ч,
+           про эту тренировку ещё не писали (§5.2) */
+        Workout a = data.active();
+        if (a != null && data.notifyUnfinished != Boolean.FALSE
+                && (data.notifyLastWid == null || data.notifyLastWid != a.id)) {
+            LocalDate ad = parseDate(a.date);
+            if (ad != null && !ad.isAfter(today.minusDays(1)) && mtimeAgeMs >= DAY_MS) return "unf";
+        }
+        /* [goal] чек-ин по целям — воскресенье в окне юзера (GOA-S1 §6.2 → UX-S19 §7);
+           нет активных целей — сообщение не отправляется (GOA-S1 §6.1) */
+        if (dow == 7 && data.goalRemind != Boolean.FALSE) {
+            for (Goal g : data.goals) {
+                if (g.status == 1) return "goal";
+            }
+        }
+        /* [dg] итоги недели — понедельник в окне юзера, ≥1 завершённой за прошедшую
+           ISO-неделю (§8); 0 тренировок — молчим (E1 ANA-S2) */
+        if (dow == 1 && data.notifyDigest != Boolean.FALSE
+                && countFinishedInWeek(data, today.minusDays(7), today.minusDays(1)) > 0) return "dg";
+        /* [cb] реактивация: уровень молчания выше пройденного (stage), юзер не активен
+           ≥3 дней (§5.3); текст выбирается по факту молчания — молчун с 90 днями
+           получит ОДНО сообщение (сразу «последнее») */
+        if (data.notifyComeback != Boolean.FALSE && mtimeAgeMs >= 3 * DAY_MS) {
+            int stage = data.notifyStage == null ? 0 : data.notifyStage;
+            if (notifyCbLevel(notifySilenceDays(data, today, mtimeAgeMs), data.cadence) > stage) return "cb";
+        }
+        return null;
+    }
+
+    /* есть ли хоть одна завершённая (нулевая история — отдельный текст реактивации §4.2) */
+    static boolean notifyHasHistory(GymData data) {
+        for (Workout w : data.workouts) {
+            if (w.finished) return true;
+        }
+        return false;
+    }
+
+    /* максимальный e1RM упражнения по ЗАВЕРШЁННЫМ тренировкам (Java-эквивалент
+       goalMaxE1rm Mini App, дисплей-согласован §4.1 GOA-S1); 0 — упражнения нет */
+    static double goalMaxE1rm(GymData data, String exercise) {
+        if (exercise == null) return 0;
+        String nl = exercise.toLowerCase();
+        double best = 0;
+        for (Workout w : data.workouts) {
+            if (!w.finished) continue;
+            for (ExerciseEntry e : w.exercises) {
+                if (!e.name.toLowerCase().equals(nl)) continue;
+                for (SetEntry s : e.sets) {
+                    double er = Records.e1rm(s);
+                    if (er > best) best = er;
+                }
+            }
+        }
+        return best;
+    }
+
+    /* завершённые тренировки с датой в окне цели [start..end] (Java-эквивалент
+       goalCountIn, §4.1 GOA-S1; строки ISO сравнимы лексикографически) */
+    static int goalCountIn(GymData data, Goal g) {
+        int n = 0;
+        for (Workout w : data.workouts) {
+            if (!w.finished || w.date == null) continue;
+            if (g.start != null && w.date.compareTo(g.start) < 0) continue;
+            if (g.end != null && w.date.compareTo(g.end) > 0) continue;
+            n++;
+        }
+        return n;
+    }
+
+    /* «до 31.12» (§4.3): сокращённый срок для заголовка частотной цели; срока нет — пусто */
+    static String goalEndShort(String endIso) {
+        if (endIso == null) return "";
+        return "до " + (endIso.length() >= 10 ? endIso.substring(8, 10) + "." + endIso.substring(5, 7) : endIso);
+    }
+
+    /* «до 31.12 — 3 недели» (§4.3): недели с округлением, меньше недели — днями;
+       срока нет — пусто. Даты в прошлом даёт «0 дней» (протухшая активная цель) */
+    static String goalEndClause(String endIso, LocalDate today) {
+        if (endIso == null) return "";
+        LocalDate end = parseDate(endIso);
+        if (end == null) return "";
+        long days = Math.max(0, ChronoUnit.DAYS.between(today, end));
+        long weeks = Math.round(days / 7.0);
+        if (weeks >= 1) return goalEndShort(endIso) + " — " + weeks + " " + plural((int) weeks, "неделя", "недели", "недель");
+        return goalEndShort(endIso) + " — " + days + " " + plural((int) days, "день", "дня", "дней");
+    }
+
+    /* [UX-T53] чек-ин по целям (§4.3 = GOA-S1 §6.1, гармонизированный в «ты», решение 1
+       §17): ОДНО сообщение со сводкой всех активных целей; активных нет — null (GOA §6.1) */
+    static String notifyGoalText(GymData data, LocalDate today) {
+        StringBuilder b = new StringBuilder("🎯 Чек-ин по целям");
+        int i = 0;
+        for (Goal g : data.goals) {
+            if (g.status != 1) continue;
+            i++;
+            if (g.type == 1) {
+                double cur = goalMaxE1rm(data, g.exercise);
+                long pct = g.target > 0 ? Math.min(100, Math.round(cur / g.target * 100)) : 0;
+                double left = Math.max(0, Math.ceil((g.target - cur) * 10) / 10);
+                b.append("\n\n").append(i).append(". ").append(esc(g.exercise)).append(" — e1RM ")
+                    .append(numRu(g.target)).append(" кг")
+                    .append("\n   ").append(Math.round(cur)).append(" из ").append(numRu(g.target))
+                    .append(" кг (").append(pct).append("%). Осталось ").append(numRu(left)).append(" кг");
+                String clause = goalEndClause(g.end, today);
+                if (!clause.isEmpty()) b.append(", ").append(clause);
+                b.append('.');
+            } else {
+                int cur = goalCountIn(data, g);
+                long pct = g.target > 0 ? Math.min(100, Math.round(cur / g.target * 100)) : 0;
+                int left = (int) Math.max(0, Math.ceil(g.target - cur));
+                String clause = goalEndClause(g.end, today);
+                b.append("\n\n").append(i).append(". ").append(numRu(g.target)).append(" ")
+                    .append(plural((int) g.target, "тренировка", "тренировки", "тренировок"));
+                String shortEnd = goalEndShort(g.end);
+                if (!shortEnd.isEmpty()) b.append(" ").append(shortEnd);
+                b.append("\n   ").append(cur).append(" из ").append(numRu(g.target)).append(" (")
+                    .append(pct).append("%). Нужно ещё ").append(left);
+                if (!clause.isEmpty()) b.append(", ").append(clause);
+                b.append('.');
+            }
+        }
+        if (i == 0) return null;
+        b.append("\n\nМаленький шаг на этой неделе — и ты ближе 💪");
+        return b.toString();
+    }
+
+    /* ===== [UX-T54] дайджест недели (§4.4 = ANA-S2 §2в) ===== */
+
+    /* месяцы в родительном падеже для заголовка дайджеста («9–15 ноября») */
+    private static final String[] MONTHS_GEN = {
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря"
+    };
+
+    /* границы прошедшей ISO-недели (Пн–Вс) от любой даты: тик зовёт в понедельник,
+       /digest — в любой день («за прошлую неделю», ANA-S2 §2в) */
+    static LocalDate[] digestWeekBounds(LocalDate today) {
+        LocalDate isoStart = today.minusDays(today.getDayOfWeek().getValue() - 1);
+        return new LocalDate[]{isoStart.minusDays(7), isoStart.minusDays(1)};
+    }
+
+    /* «9–15 ноября» (один месяц) / «30 ноября – 6 декабря» (на стыке) */
+    static String digestWeekTitle(LocalDate from, LocalDate to) {
+        if (from.getMonthValue() == to.getMonthValue()) {
+            return from.getDayOfMonth() + "–" + to.getDayOfMonth() + " " + MONTHS_GEN[from.getMonthValue() - 1];
+        }
+        return from.getDayOfMonth() + " " + MONTHS_GEN[from.getMonthValue() - 1] + " – "
+            + to.getDayOfMonth() + " " + MONTHS_GEN[to.getMonthValue() - 1];
+    }
+
+    /* «6,2 т» — тонны с одним знаком (запятая), целые без хвоста */
+    static String fmtTons(double t) {
+        double r = Math.round(t * 10) / 10.0;
+        return (r == Math.floor(r) ? String.valueOf((long) r) : numRu(r)) + " т";
+    }
+
+    /* тоннаж: ≥1 т — тонны с одним знаком («6,2 т»), меньше — килограммы */
+    static String fmtTonnage(double kg) {
+        if (kg >= 995) return fmtTons(kg / 1000.0);
+        return Math.round(kg) + " кг";
+    }
+
+    /* «+0,8 т» / «−0,4 т» — дельта тоннажа к прошлой неделе (§4.4); тонны с ~100 кг,
+       меньшие дельты честнее в килограммах */
+    static String fmtTonnageDelta(double kg) {
+        String sign = kg >= 0 ? "+" : "−";
+        double a = Math.abs(kg);
+        if (a >= 95) return sign + fmtTons(a / 1000.0);
+        return sign + Math.round(a) + " кг";
+    }
+
+    /* «3 ч 40 мин» / «45 мин» — время в зале за неделю */
+    static String digestDuration(long mins) {
+        long h = mins / 60;
+        long m = mins % 60;
+        if (h <= 0) return m + " мин";
+        if (m == 0) return h + " ч";
+        return h + " ч " + m + " мин";
+    }
+
+    /* «2 400» — разряды разделены пробелом (ккал, §4.4) */
+    static String fmtGrouped(long v) {
+        String s = String.valueOf(Math.abs(v));
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            if (i > 0 && (s.length() - i) % 3 == 0) sb.append(' ');
+            sb.append(s.charAt(i));
+        }
+        return (v < 0 ? "-" : "") + sb;
+    }
+
+    /* текст дайджеста (§4.4): секции без данных опускаются (ккал без профиля, тоннаж
+       без весов, рекорды если нет); «план N/нед» — только при заданном cadence (даже
+       совпавший: перевыполнение честно видно); финал — 3 варианта по числу тренировок
+       (решение 4 §17); 0 завершённых — null (E1: молчим). Рекорды: max e1RM недели
+       выше максимума ДО недели; упражнения без веса — по объёму повторений; база пуста
+       — не рекорд (как живые рекорды Records) */
+    static String digestText(GymData data, LocalDate today) {
+        LocalDate[] bounds = digestWeekBounds(today);
+        LocalDate from = bounds[0];
+        LocalDate to = bounds[1];
+        List<Workout> week = new ArrayList<>();
+        for (Workout w : data.workouts) {
+            if (!w.finished) continue;
+            LocalDate d = parseDate(w.date);
+            if (d == null || d.isBefore(from) || d.isAfter(to)) continue;
+            week.add(w);
+        }
+        if (week.isEmpty()) return null;
+        int n = week.size();
+        long mins = 0;
+        double tonnage = 0;
+        long kcal = 0;
+        LocalDateTime now = LocalDateTime.now();
+        for (Workout w : week) {
+            Long m = durationMin(w, now);
+            if (m != null) mins += m;
+            if (data.profile != null && data.profile.weight > 0) {
+                long k = calcKcal(data.profile, w, now);
+                if (k > 0) kcal += k;
+            }
+            for (ExerciseEntry e : w.exercises) {
+                for (SetEntry s : e.sets) {
+                    tonnage += Records.avgWeight(s.weight) * Math.max(s.sets, 0) * Records.repsAvg(s.reps);
+                }
+            }
+        }
+        StringBuilder b = new StringBuilder("📊 <b>Итоги недели</b> · ")
+            .append(digestWeekTitle(from, to)).append("\n\n🏋️ Тренировки: <b>").append(n).append("</b>");
+        if (mins > 0) b.append(" · в зале ").append(digestDuration(mins));
+        if (data.cadence != null) b.append(" · план ").append(data.cadence).append("/нед");
+        b.append('\n');
+        if (tonnage > 0) {
+            b.append("⚖️ Тоннаж: <b>").append(fmtTonnage(tonnage)).append("</b>");
+            double prev = digestTonnage(data, from.minusDays(7), to.minusDays(7));
+            double delta = tonnage - prev;
+            if (prev > 0 && delta != 0) {
+                b.append(" · ").append(delta > 0 ? "▲" : "▼").append(" ")
+                    .append(fmtTonnageDelta(delta)).append(" к прошлой");
+            }
+            b.append('\n');
+        }
+        if (kcal > 0) b.append("🔥 Ккал: <b>≈ ").append(fmtGrouped(kcal)).append("</b>\n");
+        List<String> records = digestRecords(data, week, from);
+        if (!records.isEmpty()) {
+            b.append("\n🏆 <b>Рекорды недели:</b>\n");
+            for (String r : records) b.append(r).append('\n');
+        }
+        b.append('\n');
+        if (n <= 2) b.append("Неделя в работу — каждая тренировка на счету 💪");
+        else if (n <= 4) b.append("Хорошая неделя. Так держать 💪");
+        else b.append("Мощная неделя! 🔥");
+        return b.toString();
+    }
+
+    /* тоннаж окна [from..to] — для дельты к прошлой неделе (§4.4) */
+    private static double digestTonnage(GymData data, LocalDate from, LocalDate to) {
+        double v = 0;
+        for (Workout w : data.workouts) {
+            if (!w.finished) continue;
+            LocalDate d = parseDate(w.date);
+            if (d == null || d.isBefore(from) || d.isAfter(to)) continue;
+            for (ExerciseEntry e : w.exercises) {
+                for (SetEntry s : e.sets) {
+                    v += Records.avgWeight(s.weight) * Math.max(s.sets, 0) * Records.repsAvg(s.reps);
+                }
+            }
+        }
+        return v;
+    }
+
+    /* строки рекордов недели (§4.4/§8): «• Жим лёжа — 1ПМ ≈ 82 кг (▲ +2)»; упражнения
+       без веса — по объёму повторений за тренировку; база — только ДО недели, первый
+       раз (пустая база) и равный результат — не рекорд (как Records, строгое >) */
+    private static List<String> digestRecords(GymData data, List<Workout> week, LocalDate from) {
+        Map<String, Double> weekE1 = new LinkedHashMap<>();
+        Map<String, Integer> weekVol = new LinkedHashMap<>();
+        for (Workout w : week) {
+            Map<String, Double> exE1 = new LinkedHashMap<>();
+            Map<String, Integer> exVol = new LinkedHashMap<>();
+            for (ExerciseEntry e : w.exercises) {
+                for (SetEntry s : e.sets) {
+                    double er = Records.e1rm(s);
+                    if (er > 0) exE1.merge(e.name, er, Math::max);
+                    exVol.merge(e.name, Math.max(s.sets, 0) * Records.repsAvg(s.reps), Integer::sum);
+                }
+            }
+            for (Map.Entry<String, Double> en : exE1.entrySet()) {
+                weekE1.merge(en.getKey(), en.getValue(), Math::max);
+            }
+            for (Map.Entry<String, Integer> en : exVol.entrySet()) {
+                weekVol.merge(en.getKey(), en.getValue(), Math::max);
+            }
+        }
+        Map<String, Double> baseE1 = new LinkedHashMap<>();
+        Map<String, Integer> baseVol = new LinkedHashMap<>();
+        for (Workout w : data.workouts) {
+            if (!w.finished) continue;
+            LocalDate d = parseDate(w.date);
+            if (d == null || !d.isBefore(from)) continue;
+            Map<String, Double> exE1 = new LinkedHashMap<>();
+            Map<String, Integer> exVol = new LinkedHashMap<>();
+            for (ExerciseEntry e : w.exercises) {
+                for (SetEntry s : e.sets) {
+                    double er = Records.e1rm(s);
+                    if (er > 0) exE1.merge(e.name, er, Math::max);
+                    exVol.merge(e.name, Math.max(s.sets, 0) * Records.repsAvg(s.reps), Integer::sum);
+                }
+            }
+            for (Map.Entry<String, Double> en : exE1.entrySet()) {
+                baseE1.merge(en.getKey(), en.getValue(), Math::max);
+            }
+            for (Map.Entry<String, Integer> en : exVol.entrySet()) {
+                baseVol.merge(en.getKey(), en.getValue(), Math::max);
+            }
+        }
+        List<String> out = new ArrayList<>();
+        for (Map.Entry<String, Double> en : weekE1.entrySet()) {
+            double base = baseE1.getOrDefault(en.getKey(), 0.0);
+            if (base <= 0 || en.getValue() <= base) continue;
+            long delta = Math.round(en.getValue() - base);
+            if (delta <= 0) continue; /* прирост не переживает округления — не рекорд */
+            out.add("• " + esc(en.getKey()) + " — 1ПМ ≈ <b>" + Math.round(en.getValue()) + " кг</b> (▲ +" + delta + ")");
+        }
+        for (Map.Entry<String, Integer> en : weekVol.entrySet()) {
+            if (weekE1.containsKey(en.getKey())) continue; /* с весом уже отмечен по e1RM */
+            int base = baseVol.getOrDefault(en.getKey(), 0);
+            if (base <= 0 || en.getValue() <= base) continue;
+            out.add("• " + esc(en.getKey()) + " — <b>" + en.getValue() + "</b> повторений (▲ +" + (en.getValue() - base) + ")");
+        }
+        return out;
+    }
+
+    private void notifyTickSafe() {
+        try {
+            notifyTick();
+        } catch (Exception e) {
+            System.out.println("[warn] notify tick: " + e.getMessage());
+        }
+    }
+
+    /* часовой обход (§6): все чаты из data/ (паттерн /announce), решение по §5.4,
+       отправка, книга при успехе. Файл юзера пишется ТОЛЬКО когда что-то отправлено
+       (§2.7 — ни mtime-шума, ни лишних ревизий); ошибка Telegram (бот заблокирован
+       и т.п.) глотается, файл не пишется, лимит дня не съеден (§6.3); §6.5: перед
+       save файл перечитывается и к свежей копии применяются ТОЛЬКО книжечные поля —
+       иначе затрём правку из Mini App, случившуюся между load и save (lost update) */
+    private void notifyTick() {
+        LocalDate today = notifyToday();
+        LocalTime now = notifyNow();
+        int dow = today.getDayOfWeek().getValue();
+        long nowMs = System.currentTimeMillis();
+        List<Long> chats = storage.chatIds();
+        int unf = 0, cb = 0, goal = 0, dg = 0, first = 0, errs = 0; /* агрегаты для лога §6.6 */
+        for (int i = 0; i < chats.size(); i++) {
+            long chatId = chats.get(i);
+            try {
+                long mtime = storage.dataFileMtime(chatId);
+                GymData data = storage.load(chatId);
+                long mtimeAge = mtime > 0 ? nowMs - mtime : Long.MAX_VALUE;
+                /* нулевой юзер ещё «на смотрине»: тренировок нет, файл свежий (§5.4) */
+                if (data.workouts.isEmpty() && mtimeAge < 7 * DAY_MS) continue;
+                String type = decideNotify(data, today, now, dow, mtimeAge);
+                if (type == null) continue;
+                String text = notifyText(type, data, today, mtimeAge);
+                if (text == null) continue; /* тексты типов подключаются UX-T53/T54 */
+                String err = notifySend(chatId, type, text, notifyKb(type, data, today, mtimeAge));
+                if (i < chats.size() - 1) notifyPause();
+                if (err != null) {
+                    errs++;
+                    continue;
+                }
+                notifyMark(data, type, today, mtimeAge);
+                GymData fresh = storage.load(chatId);
+                fresh.notifyLog.clear();
+                fresh.notifyLog.addAll(data.notifyLog);
+                fresh.notifyStage = data.notifyStage;
+                fresh.notifyLastWid = data.notifyLastWid;
+                fresh.firstDone = data.firstDone;
+                storage.save(chatId, fresh);
+                notifyCount(type);
+                switch (type) {
+                    case "unf" -> unf++;
+                    case "cb" -> cb++;
+                    case "goal" -> goal++;
+                    case "dg" -> dg++;
+                    case "first" -> first++;
+                    default -> { }
+                }
+            } catch (Exception e) {
+                System.out.println("[warn] notify chat: " + e.getMessage());
+            }
+        }
+        /* §6.6: лог — только агрегаты, без chat_id и содержимого */
+        if (unf + cb + goal + dg + first + errs > 0) {
+            System.out.println("[notify] week=" + notifyWeekKey(today)
+                + " unf=" + unf + " cb=" + cb + " goal=" + goal + " dg=" + dg
+                + " first=" + first + " err=" + errs);
+        }
+    }
+
+    /* пауза 50 мс между отправками — запас к глобальному лимиту Telegram (§6.1) */
+    private static void notifyPause() {
+        try {
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /* ISO-ключ недели «2026-W48» для лога тика (§6.6) */
+    static String notifyWeekKey(LocalDate d) {
+        return String.format("%04d-W%02d",
+            d.get(WeekFields.ISO.weekBasedYear()), d.get(WeekFields.ISO.weekOfWeekBasedYear()));
+    }
+
+    /* отправка (§6.1): goal/dg — тихий пуш (disable_notification), unf/cb/first —
+       обычные; null = ok, иначе описание ошибки Telegram */
+    private String notifySend(long chatId, String type, String text, List<List<Map<String, Object>>> kb) {
+        if ("goal".equals(type) || "dg".equals(type)) return api.sendMessageSilentKb(chatId, text, kb);
+        return api.sendMessageResult(chatId, text, kb);
+    }
+
+    /* книга учёта при успешной отправке (§12.1): отметка {дата, тип} (трим до 7),
+       unf → lastWid, cb → stage = отправленный уровень, first → firstDone */
+    static void notifyMark(GymData data, String type, LocalDate today, long mtimeAgeMs) {
+        data.notifyLog.add(new NotifyMark(today.toString(), type));
+        while (data.notifyLog.size() > 7) data.notifyLog.remove(0);
+        if ("unf".equals(type)) {
+            Workout a = data.active();
+            if (a != null) data.notifyLastWid = a.id;
+        } else if ("cb".equals(type)) {
+            data.notifyStage = notifyCbLevel(notifySilenceDays(data, today, mtimeAgeMs), data.cadence);
+        } else if ("first".equals(type)) {
+            data.firstDone = true;
+        }
+    }
+
+    /* счётчик Stats по типу (§13): dg — имя ANA-S2 digestSent; только при ok */
+    private void notifyCount(String type) {
+        if (stats == null) return;
+        switch (type) {
+            case "unf" -> stats.inc("notifySentUnf");
+            case "cb" -> stats.inc("notifySentRc");
+            case "goal" -> stats.inc("notifySentGoal");
+            case "dg" -> stats.inc("digestSent");
+            case "first" -> stats.inc("notifySentFirst");
+            default -> { }
+        }
+    }
+
+    /* текст сообщения типа (§4): null — данных для текста нет: тишина без записи.
+       unf/cb/goal — [UX-T53] (§4.1–4.3), dg/first — [UX-T54] (§4.4–4.5) */
+    static String notifyText(String type, GymData data, LocalDate today, long mtimeAgeMs) {
+        switch (type) {
+            case "unf": {
+                Workout a = data.active();
+                if (a == null) return null;
+                return "🏋️ Тренировка от " + fmtDM(a.date)
+                    + " осталась незавершённой. Жизнь бывает насыщенной — допишешь сегодня?";
+            }
+            case "cb": {
+                /* текст по ФАКТУ молчания, не по этапу (§5.3): молчун с 90 днями получает
+                   ОДНО сообщение — сразу «последнее»; нулевая история на первой ступени —
+                   отдельный текст (§4.2). Каденс-1 день-21: текст «последнее» при ещё не
+                   закрытой лестнице (28) — осознанный компромисс правила «по факту» */
+                int silence = notifySilenceDays(data, today, mtimeAgeMs);
+                if (!notifyHasHistory(data) && notifyCbLevel(silence, data.cadence) == 1) {
+                    return "Первая тренировка — самая важная. 15 минут сегодня лучше идеального плана завтра 💪";
+                }
+                if (silence >= 21) {
+                    return "Прошло три недели. Это последнее напоминание — не хочу быть спамером. Дневник никуда не уйдёт 🙏";
+                }
+                if (silence >= 14) {
+                    return "Две недели без зала — бывает. Начать снова — самое трудное, дальше само пойдёт 💪";
+                }
+                return "👋 Неделя без тренировок. Может, сегодня тот самый день? Один подход — уже победа.";
+            }
+            case "goal": return notifyGoalText(data, today);
+            case "dg": return digestText(data, today);
+            case "first": return "🎉 <b>Первая тренировка в дневнике!</b>\n\n"
+                + "С неё всё начинается. Дальше — легче: история, рекорды и прогресс копятся сами 💪";
+            default: return null;
+        }
+    }
+
+    /* inline-клавиатура сообщения типа (§4.1–4.4); null — без клавиатуры. «Продолжить/
+       Начать» — существующие callback-флоу (wk:resume/menu:start); 🔕 — отписка в один
+       тап; cb-«последнее» (молчание ≥21) — без отписки: сообщений больше не будет.
+       Кнопка приложения: web_app (фолбэк url), нет ни той ни другой — ряда нет (§4.4) */
+    List<List<Map<String, Object>>> notifyKb(String type, GymData data, LocalDate today, long mtimeAgeMs) {
+        switch (type) {
+            case "unf": return List.of(
+                List.of(TelegramApi.button("▶️ Продолжить тренировку", "wk:resume")),
+                List.of(TelegramApi.button("🔕 Не напоминать", "ntf:offunf")));
+            case "cb": {
+                int silence = notifySilenceDays(data, today, mtimeAgeMs);
+                List<List<Map<String, Object>>> kb = new ArrayList<>();
+                kb.add(List.of(TelegramApi.button("💪 Начать тренировку", "menu:start")));
+                if (silence < 21) kb.add(List.of(TelegramApi.button("🔕 Не напоминать", "ntf:offcb")));
+                return kb;
+            }
+            case "dg": {
+                List<List<Map<String, Object>>> kb = new ArrayList<>();
+                if (webAppUrl != null) kb.add(List.of(TelegramApi.webAppButton("📱 Открыть приложение", webAppUrl)));
+                else if (appLink != null) kb.add(List.of(TelegramApi.urlButton("📱 Открыть приложение", appLink)));
+                kb.add(List.of(TelegramApi.button("🔕 Не присылать итоги", "digest:off")));
+                return kb;
+            }
+            case "goal": {
+                List<List<Map<String, Object>>> kb = new ArrayList<>();
+                if (webAppUrl != null) kb.add(List.of(TelegramApi.webAppButton("📱 Открыть приложение", webAppUrl)));
+                else if (appLink != null) kb.add(List.of(TelegramApi.urlButton("📱 Открыть приложение", appLink)));
+                kb.add(List.of(TelegramApi.button("🔕 Не напоминать о целях", "ntf:offgoal")));
+                return kb;
+            }
+            default: return null; /* first — без клавиатуры (§4.5: событийное, отписка не нужна) */
+        }
+    }
+
+    /* [UX-S19] итоги счётчиков для строки сводки (§13): отправлено — все 5 типов,
+       среагировало — 4 проактивных (notifyReactedFirst не заводим — нечестная метрика) */
+    static long notifySentTotal(Map<String, Object> snap) {
+        return Json.lng(snap.get("notifySentUnf")) + Json.lng(snap.get("notifySentRc"))
+            + Json.lng(snap.get("notifySentGoal")) + Json.lng(snap.get("digestSent"))
+            + Json.lng(snap.get("notifySentFirst"));
+    }
+
+    static long notifyReactedTotal(Map<String, Object> snap) {
+        return Json.lng(snap.get("notifyReactedUnf")) + Json.lng(snap.get("notifyReactedRc"))
+            + Json.lng(snap.get("notifyReactedGoal")) + Json.lng(snap.get("notifyReactedDigest"));
+    }
+
+    /* [UX-S19] реакция на напоминание (§13): юзер ЗАВЕРШИЛ тренировку в течение суток
+       после наджа — инкремент notifyReactedX по записям notifyLog (дата-гранулярность:
+       сегодня или вчера — точнее книга не хранит); вызывается из обеих точек финиша
+       (бот finishWorkout / WebServer.handleSave) при ПРИРОСТЕ завершённых. там же:
+       новая завершённая обнуляет лестницу реактивации notifyStage=0 (§5.3).
+       Публичный — gym.web.WebServer зовёт из handleSave */
+    public static void notifyReacted(GymData data, Stats stats, LocalDate today) {
+        String t0 = today.toString();
+        String t1 = today.minusDays(1).toString();
+        for (NotifyMark m : data.notifyLog) {
+            if (!t0.equals(m.d) && !t1.equals(m.d)) continue;
+            if (stats == null) continue;
+            switch (m.t) {
+                case "unf" -> stats.inc("notifyReactedUnf");
+                case "cb" -> stats.inc("notifyReactedRc");
+                case "goal" -> stats.inc("notifyReactedGoal");
+                case "dg" -> stats.inc("notifyReactedDigest");
+                default -> { }
+            }
+        }
     }
 
     /* ===== обратная связь «Написать разработчику» [ONB-T8] ===== */
@@ -2882,6 +3775,22 @@ public final class BotLogic {
     private static String fmtW(double w) {
         if (w == Math.floor(w) && !Double.isInfinite(w)) return String.valueOf((long) w);
         return String.valueOf(w);
+    }
+
+    /* [UX-S19] дата «24-11» — формат истории (§4.1) */
+    private static String fmtDM(String iso) {
+        if (iso == null) return "—";
+        try {
+            return DDM.format(LocalDate.parse(iso));
+        } catch (DateTimeParseException e) {
+            return iso;
+        }
+    }
+
+    /* [UX-S19] число в русской записи: десятичная запятая, целые без хвоста
+       (эквивалент goalFmtRu Mini App — чек-ин целей §4.3) */
+    static String numRu(double v) {
+        return fmtW(v).replace('.', ',');
     }
 
     private void send(long chatId, Long mid, String text, List<List<Map<String, Object>>> kb) {

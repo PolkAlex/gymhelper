@@ -44,7 +44,13 @@ public final class Stats {
         /* [UX-S16] постер v2: принятые POST /api/card и исход sendPhoto */
         "cardSend", "cardSendOk", "cardSendErr",
         /* [UX-S16] клиентская воронка «Картинки» через /api/track */
-        "cardClick", "cardOk", "cardErr"
+        "cardClick", "cardOk", "cardErr",
+        /* [UX-S19] механика возврата (§13): отправки по типам (dg — имя ANA-S2 digestSent),
+           реакции (юзер завершил тренировку в течение 24 ч после наджа), отписки.
+           Только агрегаты — без chat_id и содержимого */
+        "notifySentUnf", "notifySentRc", "notifySentGoal", "notifySentFirst", "digestSent",
+        "notifyReactedUnf", "notifyReactedRc", "notifyReactedGoal", "notifyReactedDigest",
+        "notifyOff", "digestOff"
     };
     /* верхняя граница числа источников в bucket startSrc (защита от раздутого файла) */
     private static final int START_SRC_MAX = 200;

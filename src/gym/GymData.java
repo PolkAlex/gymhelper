@@ -36,6 +36,20 @@ public final class GymData {
     /* [EXR-T19] томстоны удалённых «своих» (имена): ключа нет → пустой список (старые
        файлы ок); пишется только когда непустой — файл без удалённых остаётся прежним */
     public final List<String> customExHidden = new ArrayList<>();
+    /* [UX-S19] механика возврата: настройки уведомлений (клиент-авторитетны, null = вкл,
+        по образцу goalRemind, §12.1) и cadence (дней в неделю 1–7; null = «пока не знаю»);
+        книга учёта ниже пишет ТОЛЬКО сервер (часовой тик) — из payload /api/save её
+        значения не принимаются никогда (§12.3) */
+    public Integer cadence;           /* дней в неделю 1–7; null = «пока не знаю»/не отвечал */
+    public Boolean notifyMaster;      /* null = вкл; false = все 4 проактивных типа выкл */
+    public Boolean notifyUnfinished;  /* null = вкл; false = не писать про незавершённую */
+    public Boolean notifyComeback;    /* null = вкл; false = без реактивации */
+    public Boolean notifyDigest;      /* null = вкл; false = без итогов недели */
+    public Integer notifyWhen;        /* 1 утро, 2 день (дефолт null), 3 вечер */
+    public Integer notifyStage;       /* реактивация: 0..3 — до какого уровня дошли */
+    public Long notifyLastWid;        /* id незавершённой, о которой уже написали */
+    public Boolean firstDone;         /* true = поздравление с первой отправлено */
+    public final List<NotifyMark> notifyLog = new ArrayList<>(); /* ≤7 последних: {"d":ISO-дата,"t":тип} */
 
     public Workout active() {
         for (Workout w : workouts) {
@@ -215,6 +229,52 @@ public final class GymData {
                 d.customExHidden.add(name);
             }
         }
+        /* [UX-S19] настройки/книга возврата: ключей нет → дефолты (null/пустой список),
+            старые файлы читаются как раньше; каждый ключ читается толерантно — только
+            свой тип и диапазоны (cadence 1–7, notifyWhen 1–3, notifyStage 0–3,
+            notifyLastWid ≥ 0), мусорное значение не валит чтение файла (§12.2);
+            notifyLog: битые элементы пропускаются, неизвестный t игнорируется,
+            трим до 7 последних (§12.2) */
+        Object cad = m.get("cadence");
+        if (cad instanceof Number) {
+            int n = ((Number) cad).intValue();
+            if (n >= 1 && n <= 7) d.cadence = n;
+        }
+        d.notifyMaster = boolOrNull(m.get("notifyMaster"));
+        d.notifyUnfinished = boolOrNull(m.get("notifyUnfinished"));
+        d.notifyComeback = boolOrNull(m.get("notifyComeback"));
+        d.notifyDigest = boolOrNull(m.get("notifyDigest"));
+        d.firstDone = boolOrNull(m.get("firstDone"));
+        Object nw = m.get("notifyWhen");
+        if (nw instanceof Number) {
+            int n = ((Number) nw).intValue();
+            if (n >= 1 && n <= 3) d.notifyWhen = n;
+        }
+        Object nst = m.get("notifyStage");
+        if (nst instanceof Number) {
+            int n = ((Number) nst).intValue();
+            if (n >= 0 && n <= 3) d.notifyStage = n;
+        }
+        Object nlw = m.get("notifyLastWid");
+        if (nlw instanceof Number && ((Number) nlw).longValue() >= 0) {
+            d.notifyLastWid = ((Number) nlw).longValue();
+        }
+        Object nlogRaw = m.get("notifyLog");
+        if (nlogRaw instanceof List) {
+            List<NotifyMark> marks = new ArrayList<>();
+            for (Object o : (List<?>) nlogRaw) {
+                if (!(o instanceof Map)) continue;
+                Map<String, Object> mm = (Map<String, Object>) o;
+                String md = Json.str(mm, "d");
+                String mt = Json.str(mm, "t");
+                if (md == null || md.isEmpty() || mt == null) continue;
+                if (!mt.equals("unf") && !mt.equals("cb") && !mt.equals("goal")
+                        && !mt.equals("dg") && !mt.equals("first")) continue;
+                marks.add(new NotifyMark(md, mt));
+            }
+            if (marks.size() > 7) marks = new ArrayList<>(marks.subList(marks.size() - 7, marks.size()));
+            d.notifyLog.addAll(marks);
+        }
         for (Object o : Json.list(m.get("workouts"))) {
             Map<String, Object> w = Json.map(o);
             Workout workout = new Workout();
@@ -262,6 +322,11 @@ public final class GymData {
     private static String firstStr(Map<String, Object> m, String a, String b) {
         String v = Json.str(m, a);
         return v != null ? v : Json.str(m, b);
+    }
+
+    /* [UX-S19] Boolean-поля возврата: только настоящий Boolean, мусор → null (§12.2) */
+    private static Boolean boolOrNull(Object v) {
+        return v instanceof Boolean ? (Boolean) v : null;
     }
 
     private static Object firstOf(Map<String, Object> s, String a, String b) {
@@ -414,6 +479,25 @@ public final class GymData {
         /* [EXR-T19] томстоны — конец карты, пишутся только когда непустые (как favs):
             файл пользователя без удалённых «своих» остаётся байт-в-байт прежним */
         if (!customExHidden.isEmpty()) m.put("customExHidden", new ArrayList<Object>(customExHidden));
+        /* [UX-S19] механика возврата — конец карты, пишутся только заданные значения
+            (§12.1): файл юзера, не менявшего настройки и не получавшего сообщений,
+            остаётся байт-в-байт прежним; notifyMaster=true пишется явно — юзер вернул
+            после «выкл» (семантика goalRemind: null и true = вкл); notifyLog — только
+            непустой */
+        if (cadence != null) m.put("cadence", cadence);
+        if (notifyMaster != null) m.put("notifyMaster", notifyMaster);
+        if (notifyUnfinished != null) m.put("notifyUnfinished", notifyUnfinished);
+        if (notifyComeback != null) m.put("notifyComeback", notifyComeback);
+        if (notifyDigest != null) m.put("notifyDigest", notifyDigest);
+        if (notifyWhen != null) m.put("notifyWhen", notifyWhen);
+        if (notifyStage != null) m.put("notifyStage", notifyStage);
+        if (notifyLastWid != null) m.put("notifyLastWid", notifyLastWid);
+        if (firstDone != null) m.put("firstDone", firstDone);
+        if (!notifyLog.isEmpty()) {
+            List<Object> nl = new ArrayList<>();
+            for (NotifyMark mk : notifyLog) nl.add(mk.toJson());
+            m.put("notifyLog", nl);
+        }
         return m;
     }
 }

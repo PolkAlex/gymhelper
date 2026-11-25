@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[UX-S19] #406 · Механика возврата: настройки, онбординг, сообщения бота</title>
+<style>
+/* ============ страница-презентация ============ */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body.page {
+    background: #08090b;
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    color: #c9ccd2;
+    padding: 28px 12px 90px;
+}
+.stage { max-width: 454px; margin: 0 auto; }
+.mhead { margin: 0 2px 6px; font-size: 17px; font-weight: 700; color: #f2f3f5; }
+.mhead span { color: #ffc220; }
+.msub { margin: 0 2px 6px; font-size: 12.5px; color: #7d838e; line-height: 1.5; }
+.caption { margin: 46px 2px 12px; font-size: 15px; font-weight: 700; color: #f2f3f5; }
+.caption span { color: #ffc220; font-weight: 600; font-size: 12px; margin-left: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.note { margin: -6px 2px 14px; font-size: 12.5px; color: #7d838e; line-height: 1.55; }
+.note b { color: #a8adb6; }
+.note code { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: #ffc220; background: rgba(255,194,32,.08); border-radius: 4px; padding: 1px 4px; }
+.footblock {
+    margin: 40px 2px 0; padding: 14px 16px; border: 1px solid #23262c; border-radius: 14px;
+    background: rgba(255,255,255,.03); font-size: 12.5px; color: #8f95a0; line-height: 1.6;
+}
+.footblock b { color: #c9ccd2; }
+.footblock .t { font-size: 13px; font-weight: 700; color: #f2f3f5; margin-bottom: 6px; }
+.footblock table { border-collapse: collapse; width: 100%; font-size: 11.5px; }
+.footblock td { border: 1px solid #2a2d33; padding: 4px 7px; vertical-align: top; }
+
+/* ============ телефон 390px (общая рамка) ============ */
+.phone {
+    position: relative; width: 100%; max-width: 390px; margin: 0 auto;
+    height: 760px; border-radius: 36px; border: 1px solid #23262c;
+    overflow: hidden; background: #101114; box-shadow: 0 24px 70px rgba(0,0,0,.55);
+    display: flex; flex-direction: column;
+}
+.phone.tg { background: #0e1621; }
+
+/* ============ Mini App: каркас (значения из web/style.css) ============ */
+.p {
+    --bg: #101114; --text: #f2f3f5; --muted: #9aa0aa;
+    --accent: #ffc220; --accent-deep: #ffb000; --on-accent: #14120a;
+    --danger: #ff6b5e;
+    --glass: rgba(255,255,255,.055); --glassbrd: rgba(255,255,255,.10);
+    --glowbrd: rgba(255,194,32,.28);
+    --nested: rgba(0,0,0,.18); --nestedbrd: rgba(255,255,255,.05);
+    --btn: rgba(255,255,255,.07); --btnbrd: rgba(255,255,255,.08);
+    --cardshadow: rgba(0,0,0,.28); --blik: rgba(255,255,255,.06);
+    position: relative; flex: 1; min-height: 0;
+    overflow-y: auto; overflow-x: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, 'SF Pro Display', 'Segoe UI Variable Display', 'Segoe UI', Roboto, sans-serif;
+    font-size: 15px; line-height: 1.45;
+    scrollbar-width: none;
+}
+.p::before {
+    content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+        radial-gradient(420px 300px at 85% -40px, rgba(255,178,32,.15), transparent 70%),
+        radial-gradient(380px 320px at -60px 30%, rgba(255,138,60,.09), transparent 70%),
+        radial-gradient(460px 360px at 110% 80%, rgba(150,92,25,.18), transparent 72%);
+}
+.p > * { position: relative; z-index: 1; }
+.p::-webkit-scrollbar { display: none; }
+
+.topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: linear-gradient(180deg, rgba(16,17,20,.96) 62%, rgba(16,17,20,.8));
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glassbrd); border-radius: 16px;
+    padding: 10px 12px; max-width: 536px; margin: 4px 0 12px;
+}
+.tb-title { font-weight: 700; font-size: 17px; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; min-width: 0; }
+.tbtn {
+    width: 32px; height: 32px; border-radius: 9px; border: none; flex: none; cursor: pointer;
+    background: var(--btn); color: var(--muted);
+    display: inline-flex; align-items: center; justify-content: center; padding: 0;
+}
+.tbtn svg { width: 18px; height: 18px; }
+.content { padding: 0 12px 120px; }
+
+.nav {
+    position: sticky; bottom: 0; z-index: 40;
+    margin: 0 -12px; padding: 8px 14px calc(12px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(16,17,20,.2), rgba(16,17,20,.94) 40%);
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    display: flex; align-items: flex-end;
+}
+.nav .nbtn {
+    flex: 1; background: none; border: none; cursor: pointer; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    color: #6d737d; font-size: 10px; font-weight: 600; padding: 2px 0;
+}
+.nav .nbtn.on { color: var(--text); }
+.nav .nbtn.on .nic { color: var(--accent); }
+.nav .nic { display: inline-flex; line-height: 1; }
+.nav .nic svg { width: 20px; height: 20px; color: inherit; }
+.nav .nfab {
+    flex: none; width: 52px; height: 52px; margin: 0 6px;
+    border-radius: 50%; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    color: var(--on-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(255,194,32,.35);
+}
+.nav .nfab svg { width: 24px; height: 24px; }
+
+/* ============ карточки / текст / кнопки / тоглы / чипы ============ */
+.glass {
+    background: var(--glass); border: 1px solid var(--glassbrd);
+    border-radius: 20px; backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    padding: 14px; margin-bottom: 10px;
+    box-shadow: inset 0 1px 0 var(--blik), 0 10px 30px var(--cardshadow);
+}
+.glass.glow { border-color: var(--glowbrd); }
+.t1 { font-size: 18px; font-weight: 700; margin: 0 0 2px; letter-spacing: .2px; }
+.meta { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+.muted { color: var(--muted); font-size: 13px; }
+.flabel { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+.hr { border-top: 1px solid var(--nestedbrd); margin: 13px 0 12px; }
+.btnrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.btn {
+    border: 1px solid var(--btnbrd); border-radius: 14px; padding: 10px 14px;
+    font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+    background: var(--btn); color: var(--text); text-align: center;
+}
+.btn.sec { background: var(--btn); }
+.btn.wide { flex: 1 1 100%; }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin: 10px 0 4px; }
+.chip {
+    border: 1px solid var(--btnbrd); color: var(--text); background: var(--btn);
+    border-radius: 999px; padding: 8px 13px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.chip.dis { opacity: .45; pointer-events: none; }
+.setrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.setrow .lbl { flex: 1; font-size: 14px; font-weight: 600; min-width: 0; }
+.setrow-dim, .lbl.dim { color: var(--muted); }
+.switch {
+    width: 66px; height: 44px; padding: 0; border: none; background: none;
+    display: inline-flex; align-items: center; justify-content: flex-end;
+    cursor: pointer; flex: none; font-family: inherit;
+}
+.sw-track {
+    position: relative; width: 56px; height: 32px; border-radius: 999px;
+    box-sizing: border-box;
+    background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.10);
+}
+.switch.on .sw-track {
+    background: linear-gradient(135deg, var(--accent-deep), var(--accent));
+    border-color: transparent;
+}
+.sw-knob {
+    position: absolute; top: 2px; left: 2px; width: 26px; height: 26px;
+    border-radius: 50%; background: rgba(255,255,255,.92);
+    border: 1px solid rgba(255,255,255,.25);
+    box-shadow: 0 2px 8px var(--cardshadow), inset 0 1px 0 var(--blik);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .22s cubic-bezier(.2,.8,.25,1);
+}
+.switch.on .sw-knob { transform: translateX(24px); background: #fff; border-color: transparent; }
+.switch.dis { opacity: .45; pointer-events: none; }
+
+/* ============ онбординг: шаг cadence ============ */
+.ob { height: 100%; display: flex; flex-direction: column; align-items: center; padding: 34px 24px 30px; text-align: center; }
+.ob-center { margin: auto; width: 100%; display: flex; flex-direction: column; align-items: center; }
+.wbadge {
+    width: 72px; height: 72px; border-radius: 24px;
+    background: linear-gradient(135deg, rgba(255,176,0,.18), rgba(255,194,32,.05));
+    border: 1px solid var(--glowbrd);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 44px rgba(255,194,32,.14), inset 0 1px 0 var(--blik);
+}
+.wbadge svg { width: 36px; height: 36px; color: var(--accent); }
+.wtitle { font-size: 24px; font-weight: 800; letter-spacing: .3px; margin-top: 18px; line-height: 1.25; }
+.wtag { font-size: 13.5px; color: var(--muted); margin-top: 8px; font-weight: 600; line-height: 1.55; }
+.cadchips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 22px; }
+.cadchips .chip { padding: 12px 0; width: 56px; font-size: 16px; font-weight: 700; }
+.cadchips .chip.on { box-shadow: 0 8px 24px rgba(255,194,32,.25); }
+.wskip { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 14px; font-weight: 600; padding: 12px; cursor: pointer; width: 100%; margin-top: 14px; }
+.ob-bottom { width: 100%; }
+
+/* ============ Telegram-чат (тёмная тема) ============ */
+.tg-top { background: #17212b; flex: none; }
+.statusrow { display: flex; justify-content: space-between; align-items: center; padding: 8px 18px 4px; font-size: 12px; font-weight: 600; color: #e9eef3; }
+.statusrow .sig { font-size: 10px; letter-spacing: 1px; color: #a8adb6; }
+.chhead { display: flex; align-items: center; gap: 10px; padding: 8px 12px 10px; }
+.chhead .back { font-size: 22px; color: #a8adb6; line-height: 1; padding: 0 2px; }
+.avatar {
+    width: 40px; height: 40px; border-radius: 50%; flex: none;
+    background: linear-gradient(135deg, #ffb000, #ffc220);
+    display: flex; align-items: center; justify-content: center; font-size: 19px;
+    box-shadow: 0 4px 14px rgba(255,194,32,.25);
+}
+.chwho { flex: 1; min-width: 0; }
+.chwho .nm { font-size: 15px; font-weight: 700; color: #f2f5f8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chwho .st { font-size: 12px; color: #7d8794; margin-top: 1px; }
+.chact { display: flex; gap: 18px; color: #a8adb6; font-size: 17px; padding-right: 4px; }
+.chat { flex: 1; overflow-y: auto; background: #0e1621; padding: 12px 10px 14px; scrollbar-width: none; }
+.chat::-webkit-scrollbar { display: none; }
+.datechip { width: max-content; margin: 4px auto 12px; padding: 4px 12px; background: rgba(12,20,30,.72); border-radius: 999px; font-size: 12px; font-weight: 600; color: #cfd8e1; }
+.msgrow { display: flex; margin: 0 0 10px; }
+.bubble {
+    position: relative; max-width: 84%;
+    background: #182533; border-radius: 14px; border-bottom-left-radius: 4px;
+    padding: 10px 13px 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.35);
+    font-size: 14.5px; line-height: 1.5; color: #e9eef3;
+}
+.bubble .b { font-weight: 700; }
+.bubble .dim { color: #8d99a6; }
+.bubble .sec { margin-top: 9px; }
+.bubble .tail { position: absolute; left: -5px; bottom: 0; width: 0; height: 0; border-style: solid; border-width: 0 0 14px 14px; border-color: transparent transparent #182533 transparent; }
+.bmeta { display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 3px; font-size: 11px; color: #6d7887; height: 14px; }
+.bmeta .moon { font-size: 12px; }
+.ikb { margin: 8px 2px 0 12px; max-width: 84%; }
+.ikb .irow { display: flex; margin-top: 6px; }
+.ikb .ibtn {
+    flex: 1; text-align: center; padding: 10px 8px; border-radius: 9px;
+    background: rgba(43,82,120,.92); color: #fff; font-size: 14px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ikb .ibtn.ghost { background: rgba(43,82,120,.45); color: #c6d3e1; font-size: 13px; }
+.tg-input { flex: none; background: #17212b; padding: 8px 10px 12px; display: flex; align-items: center; gap: 8px; }
+.tg-input .clip { font-size: 20px; color: #a8adb6; padding: 0 2px; }
+.tg-input .field { flex: 1; background: #2b3742; border-radius: 18px; padding: 9px 14px; font-size: 14px; color: #6d7887; }
+.tg-input .mic { font-size: 19px; color: #a8adb6; padding: 0 4px; }
+.mark {
+    display: inline-block; margin: 0 0 8px 12px; padding: 3px 10px;
+    border-radius: 999px; border: 1px dashed rgba(255,194,32,.4);
+    font-size: 11px; font-weight: 600; color: #ffc220; letter-spacing: .3px;
+}
+</style>
+</head>
+<body class="page">
+<div class="stage">
+
+<p class="mhead">[UX-S19] #406 · Механика возврата <span>· настройки · онбординг · сообщения бота</span></p>
+<p class="msub">Спека — <b>docs/spec-ux-s19-returning.md</b> (тексты §4, триггеры §5, планировщик §6, данные §12).
+Экраны 1–3 — Mini App (390px, тёмная тема), 4–8 — Telegram-чат. Антиспам: ≤1 сообщения/день,
+≤4/нед, тихие часы 21:00–10:00 UTC+3, отписка в один тап под каждым сообщением.
+Ревизия 2 (25.11): макет утверждён владельцем; время обезличено (без привязки к конкретной зоне).</p>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2.6"/>
+    <path d="M12 2.8v3.2M12 18v3.2M2.8 12h3.2M18 12h3.2"/>
+    <path d="M5.4 5.4l2.2 2.2M16.4 16.4l2.2 2.2M18.6 5.4l-2.2 2.2M7.6 16.4l-2.2 2.2"/>
+  </symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="3.6"/><path d="M5.5 19.5c1.2-3.6 3.7-5.2 6.5-5.2s5.3 1.6 6.5 5.2"/>
+  </symbol>
+  <symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 4.5a7.5 7.5 0 11-7.5 7.5"/><path d="M2.9 13.6L4.5 12l1.6 1.6"/><path d="M12 7.5V12l3 1.8"/>
+  </symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5.5 19.5V13"/><path d="M12 19.5v-15"/><path d="M18.5 19.5v-9"/><path d="M3 19.5h18"/>
+  </symbol>
+  <symbol id="i-pilates" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4.5 17.5c2.2-5.5 4.8-8.5 7.5-8.5s5.3 3 7.5 8.5"/><path d="M4.5 19.5h15"/>
+  </symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5v14M5 12h14"/>
+  </symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M4 10.5h16M8 3.5v4M16 3.5v4"/>
+  </symbol>
+</svg>
+
+<!-- ================================================================ -->
+<h2 class="caption">1 · Настройки — карточка «🔔 Уведомления» <span>Mini App · мастер вкл</span></h2>
+<p class="note">Новая карточка между «⏱ Таймер отдыха» и «🧑‍🏫 Персональный тренер». Компоненты
+готовые (<code>.switch</code>/<code>.setrow</code>/<code>.chips</code>) — новых иконок нет.
+Тумблер «Чек-ин по целям» пишет существующее поле <code>goalRemind</code>. Тап по тумблу —
+мгновенный <code>save()</code> (напоминания живут на сервере). Соседние карточки сокращены —
+не меняются.</p>
+
+<div class="phone"><div class="p">
+  <div class="content">
+    <div class="topbar">
+      <span class="tb-title">Настройки</span>
+      <button class="tbtn" title="Закрыть" aria-label="Закрыть"><svg><use href="#i-gear"/></svg></button>
+    </div>
+
+    <div class="glass">
+      <p class="t1">🎨 Оформление</p>
+      <p class="meta">… не меняется (редакция UX-S4)</p>
+    </div>
+
+    <div class="glass">
+      <p class="t1">⏱ Таймер отдыха</p>
+      <p class="meta">… не меняется</p>
+    </div>
+
+    <div class="glass glow">
+      <span class="mark">новая карточка [UX-S19]</span>
+      <p class="t1">🔔 Уведомления</p>
+      <p class="meta">Бот подстрахует, если отвлечёшься. Ночью — тишина.</p>
+
+      <div class="setrow"><span class="lbl">Напоминания</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Напоминания"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <div class="setrow"><span class="lbl">Незавершённая тренировка</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Незавершённая тренировка"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <div class="setrow"><span class="lbl">Возврат в зал</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Возврат в зал"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <div class="setrow"><span class="lbl">Чек-ин по целям</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Чек-ин по целям"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <p class="meta">воскресенье вечером, если есть цели</p>
+      <div class="setrow"><span class="lbl">Итоги недели</span>
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Итоги недели"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+
+      <div class="hr"></div>
+      <div class="flabel">Когда напоминать</div>
+      <div class="chips">
+        <button class="chip">Утром</button>
+        <button class="chip on">Днём</button>
+        <button class="chip">Вечером</button>
+      </div>
+      <div class="flabel">Дней в неделю</div>
+      <div class="chips">
+        <button class="chip">1</button><button class="chip">2</button><button class="chip">3</button><button class="chip">4</button>
+        <button class="chip">5</button><button class="chip">6</button><button class="chip">7</button>
+        <button class="chip">Пока не знаю</button>
+      </div>
+      <p class="meta">По UTC+3. Всё выключить — первым тумблером.</p>
+    </div>
+
+    <div class="glass">
+      <p class="t1">🧑‍🏫 Персональный тренер</p>
+      <p class="meta">… не меняется</p>
+      <div class="btnrow"><button class="btn sec wide">Открыть раздел</button></div>
+    </div>
+
+    <div class="glass">
+      <p class="t1">ℹ️ О приложении</p>
+      <p class="meta">… не меняется</p>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="nbtn"><span class="nic"><svg><use href="#i-history"/></svg></span><span>История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span>Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span>Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span>Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================ -->
+<h2 class="caption">2 · Та же карточка — мастер выключен <span>всё гасится одним тумблером</span></h2>
+<p class="note">Первый тумбл off → строки типов и чипы «Когда напоминать» затемняются и некликабельны
+(состояние сохраняется — включение мастера возвращает всё как было). Ряд «Дней в неделю»
+остаётся активным: это не напоминание, а входные данные механики. Выбран «3» — чип подсвечен.</p>
+
+<div class="phone"><div class="p">
+  <div class="content">
+    <div class="topbar">
+      <span class="tb-title">Настройки</span>
+      <button class="tbtn" title="Закрыть" aria-label="Закрыть"><svg><use href="#i-gear"/></svg></button>
+    </div>
+
+    <div class="glass">
+      <p class="t1">🔔 Уведомления</p>
+      <p class="meta">Все напоминания выключены. Ночью и так тихо 😴</p>
+
+      <div class="setrow"><span class="lbl">Напоминания</span>
+        <button class="switch" role="switch" aria-checked="false" aria-label="Напоминания"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <div class="setrow"><span class="lbl dim">Незавершённая тренировка</span>
+        <button class="switch dis" role="switch" aria-checked="true" aria-disabled="true" aria-label="Незавершённая тренировка"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <div class="setrow"><span class="lbl dim">Возврат в зал</span>
+        <button class="switch dis" role="switch" aria-checked="false" aria-disabled="true" aria-label="Возврат в зал"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <div class="setrow"><span class="lbl dim">Чек-ин по целям</span>
+        <button class="switch dis" role="switch" aria-checked="true" aria-disabled="true" aria-label="Чек-ин по целям"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+      <div class="setrow"><span class="lbl dim">Итоги недели</span>
+        <button class="switch dis" role="switch" aria-checked="true" aria-disabled="true" aria-label="Итоги недели"><span class="sw-track"><span class="sw-knob"></span></span></button>
+      </div>
+
+      <div class="hr"></div>
+      <div class="flabel">Когда напоминать</div>
+      <div class="chips">
+        <button class="chip dis">Утром</button>
+        <button class="chip dis">Днём</button>
+        <button class="chip dis">Вечером</button>
+      </div>
+      <div class="flabel">Дней в неделю</div>
+      <div class="chips">
+        <button class="chip">1</button><button class="chip">2</button><button class="chip on">3</button><button class="chip">4</button>
+        <button class="chip">5</button><button class="chip">6</button><button class="chip">7</button>
+        <button class="chip">Пока не знаю</button>
+      </div>
+      <p class="meta">По UTC+3.</p>
+    </div>
+
+    <div class="glass">
+      <p class="t1">🧑‍🏫 Персональный тренер</p>
+      <p class="meta">… не меняется</p>
+    </div>
+  </div>
+
+  <div class="nav">
+    <button class="nbtn"><span class="nic"><svg><use href="#i-history"/></svg></span><span>История</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-chart"/></svg></span><span>Статистика</span></button>
+    <button class="nfab" title="Начать тренировку"><svg><use href="#i-plus"/></svg></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-pilates"/></svg></span><span>Техника</span></button>
+    <button class="nbtn"><span class="nic"><svg><use href="#i-user"/></svg></span><span>Профиль</span></button>
+  </div>
+</div></div>
+
+<!-- ================================================================ -->
+<h2 class="caption">3 · Онбординг — шаг «Сколько дней в неделю?» <span>между каруселью и туториалом</span></h2>
+<p class="note">Флоу: приветствие-карусель → «Начать» → <b>этот шаг</b> → туториал (новые) / приложение
+(существующие). Модальный слой без нижней навигации (как карусель). Тап по чипу = ответ
+и переход (один тап, «Дальше» не нужен); «Пока не знаю» = пропуск. Ответ пишется в
+<code>GymData.cadence</code> (нужно серверу — пороги реактивации и строка дайджеста);
+«спрошен ли» — <code>localStorage gymCadenceAsk</code>. Показывается всем один раз после релиза.</p>
+
+<div class="phone"><div class="p">
+  <div class="ob">
+    <div class="ob-center">
+      <div class="wbadge"><svg><use href="#i-calendar"/></svg></div>
+      <div class="wtitle">Сколько дней в неделю<br>тренируешься?</div>
+      <div class="wtag">Помогает подстроить напоминания.<br>Ответ ни к чему не обязывает.</div>
+      <div class="cadchips">
+        <button class="chip">1</button><button class="chip">2</button><button class="chip">3</button>
+        <button class="chip">4</button><button class="chip">5</button><button class="chip">6</button>
+        <button class="chip">7</button>
+      </div>
+      <div class="ob-bottom">
+        <button class="wskip">Пока не знаю</button>
+        <p class="meta">Изменить можно потом: Настройки → 🔔 Уведомления</p>
+      </div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ================================================================ -->
+<h2 class="caption">4 · Чат — незавершённая тренировка <span>висит &gt;1 дня</span></h2>
+<p class="note">Триггер: активная тренировка с датой ≤ вчера + юзер не трогал данные ≥24 ч.
+Одно сообщение на тренировку (<code>notifyLastWid</code>), повторных нет. Обычный пуш
+(со звуком). Дата — формат истории «24-11». «▶️ Продолжить» — существующий callback
+<code>wk:resume</code>; «🔕» пишет <code>notifyUnfinished=false</code> и снимает кнопки.</p>
+
+<div class="phone tg">
+  <div class="tg-top">
+    <div class="statusrow"><span>13:02</span><span class="sig">•••&nbsp;ᯤ&nbsp;▮▮▮</span></div>
+    <div class="chhead">
+      <span class="back">‹</span>
+      <div class="avatar">💪</div>
+      <div class="chwho"><div class="nm">GymHelperBot</div><div class="st">бот</div></div>
+      <div class="chact"><span>🔍</span><span>⋮</span></div>
+    </div>
+  </div>
+  <div class="chat">
+    <div class="datechip">25 ноября</div>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        🏋️ Тренировка от 24-11 осталась незавершённой. Жизнь бывает насыщенной — допишешь сегодня?
+        <div class="bmeta"><span>13:02</span></div>
+      </div>
+    </div>
+    <div class="ikb">
+      <div class="irow"><span class="ibtn">▶️ Продолжить тренировку</span></div>
+      <div class="irow"><span class="ibtn ghost">🔕 Не напоминать</span></div>
+    </div>
+  </div>
+  <div class="tg-input"><span class="clip">📎</span><span class="field">Сообщение</span><span class="mic">🎤</span></div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="caption">5 · Чат — реактивация 7 / 14 / 21 <span>три сообщения, потом стоп</span></h2>
+<p class="note">Молчание = дней с последней ЗАВЕРШЁННОЙ тренировки (нулевой истории — с последнего
+захода). Текст выбирается по факту: 7–13 дней → «неделя», 14–20 → «две», ≥21 → «последнее»
+(молчун с релиза получит сразу третье — честно и один раз). «💪 Начать» → <code>menu:start</code>.
+У последнего сообщения отписки нет: сообщений больше не будет. Юзер с <code>cadence=1</code>
+получает серию по 14/21/28 дней (его норма — раз в неделю).</p>
+
+<div class="phone tg">
+  <div class="tg-top">
+    <div class="statusrow"><span>13:04</span><span class="sig">•••&nbsp;ᯤ&nbsp;▮▮▮</span></div>
+    <div class="chhead">
+      <span class="back">‹</span>
+      <div class="avatar">💪</div>
+      <div class="chwho"><div class="nm">GymHelperBot</div><div class="st">бот</div></div>
+      <div class="chact"><span>🔍</span><span>⋮</span></div>
+    </div>
+  </div>
+  <div class="chat">
+    <div class="datechip">18 ноября · день 7</div>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        👋 Неделя без тренировок. Может, сегодня тот самый день? Один подход — уже победа.
+        <div class="bmeta"><span>13:04</span></div>
+      </div>
+    </div>
+    <div class="ikb">
+      <div class="irow"><span class="ibtn">💪 Начать тренировку</span></div>
+      <div class="irow"><span class="ibtn ghost">🔕 Не напоминать</span></div>
+    </div>
+
+    <div class="datechip">25 ноября · день 14</div>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        Две недели без зала — бывает. Начать снова — самое трудное, дальше само пойдёт 💪
+        <div class="bmeta"><span>13:01</span></div>
+      </div>
+    </div>
+    <div class="ikb">
+      <div class="irow"><span class="ibtn">💪 Начать тренировку</span></div>
+      <div class="irow"><span class="ibtn ghost">🔕 Не напоминать</span></div>
+    </div>
+
+    <div class="datechip">2 декабря · день 21</div>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        Прошло три недели. Это последнее напоминание — не хочу быть спамером. Дневник никуда не уйдёт 🙏
+        <div class="bmeta"><span>13:03</span></div>
+      </div>
+    </div>
+    <div class="ikb">
+      <div class="irow"><span class="ibtn">💪 Начать тренировку</span></div>
+    </div>
+    <span class="mark">дальше — тишина: новая серия только после завершённой тренировки</span>
+  </div>
+  <div class="tg-input"><span class="clip">📎</span><span class="field">Сообщение</span><span class="mic">🎤</span></div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="caption">6 · Чат — итоги недели <span>понедельник · тихий пуш</span></h2>
+<p class="note">Механика и тексты — ANA-S2 §2в; изменения UX-S19: понедельник в окне юзера
+(не 09:00 сервера), per-user <code>notifyLog</code> вместо глобального digest-state, строка
+«план 3/нед» при заданном <code>cadence</code>, кнопка — <b>web_app</b> (фолбэк url
+<code>appLink</code>). 0 тренировок за неделю — молчим. Луна у времени = тихий пуш
+(<code>disable_notification</code>). Кнопка «🔕» → <code>notifyDigest=false</code>,
+ответ и возврат через <code>/digest</code> — тексты ANA-S2.</p>
+
+<div class="phone tg">
+  <div class="tg-top">
+    <div class="statusrow"><span>13:00</span><span class="sig">•••&nbsp;ᯤ&nbsp;▮▮▮</span></div>
+    <div class="chhead">
+      <span class="back">‹</span>
+      <div class="avatar">💪</div>
+      <div class="chwho"><div class="nm">GymHelperBot</div><div class="st">бот</div></div>
+      <div class="chact"><span>🔍</span><span>⋮</span></div>
+    </div>
+  </div>
+  <div class="chat">
+    <div class="datechip">23 ноября</div>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        📊 <span class="b">Итоги недели</span> · 16–22 ноября
+
+        <div class="sec">🏋️ Тренировки: <span class="b">4</span> · в зале 3 ч 40 мин · план 3/нед</div>
+        <div>⚖️ Тоннаж: <span class="b">6,2 т</span> · <span class="dim">▲ +0,8 т к прошлой</span></div>
+        <div>🔥 Ккал: <span class="b">≈ 2 400</span></div>
+
+        <div class="sec">🏆 <span class="b">Рекорды недели:</span></div>
+        <div>• Жим лёжа — 1ПМ ≈ <span class="b">82 кг</span> (▲ +2)</div>
+
+        <div class="sec">Хорошая неделя. Так держать 💪</div>
+        <div class="bmeta"><span class="moon">🌙</span><span>13:00</span></div>
+      </div>
+    </div>
+    <div class="ikb">
+      <div class="irow"><span class="ibtn">📱 Открыть приложение</span></div>
+      <div class="irow"><span class="ibtn ghost">🔕 Не присылать итоги</span></div>
+    </div>
+    <span class="mark">web_app-кнопка: открывает Mini App не покидая чата</span>
+  </div>
+  <div class="tg-input"><span class="clip">📎</span><span class="field">Сообщение</span><span class="mic">🎤</span></div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="caption">7 · Чат — первая тренировка <span>событие · строка в финише</span></h2>
+<p class="note">Бот: строка в существующее «🎉 Тренировка завершена!» (<code>finishWorkout</code>) —
+поздравление мгновенное. Приложение: тост «🏅 Первая тренировка в дневнике!» сразу при
+завершении; чат-сообщение (для завершений из Mini App) шлёт часовой тик — текст ниже,
+без клавиатуры. Не глушится мастер-тоглом (событийное, как «🏆 Рекорд!»). Легаси-юзеры
+не получают ничего (дата первой тренировки старая). Day-1 ачивка: retention 20.5% → 33.4%.</p>
+
+<div class="phone tg">
+  <div class="tg-top">
+    <div class="statusrow"><span>19:41</span><span class="sig">•••&nbsp;ᯤ&nbsp;▮▮▮</span></div>
+    <div class="chhead">
+      <span class="back">‹</span>
+      <div class="avatar">💪</div>
+      <div class="chwho"><div class="nm">GymHelperBot</div><div class="st">бот</div></div>
+      <div class="chact"><span>🔍</span><span>⋮</span></div>
+    </div>
+  </div>
+  <div class="chat">
+    <div class="datechip">25 ноября</div>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        🎉 <span class="b">Тренировка завершена!</span>
+        <div class="sec">🏅 Первая тренировка в дневнике — с неё всё начинается. Дальше легче 💪</div>
+        <div class="sec dim">09-11 ПН · Жим лёжа · Брусья · Приседания…</div>
+        <div class="bmeta"><span>19:41</span></div>
+      </div>
+    </div>
+    <span class="mark">завершение из Mini App → тик пришлёт в чат:</span>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        🎉 <span class="b">Первая тренировка в дневнике!</span>
+        <div class="sec">С неё всё начинается. Дальше — легче: история, рекорды и прогресс копятся сами 💪</div>
+        <div class="bmeta"><span>20:07</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="tg-input"><span class="clip">📎</span><span class="field">Сообщение</span><span class="mic">🎤</span></div>
+</div>
+
+<!-- ================================================================ -->
+<h2 class="caption">8 · Чат — /notify <span>экран настроек для юзеров без Mini App</span></h2>
+<p class="note">Каждый тап — переключение и перерисовка экрана (<code>editMessageText</code>,
+паттерн «⏱ Отдых: 90 сек»). Callback-ряды: <code>ntf:master / ntf:unf / ntf:cb / ntf:goal /
+ntf:dg / ntf:when / home</code>. Команда добавляется в <code>setMyCommands</code> и
+<code>/help</code>. Состояние «вкл/выкл» в подписи кнопки — фактическое значение полей
+GymData (§12.1).</p>
+
+<div class="phone tg">
+  <div class="tg-top">
+    <div class="statusrow"><span>13:10</span><span class="sig">•••&nbsp;ᯤ&nbsp;▮▮▮</span></div>
+    <div class="chhead">
+      <span class="back">‹</span>
+      <div class="avatar">💪</div>
+      <div class="chwho"><div class="nm">GymHelperBot</div><div class="st">бот</div></div>
+      <div class="chact"><span>🔍</span><span>⋮</span></div>
+    </div>
+  </div>
+  <div class="chat">
+    <div class="datechip">25 ноября</div>
+    <div class="msgrow">
+      <div class="bubble">
+        <span class="tail"></span>
+        🔔 <span class="b">Напоминания</span>
+
+        <div class="sec">Подстрахую, если отвлечёшься:</div>
+        <div>• Незавершённая тренировка — <span class="b">вкл</span></div>
+        <div>• Возврат в зал — <span class="b">вкл</span></div>
+        <div>• Чек-ин по целям (вс) — <span class="b">вкл</span></div>
+        <div>• Итоги недели (пн) — <span class="b">вкл</span></div>
+
+        <div class="sec">Когда напоминать: <span class="b">днём</span> (UTC+3)</div>
+        <div class="bmeta"><span>13:10</span></div>
+      </div>
+    </div>
+    <div class="ikb">
+      <div class="irow"><span class="ibtn ghost">🔕 Выключить всё</span></div>
+      <div class="irow"><span class="ibtn">🏋️ Незавершённая: вкл</span></div>
+      <div class="irow"><span class="ibtn">↩️ Возврат в зал: вкл</span></div>
+      <div class="irow"><span class="ibtn">🎯 Чекин целей: вкл</span></div>
+      <div class="irow"><span class="ibtn">📊 Итоги недели: вкл</span></div>
+      <div class="irow"><span class="ibtn">⏰ Когда: днём</span></div>
+      <div class="irow"><span class="ibtn ghost">🏠 Меню</span></div>
+    </div>
+  </div>
+  <div class="tg-input"><span class="clip">📎</span><span class="field">Сообщение</span><span class="mic">🎤</span></div>
+</div>
+
+<!-- ================= примечания ================= -->
+<div class="footblock">
+<p class="t">Реализация — ключевые зацепки (полные детали в спеке)</p>
+<table>
+<tr><td><b>Поток</b></td><td><code>notify-ticker</code>: отдельный daemon-<code>ScheduledExecutorService</code>
+в BotLogic (НЕ общий с таймером отдыха), тик раз в час, <code>notifyTickSafe</code> = try/catch
+по паттерну <code>restTickSafe</code>. Обход <code>storage.chatIds()</code>, паузы 50 мс.</td></tr>
+<tr><td><b>Время</b></td><td>якорь — UTC+3: <code>System.currentTimeMillis() + GYM_NOTIFY_TZ_MIN</code>
+(дефолт 180 = UTC+3). Тихие часы 21:00–10:00; окна: утро 10–13 / день 13–17 (null) / вечер 17–21.</td></tr>
+<tr><td><b>Отправка</b></td><td><code>sendMessageResult</code> (ошибка не съедает лимит дня, файл не пишется).
+Чек-ин и дайджест — тихий пуш (новый <code>sendMessageSilentKb</code>); web_app-кнопка — новый
+<code>TelegramApi.webAppButton(text,url)</code>, фолбэк <code>urlButton(appLink)</code>.</td></tr>
+<tr><td><b>Данные</b></td><td><code>cadence, notifyMaster, notifyUnfinished, notifyComeback, notifyDigest,
+notifyWhen</code> (клиент-авторитетны, merge как restSec) + книга <code>notifyStage, notifyLastWid,
+firstDone, notifyLog[{d,t}]≤7</code> (только сервер, из payload не принимаются). Чек-ин целей —
+существующее <code>goalRemind</code>. Совместимость: null-поля не пишутся — старые файлы байт-в-байт.</td></tr>
+<tr><td><b>Метрики</b></td><td><code>notifySent{Unf,Rc,Goal,First}</code>, <code>digestSent</code>,
+<code>notifyReacted{Unf,Rc,Goal,Digest}</code> (завершённая тренировка ≤24 ч после напоминания),
+<code>notifyOff</code>, <code>digestOff</code> — агрегаты, без ПДн.</td></tr>
+</table>
+<p style="margin:10px 0 0">Макет статичный (открывается двойным кликом). Тексты утверждены владельцем 25.11
+(машинная вычитка от ИИ-измов пройдена — чисто; финальную вычитку владелец делает перед
+выкаткой, решения — спека §17). Даты/значения условные.</p>
+</div>
+
+</div>
+</body>
+</html>
